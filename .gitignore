@@ -1,1 +1,5 @@
+# Login info for synology NAS
 infrastructure/controllers/synology-csi/secret.yaml
+
+# Talos cluster credentials
+talos/clusters/melodic-muse/talosconfig

@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: george
+  name: george
+spec:
+  replicas: 10
+  selector:
+    matchLabels:
+      app: george
+  template:
+    metadata:
+      labels:
+        app: george
+    spec:
+      containers:
+      - image: httpd:2.4-alpine
+        name: httpd
+        # command: ["/bin/bash", "-c"]
+        # args: ["sleep 5; exit 1"]
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1

@@ -6,7 +6,7 @@ metadata:
   name: mealie
   namespace: mealie
   annotations:
-    metallb.io/loadBalancerIPs: test-pool
+    metallb.io/allow-shared-ip: homelab
 spec:
   ports:
   - name: 9000-9000

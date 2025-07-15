@@ -1,5 +1,2 @@
-# Login info for synology NAS
+# Secret for synology NAS
 infrastructure/controllers/synology-csi/secret.yaml
-
-# Talos cluster
-talos/

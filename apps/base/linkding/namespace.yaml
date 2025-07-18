@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: linkding
   labels:
-    george: wuz-here
+    hello: world

@@ -13,11 +13,12 @@ spec:
       labels:
         app: linkding
     spec:
-      # 33 is www-data user/group
+      # App runs as www-data user, so limit
+      # the scope of pods to the same user.
       securityContext:
-        runAsUser: 33
-        runAsGroup: 33
-        fsGroup: 33
+        runAsUser: 33 # www-data user ID
+        runAsGroup: 33 # www-data group ID
+        fsGroup: 33 # www-data group ID
 
       containers:
         - name: linkding
@@ -32,6 +33,8 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
 
+      # TODO upgrade this to a postgres backed
+      # DB instead of a PV
       volumes:
         - name: linkding-data
           persistentVolumeClaim:

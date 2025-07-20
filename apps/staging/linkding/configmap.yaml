@@ -1,7 +1,7 @@
 apiVersion: v1
 # Options from https://linkding.link/options/
 data:
-  LD_SUPERUSER_USERNAME: george
+  LD_SUPERUSER_NAME: george
 kind: ConfigMap
 metadata:
   name: linkding-container-env

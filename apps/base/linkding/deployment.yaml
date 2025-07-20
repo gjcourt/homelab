@@ -25,10 +25,11 @@ spec:
           ports:
             - containerPort: 9090
 
-          # Options from https://linkding.link/options/
           envFrom:
+            - configRef:
+                name: linkding-container-env
             - secretRef:
-                name: linkding-superuser
+                name: linkding-container-env-secret
 
           volumeMounts:
             - name: linkding-data

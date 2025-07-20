@@ -28,7 +28,7 @@ spec:
           # Options from https://linkding.link/options/
           envFrom:
             - secretRef:
-              name: linkding-superuser
+                name: linkding-superuser
 
           volumeMounts:
             - name: linkding-data

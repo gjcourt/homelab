@@ -26,6 +26,19 @@ spec:
           ports:
             - containerPort: 9090
 
+          # Options from https://linkding.link/options/
+          env:
+            - name: LD_SUPERUSER_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: linkding-superuser
+                  key: username
+            - name: LD_SUPERUSER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: linkding-superuser
+                  key: password
+
           volumeMounts:
             - name: linkding-data
               mountPath: /etc/linkding/data

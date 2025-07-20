@@ -1,2 +1,2 @@
-# Secret for synology NAS
-infrastructure/controllers/synology-csi/secret.yaml
+# SOPS encryption config
+.sops.yaml

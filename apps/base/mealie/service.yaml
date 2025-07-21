@@ -9,7 +9,7 @@ metadata:
     metallb.io/allow-shared-ip: homelab
 spec:
   ports:
-  - name: 9000-9000
+  - name: http-web
     port: 9000
     protocol: TCP
     targetPort: 9000

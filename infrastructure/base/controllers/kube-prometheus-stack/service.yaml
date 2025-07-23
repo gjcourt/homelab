@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: kube-prometheus-stack
+  name: kube-prometheus-stack
+  namespace: kube-prometheus-stack
+  # annotations:
+  #   metallb.io/allow-shared-ip: homelab
+spec:
+  ports:
+    - name: http-web
+      port: 8080
+      protocol: TCP
+      targetPort: 80
+  selector:
+    app: kube-prometheus-stack
+  # type: LoadBalancer
+  type: ClusterIP

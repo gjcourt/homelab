@@ -8,12 +8,11 @@ spec:
   chart:
     spec:
       chart:
-      version: "66.2.2"
-      # version: "75.*"
+      version: "latest"
       sourceRef:
         kind: HelmRepository
-        name: prometheus-community
-        namespace: monitoring
+        name: metallb
+        namespace: metallb-system
       interval: 12h
   install:
     crds: Create
@@ -22,10 +21,4 @@ spec:
   driftDetection:
     mode: enabled
     ignore:
-      # Ignore "validated" annotation which is not inserted during install
-      - paths: ["/metadata/annotations/prometheus-operator-validated"]
-        target:
-          kind: PrometheusRule
   values:
-    grafana:
-      adminPassword: my-new-password

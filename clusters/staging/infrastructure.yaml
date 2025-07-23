@@ -10,7 +10,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  path: ./infrastructure/contollers
+  path: ./infrastructure/controllers
   prune: true
 
   # SOPS age decryption for secrets

@@ -1,13 +1,12 @@
 # Homelab self-hosted applications
 
-## Current list of applications
+## Current applications
 - Linkding
 - Mealie
 
 ## Future applications
 - PostgresDB
-- Mealie
 - Excalidraw
-- Dashboard (homarr or similar)
+- Homepage (gethomepage)
 - Pod info?
 - PiHole

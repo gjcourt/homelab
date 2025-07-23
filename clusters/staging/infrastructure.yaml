@@ -33,7 +33,7 @@ spec:
     name: flux-system
   path: ./infrastructure/configs
   prune: true
-  {}
+
   # SOPS age decryption for secrets
   decryption:
     provider: sops

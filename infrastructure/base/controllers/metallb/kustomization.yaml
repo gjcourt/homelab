@@ -4,4 +4,4 @@ resources:
   - namespace.yaml
   - release.yaml
   - repository.yaml
-  - ip-address-pool.yaml
+  # - ip-address-pool.yaml

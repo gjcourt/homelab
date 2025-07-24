@@ -25,7 +25,6 @@ spec:
   valuesFrom:
     - kind: Secret
       name: traefik-web-password
-      namespace: traefik
       valuesKey: password
       targetPath: extraObjects[0].stringData.password
 

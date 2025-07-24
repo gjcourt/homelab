@@ -51,11 +51,12 @@ spec:
     # Enables the dashboard in Secure Mode
     api:
       dashboard: true
-      insecure: false
+      insecure: true
 
     ingressRoute:
       dashboard:
         enabled: true
+        insecure: true
         matchRule: Host(`dashboard.docker.localhost`)
         entryPoints:
           - websecure

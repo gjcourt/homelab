@@ -46,5 +46,5 @@ spec:
       kind: HTTPRoute
       namespace: linkding
   to:
-    - group: ""
+    - group: kubernetes.io/tls
       kind: Secret

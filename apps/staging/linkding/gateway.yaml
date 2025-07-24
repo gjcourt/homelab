@@ -25,11 +25,9 @@ spec:
     - name: traefik
   rules:
     - backendRefs:
-      - name: linkding
-        port: 9090
-      matches:
-      - path:
-          type: PathPrefix
-          value: /
-status:
-  parents: []
+        - name: linkding
+          port: 9090
+      # matches:
+      #   - path:
+      #       type: PathPrefix
+      #       value: /

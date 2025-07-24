@@ -62,6 +62,11 @@ spec:
         middlewares:
           - name: dashboard-auth
 
+    # Service specific annotations
+    service:
+      annotations:
+        metallb.io/allow-shared-ip: homelab # 192.168.4.113
+
     # Creates a BasicAuth Middleware and Secret for the Dashboard Security
     extraObjects:
       - apiVersion: v1

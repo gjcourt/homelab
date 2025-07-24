@@ -9,3 +9,4 @@ resources:
   - gateway.yaml
   - secret-cloudflare-tunnel.yaml
   - secret-linkding-container-env.yaml
+  - secret-tls-creds.yaml

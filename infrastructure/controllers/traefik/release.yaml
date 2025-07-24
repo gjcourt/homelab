@@ -51,12 +51,11 @@ spec:
     # Enables the dashboard in Secure Mode
     api:
       dashboard: true
-      insecure: true
+      insecure: false
 
     ingressRoute:
       dashboard:
         enabled: true
-        insecure: true
         matchRule: Host(`dashboard.burntbytes.com`)
         entryPoints:
           - websecure

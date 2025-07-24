@@ -1,28 +1,36 @@
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: Gateway
 metadata:
-  creationTimestamp: null
-  name: traefik
+  name: staging-linkding-gateway
   namespace: linkding
 spec:
   gatewayClassName: traefik
   listeners:
     - hostname: links-stage.burntbytes.com
-      name: links-stage-burntbytes-com-http
+      name: web
       port: 80
       protocol: HTTP
+    - hostname: links-stage.burntbytes.com
+      name: websecure
+      port: 443
+      protocol: HTTPS
+      tls:
+        certificateRefs:
+        - group: ""
+          kind: Secret
+          name: local-selfsigned-tls
+        mode: Terminate
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
-  creationTimestamp: null
-  name: links-stage-burntbytes-com
+  name: staging-linkding-route
   namespace: linkding
 spec:
   hostnames:
     - links-stage.burntbytes.com
   parentRefs:
-    - name: traefik
+    - name: staging-linkding-gateway
   rules:
     - backendRefs:
         - name: linkding

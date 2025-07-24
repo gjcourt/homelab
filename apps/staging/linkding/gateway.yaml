@@ -1,0 +1,35 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  creationTimestamp: null
+  name: traefik
+  namespace: linkding
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - hostname: links-stage.burntbytes.com
+      name: links-stage-burntbytes-com-http
+      port: 80
+      protocol: HTTP
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  creationTimestamp: null
+  name: links-stage-burntbytes-com
+  namespace: linkding
+spec:
+  hostnames:
+    - links-stage.burntbytes.com
+  parentRefs:
+    - name: traefik
+  rules:
+    - backendRefs:
+      - name: linkding
+        port: 9090
+      matches:
+      - path:
+          type: PathPrefix
+          value: /
+status:
+  parents: []

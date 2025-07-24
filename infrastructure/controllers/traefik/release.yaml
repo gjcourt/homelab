@@ -36,17 +36,17 @@ spec:
       web:
         port: 80
 
-        # # Instructs this entry point to redirect all traffic to the 'websecure' entry point
-        # redirections:
-        #   entryPoint:
-        #     to: websecure
-        #     scheme: https
-        #     permanent: true
+        # Instructs this entry point to redirect all traffic to the 'websecure' entry point
+        redirections:
+          entryPoint:
+            to: websecure
+            scheme: https
+            permanent: true
 
       # Defines the HTTPS entry point named 'websecure'
       websecure:
         port: 443
-        nodePort: 30001
+        # nodePort: 30001
 
     # Enables the dashboard in Secure Mode
     api:

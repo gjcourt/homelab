@@ -38,7 +38,7 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
 metadata:
-  name: cert-reference-grant
+  name: local-selfsigned-tls-reference
   namespace: traefik
 spec:
   from:
@@ -46,5 +46,6 @@ spec:
       kind: HTTPRoute
       namespace: linkding
   to:
-    - group: kubernetes.io/tls
+    - group: ""
       kind: Secret
+      name: local-selfsigned-tls

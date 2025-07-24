@@ -6,12 +6,10 @@ metadata:
 spec:
   gatewayClassName: traefik
   listeners:
-    - hostname: links-stage.burntbytes.com
-      name: web
+    - name: http
       port: 80
       protocol: HTTP
-    - hostname: links-stage.burntbytes.com
-      name: websecure
+    - name: https
       port: 443
       protocol: HTTPS
       tls:
@@ -36,7 +34,3 @@ spec:
     - backendRefs:
         - name: linkding
           port: 9090
-      # matches:
-      #   - path:
-      #       type: PathPrefix
-      #       value: /

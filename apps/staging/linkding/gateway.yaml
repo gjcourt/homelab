@@ -38,7 +38,7 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
 metadata:
-  name: local-selfsigned-tls-reference
+  name: staging-linkding-reference-grant
   namespace: traefik
 spec:
   from:

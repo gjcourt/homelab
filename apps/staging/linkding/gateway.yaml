@@ -17,7 +17,6 @@ spec:
           - group: ""
             kind: Secret
             name: local-selfsigned-tls
-            namespace: traefik
         mode: Terminate
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -34,18 +33,18 @@ spec:
     - backendRefs:
         - name: linkding
           port: 9090
----
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: staging-linkding-reference-grant
-  namespace: traefik
-spec:
-  from:
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      namespace: linkding
-  to:
-    - group: ""
-      kind: Secret
-      name: local-selfsigned-tls
+# ---
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: ReferenceGrant
+# metadata:
+#   name: staging-linkding-reference-grant
+#   namespace: traefik
+# spec:
+#   from:
+#     - group: gateway.networking.k8s.io
+#       kind: Gateway
+#       namespace: linkding
+#   to:
+#     - group: ""
+#       kind: Secret
+#       name: local-selfsigned-tls

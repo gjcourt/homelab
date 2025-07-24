@@ -43,7 +43,8 @@ metadata:
 spec:
   from:
     - group: gateway.networking.k8s.io
-      kind: HTTPRoute
+      kind: Gateway
+      name: staging-linkding-gateway
       namespace: linkding
   to:
     - group: ""

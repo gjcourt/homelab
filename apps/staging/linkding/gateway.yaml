@@ -34,3 +34,17 @@ spec:
     - backendRefs:
         - name: linkding
           port: 9090
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: cert-reference-grant
+  namespace: traefik
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: linkding
+  to:
+    - group: ""
+      kind: Secret

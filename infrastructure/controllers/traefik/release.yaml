@@ -57,7 +57,7 @@ spec:
       dashboard:
         enabled: true
         insecure: true
-        matchRule: Host(`dashboard.docker.localhost`)
+        matchRule: Host(`dashboard.burntbytes.com`)
         entryPoints:
           - websecure
         middlewares:
@@ -88,7 +88,7 @@ spec:
 
     # We will route with Gateway API instead.
     ingressClass:
-      enabled: true
+      enabled: false
 
     # Enable Gateway API Provider & Disables the KubernetesIngress provider
     # Providers tell Traefik where to find routing configuration.
@@ -119,7 +119,7 @@ spec:
     # Enable Observability
     logs:
       general:
-        level: INFO
+        level: DEBUG
       # This enables access logs, outputting them to Traefik's standard output by default. The [Access Logs Documentation](https://doc.traefik.io/traefik/observability/access-logs/) covers formatting, filtering, and output options.
       access:
         enabled: true

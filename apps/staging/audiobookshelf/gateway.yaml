@@ -27,7 +27,7 @@ metadata:
   namespace: audiobookshelf
 spec:
   hostnames:
-    - books-stage.burntbytes.com
+    - audio-books-stage.burntbytes.com
   parentRefs:
     - name: staging-audiobookshelf-gateway
   rules:

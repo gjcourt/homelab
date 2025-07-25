@@ -7,11 +7,12 @@ metadata:
   namespace: audiobookshelf
   annotations:
     metallb.io/allow-shared-ip: homelab
+type: ClusterIP
 spec:
   ports:
     - name: http-web
       port: 3000
+      protocol: HTTP
+      targetPort: 13378
   selector:
     app: audiobookshelf
-  # type: LoadBalancer
-  type: ClusterIP

@@ -15,6 +15,12 @@ spec:
       labels:
         app: audiobookshelf
     spec:
+      # App runs as node user, limits the scope of pods to the same user.
+      securityContext:
+        runAsUser: 1000 # node user ID
+        runAsGroup: 1000 # node group ID
+        fsGroup: 1000 # node group ID
+
       containers:
         - image: ghcr.io/advplyr/audiobookshelf:latest
           name: audiobookshelf

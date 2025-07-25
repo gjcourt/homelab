@@ -32,8 +32,13 @@ spec:
           volumeMounts:
             - name: audiobookshelf-data
               mountPath: /usr/share/audiobookshelf/config
+            - name: audiobookshelf-meta-data
+              mountPath: /usr/share/audiobookshelf/metadata
       volumes:
         - name: audiobookshelf-data
+          persistentVolumeClaim:
+            claimName: audiobookshelf-data-pvc
+        - name: audiobookshelf-meta-data
           persistentVolumeClaim:
             claimName: audiobookshelf-data-pvc
 

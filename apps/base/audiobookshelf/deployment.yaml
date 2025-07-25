@@ -25,7 +25,7 @@ spec:
                 name: audiobookshelf-container-env
           volumeMounts:
             - name: audiobookshelf-data
-              mountPath: /config
+              mountPath: /usr/share/audiobookshelf/config
       volumes:
         - name: audiobookshelf-data
           persistentVolumeClaim:

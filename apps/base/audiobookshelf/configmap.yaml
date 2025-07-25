@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: audiobookshelf-container-env
+data:
+  CONFIG_PATH: /usr/share/audiobookshelf/config
+  FFMPEG_PATH: /usr/lib/audiobookshelf-ffmpeg/ffmpeg
+  FFPROBE_PATH: /usr/lib/audiobookshelf-ffmpeg/ffprobe
+  METADATA_PATH: /usr/share/audiobookshelf/metadata
+  PORT: 13378
+  TONE_PATH: /usr/lib/audiobookshelf-ffmpeg/tone
+  TZ: America/Los_Angeles

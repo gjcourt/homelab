@@ -12,7 +12,7 @@ spec:
   ports:
     - name: http-web
       port: 3000
-      protocol: HTTP
+      protocol: TCP
       targetPort: 13378
   selector:
     app: audiobookshelf

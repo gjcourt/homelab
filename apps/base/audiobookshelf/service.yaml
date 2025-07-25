@@ -11,7 +11,7 @@ type: ClusterIP
 spec:
   ports:
     - name: http-web
-      port: 3000
+      port: 3005
       protocol: TCP
       targetPort: 13378
   selector:

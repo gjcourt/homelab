@@ -25,7 +25,7 @@ spec:
   valuesFrom:
     - kind: Secret
       name: client-info-secret
-      valuesKey: "client-info\.yml.clients"
+      valuesKey: "client-info.yml.clients"
       targetPath: clientInfoSecret.clients
 
   values:

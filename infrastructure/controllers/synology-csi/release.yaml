@@ -21,12 +21,12 @@ spec:
   driftDetection:
     mode: enabled
 
-  # Secret value client login
-  valuesFrom:
-    - kind: Secret
-      name: client-info-secret
-      valuesKey: client-info.clients
-      targetPath: clientInfoSecret.clients
+  # # Secret value client login
+  # valuesFrom:
+  #   - kind: Secret
+  #     name: client-info-secret
+  #     valuesKey: client-info.clients
+  #     targetPath: clientInfoSecret.clients
 
   values:
     clientInfoSecret:
@@ -45,5 +45,5 @@ spec:
       # Whether to create the secret if the chart gets installed or not; ignored on updates.
       create: false
       # Defaults to {{ include "synology-csi.fullname" $ }}-client-info if empty or not present:
-      name: "client-info-secret"
+      name: client-info-secret
 

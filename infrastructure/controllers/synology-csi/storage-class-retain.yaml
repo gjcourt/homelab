@@ -8,6 +8,6 @@ parameters:
   dsm: 192.168.5.8
   location: /volume1
   protocol: iscsi
-  fsType: ext4
+  fsType: btrfs
 reclaimPolicy: Retain
 allowVolumeExpansion: true

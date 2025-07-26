@@ -14,36 +14,41 @@ spec:
         name: synology-csi-chart
         namespace: synology-csi
       interval: 12h
+
   install:
     crds: Create
   upgrade:
     crds: CreateReplace
+
   driftDetection:
     mode: enabled
 
-  # # Secret value client login
-  # valuesFrom:
-  #   - kind: Secret
-  #     name: client-info-secret
-  #     valuesKey: client-info.clients
-  #     targetPath: clientInfoSecret.clients
-
   values:
     clientInfoSecret:
-      # How to connect to your Synology Diskstation?
-      #  clients:
-      #    - host: 192.168.1.1   # the IP address of the Diskstation
-      #      https: false        # whether the port expects HTTPS or not
-      #      password: password  # the password of the dedicated CSI user
-      #      port: 5000          # the port for connecting to the Diskstation Manager application
-      #      username: username  # the name of the dedicated CSI user
-      #    - host: 192.168.1.1
-      #      https: true
-      #      password: password
-      #      port: 5001
-      #      username: username
-      # Whether to create the secret if the chart gets installed or not; ignored on updates.
       create: false
-      # Defaults to {{ include "synology-csi.fullname" $ }}-client-info if empty or not present:
       name: client-info-secret
-
+    storageClasses:
+      synology-iscsi:
+        isDefault: true
+        parameters:
+          dsm: 192.168.5.8
+          location: /volume1
+          protocol: iscsi
+          fsType: ext4
+        reclaimPolicy: Delete
+      synology-iscsi-btrfs:
+        parameters:
+          dsm: 192.168.5.8
+          location: /volume1
+          protocol: iscsi
+          fsType: btrfs
+        reclaimPolicy: Delete
+        allowVolumeExpansion: true
+      synology-iscsi-retain:
+        parameters:
+          dsm: 192.168.5.8
+          location: /volume1
+          protocol: iscsi
+          fsType: ext4
+        reclaimPolicy: Retain
+        allowVolumeExpansion: true

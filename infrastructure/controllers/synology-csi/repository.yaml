@@ -1,0 +1,8 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: synology-csi-chart
+  namespace: synology-csi
+spec:
+  interval: 24h
+  url: https://zebernst.github.io/synology-csi-talos

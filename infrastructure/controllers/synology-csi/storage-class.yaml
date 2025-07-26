@@ -6,9 +6,9 @@ metadata:
     storageclass.kubernetes.io/is-default-class: "true"
 provisioner: csi.san.synology.com
 parameters:
-  dsm: 192.168.5.8
-  location: /volume1
+  dsm: '192.168.5.8'
+  location: '/volume1'
   protocol: iscsi
-  fsType: btrfs
+  csi.storage.k8s.io/fstype: ext4
 reclaimPolicy: Delete
 allowVolumeExpansion: true

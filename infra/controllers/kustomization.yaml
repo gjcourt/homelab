@@ -4,6 +4,6 @@ resources:
   # - kube-prometheus-stack
   - metallb
   - renovate
-  # - synology-csi
-  # - snapshot
+  - snapshot
+  - synology-csi
   - traefik

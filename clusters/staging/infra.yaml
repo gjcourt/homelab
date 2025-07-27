@@ -11,7 +11,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  path: ./infrastructure/controllers
+  path: ./infra/controllers
   prune: true
   wait: true
 
@@ -35,7 +35,7 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  path: ./infrastructure/configs
+  path: ./infra/configs
   prune: true
 
   # SOPS age decryption for secrets

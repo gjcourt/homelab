@@ -16,7 +16,7 @@ spec:
         certificateRefs:
           - group: ""
             kind: Secret
-            name: local-selfsigned-tls
+            name: tls-wildcard-burntbytes-com
             namespace: traefik
         mode: Terminate
 ---

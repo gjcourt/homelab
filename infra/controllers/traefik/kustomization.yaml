@@ -7,4 +7,5 @@ resources:
   - repository.yaml
   - secret-tls-burntbytes.yaml
   - secret-tls-creds.yaml
+  - secret-tls-origin-burntbytes.yaml
   - secret.yaml

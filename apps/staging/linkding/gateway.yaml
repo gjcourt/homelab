@@ -3,6 +3,9 @@ kind: Gateway
 metadata:
   name: staging-linkding-gateway
   namespace: linkding
+  labels:
+    app: linkding
+    env: staging
 spec:
   gatewayClassName: traefik
   listeners:
@@ -25,6 +28,9 @@ kind: HTTPRoute
 metadata:
   name: staging-linkding-route
   namespace: linkding
+  labels:
+    app: linkding
+    env: staging
 spec:
   hostnames:
     - links-stage.burntbytes.com

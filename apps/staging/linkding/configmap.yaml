@@ -2,6 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: linkding-container-env
+  namespace: linkding
   labels:
     app: linkding
     env: staging

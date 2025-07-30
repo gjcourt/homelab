@@ -3,7 +3,7 @@ kind: Kustomization
 resources:
   # - cilium
   - cnpg
-  - kube-prometheus-stack
+  # - kube-prometheus-stack
   # - metallb
   - renovate
   - snapshot

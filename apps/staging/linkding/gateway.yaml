@@ -1,13 +1,13 @@
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: Gateway
 metadata:
-  name: staging-linkding-gateway
+  name: linkding-gateway-staging
   namespace: linkding
   labels:
     app: linkding
     env: staging
 spec:
-  gatewayClassName: traefik
+  gatewayClassName: cilium
   listeners:
     - name: http
       port: 80
@@ -19,14 +19,14 @@ spec:
         certificateRefs:
           - group: ""
             kind: Secret
-            name: tls-origin-burntbytes
-            namespace: traefik
+            name: tls-local-selfsigned
+            namespace: certificates
         mode: Terminate
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
-  name: staging-linkding-route
+  name: linkding-route-staging
   namespace: linkding
   labels:
     app: linkding
@@ -35,7 +35,7 @@ spec:
   hostnames:
     - links-stage.burntbytes.com
   parentRefs:
-    - name: staging-linkding-gateway
+    - name: linkding-route-staging
   rules:
     - backendRefs:
         - name: linkding

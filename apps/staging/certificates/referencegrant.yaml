@@ -1,0 +1,33 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: linkding-staging-reference-grant
+  namespace: certificates
+  labels:
+    env: staging
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      namespace: linkding
+  to:
+    - group: ""
+      kind: Secret
+      name: local-selfsigned-tls
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: audiobookshelf-staging-reference-grant
+  namespace: certificates
+  labels:
+    env: staging
+spec:
+  from:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      namespace: audiobookshelf
+  to:
+    - group: ""
+      kind: Secret
+      name: local-selfsigned-tls

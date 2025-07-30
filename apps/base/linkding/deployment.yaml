@@ -3,6 +3,8 @@ kind: Deployment
 metadata:
   name: linkding
   namespace: linkding
+  labels:
+    app: linkding
 spec:
   replicas: 1
   selector:

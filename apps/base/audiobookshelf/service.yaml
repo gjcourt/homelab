@@ -4,13 +4,15 @@ metadata:
   name: audiobookshelf
   namespace: audiobookshelf
   annotations:
-    metallb.io/allow-shared-ip: homelab
+    # metallb.io/allow-shared-ip: homelab
+    lbipam.cilium.io/sharing-key: homelab
   labels:
     app: audiobookshelf
+    color: blue
 type: ClusterIP
 spec:
   ports:
-    - name: http-web
+    - name: http
       port: 3005
       protocol: TCP
       targetPort: 13378

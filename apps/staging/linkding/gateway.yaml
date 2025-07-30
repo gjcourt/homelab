@@ -10,10 +10,10 @@ spec:
   gatewayClassName: cilium
   listeners:
     - name: http
-      port: 80
+      port: 81
       protocol: HTTP
     - name: https
-      port: 443
+      port: 444
       protocol: HTTPS
       tls:
         certificateRefs:
@@ -35,7 +35,7 @@ spec:
   hostnames:
     - links-stage.burntbytes.com
   parentRefs:
-    - name: linkding-route-staging
+    - name: linkding-gateway-staging
   rules:
     - backendRefs:
         - name: linkding

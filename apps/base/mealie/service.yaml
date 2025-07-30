@@ -8,6 +8,7 @@ metadata:
     lbipam.cilium.io/sharing-key: homelab
   labels:
     app: mealie
+    color: blue
 type: LoadBalancer
 spec:
   ports:

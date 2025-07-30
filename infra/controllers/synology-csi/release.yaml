@@ -34,7 +34,6 @@ spec:
           protocol: iscsi
           fsType: btrfs
         reclaimPolicy: Delete
-        allowVolumeExpansion: true
       synology-iscsi-retain:
         parameters:
           dsm: 192.168.5.8

@@ -3,9 +3,6 @@ kind: Cluster
 metadata:
   name: linkding-db-staging-cnpg-v1
   namespace: linkding
-  # labels:
-  #   app: linkding-database
-  #   env: staging
 
 spec:
   description: Postgres cluster for the linkding application

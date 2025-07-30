@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  labels:
-    app: mealie
   name: mealie
   namespace: mealie
+  labels:
+    app: mealie
 spec:
   replicas: 1
   selector:

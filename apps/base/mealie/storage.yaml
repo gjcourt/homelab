@@ -3,9 +3,11 @@ kind: PersistentVolumeClaim
 metadata:
   name: mealie-data-pvc
   namespace: mealie
+  labels:
+    app: mealie
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 1Gi
+      storage: 200Mi

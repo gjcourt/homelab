@@ -1,10 +1,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  labels:
-    app: pihole
   name: pihole
   namespace: pihole
+  labels:
+    app: pihole
 spec:
   replicas: 1
   selector:

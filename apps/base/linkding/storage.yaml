@@ -3,9 +3,11 @@ kind: PersistentVolumeClaim
 metadata:
   name: linkding-data-pvc
   namespace: linkding
+  labels:
+    app: linkding
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 1Gi
+      storage: 200Mi

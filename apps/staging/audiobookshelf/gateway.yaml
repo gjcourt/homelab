@@ -3,6 +3,9 @@ kind: Gateway
 metadata:
   name: staging-audiobookshelf-gateway
   namespace: audiobookshelf
+  labels:
+    app: audiobookshelf
+    env: staging
 spec:
   gatewayClassName: traefik
   listeners:
@@ -25,6 +28,9 @@ kind: HTTPRoute
 metadata:
   name: staging-audiobookshelf-route
   namespace: audiobookshelf
+  labels:
+    app: audiobookshelf
+    env: staging
 spec:
   hostnames:
     - audio-books-stage.burntbytes.com

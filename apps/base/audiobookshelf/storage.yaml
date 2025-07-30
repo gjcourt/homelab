@@ -3,21 +3,25 @@ kind: PersistentVolumeClaim
 metadata:
   name: audiobookshelf-data-pvc
   namespace: audiobookshelf
+  labels:
+    app: audiobookshelf
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      storage: 200Mi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: audiobookshelf-meta-data-pvc
   namespace: audiobookshelf
+  labels:
+    app: audiobookshelf
 spec:
   accessModes:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      storage: 200Mi

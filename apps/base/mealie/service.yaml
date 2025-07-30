@@ -12,7 +12,7 @@ metadata:
 type: LoadBalancer
 spec:
   ports:
-  - name: http-web
+  - name: http
     port: 9000
     protocol: TCP
     targetPort: 9000

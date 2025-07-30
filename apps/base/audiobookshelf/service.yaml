@@ -9,8 +9,8 @@ metadata:
   labels:
     app: audiobookshelf
     color: blue
-type: LoadBalancer
 spec:
+  type: LoadBalancer
   ports:
     - name: http
       port: 3005

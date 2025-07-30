@@ -4,7 +4,7 @@ metadata:
   name: cilium
   namespace: kube-system
 spec:
-  interval: 1d
+  interval: 12h
   chart:
     spec:
       chart: cilium
@@ -13,7 +13,7 @@ spec:
         kind: HelmRepository
         name: cilium
         namespace: kube-system
-      interval: 1d
+      interval: 12h
   install:
     crds: Create
   upgrade:

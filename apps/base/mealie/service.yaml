@@ -4,7 +4,8 @@ metadata:
   name: mealie
   namespace: mealie
   annotations:
-    metallb.io/allow-shared-ip: homelab
+    # metallb.io/allow-shared-ip: homelab
+    lbipam.cilium.io/sharing-key: homelab
   labels:
     app: mealie
 spec:

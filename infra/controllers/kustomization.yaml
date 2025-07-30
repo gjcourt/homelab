@@ -4,7 +4,7 @@ resources:
   # - cilium
   - cnpg
   - kube-prometheus-stack
-  - metallb
+  # - metallb
   - renovate
   - snapshot
   - synology-csi

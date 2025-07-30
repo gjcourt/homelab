@@ -8,6 +8,7 @@ metadata:
     lbipam.cilium.io/sharing-key: homelab
   labels:
     app: mealie
+type: LoadBalancer
 spec:
   ports:
   - name: http-web
@@ -16,4 +17,3 @@ spec:
     targetPort: 9000
   selector:
     app: mealie
-  type: LoadBalancer

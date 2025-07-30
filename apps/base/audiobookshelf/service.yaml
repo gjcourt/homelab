@@ -9,7 +9,7 @@ metadata:
   labels:
     app: audiobookshelf
     color: blue
-type: ClusterIP
+type: LoadBalancer
 spec:
   ports:
     - name: http

@@ -5,11 +5,11 @@ metadata:
   namespace: linkding
   annotations:
     # metallb.io/allow-shared-ip: homelab
-    # lbipam.cilium.io/sharing-key: homelab
+    lbipam.cilium.io/sharing-key: homelab
   labels:
     app: linkding
     color: blue
-type: ClusterIP
+type: LoadBalancer
 spec:
   ports:
     - name: http

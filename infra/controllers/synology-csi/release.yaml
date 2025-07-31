@@ -47,4 +47,4 @@ spec:
         deletionPolicy: Delete
         parameters:
          description: Kubernetes CSI
-         is_locked: false
+         is_locked: 'false'

@@ -5,6 +5,6 @@ resources:
   - ../../base/linkding/
   # - cloudflare.yaml
   - configmap.yaml
-  - gateway.yaml
+  # - gateway.yaml
   - secret-cloudflare-tunnel.yaml
   - secret-linkding-container-env.yaml

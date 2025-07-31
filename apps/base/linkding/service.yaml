@@ -4,14 +4,13 @@ metadata:
   name: linkding
   namespace: linkding
   annotations:
-    # metallb.io/allow-shared-ip: homelab
-    lbipam.cilium.io/sharing-key: homelab
-    lbipam.cilium.io/sharing-cross-namespace: audiobookshelf,linkding,mealie
+    # lbipam.cilium.io/sharing-key: homelab
+    # lbipam.cilium.io/sharing-cross-namespace: audiobookshelf,linkding,mealie
   labels:
     app: linkding
     color: blue
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   ports:
     - name: http
       port: 9090

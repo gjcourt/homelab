@@ -19,7 +19,7 @@ spec:
         certificateRefs:
           - group: ""
             kind: Secret
-            name: tls-local-selfsigned
+            name: local-selfsigned-tls
             namespace: certificates
         mode: Terminate
 ---

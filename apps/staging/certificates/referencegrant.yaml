@@ -9,38 +9,10 @@ spec:
   from:
     - group: gateway.networking.k8s.io
       kind: Gateway
-      namespace: linkding
-  to:
-    - group: ""
-      kind: Secret
-      name: local-selfsigned-tls
----
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: audiobookshelf-reference-grant-staging
-  namespace: certificates
-  labels:
-    env: staging
-spec:
-  from:
+      namespace: audiobookshelf
     - group: gateway.networking.k8s.io
       kind: Gateway
-      namespace: audiobookshelf
-  to:
-    - group: ""
-      kind: Secret
-      name: local-selfsigned-tls
----
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: ReferenceGrant
-metadata:
-  name: mealie-reference-grant-staging
-  namespace: certificates
-  labels:
-    env: staging
-spec:
-  from:
+      namespace: linkding
     - group: gateway.networking.k8s.io
       kind: Gateway
       namespace: mealie
@@ -48,3 +20,37 @@ spec:
     - group: ""
       kind: Secret
       name: local-selfsigned-tls
+# ---
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: ReferenceGrant
+# metadata:
+#   name: audiobookshelf-reference-grant-staging
+#   namespace: certificates
+#   labels:
+#     env: staging
+# spec:
+#   from:
+#     - group: gateway.networking.k8s.io
+#       kind: Gateway
+#       namespace: audiobookshelf
+#   to:
+#     - group: ""
+#       kind: Secret
+#       name: local-selfsigned-tls
+# ---
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: ReferenceGrant
+# metadata:
+#   name: mealie-reference-grant-staging
+#   namespace: certificates
+#   labels:
+#     env: staging
+# spec:
+#   from:
+#     - group: gateway.networking.k8s.io
+#       kind: Gateway
+#       namespace: mealie
+#   to:
+#     - group: ""
+#       kind: Secret
+#       name: local-selfsigned-tls

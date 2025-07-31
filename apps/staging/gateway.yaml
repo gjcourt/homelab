@@ -29,6 +29,7 @@ metadata:
 spec:
   parentRefs:
     - name: app-gateway-staging
+      namespace: default
       sectionName: http # Attach to the 'http' listener on port 80
   hostnames:
     - "audio-books-stage.burntbytes.com" # Match requests for app1.example.com
@@ -46,6 +47,7 @@ metadata:
 spec:
   parentRefs:
     - name: app-gateway-staging
+      namespace: default
       sectionName: http # Attach to the same 'http' listener
   hostnames:
     - "links-stage.burntbytes.com" # Match requests for app2.example.com
@@ -63,6 +65,7 @@ metadata:
 spec:
   parentRefs:
     - name: app-gateway-staging
+      namespace: default
       sectionName: http # Attach to the same 'http' listener
   hostnames:
     - "mealie-stage.burntbytes.com" # Match requests for app2.example.com

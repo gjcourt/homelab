@@ -5,7 +5,8 @@ metadata:
   namespace: audiobookshelf
   annotations:
     # metallb.io/allow-shared-ip: homelab
-    lbipam.cilium.io/sharing-key: homelab
+    "lbipam.cilium.io/sharing-key": homelab
+    foo: bar
   labels:
     app: audiobookshelf
     color: blue

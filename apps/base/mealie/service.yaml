@@ -5,7 +5,8 @@ metadata:
   namespace: mealie
   annotations:
     # metallb.io/allow-shared-ip: homelab
-    "lbipam.cilium.io/sharing-key": homelab
+    lbipam.cilium.io/sharing-key: homelab
+    lbipam.cilium.io/sharing-cross-namespace: audiobookshelf,linkding,mealie
   labels:
     app: mealie
     color: blue

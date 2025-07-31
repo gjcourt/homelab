@@ -3,4 +3,4 @@ kind: Kustomization
 namespace: mealie
 resources:
   - ../../base/mealie/
-  # - gateway.yaml
+  - gateway.yaml

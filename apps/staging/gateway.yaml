@@ -28,7 +28,7 @@ spec:
             name: local-selfsigned-tls
             namespace: certificates
         mode: Terminate
-
+      allowedRoutes:
         namespaces:
           from: Selector
           selector:

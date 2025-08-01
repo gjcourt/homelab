@@ -52,39 +52,39 @@ spec:
     - backendRefs:
       - name: audiobookshelf
         port: 3005
----
-# HTTPRoute for linkding
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: HTTPRoute
-metadata:
-  name: linkding
-  namespace: linkding
-spec:
-  hostnames:
-    - links-stage.burntbytes.com # Match requests for app2.example.com
-  parentRefs:
-    - name: app-gateway-staging
-      namespace: default
-      sectionName: http # Attach to the same 'http' listener
-  rules:
-    - backendRefs:
-      - name: linkding
-        port: 9090
----
-# HTTPRoute for mealie
-apiVersion: gateway.networking.k8s.io/v1beta1
-kind: HTTPRoute
-metadata:
-  name: mealie
-  namespace: mealie
-spec:
-  hostnames:
-    - mealie-stage.burntbytes.com # Match requests for app2.example.com
-  parentRefs:
-    - name: app-gateway-staging
-      namespace: default
-      sectionName: http # Attach to the same 'http' listener
-  rules:
-    - backendRefs:
-      - name: mealie
-        port: 9000
+# ---
+# # HTTPRoute for linkding
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: HTTPRoute
+# metadata:
+#   name: linkding
+#   namespace: linkding
+# spec:
+#   hostnames:
+#     - links-stage.burntbytes.com # Match requests for app2.example.com
+#   parentRefs:
+#     - name: app-gateway-staging
+#       namespace: default
+#       sectionName: http # Attach to the same 'http' listener
+#   rules:
+#     - backendRefs:
+#       - name: linkding
+#         port: 9090
+# ---
+# # HTTPRoute for mealie
+# apiVersion: gateway.networking.k8s.io/v1beta1
+# kind: HTTPRoute
+# metadata:
+#   name: mealie
+#   namespace: mealie
+# spec:
+#   hostnames:
+#     - mealie-stage.burntbytes.com # Match requests for app2.example.com
+#   parentRefs:
+#     - name: app-gateway-staging
+#       namespace: default
+#       sectionName: http # Attach to the same 'http' listener
+#   rules:
+#     - backendRefs:
+#       - name: mealie
+#         port: 9000

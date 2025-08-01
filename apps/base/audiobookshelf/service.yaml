@@ -8,7 +8,6 @@ metadata:
     # lbipam.cilium.io/sharing-cross-namespace: audiobookshelf,linkding,mealie
   labels:
     app: audiobookshelf
-    color: blue
 spec:
   type: ClusterIP
   ports:

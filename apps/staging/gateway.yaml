@@ -15,10 +15,10 @@ spec:
       allowedRoutes:
         namespaces:
           from: All
-          # from: Selector
-          # selector:
-          #   matchLabels:
-          #     gateway-access: "true"
+          from: Selector
+          selector:
+            matchLabels:
+              gateway-access: "true"
 ---
 # HTTPRoute for audiobookshelf
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -34,7 +34,11 @@ spec:
   hostnames:
     - "audio-books-stage.burntbytes.com" # Match requests for app1.example.com
   rules:
-    - backendRefs:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
         - name: audiobookshelf
           port: 3005
 ---
@@ -52,7 +56,11 @@ spec:
   hostnames:
     - "links-stage.burntbytes.com" # Match requests for app2.example.com
   rules:
-    - backendRefs:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
         - name: linkding
           port: 9090
 ---
@@ -70,6 +78,10 @@ spec:
   hostnames:
     - "mealie-stage.burntbytes.com" # Match requests for app2.example.com
   rules:
-    - backendRefs:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
         - name: mealie
           port: 9000

@@ -14,7 +14,6 @@ spec:
       protocol: HTTP
       allowedRoutes:
         namespaces:
-          from: All
           from: Selector
           selector:
             matchLabels:

@@ -7,15 +7,17 @@ metadata:
     env: staging
 spec:
   from:
+    # - group: gateway.networking.k8s.io
+    #   namespace: audiobookshelf
+    # - group: gateway.networking.k8s.io
+    #   kind: HTTPRoute
+    #   namespace: linkding
+    # - group: gateway.networking.k8s.io
+    #   kind: HTTPRoute
+    #   namespace: mealie
     - group: gateway.networking.k8s.io
       kind: Gateway
-      namespace: audiobookshelf
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      namespace: linkding
-    - group: gateway.networking.k8s.io
-      kind: Gateway
-      namespace: mealie
+      namespace: default
   to:
     - group: ""
       kind: Secret

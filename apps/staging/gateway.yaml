@@ -18,6 +18,22 @@ spec:
           selector:
             matchLabels:
               gateway-access: "true"
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        certificateRefs:
+          - group: ""
+            kind: Secret
+            name: local-selfsigned-tls
+            namespace: certificates
+        mode: Terminate
+
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              gateway-access: "true"
 ---
 # HTTPRoute for audiobookshelf
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -26,20 +42,16 @@ metadata:
   name: audiobookshelf
   namespace: audiobookshelf
 spec:
+  hostnames:
+    - audio-books-stage.burntbytes.com # Match requests for app1.example.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
       sectionName: http # Attach to the 'http' listener on port 80
-  hostnames:
-    - "audio-books-stage.burntbytes.com" # Match requests for app1.example.com
   rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: audiobookshelf
-          port: 3005
+    - backendRefs:
+      - name: audiobookshelf
+        port: 3005
 ---
 # HTTPRoute for linkding
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -48,20 +60,16 @@ metadata:
   name: linkding
   namespace: linkding
 spec:
+  hostnames:
+    - links-stage.burntbytes.com # Match requests for app2.example.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
       sectionName: http # Attach to the same 'http' listener
-  hostnames:
-    - "links-stage.burntbytes.com" # Match requests for app2.example.com
   rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: linkding
-          port: 9090
+    - backendRefs:
+      - name: linkding
+        port: 9090
 ---
 # HTTPRoute for mealie
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -70,17 +78,13 @@ metadata:
   name: mealie
   namespace: mealie
 spec:
+  hostnames:
+    - mealie-stage.burntbytes.com # Match requests for app2.example.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
       sectionName: http # Attach to the same 'http' listener
-  hostnames:
-    - "mealie-stage.burntbytes.com" # Match requests for app2.example.com
   rules:
-    - matches:
-        - path:
-            type: PathPrefix
-            value: /
-      backendRefs:
-        - name: mealie
-          port: 9000
+    - backendRefs:
+      - name: mealie
+        port: 9000

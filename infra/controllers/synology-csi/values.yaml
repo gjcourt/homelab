@@ -20,15 +20,6 @@ storageClasses:
     reclaimPolicy: Retain
     allowVolumeExpansion: true
 
-  synology-iscsi-ext4: # Name of the ext4 storage class
-    isDefault: true
-    parameters:
-      dsm: 192.168.5.8
-      location: /volume1
-      protocol: iscsi
-      fsType: ext4
-    reclaimPolicy: Delete
-
 # Volume Snapshot Classes
 volumeSnapshotClasses:
   synology-iscsi-snapshot:

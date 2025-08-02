@@ -7,7 +7,8 @@ spec:
   # serviceSelector (Optional): Selects services to be announced. If omitted, all services are selected.
   serviceSelector:
     matchLabels:
-      app: app-gateway-staging # Only announce services with the label 'app: my-loadbalancer-service'
+      # app: app-gateway-staging # Only announce services with the label 'app: my-loadbalancer-service'
+      io.cilium.gateway/owning-gateway: app-gateway-staging
       # You can add more labels here to be more specific.
       # A service must have loadBalancerClass unspecified or set to io.cilium/l2-announcer
       # to be selected by a policy for announcement.

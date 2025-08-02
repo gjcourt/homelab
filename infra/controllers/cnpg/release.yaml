@@ -23,3 +23,7 @@ spec:
 
   driftDetection:
     mode: enabled
+
+  valuesFrom:
+    - kind: ConfigMap
+      name: cnpg-helm-values

@@ -9,7 +9,7 @@ configMapGenerator:
   - name: cnpg-helm-values
     namespace: cnpg-system
     files:
-      - values.yaml=values.yaml
+      - values.yaml
 
 configurations:
   - kustomizeconfig.yaml

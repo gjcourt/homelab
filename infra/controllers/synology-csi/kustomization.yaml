@@ -5,3 +5,12 @@ resources:
   - release.yaml
   - repository.yaml
   - secret-client-info.yaml
+
+configMapGenerator:
+  - name: synology-csi-helm-values
+    namespace: synology-csi
+    files:
+      - values.yaml
+
+configurations:
+  - kustomizeconfig.yaml

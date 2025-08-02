@@ -1,0 +1,28 @@
+# Helm values
+
+# Storage Classes
+storageClasses:
+  synology-iscsi: # Name of the default storage class
+    isDefault: true
+    parameters:
+      dsm: 192.168.5.8
+      location: /volume1
+      protocol: iscsi
+      fsType: btrfs
+    reclaimPolicy: Delete
+
+  synology-iscsi-retain: # Name of alt storage class
+    parameters:
+      dsm: 192.168.5.8
+      location: /volume1
+      protocol: iscsi
+      fsType: btrfs
+    reclaimPolicy: Retain
+    allowVolumeExpansion: true
+
+# Volume Snapshot Classes
+volumeSnapshotClasses:
+  synology-iscsi-snapshot:
+    deletionPolicy: Delete
+    parameters:
+      description: Kubernetes CSI

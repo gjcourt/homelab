@@ -24,26 +24,6 @@ spec:
   driftDetection:
     mode: enabled
 
-  values:
-    storageClasses:
-      synology-iscsi:
-        isDefault: true
-        parameters:
-          dsm: 192.168.5.8
-          location: /volume1
-          protocol: iscsi
-          fsType: btrfs
-        reclaimPolicy: Delete
-      synology-iscsi-retain:
-        parameters:
-          dsm: 192.168.5.8
-          location: /volume1
-          protocol: iscsi
-          fsType: btrfs
-        reclaimPolicy: Retain
-        allowVolumeExpansion: true
-    volumeSnapshotClasses:
-      synology-iscsi-snapshot:
-        deletionPolicy: Delete
-        parameters:
-          description: Kubernetes CSI
+  valuesFrom:
+    - kind: ConfigMap
+      name: synology-csi-helm-values

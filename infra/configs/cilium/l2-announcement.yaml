@@ -1,0 +1,33 @@
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: l2-announcement-policy-staging
+  namespace: kube-system # L2 announcement policies are typically cluster-wide
+spec:
+  # serviceSelector (Optional): Selects services to be announced. If omitted, all services are selected.
+  serviceSelector:
+    matchLabels:
+      app: app-gateway-staging # Only announce services with the label 'app: my-loadbalancer-service'
+      # You can add more labels here to be more specific.
+      # A service must have loadBalancerClass unspecified or set to io.cilium/l2-announcer
+      # to be selected by a policy for announcement.
+
+  # # nodeSelector (Optional): Selects which nodes will announce the IPs for the services. If omitted, all nodes are candidates.
+  # nodeSelector:
+  #   matchLabels:
+  #     kubernetes.io/role: worker # Only worker nodes will announce the IPs
+      # Or you can use matchExpressions for more complex selections:
+      # matchExpressions:
+      #   - key: node-role.kubernetes.io/control-plane
+      #     operator: DoesNotExist # Exclude control plane nodes
+
+  # # interfaces (Optional): A list of regular expressions for the network interfaces
+  # # on which to announce the services. If omitted, all interfaces are used.
+  # interfaces:
+  #   - "^eth[0-9]+" # Announce on interfaces named like eth0, eth1, etc.
+
+  # externalIPs (Optional): If true, external IPs of the selected services are announced.
+  externalIPs: true
+
+  # loadBalancerIPs (Optional): If true, LoadBalancer IPs of the selected services are announced.
+  loadBalancerIPs: true

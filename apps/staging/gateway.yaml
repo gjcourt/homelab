@@ -6,8 +6,8 @@ metadata:
   namespace: default
   annotations:
     lbipam.cilium.io/ip-pool: single-node-pool
-    labels:
-      app: app-gateway-staging
+  labels:
+    app: app-gateway-staging
 spec:
   gatewayClassName: cilium
   listeners:

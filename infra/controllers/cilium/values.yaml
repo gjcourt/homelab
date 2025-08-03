@@ -120,3 +120,13 @@ gatewayAPI:
 operator:
   # -- Number of replicas to run for the cilium-operator deployment
   replicas: 1
+
+hubble:
+  # -- Enable Hubble (true by default).
+  enabled: true
+  relay:
+    # -- Enable Hubble Relay (requires hubble.enabled=true)
+    enabled: false
+  ui:
+    # -- Whether to enable the Hubble UI.
+    enabled: false

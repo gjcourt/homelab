@@ -1,4 +1,7 @@
 # Helm values
+debug:
+  enabled: true
+
 ipam:
   # -- Configure IP Address Management mode.
   # ref: https://docs.cilium.io/en/stable/network/concepts/ipam/

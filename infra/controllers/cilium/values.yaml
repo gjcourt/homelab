@@ -88,7 +88,8 @@ k8sServiceHost: "localhost"
 # type: [string, integer]
 # @schema
 # -- (string) Kubernetes service port
-k8sServicePort: "7445"
+# k8sServicePort: "7445"
+k8sServicePort: "6443"
 # @schema
 # type: [null, string]
 # @schema

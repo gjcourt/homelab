@@ -10,6 +10,8 @@ ipam:
 kubeProxyReplacement: true
 
 securityContext:
+  # -- Run the pod with elevated privileges
+  privileged: true
   capabilities:
     # -- Capabilities for the `cilium-agent` container
     ciliumAgent:

@@ -112,3 +112,11 @@ gatewayAPI:
   hostNetwork:
     # -- Configure whether the Envoy listeners should be exposed on the host network.
     enabled: false
+
+# NOTE - running with 1 replica instead of 2 because a 1 worker node is not able
+# to deploy 2 replicas on the same port.
+#
+# TODO(george): Delete this config once the cluster has more than 1 worker
+operator:
+  # -- Number of replicas to run for the cilium-operator deployment
+  replicas: 1

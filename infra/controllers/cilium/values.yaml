@@ -7,7 +7,7 @@ ipam:
 # -- Configure the kube-proxy replacement in Cilium BPF datapath
 # Valid options are "true" or "false".
 # ref: https://docs.cilium.io/en/stable/network/kubernetes/kubeproxy-free/
-kubeProxyReplacement: "true"
+kubeProxyReplacement: true
 
 securityContext:
   capabilities:
@@ -108,4 +108,4 @@ gatewayAPI:
   # Host Network related configuration
   hostNetwork:
     # -- Configure whether the Envoy listeners should be exposed on the host network.
-    enabled: true
+    enabled: false

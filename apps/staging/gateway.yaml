@@ -21,19 +21,19 @@ spec:
     - name: https
       port: 443
       protocol: HTTPS
-      tls:
-        certificateRefs:
-          - group: ""
-            kind: Secret
-            name: local-selfsigned-tls
-            namespace: certificates
-        mode: Terminate
       allowedRoutes:
         namespaces:
           from: Selector
           selector:
             matchLabels:
               gateway-access: "true"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            group: ""
+            name: local-selfsigned-tls
+            namespace: certificates
 ---
 # HTTPRoute for audiobookshelf
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -47,7 +47,7 @@ spec:
   parentRefs:
     - name: app-gateway-staging
       namespace: default
-      sectionName: http # Attach to the 'http' listener on port 80
+      # sectionName: http # Attach to the 'http' listener on port 80
   rules:
     - backendRefs:
       - name: audiobookshelf

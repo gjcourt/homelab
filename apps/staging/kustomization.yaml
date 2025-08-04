@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - audiobookshelf
   - certificates
+  - homepage
   - ingress
   - linkding
   - mealie

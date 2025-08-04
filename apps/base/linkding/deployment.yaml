@@ -4,16 +4,16 @@ metadata:
   name: linkding
   namespace: linkding
   labels:
-    app: linkding
+    app.kubernetes.io/name: linkding
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: linkding
+      app.kubernetes.io/name: linkding
   template:
     metadata:
       labels:
-        app: linkding
+        app.kubernetes.io/name: linkding
     spec:
       # App runs as www-data user, limits the scope of pods to the same user.
       securityContext:

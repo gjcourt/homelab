@@ -4,16 +4,16 @@ metadata:
   name: mealie
   namespace: mealie
   labels:
-    app: mealie
+    app.kubernetes.io/name: mealie
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: mealie
+      app.kubernetes.io/name: mealie
   template:
     metadata:
       labels:
-        app: mealie
+        app.kubernetes.io/name: mealie
     spec:
       containers:
         - image: ghcr.io/mealie-recipes/mealie:v2.8.0

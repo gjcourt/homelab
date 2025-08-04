@@ -4,16 +4,16 @@ metadata:
   name: audiobookshelf
   namespace: audiobookshelf
   labels:
-    app: audiobookshelf
+    app.kubernetes.io/name: audiobookshelf
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: audiobookshelf
+      app.kubernetes.io/name: audiobookshelf
   template:
     metadata:
       labels:
-        app: audiobookshelf
+        app.kubernetes.io/name: audiobookshelf
     spec:
       # App runs as node user, limits the scope of pods to the same user.
       securityContext:

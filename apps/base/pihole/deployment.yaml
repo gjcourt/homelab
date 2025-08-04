@@ -4,16 +4,16 @@ metadata:
   name: pihole
   namespace: pihole
   labels:
-    app: pihole
+    app.kubernetes.io/name: pihole
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: pihole
+      app.kubernetes.io/name: pihole
   template:
     metadata:
       labels:
-        app: pihole
+        app.kubernetes.io/name: pihole
     spec:
       containers:
       - image: ghcr.io/pi-hole/pihole:2025.07.1

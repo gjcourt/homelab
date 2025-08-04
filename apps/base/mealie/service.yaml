@@ -7,7 +7,7 @@ metadata:
     # lbipam.cilium.io/sharing-key: homelab
     # lbipam.cilium.io/sharing-cross-namespace: audiobookshelf,linkding,mealie
   labels:
-    app: mealie
+    app.kubernetes.io/name: mealie
     color: blue
 spec:
   type: ClusterIP
@@ -17,4 +17,4 @@ spec:
       protocol: TCP
       targetPort: 9000
   selector:
-    app: mealie
+    app.kubernetes.io/name: mealie

@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: cloudflared
   labels:
-    app: linkding
+    app.kubernetes.io/name: linkding
     env: staging
 spec:
   selector:

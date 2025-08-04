@@ -4,7 +4,7 @@ metadata:
   name: linkding-data-pvc
   namespace: linkding
   labels:
-    app: linkding
+    app.kubernetes.io/name: linkding
 spec:
   accessModes:
     - ReadWriteOnce

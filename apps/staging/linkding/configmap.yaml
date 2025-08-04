@@ -4,7 +4,7 @@ metadata:
   name: linkding-container-env
   namespace: linkding
   labels:
-    app: linkding
+    app.kubernetes.io/name: linkding
     env: staging
 # Options from https://linkding.link/options/
 data:

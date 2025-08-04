@@ -4,7 +4,7 @@ metadata:
   name: mealie-data-pvc
   namespace: mealie
   labels:
-    app: mealie
+    app.kubernetes.io/name: mealie
 spec:
   accessModes:
     - ReadWriteOnce

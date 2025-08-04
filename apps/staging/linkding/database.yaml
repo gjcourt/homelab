@@ -15,7 +15,7 @@ spec:
 
   inheritedMetadata:
     labels:
-      app: linkding-database
+      app.kubernetes.io/name: linkding-database
       env: staging
       policy-type: "database"
 

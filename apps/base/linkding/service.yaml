@@ -7,7 +7,7 @@ metadata:
     # lbipam.cilium.io/sharing-key: homelab
     # lbipam.cilium.io/sharing-cross-namespace: audiobookshelf,linkding,mealie
   labels:
-    app.kubernetes.io/name: linkding
+    app: linkding
     color: blue
 spec:
   type: ClusterIP
@@ -18,4 +18,4 @@ spec:
       # protocol: TCP
       # targetPort: 9090
   selector:
-    app.kubernetes.io/name: linkding
+    app: linkding

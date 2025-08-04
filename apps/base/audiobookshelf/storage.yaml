@@ -4,7 +4,7 @@ metadata:
   name: audiobookshelf-data-pvc
   namespace: audiobookshelf
   labels:
-    app.kubernetes.io/name: audiobookshelf
+    app: audiobookshelf
 spec:
   accessModes:
     - ReadWriteOnce
@@ -18,7 +18,7 @@ metadata:
   name: audiobookshelf-meta-data-pvc
   namespace: audiobookshelf
   labels:
-    app.kubernetes.io/name: audiobookshelf
+    app: audiobookshelf
 spec:
   accessModes:
     - ReadWriteOnce

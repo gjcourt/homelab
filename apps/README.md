@@ -3,9 +3,9 @@
 ## Current applications
 - Linkding
 - Mealie
-- PostgresDB
 
 ## Future applications
+- PostgresDB
 - Excalidraw
 - Homepage (gethomepage)
 - Pod info?

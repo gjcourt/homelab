@@ -3,7 +3,7 @@ kind: ConfigMap
 metadata:
   name: audiobookshelf-container-env
   labels:
-    app.kubernetes.io/name: audiobookshelf
+    app: audiobookshelf
 data:
   CONFIG_PATH: /usr/share/audiobookshelf/config
   FFMPEG_PATH: /usr/lib/audiobookshelf-ffmpeg/ffmpeg

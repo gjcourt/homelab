@@ -7,7 +7,7 @@ metadata:
     # lbipam.cilium.io/sharing-key: homelab
     # lbipam.cilium.io/sharing-cross-namespace: audiobookshelf,linkding,mealie
   labels:
-    app.kubernetes.io/name: audiobookshelf
+    app: audiobookshelf
 spec:
   type: ClusterIP
   ports:
@@ -16,4 +16,4 @@ spec:
       protocol: TCP
       targetPort: 13378
   selector:
-    app.kubernetes.io/name: audiobookshelf
+    app: audiobookshelf

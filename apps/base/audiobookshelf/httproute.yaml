@@ -1,11 +1,11 @@
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
-  name: audiobookshelf
+  name: audiobookshelf-http
   namespace: audiobookshelf
 spec:
   hostnames:
-    - audio-books-stage.burntbytes.com # Match requests for app1.example.com
+    - audio-books-stage.burntbytes.com # Match requests
   parentRefs:
     - name: app-gateway-staging
       namespace: default
@@ -20,11 +20,11 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
-  name: audiobookshelf
+  name: audiobookshelf-https
   namespace: audiobookshelf
 spec:
   hostnames:
-    - audio-books-stage.burntbytes.com # Match requests for app1.example.com
+    - audio-books-stage.burntbytes.com # Match requests
   parentRefs:
     - name: app-gateway-staging
       namespace: default

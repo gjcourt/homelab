@@ -1,7 +1,7 @@
 apiversion: gateway.networking.k8s.io/v1beta1
 kind: httproute
 metadata:
-  name: linkding
+  name: linkding-http
   namespace: linkding
 spec:
   hostnames:
@@ -20,7 +20,7 @@ spec:
 apiversion: gateway.networking.k8s.io/v1beta1
 kind: httproute
 metadata:
-  name: linkding
+  name: linkding-https
   namespace: linkding
 spec:
   hostnames:

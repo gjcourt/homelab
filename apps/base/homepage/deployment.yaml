@@ -32,7 +32,7 @@ spec:
               value: gethomepage.dev # required, may need port. See gethomepage.dev/installation/#homepage_allowed_hosts
           ports:
             - name: http
-              containerPort: 3000
+              containerPort: 3001
               protocol: TCP
           volumeMounts:
             - mountPath: /app/config/custom.js

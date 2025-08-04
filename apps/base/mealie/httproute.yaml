@@ -1,0 +1,35 @@
+apiversion: gateway.networking.k8s.io/v1beta1
+kind: httproute
+metadata:
+  name: mealie
+  namespace: mealie
+spec:
+  hostnames:
+    - mealie-stage.burntbytes.com # match requests for app2.example.com
+  parentrefs:
+    - name: app-gateway-staging
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+      - type: RequestRedirect
+        requestRedirect:
+          scheme: https
+          statusCode: 301
+---
+apiversion: gateway.networking.k8s.io/v1beta1
+kind: httproute
+metadata:
+  name: mealie
+  namespace: mealie
+spec:
+  hostnames:
+    - mealie-stage.burntbytes.com # match requests for app2.example.com
+  parentrefs:
+    - name: app-gateway-staging
+      namespace: default
+      sectionName: https
+  rules:
+    - backendRefs:
+      - name: mealie
+        port: 9000

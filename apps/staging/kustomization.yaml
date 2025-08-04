@@ -3,7 +3,7 @@ kind: Kustomization
 resources:
   - audiobookshelf
   - certificates
+  - ingress
   - linkding
   - mealie
   # - pihole
-  - gateway.yaml

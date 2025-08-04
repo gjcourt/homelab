@@ -1,0 +1,39 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: app-gateway-staging
+  namespace: default
+  # Gateway (assuming you have a CiliumLoadBalancerIPPool named single-node-pool)
+  annotations:
+    lbipam.cilium.io/ip-pool: single-node-pool
+  labels:
+    app: gateway
+    env: staging
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              gateway-access: "true"
+    - name: https
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              gateway-access: "true"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            group: ""
+            name: local-selfsigned-tls
+            namespace: certificates

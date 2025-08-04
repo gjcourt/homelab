@@ -4,3 +4,12 @@ resources:
   - namespace.yaml
   - release.yaml
   - repository.yaml
+
+configMapGenerator:
+  - name: kube-prometheus-stack-helm-values
+    namespace: monitoring
+    files:
+      - values.yaml
+
+configurations:
+  - kustomizeconfig.yaml

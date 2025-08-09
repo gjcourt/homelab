@@ -6,6 +6,7 @@ metadata:
 
 spec:
   interval: 30m
+  timeout: 10m0s
   chart:
     spec:
       chart: kube-prometheus-stack

@@ -34,10 +34,10 @@ spec:
       destinationPath: "s3://gjcourt-homelab-backup/staging"
       s3Credentials:
         accessKeyId:
-          name: aws-creds
+          name: linkding-aws-creds-secret
           key: ACCESS_KEY_ID
         secretAccessKey:
-          name: aws-creds
+          name: linkding-aws-creds-secret
           key: ACCESS_SECRET_KEY
     retentionPolicy: "14d"
 

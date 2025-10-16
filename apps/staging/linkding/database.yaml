@@ -31,7 +31,7 @@ spec:
 
   backup:
     barmanObjectStore:
-      destinationPath: "s3://gjcourt-homelab-backup"
+      destinationPath: "s3://gjcourt-homelab-backup/staging"
       s3Credentials:
         accessKeyId:
           name: aws-creds

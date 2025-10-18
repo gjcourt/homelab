@@ -10,7 +10,5 @@ metadata:
 data:
   LD_SUPERUSER_NAME: george
   LD_DB_ENGINE: postgres
-  LD_DB_DATABASE: app
-  LD_DB_USER: app
   LD_DB_HOST: linkding-db-staging-cnpg-v1-rw.linkding.svc.cluster.local
   LD_DB_PORT: '5432'

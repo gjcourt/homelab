@@ -5,6 +5,6 @@ resources:
   - certificates
   # - homepage
   - ingress
-  # - linkding
+  - linkding
   - mealie
   # - pihole

@@ -33,5 +33,16 @@ spec:
             - secretRef:
                 name: linkding-container-env-secret
 
+          # volumeMounts:
+          #   - name: linkding-data
+          #     mountPath: /etc/linkding/data
+
           securityContext:
             allowPrivilegeEscalation: false
+
+      # TODO upgrade this to a postgres backed
+      # DB instead of a PV
+      # volumes:
+      #   - name: linkding-data
+      #     persistentVolumeClaim:
+      #       claimName: linkding-data-pvc

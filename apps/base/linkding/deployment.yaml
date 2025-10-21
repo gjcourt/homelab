@@ -23,7 +23,7 @@ spec:
 
       containers:
         - name: linkding
-          image: sissbruecker/linkding:1.43.0
+          image: sissbruecker/linkding:latest
           ports:
             - containerPort: 9090
 
@@ -33,16 +33,17 @@ spec:
             - secretRef:
                 name: linkding-container-env-secret
 
-          # volumeMounts:
-          #   - name: linkding-data
-          #     mountPath: /etc/linkding/data
+          # Mount required for Huey tasks queues (can be moved to redis, though
+          # this is defined in the INSTALLED_APPS)
+          volumeMounts:
+            - name: linkding-data
+              mountPath: /etc/linkding/data
 
           securityContext:
             allowPrivilegeEscalation: false
 
-      # TODO upgrade this to a postgres backed
-      # DB instead of a PV
-      # volumes:
-      #   - name: linkding-data
-      #     persistentVolumeClaim:
-      #       claimName: linkding-data-pvc
+      # TODO upgrade this to a postgres backed DB instead of a PV
+      volumes:
+        - name: linkding-data
+          persistentVolumeClaim:
+            claimName: linkding-data-pvc

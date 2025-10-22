@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: linkding
   labels:
-    gateway-access: "true"
+    http-ingress: "true"

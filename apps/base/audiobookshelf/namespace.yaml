@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: audiobookshelf
   labels:
-    gateway-access: "true"
+    http-ingress: "true"

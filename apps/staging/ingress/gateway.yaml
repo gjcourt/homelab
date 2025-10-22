@@ -20,7 +20,7 @@ spec:
           from: Selector
           selector:
             matchLabels:
-              gateway-access: "true"
+              http-ingress: "true"
     - name: https
       port: 443
       protocol: HTTPS
@@ -29,7 +29,7 @@ spec:
           from: Selector
           selector:
             matchLabels:
-              gateway-access: "true"
+              http-ingress: "true"
       tls:
         mode: Terminate
         certificateRefs:

@@ -4,10 +4,8 @@ metadata:
   name: pihole-dns-udp
   namespace: pihole
 spec:
-  # hostnames:
-  #   - dns.burntbytes.com # match requests for app2.example.com
   parentRefs:
-    - name: dns-gateway-staging
+    - name: app-gateway-staging
       namespace: default
       sectionName: dns-udp
   rules:

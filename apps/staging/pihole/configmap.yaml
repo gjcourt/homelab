@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pihole-container-env
+  namespace: pihole
+  labels:
+    app: pihole
+    env: staging
+data:
+  TZ: America/Los_Angeles

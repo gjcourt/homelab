@@ -3,5 +3,5 @@ kind: Namespace
 metadata:
   name: pihole
   labels:
-    app-ingress: "true"
-    udp-ingress: "true"
+    http-ingress: "true"
+    dns-ingress: "true"

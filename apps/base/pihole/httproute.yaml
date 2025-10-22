@@ -24,7 +24,7 @@ spec:
   hostnames:
     - pihole.burntbytes.com # match requests for app2.example.com
   parentRefs:
-    - name: gateway-staging
+    - name: app-gateway-staging
       namespace: default
       sectionName: http
   rules:

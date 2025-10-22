@@ -1,0 +1,16 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: UDPRoute
+metadata:
+  name: pihole-udp-dns
+  namespace: pihole
+spec:
+  hostnames:
+    - dns.burntbytes.com # match requests for app2.example.com
+  parentRefs:
+    - name: dns-gateway-staging
+      namespace: default
+      sectionName: udp-dns
+  rules:
+    - backendRefs:
+      - name: pihole
+        port: 53

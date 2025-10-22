@@ -1,0 +1,32 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: dns-gateway-staging
+  namespace: default
+  # Gateway (assuming you have a CiliumLoadBalancerIPPool named single-node-pool)
+  annotations:
+    lbipam.cilium.io/ip-pool: single-node-pool
+  labels:
+    app: gateway
+    env: staging
+spec:
+  gatewayClassName: cilium
+  listeners:
+    - name: udp-dns
+      port: 53
+      protocol: UDP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              dns-ingress: "true"
+    - name: http-dns
+      port: 53
+      protocol: TCP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              dns-ingress: "true"

@@ -5,4 +5,5 @@ resources:
   - httproute.yaml
   - namespace.yaml
   - service.yaml
+  - storage.yaml
   - udproute.yaml

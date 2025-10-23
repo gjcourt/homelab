@@ -42,7 +42,7 @@ spec:
             - name: pihole-data
               mountPath: /etc/pihole
             - name: pihole-webpass-data
-              mountPath: /
+              mountPath: /pihole_password.txt
 
       volumes:
         - name: pihole-data
@@ -50,10 +50,9 @@ spec:
             claimName: pihole-data-pvc
         - name: pihole-webpass-data
           secret:
-            secretName: pihole-webpass-secret
+            secretName: pihole-container-env-secret
             # Optional: Define permissions for the mounted files
             defaultMode: 0400
             # Optional: Select specific keys to mount as files
             items:
-              - key: pihole_password.txt
-                path: ./pihole_password.txt
+              - key: WEBPASSWORD

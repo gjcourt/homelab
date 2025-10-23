@@ -33,9 +33,9 @@ spec:
             - containerPort: 80
               name: admin-port
               protocol: TCP
-            # - containerPort: 53
-            #   name: dns-port-tcp
-            #   protocol: TCP
+            - containerPort: 53
+              name: dns-port-tcp
+              protocol: TCP
             - containerPort: 53
               name: dns-port-udp
               protocol: UDP

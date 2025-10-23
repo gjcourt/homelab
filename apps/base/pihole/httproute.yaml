@@ -21,6 +21,8 @@ metadata:
   name: pihole-dns-tcp
   namespace: pihole
 spec:
+  hostnames:
+    - pihole.burntbytes.com # match requests for app2.example.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default

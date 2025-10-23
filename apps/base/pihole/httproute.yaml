@@ -28,4 +28,4 @@ spec:
   rules:
     - backendRefs:
       - name: pihole
-        port: 53
+        port: 553

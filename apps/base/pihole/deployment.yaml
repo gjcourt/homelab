@@ -36,9 +36,9 @@ spec:
 
           envFrom:
             - configMapRef:
-              name: pihole-container-env
+                name: pihole-container-env
             - secretRef:
-              name: pihole-container-env-secret
+                name: pihole-container-env-secret
 
           volumeMounts:
             - name: pihole-data

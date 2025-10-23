@@ -20,10 +20,11 @@ spec:
         app: pihole
 
     spec:
-      securityContext:
-        runAsUser: 1000 # pihole user ID
-        runAsGroup: 1000 # pihole group ID
-        fsGroup: 1000 # pihole group ID
+      # TODO determine how to run pihole as non-root
+      # securityContext:
+      #   runAsUser: 1000 # pihole user ID
+      #   runAsGroup: 1000 # pihole group ID
+      #   fsGroup: 1000 # pihole group ID
 
       containers:
         - name: pihole

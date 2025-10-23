@@ -33,10 +33,10 @@ spec:
             - containerPort: 80
               name: admin-port
               protocol: TCP
-            - containerPort: 53
+            - containerPort: 553
               name: dns-port-tcp
               protocol: TCP
-              targetPort: 553
+              targetPort: 53
             - containerPort: 53
               name: dns-port-udp
               protocol: UDP

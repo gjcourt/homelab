@@ -4,5 +4,4 @@ namespace: pihole
 resources:
   - ../../base/pihole/
   - configmap.yaml
-  - secret-webpass.yaml
   - secret.yaml

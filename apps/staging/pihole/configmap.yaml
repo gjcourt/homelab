@@ -8,3 +8,4 @@ metadata:
     env: staging
 data:
   TZ: America/Los_Angeles
+  WEBPASSWORD_FILE: pihole_password.txt

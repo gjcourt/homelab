@@ -37,12 +37,21 @@ spec:
           envFrom:
             - configMapRef:
                 name: pihole-container-env
-            - secretRef:
-                name: pihole-container-env-secret
+            # - secretRef:
+            #     name: pihole-container-env-secret
 
           volumeMounts:
             - name: pihole-data
               mountPath: /etc/pihole
+            - name: secret-volume
+              secret:
+                secretName: pihole-webpass-secret
+                # Optional: Define permissions for the mounted files
+                defaultMode: 0400
+                # Optional: Select specific keys to mount as files
+                items:
+                  - key: pihole_password.txt
+                    path: ./pihole_password.txt
 
       volumes:
         - name: pihole-data

@@ -21,8 +21,8 @@ spec:
 
     spec:
       containers:
-        - image: ghcr.io/pi-hole/pihole:2025.08.0
-          name: pihole
+        - name: pihole
+          image: ghcr.io/pi-hole/pihole:2025.08.0
           ports:
             - containerPort: 80
               name: admin-port
@@ -33,3 +33,18 @@ spec:
             - containerPort: 53
               name: dns-port-udp
               protocol: UDP
+
+          envFrom:
+            - configMapRef:
+              name: pihole-container-env
+            # - secretRef:
+            #   name: pihole-container-env-secret
+
+          volumeMounts:
+            - name: pihole-data
+              mountPath: /etc/pihole
+
+      volumes:
+        - name: pihole-data
+          persistentVolumeClaim:
+            claimName: pihole-data-pvc

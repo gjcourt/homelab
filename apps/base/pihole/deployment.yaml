@@ -42,7 +42,7 @@ spec:
             - name: pihole-data
               mountPath: /etc/pihole
             - name: pihole-webpass-data
-              mountPath: /pihole_password.txt
+              mountPath: .
 
       volumes:
         - name: pihole-data

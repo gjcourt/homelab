@@ -13,8 +13,9 @@ spec:
     port: 80
     protocol: TCP
   - name: dns-tcp
-    port: 53
+    port: 553
     protocol: TCP
+    targetPort: 53
   - name: dns-udp
     port: 53
     protocol: UDP

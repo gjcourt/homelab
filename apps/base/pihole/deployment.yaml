@@ -36,7 +36,6 @@ spec:
             - containerPort: 553
               name: dns-port-tcp
               protocol: TCP
-              targetPort: 53
             - containerPort: 53
               name: dns-port-udp
               protocol: UDP

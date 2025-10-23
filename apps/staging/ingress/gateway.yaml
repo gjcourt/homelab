@@ -47,12 +47,12 @@ spec:
           selector:
             matchLabels:
               dns-ingress: "true"
-    # - name: dns-tcp
-    #   port: 53
-    #   protocol: TCP
-    #   allowedRoutes:
-    #     namespaces:
-    #       from: Selector
-    #       selector:
-    #         matchLabels:
-    #           dns-ingress: "true"
+    - name: dns-tcp
+      port: 53
+      protocol: TCP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              dns-ingress: "true"

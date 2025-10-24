@@ -56,3 +56,6 @@ spec:
           selector:
             matchLabels:
               dns-ingress: "true"
+    - name: udp-test
+      port: 5555
+      protocol: UDP

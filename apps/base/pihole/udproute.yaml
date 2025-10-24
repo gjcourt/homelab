@@ -4,8 +4,6 @@ metadata:
   name: pihole-dns-udp
   namespace: pihole
 spec:
-  # hostnames:
-  #   - pihole.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default

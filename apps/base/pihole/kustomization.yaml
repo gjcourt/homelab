@@ -4,7 +4,7 @@ resources:
   - deployment.yaml
   - httproute.yaml
   - namespace.yaml
-  - service-dns.yaml
+  - service-dns.yaml # not working
   - service.yaml
   - storage.yaml
-  # - udproute.yaml
+  - udproute.yaml # not working

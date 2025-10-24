@@ -6,8 +6,7 @@ metadata:
   # Gateway (assuming you have a CiliumLoadBalancerIPPool named single-node-pool)
   annotations:
     lbipam.cilium.io/ip-pool: single-node-pool
-    lbipam.cilium.io/sharing-cross-namespace: "pihole"
-    lbipam.cilium.io/sharing-key: "homelab"
+    lbipam.cilium.io/sharing-key: homelab
   labels:
     app: gateway
     env: staging

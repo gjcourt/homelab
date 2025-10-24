@@ -3,4 +3,4 @@ kind: Kustomization
 namespace: default
 resources:
   # - gateway-dns.yaml
-  - gateway.yaml
+  # - gateway.yaml

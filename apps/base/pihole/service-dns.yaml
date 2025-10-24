@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: pihole
+  name: pihole-dns
   namespace: pihole
   labels:
     app: pihole

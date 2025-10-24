@@ -5,6 +5,10 @@ metadata:
   namespace: pihole
   labels:
     app: pihole
+  annotations:
+    lbipam.cilium.io/ip-pool: single-node-pool
+    lbipam.cilium.io/sharing-cross-namespace: "default"
+    lbipam.cilium.io/sharing-key: "homelab"
 spec:
   type: ClusterIP
   selector:

@@ -5,21 +5,25 @@ metadata:
   namespace: monitoring
 spec:
   interval: 30m
+
   chart:
     spec:
       chart: kube-prometheus-stack
-      version: 75.15.1
+      version: 78.4.0
       sourceRef:
         kind: HelmRepository
         name: prometheus-community
         namespace: monitoring
       interval: 12h
+
   install:
-    timtout: 15m
+    timeout: 15m
     crds: Create
+
   upgrade:
-    timtout: 15m
+    timeout: 15m
     crds: CreateReplace
+
   driftDetection:
     mode: enabled
     ignore:

@@ -1,7 +1,7 @@
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
-  name: pihole
+  name: pihole-admin
   namespace: pihole
 spec:
   hostnames:
@@ -12,7 +12,7 @@ spec:
       sectionName: http
   rules:
     - backendRefs:
-      - name: pihole-admin
+      - name: pihole
         port: 80
 # ---
 # apiVersion: gateway.networking.k8s.io/v1beta1

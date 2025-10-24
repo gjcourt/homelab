@@ -5,6 +5,6 @@ resources:
   - httproute.yaml
   - namespace.yaml
   - service-admin.yaml
-  - service-dns.yaml
+  # - service-dns.yaml
   - storage.yaml
   # - udproute.yaml

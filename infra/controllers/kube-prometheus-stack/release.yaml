@@ -3,8 +3,9 @@ kind: HelmRelease
 metadata:
   name: kube-prometheus-stack
   namespace: monitoring
+
 spec:
-  interval: 30m
+  interval: 120m
 
   chart:
     spec:
@@ -17,11 +18,11 @@ spec:
       interval: 12h
 
   install:
-    timeout: 15m
+    timeout: 60m
     crds: Create
 
   upgrade:
-    timeout: 15m
+    timeout: 60m
     crds: CreateReplace
 
   driftDetection:

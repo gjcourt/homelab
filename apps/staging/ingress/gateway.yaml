@@ -42,6 +42,8 @@ spec:
       port: 53
       protocol: UDP
       allowedRoutes:
+        kinds:
+          - kind: UDPRoute
         namespaces:
           from: Selector
           selector:
@@ -59,3 +61,6 @@ spec:
     - name: udp-test
       port: 5555
       protocol: UDP
+      allowedRoutes:
+        kinds:
+          - kind: UDPRoute

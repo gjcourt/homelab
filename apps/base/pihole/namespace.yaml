@@ -4,4 +4,3 @@ metadata:
   name: pihole
   labels:
     http-ingress: "true"
-    dns-ingress: "true"

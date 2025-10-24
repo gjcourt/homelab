@@ -38,24 +38,21 @@ spec:
             group: ""
             name: local-selfsigned-tls
             namespace: certificates
-    - name: dns-udp
-      port: 53
-      protocol: UDP
-      allowedRoutes:
-        namespaces:
-          from: Selector
-          selector:
-            matchLabels:
-              dns-ingress: "true"
-    - name: dns-tcp
-      port: 53
-      protocol: TCP
-      allowedRoutes:
-        namespaces:
-          from: Selector
-          selector:
-            matchLabels:
-              dns-ingress: "true"
-    - name: udp-test
-      port: 5555
-      protocol: UDP
+    # - name: dns-udp
+    #   port: 53
+    #   protocol: UDP
+    #   allowedRoutes:
+    #     namespaces:
+    #       from: Selector
+    #       selector:
+    #         matchLabels:
+    #           dns-ingress: "true"
+    # - name: dns-tcp
+    #   port: 53
+    #   protocol: TCP
+    #   allowedRoutes:
+    #     namespaces:
+    #       from: Selector
+    #       selector:
+    #         matchLabels:
+    #           dns-ingress: "true"

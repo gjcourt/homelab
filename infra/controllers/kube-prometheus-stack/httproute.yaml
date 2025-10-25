@@ -40,10 +40,12 @@ metadata:
   name: prometheus-node-exporter
   namespace: monitoring
 spec:
+  hostnames:
+    - grafana.burntbytes.com # Match requests
   parentRefs:
     - name: app-gateway-staging
       namespace: default
-      sectionName: http
+      sectionName: http-metrics
   rules:
     - backendRefs:
       - name: kube-prometheus-stack-prometheus-node-exporter

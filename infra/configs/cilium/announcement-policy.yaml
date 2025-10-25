@@ -4,14 +4,15 @@ metadata:
   name: announcement-policy-staging
   namespace: kube-system # L2 announcement policies are typically cluster-wide
 spec:
-  # # serviceSelector (Optional): Selects services to be announced. If omitted, all services are selected.
-  # serviceSelector:
-  #   matchLabels:
-  #     # app: app-gateway-staging # Only announce services with the label 'app: my-loadbalancer-service'
-  #     io.cilium.gateway/owning-gateway: app-gateway-staging
-  #     # You can add more labels here to be more specific.
-  #     # A service must have loadBalancerClass unspecified or set to io.cilium/l2-announcer
-  #     # to be selected by a policy for announcement.
+  # serviceSelector (Optional): Selects services to be announced. If omitted, all services are selected.
+  serviceSelector:
+    matchLabels:
+      app: gateway
+      # app: app-gateway-staging # Only announce services with the label 'app: my-loadbalancer-service'
+      # io.cilium.gateway/owning-gateway: app-gateway-staging
+      # You can add more labels here to be more specific.
+      # A service must have loadBalancerClass unspecified or set to io.cilium/l2-announcer
+      # to be selected by a policy for announcement.
 
   # # nodeSelector (Optional): Selects which nodes will announce the IPs for the services. If omitted, all nodes are candidates.
   # nodeSelector:

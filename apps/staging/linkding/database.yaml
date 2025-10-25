@@ -32,7 +32,7 @@ spec:
 
   backup:
     barmanObjectStore:
-      destinationPath: "s3://gjcourt-homelab-backup/staging/"
+      destinationPath: "s3://gjcourt-homelab-backup/staging"
       s3Credentials:
         accessKeyId:
           name: linkding-aws-creds-secret

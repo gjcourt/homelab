@@ -1,7 +1,7 @@
 apiVersion: cilium.io/v2alpha1
 kind: CiliumL2AnnouncementPolicy
 metadata:
-  name: announcement-policy-staging
+  name: l2-announcement-policy-staging
   namespace: kube-system # L2 announcement policies are typically cluster-wide
 spec:
   # # serviceSelector (Optional): Selects services to be announced. If omitted, all services are selected.

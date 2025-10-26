@@ -1,6 +1,5 @@
+# TODO remove this namespace definition
 apiVersion: v1
 kind: Namespace
 metadata:
   name: security
-  labels:
-    env: staging

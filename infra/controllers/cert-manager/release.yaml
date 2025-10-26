@@ -21,6 +21,6 @@ spec:
   driftDetection:
     mode: enabled
 
-  # valuesFrom:
-  #   - kind: ConfigMap
-  #     name: cilium-helm-values
+  valuesFrom:
+    - kind: ConfigMap
+      name: cert-manager-helm-values

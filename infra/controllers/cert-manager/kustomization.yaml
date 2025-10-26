@@ -3,3 +3,12 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - ocirepository.yaml
+
+configMapGenerator:
+  - name: cert-manager-helm-values
+    namespace: kube-system
+    files:
+      - values.yaml
+
+configurations:
+  - kustomizeconfig.yaml

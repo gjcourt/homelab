@@ -2111,7 +2111,8 @@ kubeEtcd:
 
   ## If your etcd is not deployed as a pod, specify IPs it can be found on
   ##
-  endpoints: []
+  endpoints:
+    - 192.168.4.113
   # - 10.141.4.22
   # - 10.141.4.23
   # - 10.141.4.24
@@ -2169,12 +2170,12 @@ kubeEtcd:
     ## proxyUrl: URL of a proxy that should be used for scraping.
     ##
     proxyUrl: ""
-    scheme: http
+    scheme: https
     insecureSkipVerify: false
-    serverName: ""
-    caFile: ""
-    certFile: ""
-    keyFile: ""
+    serverName: localhost
+    caFile: "/etc/prometheus/secrets/etcd-certs/ca.crt"
+    certFile: "/etc/prometheus/secrets/etcd-certs/server.crt"
+    keyFile: "/etc/prometheus/secrets/etcd-certs/server.key"
 
     ## port: Name of the port the metrics will be scraped from
     ##
@@ -4070,7 +4071,8 @@ prometheus:
     ## reflected in the running Pods. To change the secrets mounted into the Prometheus Pods, the object must be deleted and recreated
     ## with the new list of secrets.
     ##
-    secrets: []
+    secrets:
+      - etcd-certs
 
     ## ConfigMaps is a list of ConfigMaps in the same namespace as the Prometheus object, which shall be mounted into the Prometheus Pods.
     ## The ConfigMaps are mounted into /etc/prometheus/configmaps/.

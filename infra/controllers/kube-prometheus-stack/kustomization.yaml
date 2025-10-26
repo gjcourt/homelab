@@ -5,6 +5,7 @@ resources:
   - namespace.yaml
   - release.yaml
   - repository.yaml
+  - secrets.yaml
 
 configMapGenerator:
   - name: kube-prometheus-stack-helm-values

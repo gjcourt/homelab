@@ -2173,9 +2173,9 @@ kubeEtcd:
     scheme: http
     insecureSkipVerify: false
     serverName: localhost
-    caFile: "/etc/prometheus/secrets/etcd-certs/ca.crt"
-    certFile: "/etc/prometheus/secrets/etcd-certs/server.crt"
-    keyFile: "/etc/prometheus/secrets/etcd-certs/server.key"
+    caFile: ""
+    certFile: ""
+    keyFile: ""
 
     ## port: Name of the port the metrics will be scraped from
     ##

@@ -7,6 +7,4 @@ resources:
   - service-dns.yaml # not working
   - service.yaml
   - storage.yaml
-  # WARN Current unsupported by Cilium
-  # https://github.com/cilium/cilium/issues/21929
-  # - udproute.yaml # not working
+  - udproute.yaml # not working

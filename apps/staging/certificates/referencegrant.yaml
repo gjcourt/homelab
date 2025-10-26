@@ -1,8 +1,8 @@
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: ReferenceGrant
 metadata:
-  name: linkding-reference-grant-staging
-  namespace: certificates
+  name: gateway-staging
+  namespace: security
   labels:
     env: staging
 spec:

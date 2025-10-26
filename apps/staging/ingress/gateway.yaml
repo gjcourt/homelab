@@ -38,7 +38,7 @@ spec:
           - kind: Secret
             group: ""
             name: local-selfsigned-tls
-            namespace: certificates
+            namespace: security
     # - name: http-metrics
     #   port: 9100
     #   protocol: HTTP

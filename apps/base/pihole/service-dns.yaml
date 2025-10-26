@@ -14,9 +14,9 @@ spec:
   selector:
     app: pihole
   ports:
-  - name: dns-tcp
-    port: 53
-    protocol: TCP
-  - name: dns-udp
-    port: 53
-    protocol: UDP
+    - name: dns-udp
+      port: 53
+      protocol: UDP
+    # - name: dns-tcp
+    #   port: 53
+    #   protocol: TCP

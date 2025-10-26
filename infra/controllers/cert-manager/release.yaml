@@ -1,0 +1,26 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cert-manager
+  namespace: security
+spec:
+  interval: 12h
+  chart:
+    spec:
+      chart: cert-manager
+      version: 1.19.1
+      sourceRef:
+        kind: OCIRepository
+        name: cert-manager
+        namespace: cert-manager
+      interval: 12h
+  install:
+    crds: Create
+  upgrade:
+    crds: CreateReplace
+  driftDetection:
+    mode: enabled
+
+  # valuesFrom:
+  #   - kind: ConfigMap
+  #     name: cilium-helm-values

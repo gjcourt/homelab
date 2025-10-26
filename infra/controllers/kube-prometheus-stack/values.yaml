@@ -2111,8 +2111,8 @@ kubeEtcd:
 
   ## If your etcd is not deployed as a pod, specify IPs it can be found on
   ##
-  endpoints:
-    - 192.168.4.113
+  endpoints: []
+  # - 192.168.4.113
   # - 10.141.4.22
   # - 10.141.4.23
   # - 10.141.4.24
@@ -2127,7 +2127,9 @@ kubeEtcd:
       enabled: false
       ipFamilies: ["IPv6", "IPv4"]
       ipFamilyPolicy: "PreferDualStack"
-    # selector:
+    selector:
+      k8s-app: kube-controller-manager # or any other service like kube-proxy or kube-scheduler
+    selector:
     #   component: etcd
 
   ## Configure secure access to the etcd cluster by loading a secret into prometheus and
@@ -2213,6 +2215,19 @@ kubeEtcd:
     ## defines the labels which are transferred from the associated Kubernetes Service object onto the ingested metrics.
     ## https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/api-reference/api.md#servicemonitor
     targetLabels: []
+
+    # Taken from https://github.com/siderolabs/talos/discussions/7214#discussioncomment-10345376
+    relabelings:   # Add nodename label
+      - sourceLabels: [__meta_kubernetes_pod_node_name]
+        separator: ;
+        regex: ^(.*)$
+        targetLabel: nodename
+        replacement: $1
+        action: replace
+
+    metricRelabelings:   # Remove pod label
+      - action: labeldrop
+        regex: pod
 
 ## Component scraping kube scheduler
 ##

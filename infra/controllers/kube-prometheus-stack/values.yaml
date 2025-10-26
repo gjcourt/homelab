@@ -2129,7 +2129,7 @@ kubeEtcd:
       ipFamilyPolicy: "PreferDualStack"
     selector:
       k8s-app: kube-controller-manager # or any other service like kube-proxy or kube-scheduler
-    selector:
+    # selector:
     #   component: etcd
 
   ## Configure secure access to the etcd cluster by loading a secret into prometheus and

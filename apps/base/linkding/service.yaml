@@ -3,9 +3,9 @@ kind: Service
 metadata:
   name: linkding
   namespace: linkding
-  # annotations:
-  #   lbipam.cilium.io/sharing-key: homelab
-  #   lbipam.cilium.io/sharing-cross-namespace: audiobookshelf,linkding,mealie
+  annotations:
+    lbipam.cilium.io/sharing-key: homelab
+    lbipam.cilium.io/sharing-cross-namespace: audiobookshelf,linkding,mealie,pihole
   labels:
     app: linkding
 spec:

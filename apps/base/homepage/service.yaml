@@ -3,9 +3,11 @@ kind: Service
 metadata:
   name: homepage
   namespace: default
+  # annotations:
+  #   lbipam.cilium.io/sharing-key: homelab
+  #   lbipam.cilium.io/sharing-cross-namespace: audiobookshelf,linkding,mealie,pihole
   labels:
     app.kubernetes.io/name: homepage
-  annotations:
 spec:
   type: ClusterIP
   ports:

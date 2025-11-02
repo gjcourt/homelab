@@ -3,6 +3,9 @@ kind: Service
 metadata:
   name: audiobookshelf
   namespace: audiobookshelf
+  annotations:
+    lbipam.cilium.io/sharing-key: homelab
+    lbipam.cilium.io/sharing-cross-namespace: audiobookshelf,linkding,mealie,pihole
   labels:
     app: audiobookshelf
 spec:

@@ -6,7 +6,7 @@ metadata:
   labels:
     app: pihole
   annotations:
-    # lbipam.cilium.io/ip-pool: single-node-pool
+    lbipam.cilium.io/ip-pool: single-node-pool
     lbipam.cilium.io/sharing-key: homelab
     lbipam.cilium.io/sharing-cross-namespace: default,audiobookshelf,linkding,mealie,pihole
 spec:

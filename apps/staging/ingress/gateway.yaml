@@ -15,6 +15,7 @@ spec:
   gatewayClassName: cilium
   infrastructure:
     annotations:
+      lbipam.cilium.io/ip-pool: single-node-pool
       lbipam.cilium.io/sharing-cross-namespace: pihole
       lbipam.cilium.io/sharing-key: homelab
   listeners:

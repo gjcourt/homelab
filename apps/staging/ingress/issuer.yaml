@@ -1,0 +1,33 @@
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt-staging
+  namespace: security
+spec:
+  acme:
+    # You must replace this email address with your own.
+    # Let's Encrypt will use this to contact you about expiring
+    # certificates, and issues related to your account.
+    email: skills.13freaky@icloud.com
+    # If the ACME server supports profiles, you can specify the profile name here.
+    # See #acme-certificate-profiles below.
+    profile: tlsserver
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      # Secret resource that will be used to store the account's private key.
+      # This is your identity with your ACME provider. Any secret name may be
+      # chosen. It will be populated with data automatically, so generally
+      # nothing further needs to be done with the secret. If you lose this
+      # identity/secret, you will be able to generate a new one and generate
+      # certificates for any/all domains managed using your previous account,
+      # but you will be unable to revoke any certificates generated using that
+      # previous account.
+      name: letsencrypt-staging-issuer-account-key
+    # Add a single challenge solver, HTTP01 using gateway api
+    solvers:
+      - http01:
+          gatewayHTTPRoute:
+            parentRefs:
+              - name: app-gateway-staging
+                namespace: default
+                kind: Gateway

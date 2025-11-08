@@ -2,3 +2,9 @@ crds:
   # This option decides if the CRDs should be installed
   # as part of the Helm installation.
   enabled: true
+
+config:
+  apiVersion: controller.config.cert-manager.io/v1alpha1
+  kind: ControllerConfiguration
+  # Enables gateway api to manage certs
+  enableGatewayAPI: true

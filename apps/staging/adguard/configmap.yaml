@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adguard-container-env
+  namespace: adguard
+  labels:
+    app: adguard
+    env: staging
+data:
+  ADGUARD_HTTPS_PORT: 443
+  ADGUARD_HTTP_PORT: 80
+  ADGUARD_LISTEN_ADDR: 0.0.0.0
+  DB_HOST: adguard-db-staging-cnpg-v1-rw.adguard.svc.cluster.local
+  DB_PORT: 5432
+  DB_USER: app

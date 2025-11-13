@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adguard
+  namespace: adguard
+spec:
+  template:
+    spec:
+      $patch: replace
+      containers:
+        - name: adguard
+          image: "adguard/adguardhome:latest"
+          # Pull env vars from the staging configmap/secret
+          envFrom:
+            - configMapRef:
+                name: adguard-container-env
+            - secretRef:
+                name: adguard-container-env-secret
+          ports:
+            - containerPort: 80
+              name: http
+            - containerPort: 443
+              name: https
+            - containerPort: 53
+              name: dns
+              protocol: UDP
+            - containerPort: 53
+              name: dns-tcp
+              protocol: TCP
+          # no volumeMounts in this overlay (we will not mount PVCs in staging)
+      # no volumes in this overlay

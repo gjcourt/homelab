@@ -20,19 +20,24 @@ spec:
     enablePodMonitor: true
 
   storage:
-    size: 1Gi
+    size: 2Gi
 
-  # bootstrap:
-  #   recovery:
-  #     source: clusterBackup
-  #     database: app
-  #     owner: app
-  #     secret:
-  #       name: linkding-db-creds
+  bootstrap:
+    recovery:
+      source: clusterBackup
+      database: app
+      owner: app
+      secret:
+        name: linkding-db-staging-cnpg-v1-app
 
   backup:
     barmanObjectStore:
-      destinationPath: "s3://gjcourt-homelab-backup/staging"
+      destinationPath: s3://gjcourt-homelab-backup/staging
+      # If you're using a non-AWS S3-compatible endpoint (MinIO, Synology, etc.)
+      # set the endpoint and region here. If you're using AWS S3 you can leave
+      # these as the AWS defaults or remove them.
+      s3Endpoint: https://s3.amazonaws.com
+      s3Region: us-east-1
       s3Credentials:
         accessKeyId:
           name: linkding-aws-creds-secret
@@ -40,5 +45,5 @@ spec:
         secretAccessKey:
           name: linkding-aws-creds-secret
           key: ACCESS_SECRET_KEY
-    retentionPolicy: "14d"
+    retentionPolicy: 14d
 

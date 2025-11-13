@@ -1,3 +1,4 @@
 # SOPS encryption config
 .sops.yaml
 default-values.yaml
+.vscode/

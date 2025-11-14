@@ -16,10 +16,10 @@ spec:
     app.kubernetes.io/name: adguard
   ports:
     - name: http
-      port: 80
+      port: 8080
       targetPort: http
     - name: https
-      port: 443
+      port: 8443
       targetPort: https
     - name: dns
       port: 53

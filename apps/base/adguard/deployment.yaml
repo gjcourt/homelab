@@ -31,16 +31,4 @@ spec:
               name: dns-tcp
               protocol: TCP
 
-          volumeMounts:
-            - mountPath: /opt/adguardhome/conf
-              name: config
-            - mountPath: /opt/adguardhome/work
-              name: work
-
-      volumes:
-        - name: config
-          persistentVolumeClaim:
-            claimName: adguard-config
-        - name: work
-          persistentVolumeClaim:
-            claimName: adguard-work
+      restartPolicy: Always

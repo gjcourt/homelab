@@ -10,5 +10,3 @@ resources:
 
 patchesStrategicMerge:
   - patch-deployment-cnpg.yaml
-  - delete-pvc-config.yaml
-  - delete-pvc-work.yaml

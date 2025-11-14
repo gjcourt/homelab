@@ -10,7 +10,7 @@ spec:
       chart: cert-manager
       version: 1.19.1
       sourceRef:
-        kind: OCIRepository
+        kind: HelmRepository
         name: cert-manager
         namespace: security
       interval: 12h

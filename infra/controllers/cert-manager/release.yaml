@@ -12,7 +12,7 @@ spec:
       sourceRef:
         kind: OCIRepository
         name: cert-manager
-        namespace: cert-manager
+        namespace: security
       interval: 12h
   install:
     crds: Create

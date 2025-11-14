@@ -22,14 +22,6 @@ spec:
   storage:
     size: 2Gi
 
-  bootstrap:
-    recovery:
-      source: clusterBackup
-      database: app
-      owner: app
-      secret:
-        name: linkding-db-staging-cnpg-v1-app
-
   backup:
     barmanObjectStore:
       destinationPath: s3://gjcourt-homelab-backup/staging

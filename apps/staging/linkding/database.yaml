@@ -33,11 +33,8 @@ spec:
   backup:
     barmanObjectStore:
       destinationPath: s3://gjcourt-homelab-backup/staging
-      # If you're using a non-AWS S3-compatible endpoint (MinIO, Synology, etc.)
-      # set the endpoint and region here. If you're using AWS S3 you can leave
-      # these as the AWS defaults or remove them.
-      s3Endpoint: https://s3.amazonaws.com
-      s3Region: us-east-1
+      # Removed s3Endpoint and s3Region as they're not supported in CNPG v1 schema
+      # For AWS S3, these are defaults and not required
       s3Credentials:
         accessKeyId:
           name: linkding-aws-creds-secret

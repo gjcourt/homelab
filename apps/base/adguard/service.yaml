@@ -15,6 +15,9 @@ spec:
   selector:
     app.kubernetes.io/name: adguard
   ports:
+    - name: setup
+      port: 3000
+      targetPort: 3000
     - name: http
       port: 8080
       targetPort: http

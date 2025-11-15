@@ -3,10 +3,3 @@ kind: Kustomization
 namespace: adguard
 resources:
   - ../../base/adguard
-  - configmap.yaml
-  - database.yaml
-  - secret-adguard-container-env.yaml
-  - httproute.yaml
-
-patchesStrategicMerge:
-  - patch-deployment-cnpg.yaml

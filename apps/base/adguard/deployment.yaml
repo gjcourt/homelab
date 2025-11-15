@@ -19,6 +19,12 @@ spec:
         - name: adguard
           image: adguard/adguardhome:latest
 
+          envFrom:
+            - configMapRef:
+                name: adguard-container-env
+            - secretRef:
+                name: adguard-container-env-secret
+
           ports:
             - containerPort: 80
               name: http

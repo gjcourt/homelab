@@ -4,3 +4,7 @@ resources:
   - deployment.yaml
   - namespace.yaml
   - service.yaml
+  - configmap.yaml
+  - database.yaml
+  - secret-adguard-container-env.yaml
+  - httproute.yaml

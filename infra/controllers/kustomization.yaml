@@ -5,6 +5,7 @@ resources:
   - cilium
   - cnpg
   - kube-prometheus-stack
+  - loki
   # - metallb
   - renovate
   - snapshot

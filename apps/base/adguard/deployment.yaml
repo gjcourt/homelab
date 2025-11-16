@@ -18,7 +18,6 @@ spec:
       containers:
         - name: adguard
           image: adguard/adguardhome:latest
-          imagePullPolicy: IfNotPresent
 
           envFrom:
             - configMapRef:

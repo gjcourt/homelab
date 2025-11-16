@@ -42,7 +42,23 @@ spec:
         certificateRefs:
           - kind: Secret
             group: ""
-            name: local-selfsigned-tls
+            name: adguard-stage-tls
+            namespace: security
+          - kind: Secret
+            group: ""
+            name: audio-books-stage-tls
+            namespace: security
+          - kind: Secret
+            group: ""
+            name: links-stage-tls
+            namespace: security
+          - kind: Secret
+            group: ""
+            name: mealie-stage-tls
+            namespace: security
+          - kind: Secret
+            group: ""
+            name: grafana-tls
             namespace: security
     # - name: http-metrics
     #   port: 9100

@@ -1,12 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: adguard-web
+  name: adguard
   namespace: adguard
   labels:
     app: adguard
-    app.kubernetes.io/name: adguard-web
-    app.kubernetes.io/component: web
+    app.kubernetes.io/name: adguard
   annotations:
     lbipam.cilium.io/ip-pool: single-node-pool
     lbipam.cilium.io/sharing-cross-namespace: default,audiobookshelf,linkding,mealie,pihole,adguard
@@ -14,8 +13,7 @@ metadata:
 spec:
   type: LoadBalancer
   selector:
-    app.kubernetes.io/name: adguard-web
-    app.kubernetes.io/component: web
+    app.kubernetes.io/name: adguard
   ports:
     - name: setup
       port: 3000
@@ -26,3 +24,11 @@ spec:
     - name: https
       port: 8443
       targetPort: https
+    - name: dns
+      port: 53
+      targetPort: dns
+      protocol: UDP
+    - name: dns-tcp
+      port: 53
+      targetPort: dns-tcp
+      protocol: TCP

@@ -35,5 +35,5 @@ spec:
       sectionName: https
   rules:
     - backendRefs:
-      - name: adguard-web
+      - name: adguard
         port: 80

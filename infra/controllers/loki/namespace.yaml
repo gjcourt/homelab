@@ -1,4 +1,2 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: loki
+# Loki will be installed in the monitoring namespace
+# which is created by kube-prometheus-stack

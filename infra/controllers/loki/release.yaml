@@ -2,9 +2,10 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: loki
-  namespace: loki
+  namespace: monitoring
 spec:
   interval: 12h
+  timeout: 10m
   chart:
     spec:
       chart: loki
@@ -12,7 +13,7 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: grafana
-        namespace: loki
+        namespace: monitoring
       interval: 12h
   install:
     crds: Create

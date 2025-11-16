@@ -1,3 +1,5 @@
+deploymentMode: SingleBinary
+
 loki:
   auth_enabled: false
   commonConfig:
@@ -20,6 +22,12 @@ singleBinary:
     enabled: true
     storageClass: synology-iscsi
     size: 10Gi
+  resources:
+    limits:
+      memory: 2Gi
+    requests:
+      cpu: 100m
+      memory: 512Mi
 
 # Disable unused components for single binary mode
 read:
@@ -28,6 +36,9 @@ write:
   replicas: 0
 backend:
   replicas: 0
+
+gateway:
+  enabled: false
 
 test:
   enabled: false

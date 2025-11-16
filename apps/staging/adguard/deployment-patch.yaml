@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adguard
+  namespace: adguard
+spec:
+  template:
+    spec:
+      containers:
+        - name: adguard
+          volumeMounts:
+            - mountPath: /opt/adguardhome/conf
+              name: config
+            - mountPath: /opt/adguardhome/work
+              name: work
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: adguard-config-staging
+        - name: work
+          persistentVolumeClaim:
+            claimName: adguard-work-staging

@@ -5,3 +5,7 @@ resources:
   - ../../base/adguard
   - configmap.yaml
   - secret-adguard-container-env.yaml
+  - storage.yaml
+
+patches:
+  - path: deployment-patch.yaml

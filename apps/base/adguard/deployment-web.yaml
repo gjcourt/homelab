@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adguard-web
+  namespace: adguard
+  labels:
+    app.kubernetes.io/name: adguard-web
+    app.kubernetes.io/component: web
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: adguard-web
+      app.kubernetes.io/component: web
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: adguard-web
+        app.kubernetes.io/component: web
+    spec:
+      containers:
+        - name: adguard
+          image: adguard/adguardhome:latest
+
+          envFrom:
+            - configMapRef:
+                name: adguard-container-env
+            - secretRef:
+                name: adguard-container-env-secret
+
+          ports:
+            - containerPort: 80
+              name: http
+            - containerPort: 443
+              name: https
+            - containerPort: 3000
+              name: setup
+
+          volumeMounts:
+            - mountPath: /opt/adguardhome/conf
+              name: config
+            - mountPath: /opt/adguardhome/work
+              name: work
+
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: adguard-config
+        - name: work
+          persistentVolumeClaim:
+            claimName: adguard-work
+
+      restartPolicy: Always

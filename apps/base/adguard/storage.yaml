@@ -5,6 +5,7 @@ metadata:
   namespace: adguard
 spec:
   accessModes: ["ReadWriteOnce"]
+  storageClassName: synology-iscsi
   resources:
     requests:
       storage: 1Gi
@@ -16,6 +17,7 @@ metadata:
   namespace: adguard
 spec:
   accessModes: ["ReadWriteOnce"]
+  storageClassName: synology-iscsi
   resources:
     requests:
       storage: 1Gi

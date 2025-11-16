@@ -8,3 +8,9 @@ config:
   kind: ControllerConfiguration
   # Enables gateway api to manage certs
   enableGatewayAPI: true
+
+# Enable the default approver
+# This automatically approves certificate requests from cert-manager
+approveSignerNames:
+  - "issuers.cert-manager.io/*"
+  - "clusterissuers.cert-manager.io/*"

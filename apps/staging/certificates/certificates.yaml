@@ -36,6 +36,8 @@ spec:
     kind: ClusterIssuer
   dnsNames:
     - links-stage.burntbytes.com
+  # Force DNS-01 challenge by requesting a wildcard or using solver selection
+  # The ClusterIssuer will automatically use DNS-01 based on the dnsNames selector
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate

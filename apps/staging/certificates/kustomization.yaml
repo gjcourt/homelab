@@ -4,5 +4,6 @@ resources:
   - namespace.yaml
   - referencegrant.yaml
   - secret-tls-creds.yaml
+  - secret-cloudflare-api-token.yaml
   - clusterissuer.yaml
   - certificates.yaml

@@ -9,19 +9,12 @@ spec:
     privateKeySecretRef:
       name: letsencrypt-production-issuer-account-key
     solvers:
-      # HTTP-01 solver for most certificates
-      - http01:
-          gatewayHTTPRoute:
-            parentRefs:
-              - name: app-gateway-staging
-                namespace: default
-                kind: Gateway
-      # DNS-01 solver for Cloudflare (for specific domains)
-      - selector:
-          dnsNames:
-            - links-stage.burntbytes.com
-        dns01:
+      # DNS-01 solver for all burntbytes.com certificates via Cloudflare
+      - dns01:
           cloudflare:
             apiTokenSecretRef:
               name: cloudflare-api-token
               key: api-token
+        selector:
+          dnsZones:
+            - burntbytes.com

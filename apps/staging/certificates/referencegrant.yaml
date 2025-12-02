@@ -13,4 +13,5 @@ spec:
   to:
     - group: ""
       kind: Secret
-      name: local-selfsigned-tls
+      # Allow access to all certificate secrets in this namespace
+      # This includes both self-signed and Let's Encrypt certificates

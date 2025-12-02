@@ -7,3 +7,4 @@ resources:
   - secret-cloudflare-api-token.yaml
   - clusterissuer.yaml
   - certificates.yaml
+  - certificate-wildcard.yaml

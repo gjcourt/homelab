@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memos
+  namespace: memos
+  labels:
+    app: memos
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: memos
+  template:
+    metadata:
+      labels:
+        app: memos
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+
+      containers:
+        - name: memos
+          image: neosmemo/memos:stable
+          ports:
+            - containerPort: 5230
+
+          envFrom:
+            - configMapRef:
+                name: memos-container-env
+
+          volumeMounts:
+            - name: memos-data
+              mountPath: /var/opt/memos
+
+          securityContext:
+            allowPrivilegeEscalation: false
+
+      volumes:
+        - name: memos-data
+          persistentVolumeClaim:
+            claimName: memos-data-pvc

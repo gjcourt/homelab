@@ -1,0 +1,35 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: memos-db-staging-cnpg-v1
+  namespace: memos
+
+spec:
+  description: Postgres cluster for the memos application
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.5
+
+  instances: 3
+
+  inheritedMetadata:
+    labels:
+      app: memos-database
+      env: staging
+      policy-type: "database"
+
+  monitoring:
+    enablePodMonitor: true
+
+  storage:
+    size: 2Gi
+
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://gjcourt-homelab-backup/staging/memos
+      s3Credentials:
+        accessKeyId:
+          name: memos-aws-creds-secret
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: memos-aws-creds-secret
+          key: ACCESS_SECRET_KEY
+    retentionPolicy: 14d

@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memos
+  namespace: memos
+spec:
+  template:
+    spec:
+      initContainers:
+        # Construct DSN from environment variables including CNPG password
+        - name: init-dsn
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              echo "postgresql://${MEMOS_DB_USER}:${MEMOS_DB_PASSWORD}@${MEMOS_DB_HOST}:${MEMOS_DB_PORT}/${MEMOS_DB_NAME}?sslmode=require" > /dsn/MEMOS_DSN
+          envFrom:
+            - configMapRef:
+                name: memos-container-env
+          env:
+            - name: MEMOS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: memos-db-staging-cnpg-v1-app
+                  key: password
+          volumeMounts:
+            - name: dsn-volume
+              mountPath: /dsn
+      containers:
+        - name: memos
+          env:
+            - name: MEMOS_DSN
+              value: ""  # Will be overridden by the script below
+          command:
+            - sh
+            - -c
+            - |
+              export MEMOS_DSN=$(cat /dsn/MEMOS_DSN)
+              exec /usr/local/memos/memos
+          volumeMounts:
+            - name: dsn-volume
+              mountPath: /dsn
+      volumes:
+        - name: dsn-volume
+          emptyDir: {}

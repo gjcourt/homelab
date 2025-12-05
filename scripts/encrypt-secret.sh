@@ -1,6 +1,4 @@
 #!/bin/sh
-sops --age=$AGE_PUBLIC \
-	--encrypt \
-	--encrypted-regex '^(data|stringData)$' \
-	--in-place \
-	$@
+# Encrypts Kubernetes secrets in-place using SOPS
+# Configuration is read from .sops.yaml at repo root
+sops --encrypt --in-place "$@"

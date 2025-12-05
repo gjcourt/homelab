@@ -1,5 +1,4 @@
 #!/bin/sh
-export SOPS_AGE_KEY_FILE=/Users/george/.sops/homelab-staging.agekey
-sops --decrypt \
-    --in-place \
-    $@
+# Decrypts SOPS-encrypted Kubernetes secrets in-place
+# Requires SOPS_AGE_KEY_FILE env var set in shell profile
+sops --decrypt --in-place "$@"

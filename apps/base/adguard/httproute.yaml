@@ -36,4 +36,4 @@ spec:
   rules:
     - backendRefs:
       - name: adguard
-        port: 80
+        port: 8080

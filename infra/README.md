@@ -1,10 +1,12 @@
-# Homelan Infra
+# Homelab Infra
 
 ## Current components
 - kube-prometheus-stack
 - MetalLB
-- Traefik
-
-## Future components
-- ingress-nginx
-- Cilium
+- Cilium (CNI + Gateway API)
+- cert-manager
+- CloudNative PG (cnpg)
+- Loki
+- Renovate
+- Synology CSI
+- Snapshot controller

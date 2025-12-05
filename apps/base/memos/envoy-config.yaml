@@ -83,7 +83,15 @@ data:
             envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
               "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
               explicit_http_config:
-                http2_protocol_options: {}
+                http2_protocol_options:
+                  max_concurrent_streams: 1
+                  initial_stream_window_size: 65536
+                  initial_connection_window_size: 1048576
+          circuit_breakers:
+            thresholds:
+              - max_connections: 1000
+                max_pending_requests: 1000
+                max_requests: 1000
           load_assignment:
             cluster_name: memos_grpc
             endpoints:

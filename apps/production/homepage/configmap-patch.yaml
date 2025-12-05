@@ -14,10 +14,20 @@ data:
             icon: linkding.png
             href: https://links.burntbytes.com
             description: Bookmark manager
+        - Audiobookshelf:
+            icon: audiobookshelf.png
+            href: https://audiobooks.burntbytes.com
+            description: Audiobook and podcast server
         - Mealie:
             icon: mealie.png
             href: https://mealie.burntbytes.com
             description: Recipe management
+
+    - Infrastructure:
+        - AdGuard Home:
+            icon: adguard-home.png
+            href: https://adguard.burntbytes.com
+            description: DNS ad blocker
 
   bookmarks.yaml: |
     - Developer:

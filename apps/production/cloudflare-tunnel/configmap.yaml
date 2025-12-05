@@ -16,6 +16,18 @@ data:
     # Route all traffic to the production gateway
     # The gateway handles routing based on hostname
     ingress:
+      # AdGuard Home
+      - hostname: adguard.burntbytes.com
+        service: http://app-gateway-production.default.svc.cluster.local:8080
+        originRequest:
+          httpHostHeader: adguard.burntbytes.com
+
+      # Audiobookshelf
+      - hostname: audiobooks.burntbytes.com
+        service: http://app-gateway-production.default.svc.cluster.local:8080
+        originRequest:
+          httpHostHeader: audiobooks.burntbytes.com
+
       # Homepage
       - hostname: home.burntbytes.com
         service: http://app-gateway-production.default.svc.cluster.local:8080

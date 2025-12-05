@@ -5,14 +5,11 @@ metadata:
   namespace: memos
   labels:
     app: memos
-  annotations:
-    # memos uses gRPC which requires HTTP/2
 spec:
   type: ClusterIP
   selector:
     app: memos
   ports:
-    - name: grpc
+    - name: http
       port: 5230
       targetPort: 5230
-      appProtocol: kubernetes.io/h2c

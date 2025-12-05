@@ -34,10 +34,11 @@ data:
                           domains: ["*"]
                           cors:
                             allow_origin_string_match:
-                              - prefix: "*"
+                              - exact: "https://memos-stage.burntbytes.com"
                             allow_methods: "GET, POST, PUT, DELETE, PATCH, OPTIONS"
-                            allow_headers: "content-type, x-grpc-web, x-user-agent, grpc-timeout, authorization"
-                            expose_headers: "grpc-status, grpc-message, grpc-status-details-bin"
+                            allow_headers: "content-type, x-grpc-web, x-user-agent, grpc-timeout, authorization, cookie"
+                            expose_headers: "grpc-status, grpc-message, grpc-status-details-bin, set-cookie"
+                            allow_credentials: true
                             max_age: "86400"
                           routes:
                             # gRPC routes - use HTTP/2 backend

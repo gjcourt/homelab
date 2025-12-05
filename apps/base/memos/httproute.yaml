@@ -71,5 +71,5 @@ spec:
         - method:
             service: "memos.api.v1.WebhookService"
       backendRefs:
-        - name: memos
+        - name: memos-grpc
           port: 5230

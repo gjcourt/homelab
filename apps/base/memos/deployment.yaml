@@ -21,6 +21,20 @@ spec:
         fsGroup: 1000
 
       containers:
+        - name: envoy
+          image: envoyproxy/envoy:v1.31-latest
+          args:
+            - -c
+            - /etc/envoy/envoy.yaml
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: envoy-config
+              mountPath: /etc/envoy
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+
         - name: memos
           image: neosmemo/memos:stable
           ports:
@@ -38,6 +52,9 @@ spec:
             allowPrivilegeEscalation: false
 
       volumes:
+        - name: envoy-config
+          configMap:
+            name: memos-envoy-config
         - name: memos-data
           persistentVolumeClaim:
             claimName: memos-data-pvc

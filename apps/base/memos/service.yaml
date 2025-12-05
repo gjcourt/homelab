@@ -13,5 +13,4 @@ spec:
     - name: http
       port: 5230
       targetPort: 5230
-      protocol: GRPC
       # appProtocol: kubernetes.io/h2c

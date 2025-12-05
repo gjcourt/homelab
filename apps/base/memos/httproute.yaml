@@ -49,27 +49,27 @@ spec:
   rules:
     - matches:
         - method:
-            service: "memos.api.v1.WorkspaceService"
+            service: memos.api.v1.ActivityService
         - method:
-            service: "memos.api.v1.AuthService"
+            service: memos.api.v1.AuthService
         - method:
-            service: "memos.api.v1.UserService"
+            service: memos.api.v1.IdentityProviderService
         - method:
-            service: "memos.api.v1.MemoService"
+            service: memos.api.v1.InboxService
         - method:
-            service: "memos.api.v1.AttachmentService"
+            service: memos.api.v1.MarkdownService
         - method:
-            service: "memos.api.v1.ShortcutService"
+            service: memos.api.v1.MemoService
         - method:
-            service: "memos.api.v1.ActivityService"
+            service: memos.api.v1.ResourceService
         - method:
-            service: "memos.api.v1.IdentityProviderService"
+            service: memos.api.v1.UserService
         - method:
-            service: "memos.api.v1.InstanceService"
+            service: memos.api.v1.WebhookService
         - method:
-            service: "memos.api.v1.MarkdownService"
+            service: memos.api.v1.WorkspaceService
         - method:
-            service: "memos.api.v1.WebhookService"
+            service: memos.api.v1.WorkspaceSettingService
       backendRefs:
         - name: memos-grpc
           port: 5230

@@ -10,7 +10,7 @@ spec:
   selector:
     app: memos
   ports:
-    - name: http
+    - name: grpc
       port: 5230
       targetPort: 5230
-      # appProtocol: kubernetes.io/h2c
+      appProtocol: kubernetes.io/h2c

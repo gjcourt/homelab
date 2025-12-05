@@ -3,4 +3,4 @@ kind: Namespace
 metadata:
   name: homepage
   labels:
-    # http-ingress: "true"
+    http-ingress: "true"

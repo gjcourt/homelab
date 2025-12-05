@@ -19,6 +19,8 @@ data:
                     "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
                     stat_prefix: ingress_http
                     codec_type: AUTO
+                    upgrade_configs:
+                      - upgrade_type: websocket
                     route_config:
                       name: local_route
                       virtual_hosts:
@@ -34,24 +36,11 @@ data:
                             allow_credentials: true
                             max_age: "86400"
                           routes:
-                            # Route gRPC-web requests to HTTP/2 cluster
-                            - match:
-                                prefix: "/"
-                                headers:
-                                  - name: content-type
-                                    prefix_match: "application/grpc"
-                              route:
-                                cluster: memos_grpc
-                            # Route everything else to HTTP/1.1 cluster
                             - match:
                                 prefix: "/"
                               route:
-                                cluster: memos_http
+                                cluster: memos
                     http_filters:
-                      # gRPC-web filter to translate gRPC-web to gRPC
-                      - name: envoy.filters.http.grpc_web
-                        typed_config:
-                          "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
                       # CORS filter for browser requests
                       - name: envoy.filters.http.cors
                         typed_config:
@@ -74,40 +63,12 @@ data:
                           "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
       clusters:
-        # HTTP/2 cluster for gRPC requests
-        - name: memos_grpc
-          connect_timeout: 30s
-          type: STATIC
-          lb_policy: ROUND_ROBIN
-          typed_extension_protocol_options:
-            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
-              "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
-              explicit_http_config:
-                http2_protocol_options:
-                  max_concurrent_streams: 1
-                  initial_stream_window_size: 65536
-                  initial_connection_window_size: 1048576
-          circuit_breakers:
-            thresholds:
-              - max_connections: 1000
-                max_pending_requests: 1000
-                max_requests: 1000
-          load_assignment:
-            cluster_name: memos_grpc
-            endpoints:
-              - lb_endpoints:
-                  - endpoint:
-                      address:
-                        socket_address:
-                          address: 127.0.0.1
-                          port_value: 5230
-        # HTTP/1.1 cluster for web UI and REST API
-        - name: memos_http
+        - name: memos
           connect_timeout: 30s
           type: STATIC
           lb_policy: ROUND_ROBIN
           load_assignment:
-            cluster_name: memos_http
+            cluster_name: memos
             endpoints:
               - lb_endpoints:
                   - endpoint:

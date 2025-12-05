@@ -28,8 +28,6 @@ spec:
             - name: dsn-volume
               mountPath: /dsn
       containers:
-        # Envoy sidecar is defined in base - this entry ensures it's preserved
-        - name: envoy
         - name: memos
           env:
             - name: MEMOS_DSN

@@ -25,11 +25,28 @@ data:
                         - name: memos
                           domains: ["*"]
                           routes:
+                            # Route gRPC-web requests to HTTP/2 cluster
+                            - match:
+                                prefix: "/"
+                                headers:
+                                  - name: content-type
+                                    prefix_match: "application/grpc"
+                              route:
+                                cluster: memos_grpc
+                            # Route everything else to HTTP/1.1 cluster
                             - match:
                                 prefix: "/"
                               route:
-                                cluster: memos
+                                cluster: memos_http
                     http_filters:
+                      # gRPC-web filter to translate gRPC-web to gRPC
+                      - name: envoy.filters.http.grpc_web
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb
+                      # CORS filter for browser requests
+                      - name: envoy.filters.http.cors
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors
                       # Lua filter to rewrite grpc-metadata-set-cookie to set-cookie
                       - name: envoy.filters.http.lua
                         typed_config:
@@ -48,12 +65,32 @@ data:
                           "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
       clusters:
-        - name: memos
+        # HTTP/2 cluster for gRPC requests
+        - name: memos_grpc
+          connect_timeout: 30s
+          type: STATIC
+          lb_policy: ROUND_ROBIN
+          typed_extension_protocol_options:
+            envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+              "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+              explicit_http_config:
+                http2_protocol_options: {}
+          load_assignment:
+            cluster_name: memos_grpc
+            endpoints:
+              - lb_endpoints:
+                  - endpoint:
+                      address:
+                        socket_address:
+                          address: 127.0.0.1
+                          port_value: 5230
+        # HTTP/1.1 cluster for web UI and REST API
+        - name: memos_http
           connect_timeout: 30s
           type: STATIC
           lb_policy: ROUND_ROBIN
           load_assignment:
-            cluster_name: memos
+            cluster_name: memos_http
             endpoints:
               - lb_endpoints:
                   - endpoint:

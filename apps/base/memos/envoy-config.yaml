@@ -26,6 +26,13 @@ data:
                       virtual_hosts:
                         - name: backend
                           domains: ["*"]
+                          cors:
+                            allow_origin_string_match:
+                              - prefix: "*"
+                            allow_methods: "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+                            allow_headers: "content-type, x-grpc-web, x-user-agent, grpc-timeout, authorization"
+                            expose_headers: "grpc-status, grpc-message, grpc-status-details-bin"
+                            max_age: "86400"
                           routes:
                             # gRPC routes - use HTTP/2 backend
                             - match:
@@ -42,6 +49,9 @@ data:
                               route:
                                 cluster: memos_http
                     http_filters:
+                      - name: envoy.filters.http.cors
+                        typed_config:
+                          "@type": type.googleapis.com/envoy.extensions.filters.http.cors.v3.Cors
                       - name: envoy.filters.http.grpc_web
                         typed_config:
                           "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_web.v3.GrpcWeb

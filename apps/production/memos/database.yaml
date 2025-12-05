@@ -1,0 +1,44 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: memos-db-production-cnpg-v1
+  namespace: memos
+
+spec:
+  description: Postgres cluster for the memos application (production)
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.5
+
+  instances: 3
+
+  inheritedMetadata:
+    labels:
+      app: memos-database
+      env: production
+      policy-type: "database"
+
+  monitoring:
+    enablePodMonitor: true
+
+  storage:
+    size: 10Gi
+
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://gjcourt-homelab-backup/production/memos
+      s3Credentials:
+        accessKeyId:
+          name: memos-aws-creds-secret
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: memos-aws-creds-secret
+          key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "30d"
+
+  bootstrap:
+    initdb:
+      database: app
+      owner: app

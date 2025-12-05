@@ -1,0 +1,21 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: Gateway
+metadata:
+  name: app-gateway-production
+  namespace: default
+  labels:
+    app: gateway
+    env: production
+spec:
+  gatewayClassName: cilium
+  listeners:
+    # Internal HTTP listener for cloudflared tunnel traffic
+    - name: http-internal
+      port: 8080
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              http-ingress: "true"

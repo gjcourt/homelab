@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homepage
+  namespace: homepage
+data:
+  services.yaml: |
+    - Applications:
+        - Memos:
+            icon: memos.png
+            href: https://memos.burntbytes.com
+            description: Lightweight note-taking service
+        - Linkding:
+            icon: linkding.png
+            href: https://links.burntbytes.com
+            description: Bookmark manager
+        - Mealie:
+            icon: mealie.png
+            href: https://mealie.burntbytes.com
+            description: Recipe management
+
+  bookmarks.yaml: |
+    - Developer:
+        - Github:
+            - abbr: GH
+              href: https://github.com/
+
+    - Reference:
+        - Kubernetes Docs:
+            - abbr: K8s
+              href: https://kubernetes.io/docs/
+        - Cilium Docs:
+            - abbr: CIL
+              href: https://docs.cilium.io/
+
+  widgets.yaml: |
+    - kubernetes:
+        cluster:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+          label: "production"
+        nodes:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+    - search:
+        provider: duckduckgo
+        target: _blank

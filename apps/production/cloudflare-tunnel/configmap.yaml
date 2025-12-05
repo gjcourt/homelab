@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared
+data:
+  config.yaml: |
+    # Production tunnel configuration
+    # Tunnel name should match the tunnel created in Cloudflare dashboard
+    tunnel: production
+    credentials-file: /etc/cloudflared/creds/credentials.json
+
+    # Metrics endpoint for health checks
+    metrics: 0.0.0.0:2000
+    no-autoupdate: true
+
+    # Route all traffic to the production gateway
+    # The gateway handles routing based on hostname
+    ingress:
+      # Homepage
+      - hostname: home.burntbytes.com
+        service: http://app-gateway-production.default.svc.cluster.local:8080
+        originRequest:
+          httpHostHeader: home.burntbytes.com
+
+      # Memos
+      - hostname: memos.burntbytes.com
+        service: http://app-gateway-production.default.svc.cluster.local:8080
+        originRequest:
+          httpHostHeader: memos.burntbytes.com
+
+      # Linkding
+      - hostname: links.burntbytes.com
+        service: http://app-gateway-production.default.svc.cluster.local:8080
+        originRequest:
+          httpHostHeader: links.burntbytes.com
+
+      # Mealie
+      - hostname: mealie.burntbytes.com
+        service: http://app-gateway-production.default.svc.cluster.local:8080
+        originRequest:
+          httpHostHeader: mealie.burntbytes.com
+
+      # Catch-all returns 404
+      - service: http_status:404

@@ -1,0 +1,56 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: memos-http
+  namespace: memos
+spec:
+  hostnames:
+    - memos.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http-internal
+  rules:
+    - backendRefs:
+      - name: memos
+        port: 5230
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GRPCRoute
+metadata:
+  name: memos-grpc
+  namespace: memos
+spec:
+  hostnames:
+    - memos.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http-internal
+  rules:
+    - matches:
+        - method:
+            service: memos.api.v1.ActivityService
+        - method:
+            service: memos.api.v1.AuthService
+        - method:
+            service: memos.api.v1.IdentityProviderService
+        - method:
+            service: memos.api.v1.InboxService
+        - method:
+            service: memos.api.v1.MarkdownService
+        - method:
+            service: memos.api.v1.MemoService
+        - method:
+            service: memos.api.v1.ResourceService
+        - method:
+            service: memos.api.v1.UserService
+        - method:
+            service: memos.api.v1.WebhookService
+        - method:
+            service: memos.api.v1.WorkspaceService
+        - method:
+            service: memos.api.v1.WorkspaceSettingService
+      backendRefs:
+        - name: memos-grpc
+          port: 5230

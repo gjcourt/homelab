@@ -5,6 +5,7 @@ resources:
   - ../../base/memos/
   - configmap.yaml
   - database.yaml
+  - httproute.yaml
   - secret-aws-creds.yaml
 
 patches:

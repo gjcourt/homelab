@@ -3,7 +3,6 @@ kind: Kustomization
 resources:
   - configmap.yaml
   - deployment.yaml
-  - httproute.yaml
   - namespace.yaml
   - service.yaml
   - storage.yaml

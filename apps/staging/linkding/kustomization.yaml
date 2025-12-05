@@ -6,6 +6,7 @@ resources:
   # - cloudflare.yaml
   - configmap.yaml
   - database.yaml
+  - httproute.yaml
   - secret-aws-creds.yaml
   - secret-cloudflare-tunnel.yaml
   - secret-linkding-container-env.yaml

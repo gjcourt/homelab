@@ -4,6 +4,7 @@ namespace: adguard
 resources:
   - ../../base/adguard
   - configmap.yaml
+  - httproute.yaml
   - secret-adguard-container-env.yaml
   - storage.yaml
 

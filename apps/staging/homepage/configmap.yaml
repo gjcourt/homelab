@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homepage
+  namespace: homepage
+data:
+  services.yaml: |
+    - Applications:
+        - Memos:
+            icon: memos.png
+            href: https://memos-stage.burntbytes.com
+            description: Lightweight note-taking service
+        - Linkding:
+            icon: linkding.png
+            href: https://links-stage.burntbytes.com
+            description: Bookmark manager
+        - Audiobookshelf:
+            icon: audiobookshelf.png
+            href: https://audiobookshelf-stage.burntbytes.com
+            description: Audiobook and podcast server
+        - Mealie:
+            icon: mealie.png
+            href: https://mealie-stage.burntbytes.com
+            description: Recipe management
+
+    - Infrastructure:
+        - AdGuard Home:
+            icon: adguard-home.png
+            href: https://adguard-stage.burntbytes.com
+            description: DNS ad blocker
+
+  bookmarks.yaml: |
+    - Developer:
+        - Github:
+            - abbr: GH
+              href: https://github.com/
+
+    - Reference:
+        - Kubernetes Docs:
+            - abbr: K8s
+              href: https://kubernetes.io/docs/
+        - Cilium Docs:
+            - abbr: CIL
+              href: https://docs.cilium.io/
+
+  widgets.yaml: |
+    - kubernetes:
+        cluster:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+          label: "staging"
+        nodes:
+          show: true
+          cpu: true
+          memory: true
+          showLabel: true
+    - search:
+        provider: duckduckgo
+        target: _blank

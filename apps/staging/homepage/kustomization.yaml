@@ -3,3 +3,7 @@ kind: Kustomization
 namespace: homepage
 resources:
   - ../../base/homepage/
+  - httproute.yaml
+patches:
+  - path: deployment-patch.yaml
+  - path: configmap.yaml

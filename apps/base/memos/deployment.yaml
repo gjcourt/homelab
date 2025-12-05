@@ -37,18 +37,16 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
 
-        - name: envoy
-          image: envoyproxy/envoy:v1.31-latest
+        - name: grpcwebproxy
+          image: ghcr.io/aspect-build/aspect-workflows/grpcwebproxy:latest
           ports:
             - containerPort: 8080
-          command:
-            - envoy
-            - -c
-            - /etc/envoy/envoy.yaml
-          volumeMounts:
-            - name: envoy-config
-              mountPath: /etc/envoy
-              readOnly: true
+          args:
+            - --backend_addr=127.0.0.1:5230
+            - --run_tls_server=false
+            - --allow_all_origins
+            - --use_websockets
+            - --backend_tls=false
           securityContext:
             allowPrivilegeEscalation: false
 
@@ -56,6 +54,3 @@ spec:
         - name: memos-data
           persistentVolumeClaim:
             claimName: memos-data-pvc
-        - name: envoy-config
-          configMap:
-            name: memos-envoy-config

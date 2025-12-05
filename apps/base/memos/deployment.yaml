@@ -37,7 +37,25 @@ spec:
           securityContext:
             allowPrivilegeEscalation: false
 
+        - name: envoy
+          image: envoyproxy/envoy:v1.31-latest
+          ports:
+            - containerPort: 8080
+          command:
+            - envoy
+            - -c
+            - /etc/envoy/envoy.yaml
+          volumeMounts:
+            - name: envoy-config
+              mountPath: /etc/envoy
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+
       volumes:
         - name: memos-data
           persistentVolumeClaim:
             claimName: memos-data-pvc
+        - name: envoy-config
+          configMap:
+            name: memos-envoy-config

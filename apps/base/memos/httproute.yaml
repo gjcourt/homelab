@@ -49,7 +49,27 @@ spec:
   rules:
     - matches:
         - method:
-            service: "memos.api.v1.*"
+            service: "memos.api.v1.WorkspaceService"
+        - method:
+            service: "memos.api.v1.AuthService"
+        - method:
+            service: "memos.api.v1.UserService"
+        - method:
+            service: "memos.api.v1.MemoService"
+        - method:
+            service: "memos.api.v1.AttachmentService"
+        - method:
+            service: "memos.api.v1.ShortcutService"
+        - method:
+            service: "memos.api.v1.ActivityService"
+        - method:
+            service: "memos.api.v1.IdentityProviderService"
+        - method:
+            service: "memos.api.v1.InstanceService"
+        - method:
+            service: "memos.api.v1.MarkdownService"
+        - method:
+            service: "memos.api.v1.WebhookService"
       backendRefs:
         - name: memos
           port: 5230

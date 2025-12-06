@@ -16,7 +16,7 @@ spec:
       volumes:
         - name: config
           persistentVolumeClaim:
-            claimName: adguard-config-staging
+            claimName: adguard-config-stage
         - name: work
           persistentVolumeClaim:
-            claimName: adguard-work-staging
+            claimName: adguard-work-stage

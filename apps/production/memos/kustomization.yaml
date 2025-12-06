@@ -1,6 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: memos
+namespace: memos-prod
 resources:
   - ../../base/memos/
   - configmap.yaml
@@ -8,7 +8,18 @@ resources:
   - httproute.yaml
   - secret-aws-creds.yaml
 
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false
+
 patches:
   - path: deployment-patch.yaml
-
-nameSuffix: ""
+  - target:
+      kind: Namespace
+      name: memos
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: memos-prod

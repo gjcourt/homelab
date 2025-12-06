@@ -2,7 +2,7 @@ apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
   name: audiobookshelf-http
-  namespace: audiobookshelf
+  namespace: audiobookshelf-stage
 spec:
   hostnames:
     - audio-books-stage.burntbytes.com # Match requests
@@ -21,7 +21,7 @@ apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
   name: audiobookshelf-https
-  namespace: audiobookshelf
+  namespace: audiobookshelf-stage
 spec:
   hostnames:
     - audio-books-stage.burntbytes.com # Match requests

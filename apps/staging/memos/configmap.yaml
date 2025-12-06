@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: memos-container-env
-  namespace: memos
+  namespace: memos-stage
   labels:
     app: memos
     env: staging
@@ -12,7 +12,7 @@ data:
   MEMOS_PORT: "5230"
   MEMOS_DRIVER: postgres
   # DB connection details - password injected from CNPG secret in deployment patch
-  MEMOS_DB_HOST: memos-db-staging-cnpg-v1-rw.memos.svc.cluster.local
+  MEMOS_DB_HOST: memos-db-stage-cnpg-v1-rw.memos-stage.svc.cluster.local
   MEMOS_DB_PORT: "5432"
   MEMOS_DB_USER: app
   MEMOS_DB_NAME: app

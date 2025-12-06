@@ -16,7 +16,7 @@ spec:
       volumes:
         - name: config
           persistentVolumeClaim:
-            claimName: adguard-config-production
+            claimName: adguard-config-prod
         - name: work
           persistentVolumeClaim:
-            claimName: adguard-work-production
+            claimName: adguard-work-prod

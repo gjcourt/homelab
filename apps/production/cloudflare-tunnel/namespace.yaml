@@ -3,4 +3,5 @@ kind: Namespace
 metadata:
   name: cloudflare-tunnel
   labels:
-    app.kubernetes.io/name: cloudflare-tunnel
+    env: production
+    app.kubernetes.io/instance: production

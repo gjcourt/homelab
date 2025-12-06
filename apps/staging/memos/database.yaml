@@ -1,8 +1,8 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: memos-db-staging-cnpg-v1
-  namespace: memos
+  name: memos-db-stage-cnpg-v1
+  namespace: memos-stage
 
 spec:
   description: Postgres cluster for the memos application

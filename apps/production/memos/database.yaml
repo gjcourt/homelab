@@ -1,8 +1,8 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: memos-db-production-cnpg-v1
-  namespace: memos
+  name: memos-db-prod-cnpg-v1
+  namespace: memos-prod
 
 spec:
   description: Postgres cluster for the memos application (production)

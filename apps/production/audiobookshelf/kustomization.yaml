@@ -1,6 +1,21 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: audiobookshelf
+namespace: audiobookshelf-prod
 resources:
   - ../../base/audiobookshelf/
   - httproute.yaml
+
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Namespace
+      name: audiobookshelf
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: audiobookshelf-prod

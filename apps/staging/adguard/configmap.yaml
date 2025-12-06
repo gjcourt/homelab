@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: adguard-container-env
-  namespace: adguard
+  namespace: adguard-stage
   labels:
     app: adguard
     env: staging

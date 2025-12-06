@@ -1,6 +1,21 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: mealie
+namespace: mealie-stage
 resources:
   - ../../base/mealie/
   - httproute.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Namespace
+      name: mealie
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: mealie-stage

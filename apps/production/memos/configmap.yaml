@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: memos-container-env
-  namespace: memos
+  namespace: memos-prod
   labels:
     app: memos
     env: production
@@ -10,7 +10,7 @@ data:
   MEMOS_MODE: prod
   MEMOS_PORT: "5230"
   MEMOS_DRIVER: postgres
-  MEMOS_DB_HOST: memos-db-production-cnpg-v1-rw.memos.svc.cluster.local
+  MEMOS_DB_HOST: memos-db-prod-cnpg-v1-rw.memos-prod.svc.cluster.local
   MEMOS_DB_PORT: "5432"
   MEMOS_DB_USER: app
   MEMOS_DB_NAME: app

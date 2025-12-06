@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: linkding-container-env
-  namespace: linkding
+  namespace: linkding-stage
   labels:
     app: linkding
     env: staging
@@ -10,7 +10,7 @@ metadata:
 data:
   LD_DB_DATABASE: app
   LD_DB_ENGINE: postgres
-  LD_DB_HOST: linkding-db-staging-cnpg-v1-rw.linkding.svc.cluster.local
+  LD_DB_HOST: linkding-db-stage-cnpg-v1-rw.linkding-stage.svc.cluster.local
   LD_DB_PORT: '5432'
   LD_DB_USER: app
   LD_SUPERUSER_NAME: george

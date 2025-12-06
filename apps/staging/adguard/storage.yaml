@@ -1,8 +1,8 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: adguard-config-staging
-  namespace: adguard
+  name: adguard-config-stage
+  namespace: adguard-stage
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: synology-iscsi
@@ -13,8 +13,8 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: adguard-work-staging
-  namespace: adguard
+  name: adguard-work-stage
+  namespace: adguard-stage
 spec:
   accessModes: ["ReadWriteOnce"]
   storageClassName: synology-iscsi

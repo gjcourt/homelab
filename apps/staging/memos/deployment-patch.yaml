@@ -22,7 +22,7 @@ spec:
             - name: MEMOS_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: memos-db-staging-cnpg-v1-app
+                  name: memos-db-stage-cnpg-v1-app
                   key: password
           volumeMounts:
             - name: dsn-volume

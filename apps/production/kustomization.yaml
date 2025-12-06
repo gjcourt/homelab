@@ -4,6 +4,7 @@ resources:
   - adguard
   - audiobookshelf
   - cloudflare-tunnel
+  - excalidraw
   - homepage
   - ingress
   - linkding

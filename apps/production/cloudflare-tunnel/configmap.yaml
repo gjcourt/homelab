@@ -28,6 +28,12 @@ data:
         originRequest:
           httpHostHeader: audiobooks.burntbytes.com
 
+      # Excalidraw
+      - hostname: excalidraw.burntbytes.com
+        service: http://app-gateway-production.default.svc.cluster.local:8080
+        originRequest:
+          httpHostHeader: excalidraw.burntbytes.com
+
       # Homepage
       - hostname: home.burntbytes.com
         service: http://app-gateway-production.default.svc.cluster.local:8080

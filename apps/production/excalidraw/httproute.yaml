@@ -1,0 +1,16 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: excalidraw-http
+  namespace: excalidraw
+spec:
+  hostnames:
+    - excalidraw.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http-internal
+  rules:
+    - backendRefs:
+      - name: excalidraw
+        port: 80

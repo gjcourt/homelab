@@ -38,7 +38,23 @@ spec:
         compression: gzip
     retentionPolicy: "30d"
 
+  # Bootstrap from backup if available, otherwise initialize fresh
+  # To restore: uncomment recovery section and comment out initdb
   bootstrap:
     initdb:
       database: app
       owner: app
+    # recovery:
+    #   source: memos-db-backup
+
+  externalClusters:
+    - name: memos-db-backup
+      barmanObjectStore:
+        destinationPath: s3://gjcourt-homelab-backup/production/memos
+        s3Credentials:
+          accessKeyId:
+            name: memos-aws-creds-secret
+            key: ACCESS_KEY_ID
+          secretAccessKey:
+            name: memos-aws-creds-secret
+            key: ACCESS_SECRET_KEY

@@ -38,7 +38,23 @@ spec:
         compression: gzip
     retentionPolicy: "30d"
 
+  # Bootstrap from backup if available, otherwise initialize fresh
+  # To restore: uncomment recovery section and comment out initdb
   bootstrap:
     initdb:
       database: app
       owner: app
+    # recovery:
+    #   source: linkding-db-backup
+
+  externalClusters:
+    - name: linkding-db-backup
+      barmanObjectStore:
+        destinationPath: s3://gjcourt-homelab-backup/production/linkding
+        s3Credentials:
+          accessKeyId:
+            name: linkding-aws-creds-secret
+            key: ACCESS_KEY_ID
+          secretAccessKey:
+            name: linkding-aws-creds-secret
+            key: ACCESS_SECRET_KEY

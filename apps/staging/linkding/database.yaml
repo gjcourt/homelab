@@ -24,9 +24,7 @@ spec:
 
   backup:
     barmanObjectStore:
-      destinationPath: s3://gjcourt-homelab-backup/staging
-      # Removed s3Endpoint and s3Region as they're not supported in CNPG v1 schema
-      # For AWS S3, these are defaults and not required
+      destinationPath: s3://gjcourt-homelab-backup/staging/linkding
       s3Credentials:
         accessKeyId:
           name: linkding-aws-creds-secret
@@ -35,4 +33,25 @@ spec:
           name: linkding-aws-creds-secret
           key: ACCESS_SECRET_KEY
     retentionPolicy: 14d
+
+  # Bootstrap from backup if available, otherwise initialize fresh
+  # To restore: uncomment recovery section and comment out initdb
+  bootstrap:
+    initdb:
+      database: app
+      owner: app
+    # recovery:
+    #   source: linkding-db-backup
+
+  externalClusters:
+    - name: linkding-db-backup
+      barmanObjectStore:
+        destinationPath: s3://gjcourt-homelab-backup/staging/linkding
+        s3Credentials:
+          accessKeyId:
+            name: linkding-aws-creds-secret
+            key: ACCESS_KEY_ID
+          secretAccessKey:
+            name: linkding-aws-creds-secret
+            key: ACCESS_SECRET_KEY
 

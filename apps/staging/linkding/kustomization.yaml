@@ -9,7 +9,7 @@ resources:
   - httproute.yaml
   - secret-aws-creds.yaml
   - secret-cloudflare-tunnel.yaml
-  - secret-linkding-container-env.yaml
+  - secret-db-credentials.yaml
 
 labels:
   - pairs:

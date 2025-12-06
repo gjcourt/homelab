@@ -44,6 +44,8 @@ spec:
     initdb:
       database: app
       owner: app
+      secret:
+        name: memos-db-credentials
     # recovery:
     #   source: memos-db-backup
 

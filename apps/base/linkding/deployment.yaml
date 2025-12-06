@@ -27,11 +27,16 @@ spec:
           ports:
             - containerPort: 9090
 
+          env:
+            - name: LD_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: linkding-db-credentials
+                  key: password
+
           envFrom:
             - configMapRef:
                 name: linkding-container-env
-            - secretRef:
-                name: linkding-container-env-secret
 
           # Mount required for Huey tasks queues (can be moved to redis, though
           # this is defined in the INSTALLED_APPS)

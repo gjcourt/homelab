@@ -1,7 +1,7 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: memos-db-stage-cnpg-v1
+  name: memos-db-staging-cnpg-v1
   namespace: memos-stage
 
 spec:

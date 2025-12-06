@@ -1,7 +1,7 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: linkding-db-prod-cnpg-v1
+  name: linkding-db-production-cnpg-v1
   namespace: linkding-prod
 
 spec:

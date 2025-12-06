@@ -1,7 +1,7 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: linkding-db-stage-cnpg-v1
+  name: linkding-db-staging-cnpg-v1
   namespace: linkding-stage
 
 spec:

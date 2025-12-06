@@ -37,13 +37,15 @@ spec:
   # Bootstrap from backup if available, otherwise initialize fresh
   # To restore: uncomment recovery section and comment out initdb
   bootstrap:
-    initdb:
-      database: app
-      owner: app
+    # initdb:
+    #   database: app
+    #   owner: app
+    #   secret:
+    #     name: linkding-db-credentials
+    recovery:
+      source: linkding-db-backup
       secret:
         name: linkding-db-credentials
-    # recovery:
-    #   source: linkding-db-backup
 
   externalClusters:
     - name: linkding-db-backup

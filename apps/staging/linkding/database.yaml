@@ -32,6 +32,7 @@ spec:
         secretAccessKey:
           name: linkding-aws-creds-secret
           key: ACCESS_SECRET_KEY
+      serverName: linkding-db-staging-cnpg-v1
     retentionPolicy: 14d
 
   # Bootstrap from backup if available, otherwise initialize fresh

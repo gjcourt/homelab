@@ -37,6 +37,8 @@ spec:
           envFrom:
             - configMapRef:
                 name: linkding-container-env
+            - secretRef:
+                name: linkding-app-secret
 
           # Mount required for Huey tasks queues (can be moved to redis, though
           # this is defined in the INSTALLED_APPS)

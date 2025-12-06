@@ -6,6 +6,7 @@ resources:
   - configmap.yaml
   - database.yaml
   - httproute.yaml
+  - secret-app.yaml
   - secret-aws-creds.yaml
   - secret-db-credentials.yaml
 

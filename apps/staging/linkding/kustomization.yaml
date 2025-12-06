@@ -7,6 +7,7 @@ resources:
   - configmap.yaml
   - database.yaml
   - httproute.yaml
+  - secret-app.yaml
   - secret-aws-creds.yaml
   - secret-cloudflare-tunnel.yaml
   - secret-db-credentials.yaml

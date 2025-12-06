@@ -14,6 +14,10 @@ data:
             icon: linkding.png
             href: https://links-stage.burntbytes.com
             description: Bookmark manager
+        - Excalidraw:
+            icon: excalidraw.png
+            href: https://excalidraw-stage.burntbytes.com
+            description: Virtual whiteboard for sketching
         - Audiobookshelf:
             icon: audiobookshelf.png
             href: https://audiobookshelf-stage.burntbytes.com

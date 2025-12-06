@@ -17,6 +17,13 @@ labels:
 patches:
   - path: deployment-patch.yaml
   - target:
+      kind: Service
+      name: adguard
+    patch: |
+      - op: replace
+        path: /metadata/annotations/lbipam.cilium.io~1sharing-cross-namespace
+        value: default,adguard-stage,audiobookshelf-stage,linkding-stage,mealie-stage,memos-stage
+  - target:
       kind: Namespace
       name: adguard
     patch: |

@@ -5,3 +5,7 @@ metadata:
   labels:
     app: jellyfin
     http-ingress: "true"
+    # Allow privileged pods for GPU hardware acceleration
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

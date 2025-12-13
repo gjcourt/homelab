@@ -19,13 +19,13 @@ spec:
     path: /volume1/family/video/movies
     readOnly: true
   mountOptions:
-    - nfsvers=4.1
+    - nfsvers=3
     - rsize=1048576
     - wsize=1048576
     - hard
     - timeo=600
     - retrans=2
-    - noresvport
+    - nolock
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

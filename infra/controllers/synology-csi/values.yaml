@@ -20,6 +20,14 @@ storageClasses:
     reclaimPolicy: Retain
     allowVolumeExpansion: true
 
+  synology-nfs: # NFS storage class for shared media
+    parameters:
+      dsm: 192.168.5.8
+      location: /volume1
+      protocol: nfs
+    reclaimPolicy: Retain
+    allowVolumeExpansion: true
+
 # Volume Snapshot Classes
 volumeSnapshotClasses:
   synology-iscsi-snapshot:

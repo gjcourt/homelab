@@ -34,6 +34,9 @@ spec:
               mountPath: /cache
             - name: dri
               mountPath: /dev/dri
+            - name: movies
+              mountPath: /media/movies
+              readOnly: true
 
           securityContext:
             privileged: true  # Required for GPU access
@@ -57,3 +60,6 @@ spec:
           hostPath:
             path: /dev/dri
             type: Directory
+        - name: movies
+          persistentVolumeClaim:
+            claimName: jellyfin-movies-pvc

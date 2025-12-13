@@ -1,0 +1,37 @@
+# Static PV for Synology NFS movies share
+# PVs are cluster-scoped, so this is a separate resource file
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jellyfin-movies-pv-staging
+  labels:
+    app: jellyfin
+    env: staging
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 192.168.5.8
+    path: /volume1/family/video/movies
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-movies-pvc
+  namespace: jellyfin-stage
+  labels:
+    app: jellyfin
+    env: staging
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  volumeName: jellyfin-movies-pv-staging
+  resources:
+    requests:
+      storage: 1Ti

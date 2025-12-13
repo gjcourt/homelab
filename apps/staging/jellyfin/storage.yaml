@@ -12,7 +12,8 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 1Gi
+      # Jellyfin requires at least 2GiB free space for config/data
+      storage: 5Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

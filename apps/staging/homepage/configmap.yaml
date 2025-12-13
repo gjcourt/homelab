@@ -26,6 +26,10 @@ data:
             icon: mealie.png
             href: https://mealie-stage.burntbytes.com
             description: Recipe management
+        - Jellyfin:
+            icon: jellyfin.png
+            href: https://jellyfin-stage.burntbytes.com
+            description: Media streaming server
 
     - Infrastructure:
         - AdGuard Home:

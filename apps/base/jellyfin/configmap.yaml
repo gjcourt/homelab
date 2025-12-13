@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: jellyfin-container-env
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+data:
+  # Jellyfin runs as root by default, these are for the internal user
+  PUID: "1000"
+  PGID: "1000"
+  TZ: "America/Los_Angeles"

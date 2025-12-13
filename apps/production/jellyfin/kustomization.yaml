@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: jellyfin-prod
+resources:
+  - ../../base/jellyfin/
+  - httproute.yaml
+
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false
+
+# Replace base storage with production-specific storage
+patchesStrategicMerge:
+  - storage.yaml
+
+patches:
+  - path: deployment-patch.yaml
+  - target:
+      kind: Namespace
+      name: jellyfin
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: jellyfin-prod

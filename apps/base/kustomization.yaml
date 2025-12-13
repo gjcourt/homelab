@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - adguard
   - audiobookshelf
+  - jellyfin
   - linkding
   - mealie
   - memos

@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: jellyfin-stage
+resources:
+  - ../../base/jellyfin/
+  - httproute.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+
+# Replace base storage with staging-specific storage
+patchesStrategicMerge:
+  - storage.yaml
+
+patches:
+  - path: deployment-patch.yaml
+  - target:
+      kind: Namespace
+      name: jellyfin
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: jellyfin-stage

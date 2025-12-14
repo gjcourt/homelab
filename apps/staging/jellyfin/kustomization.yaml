@@ -4,7 +4,7 @@ namespace: jellyfin-stage
 resources:
   - ../../base/jellyfin/
   - httproute.yaml
-  - nfs-movies.yaml
+  - nfs-media.yaml
 
 labels:
   - pairs:

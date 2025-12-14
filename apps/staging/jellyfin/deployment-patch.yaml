@@ -37,6 +37,9 @@ spec:
             - name: movies
               mountPath: /media/movies
               readOnly: true
+            - name: tvshows
+              mountPath: /media/tvshows
+              readOnly: true
 
           securityContext:
             privileged: true  # Required for GPU access
@@ -63,3 +66,6 @@ spec:
         - name: movies
           persistentVolumeClaim:
             claimName: jellyfin-movies-pvc
+        - name: tvshows
+          persistentVolumeClaim:
+            claimName: jellyfin-tvshows-pvc

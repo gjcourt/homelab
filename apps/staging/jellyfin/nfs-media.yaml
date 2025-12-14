@@ -43,3 +43,48 @@ spec:
   resources:
     requests:
       storage: 1Ti
+---
+# Static PV for Synology NFS TV shows share
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jellyfin-tvshows-pv-staging
+  labels:
+    app: jellyfin
+    env: staging
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 192.168.5.8
+    path: /volume1/family/video/tv-shows
+    readOnly: true
+  mountOptions:
+    - nfsvers=3
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+    - nolock
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-tvshows-pvc
+  namespace: jellyfin-stage
+  labels:
+    app: jellyfin
+    env: staging
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  volumeName: jellyfin-tvshows-pv-staging
+  resources:
+    requests:
+      storage: 1Ti

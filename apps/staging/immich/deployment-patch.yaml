@@ -29,8 +29,6 @@ spec:
               mountPath: /usr/src/app/upload
             - name: photos
               mountPath: /mnt/photos
-            - name: george-photos
-              mountPath: /mnt/george-photos
       volumes:
         - name: upload
           persistentVolumeClaim:
@@ -38,9 +36,6 @@ spec:
         - name: photos
           persistentVolumeClaim:
             claimName: immich-photos-pvc
-        - name: george-photos
-          persistentVolumeClaim:
-            claimName: immich-george-photos-pvc
 ---
 # Machine Learning with GPU acceleration
 apiVersion: apps/v1

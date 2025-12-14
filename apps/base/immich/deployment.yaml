@@ -143,7 +143,7 @@ spec:
     spec:
       containers:
         - name: redis
-          image: redis:7-alpine
+          image: redis:8-alpine
           ports:
             - name: redis
               containerPort: 6379

@@ -39,6 +39,10 @@ data:
             icon: jellyfin.png
             href: https://jellyfin-stage.burntbytes.com
             description: Media streaming server
+        - Immich:
+            icon: immich.png
+            href: https://photos-stage.burntbytes.com
+            description: Photo and video management
 
     - Infrastructure:
         - AdGuard Home:

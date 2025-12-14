@@ -2,7 +2,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: immich-http
-  namespace: immich
+  namespace: immich-stage
   labels:
     app: immich
 spec:
@@ -25,7 +25,7 @@ apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: immich-https
-  namespace: immich
+  namespace: immich-stage
   labels:
     app: immich
 spec:

@@ -10,31 +10,19 @@ spec:
       containers:
         - name: immich-server
           env:
-            # Database connection from CNPG
+            # Database connection - use CNPG service and credentials secret
             - name: DB_HOSTNAME
-              valueFrom:
-                secretKeyRef:
-                  name: immich-db-staging-cnpg-v1-app
-                  key: host
+              value: immich-db-staging-cnpg-v1-rw.immich-stage.svc.cluster.local
             - name: DB_PORT
-              valueFrom:
-                secretKeyRef:
-                  name: immich-db-staging-cnpg-v1-app
-                  key: port
+              value: "5432"
             - name: DB_DATABASE_NAME
-              valueFrom:
-                secretKeyRef:
-                  name: immich-db-staging-cnpg-v1-app
-                  key: dbname
+              value: immich
             - name: DB_USERNAME
-              valueFrom:
-                secretKeyRef:
-                  name: immich-db-staging-cnpg-v1-app
-                  key: user
+              value: immich
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: immich-db-staging-cnpg-v1-app
+                  name: immich-db-credentials
                   key: password
           volumeMounts:
             - name: upload

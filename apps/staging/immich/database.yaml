@@ -4,9 +4,9 @@ metadata:
   name: immich-db-staging-cnpg-v1
   namespace: immich-stage
 spec:
-  description: Postgres cluster for Immich with pgvecto.rs for ML search
-  # Use pgvecto.rs image for vector similarity search
-  imageName: ghcr.io/tensorchord/cloudnative-pgvecto.rs:17-v0.4.0
+  description: Postgres cluster for Immich with VectorChord for ML search
+  # Use Immich's official postgres image with VectorChord
+  imageName: ghcr.io/immich-app/postgres:17-vectorchord0.4.3
 
   instances: 3
 
@@ -24,9 +24,7 @@ spec:
 
   postgresql:
     shared_preload_libraries:
-      - "vectors.so"
-    parameters:
-      search_path: '"$user", public, vectors'
+      - "vchord.so"
 
   backup:
     barmanObjectStore:
@@ -48,7 +46,7 @@ spec:
       secret:
         name: immich-db-credentials
       postInitSQL:
-        - CREATE EXTENSION IF NOT EXISTS vectors;
+        - CREATE EXTENSION IF NOT EXISTS vchord CASCADE;
         - CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;
 
   externalClusters:

@@ -1,0 +1,29 @@
+# Upload storage for photos/videos
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-upload-pvc
+  namespace: immich
+  labels:
+    app: immich
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+---
+# Model cache for machine learning
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-model-cache-pvc
+  namespace: immich
+  labels:
+    app: immich
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi

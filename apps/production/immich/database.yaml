@@ -1,0 +1,63 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: immich-db-prod-cnpg-v1
+  namespace: immich-prod
+spec:
+  description: Postgres cluster for Immich with pgvecto.rs for ML search
+  imageName: ghcr.io/tensorchord/cloudnative-pgvecto.rs:17-v0.4.0
+
+  instances: 3
+
+  inheritedMetadata:
+    labels:
+      app: immich-database
+      env: production
+      policy-type: "database"
+
+  monitoring:
+    enablePodMonitor: true
+
+  storage:
+    size: 20Gi
+
+  postgresql:
+    shared_preload_libraries:
+      - "vectors.so"
+    parameters:
+      search_path: '"$user", public, vectors'
+
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://gjcourt-homelab-backup/production/immich
+      s3Credentials:
+        accessKeyId:
+          name: immich-aws-creds-secret
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: immich-aws-creds-secret
+          key: ACCESS_SECRET_KEY
+      serverName: immich-db-prod-cnpg-v1
+    retentionPolicy: 30d
+
+  bootstrap:
+    initdb:
+      database: immich
+      owner: immich
+      secret:
+        name: immich-db-credentials
+      postInitSQL:
+        - CREATE EXTENSION IF NOT EXISTS vectors;
+        - CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;
+
+  externalClusters:
+    - name: immich-db-backup
+      barmanObjectStore:
+        destinationPath: s3://gjcourt-homelab-backup/production/immich
+        s3Credentials:
+          accessKeyId:
+            name: immich-aws-creds-secret
+            key: ACCESS_KEY_ID
+          secretAccessKey:
+            name: immich-aws-creds-secret
+            key: ACCESS_SECRET_KEY

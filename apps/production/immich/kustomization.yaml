@@ -1,24 +1,27 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: homepage-stage
+namespace: immich-prod
 resources:
-  - ../../base/homepage/
+  - ../../base/immich/
   - httproute.yaml
-  - secret-synology.yaml
+  - database.yaml
+  - nfs-photos.yaml
+  - secret-db-credentials.yaml
+  - secret-aws-creds.yaml
 
 labels:
   - pairs:
-      env: staging
-      app.kubernetes.io/instance: staging
+      env: production
+      app.kubernetes.io/instance: production
     includeSelectors: false
 
 patches:
   - path: deployment-patch.yaml
-  - path: configmap.yaml
+  - path: storage.yaml
   - target:
       kind: Namespace
-      name: homepage
+      name: immich
     patch: |
       - op: replace
         path: /metadata/name
-        value: homepage-stage
+        value: immich-prod

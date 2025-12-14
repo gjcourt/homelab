@@ -4,6 +4,15 @@ metadata:
   name: homepage
   namespace: homepage
 data:
+  settings.yaml: |
+    background:
+      image: https://images.unsplash.com/photo-1502790671504-542ad42d5189?auto=format&fit=crop&w=2560&q=80
+      blur: sm
+      opacity: 50
+    cardBlur: md
+    theme: dark
+    color: slate
+
   services.yaml: |
     - Applications:
         - Memos:
@@ -36,6 +45,15 @@ data:
             icon: adguard-home.png
             href: https://adguard-stage.burntbytes.com
             description: DNS ad blocker
+        - Synology NAS:
+            icon: synology-dsm.png
+            href: https://192.168.5.8:5001
+            description: Network storage
+            widget:
+              type: diskstation
+              url: https://192.168.5.8:5001
+              username: {{HOMEPAGE_VAR_SYNOLOGY_USER}}
+              password: {{HOMEPAGE_VAR_SYNOLOGY_PASS}}
 
   bookmarks.yaml: |
     - Developer:

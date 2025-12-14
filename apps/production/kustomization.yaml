@@ -6,6 +6,7 @@ resources:
   - cloudflare-tunnel
   - excalidraw
   - homepage
+  - immich
   - ingress
   - jellyfin
   - linkding

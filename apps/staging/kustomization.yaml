@@ -6,6 +6,7 @@ resources:
   - certificates
   - excalidraw
   - homepage
+  - immich
   - ingress
   - jellyfin
   - linkding

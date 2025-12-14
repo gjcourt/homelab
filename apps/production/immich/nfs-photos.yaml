@@ -1,0 +1,44 @@
+# Static PV for Synology NFS photos share (external library)
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: immich-photos-pv-prod
+  labels:
+    app: immich
+    env: production
+spec:
+  capacity:
+    storage: 5Ti
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 192.168.5.8
+    path: /volume1/family/photos
+    readOnly: false
+  mountOptions:
+    - nfsvers=3
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+    - nolock
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-photos-pvc
+  namespace: immich-prod
+  labels:
+    app: immich
+    env: production
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  volumeName: immich-photos-pv-prod
+  resources:
+    requests:
+      storage: 5Ti

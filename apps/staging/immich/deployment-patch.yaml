@@ -1,0 +1,91 @@
+# Deployment patches for staging - GPU acceleration and database connection
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-server
+  namespace: immich
+spec:
+  template:
+    spec:
+      containers:
+        - name: immich-server
+          env:
+            # Database connection from CNPG
+            - name: DB_HOSTNAME
+              valueFrom:
+                secretKeyRef:
+                  name: immich-db-staging-cnpg-v1-app
+                  key: host
+            - name: DB_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: immich-db-staging-cnpg-v1-app
+                  key: port
+            - name: DB_DATABASE_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: immich-db-staging-cnpg-v1-app
+                  key: dbname
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: immich-db-staging-cnpg-v1-app
+                  key: user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: immich-db-staging-cnpg-v1-app
+                  key: password
+          volumeMounts:
+            - name: upload
+              mountPath: /usr/src/app/upload
+            - name: photos
+              mountPath: /mnt/photos
+      volumes:
+        - name: upload
+          persistentVolumeClaim:
+            claimName: immich-upload-pvc
+        - name: photos
+          persistentVolumeClaim:
+            claimName: immich-photos-pvc
+---
+# Machine Learning with GPU acceleration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-machine-learning
+  namespace: immich
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+        fsGroup: 0
+        supplementalGroups:
+          - 44   # video group
+          - 109  # render group
+      containers:
+        - name: immich-machine-learning
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: model-cache
+              mountPath: /cache
+            - name: dri
+              mountPath: /dev/dri
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "500m"
+            limits:
+              memory: "6Gi"
+              cpu: "4000m"
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: immich-model-cache-pvc
+        - name: dri
+          hostPath:
+            path: /dev/dri
+            type: Directory

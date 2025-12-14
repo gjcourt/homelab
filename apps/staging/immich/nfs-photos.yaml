@@ -16,7 +16,7 @@ spec:
   storageClassName: ""
   nfs:
     server: 192.168.5.8
-    path: /volume1/family/photos
+    path: /volume1/family/images/photos
     readOnly: false
   mountOptions:
     - nfsvers=3

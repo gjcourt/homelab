@@ -7,8 +7,14 @@ metadata:
 spec:
   template:
     spec:
+      securityContext:
+        supplementalGroups:
+          - 44   # video group
+          - 109  # render group
       containers:
         - name: immich-server
+          securityContext:
+            privileged: true
           env:
             # Database connection - use CNPG service and credentials secret
             - name: DB_HOSTNAME
@@ -36,6 +42,8 @@ spec:
               mountPath: /usr/src/app/upload
             - name: photos
               mountPath: /mnt/photos
+            - name: dri
+              mountPath: /dev/dri
       volumes:
         - name: upload
           persistentVolumeClaim:
@@ -43,6 +51,10 @@ spec:
         - name: photos
           persistentVolumeClaim:
             claimName: immich-photos-pvc
+        - name: dri
+          hostPath:
+            path: /dev/dri
+            type: Directory
 ---
 # Machine Learning with GPU acceleration
 apiVersion: apps/v1

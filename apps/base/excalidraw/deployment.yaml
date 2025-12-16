@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: excalidraw
-          image: excalidraw/excalidraw:latest
+          image: alswl/excalidraw:v0.18.0-fork-b3
           ports:
             - containerPort: 80
           resources:

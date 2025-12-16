@@ -12,3 +12,5 @@ spec:
           env:
             - name: VITE_APP_WS_SERVER_URL
               value: "wss://excalidraw-room-stage.burntbytes.com"
+            - name: VITE_APP_DISABLE_TRACKING
+              value: "true"

@@ -4,6 +4,7 @@ namespace: excalidraw-prod
 resources:
   - ../../base/excalidraw/
   - httproute.yaml
+  - room-httproute.yaml
 
 labels:
   - pairs:
@@ -12,6 +13,7 @@ labels:
     includeSelectors: false
 
 patches:
+  - path: deployment-patch.yaml
   - target:
       kind: Namespace
       name: excalidraw

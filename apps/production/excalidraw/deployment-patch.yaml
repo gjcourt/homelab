@@ -1,0 +1,14 @@
+# Patch to add WebSocket server URL for live collaboration
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: excalidraw
+  namespace: excalidraw
+spec:
+  template:
+    spec:
+      containers:
+        - name: excalidraw
+          env:
+            - name: VITE_APP_WS_SERVER_URL
+              value: "wss://excalidraw-room.burntbytes.com"

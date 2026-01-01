@@ -15,6 +15,10 @@ data:
 
   services.yaml: |
     - Applications:
+        - Home Assistant:
+            icon: home-assistant.png
+            href: https://hass-stage.burntbytes.com
+            description: Home automation platform
         - Memos:
             icon: memos.png
             href: https://memos-stage.burntbytes.com

@@ -29,7 +29,7 @@ data:
             description: Virtual whiteboard for sketching
         - Audiobookshelf:
             icon: audiobookshelf.png
-            href: https://audiobookshelf-stage.burntbytes.com
+            href: https://audiobooks-stage.burntbytes.com
             description: Audiobook and podcast server
         - Mealie:
             icon: mealie.png

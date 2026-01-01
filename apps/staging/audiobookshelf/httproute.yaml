@@ -5,7 +5,7 @@ metadata:
   namespace: audiobookshelf-stage
 spec:
   hostnames:
-    - audio-books-stage.burntbytes.com # Match requests
+    - audiobooks-stage.burntbytes.com # Match requests
   parentRefs:
     - name: app-gateway-staging
       namespace: default
@@ -24,7 +24,7 @@ metadata:
   namespace: audiobookshelf-stage
 spec:
   hostnames:
-    - audio-books-stage.burntbytes.com # Match requests
+    - audiobooks-stage.burntbytes.com # Match requests
   parentRefs:
     - name: app-gateway-staging
       namespace: default

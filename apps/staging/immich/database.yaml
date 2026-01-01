@@ -11,6 +11,8 @@ spec:
 
   instances: 3
 
+  enableSuperuserAccess: true
+
   inheritedMetadata:
     labels:
       app: immich-database

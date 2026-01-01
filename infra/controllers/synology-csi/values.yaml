@@ -2,22 +2,22 @@
 
 # Storage Classes
 storageClasses:
-  synology-iscsi: # Name of the default storage class
+  synology-iscsi: # Persistent storage class
     isDefault: true
     parameters:
       dsm: 192.168.5.8
       location: /volume1
       protocol: iscsi
       fsType: btrfs
-    reclaimPolicy: Delete
+    reclaimPolicy: Retain
 
-  synology-iscsi-retain: # Name of alt storage class
+  synology-iscsi-ephemeral: # Ephemeral storage class
     parameters:
       dsm: 192.168.5.8
       location: /volume1
       protocol: iscsi
       fsType: btrfs
-    reclaimPolicy: Retain
+    reclaimPolicy: Delete
     allowVolumeExpansion: true
 
   synology-nfs: # NFS storage class for shared media

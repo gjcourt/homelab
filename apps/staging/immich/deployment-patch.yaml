@@ -33,11 +33,11 @@ spec:
                   key: password
           resources:
             requests:
-              memory: "1Gi"
-              cpu: "500m"
+              memory: "512Mi"
+              cpu: "250m"
             limits:
-              memory: "4Gi"
-              cpu: "4000m"
+              memory: "2Gi"
+              cpu: "2000m"
           volumeMounts:
             - name: upload
               mountPath: /usr/src/app/upload
@@ -64,7 +64,7 @@ metadata:
   name: immich-machine-learning
   namespace: immich
 spec:
-  replicas: 2
+  replicas: 1
   template:
     spec:
       securityContext:
@@ -85,11 +85,11 @@ spec:
               mountPath: /dev/dri
           resources:
             requests:
-              memory: "2Gi"
+              memory: "1Gi"
               cpu: "500m"
             limits:
-              memory: "6Gi"
-              cpu: "4000m"
+              memory: "2Gi"
+              cpu: "2000m"
       volumes:
         - name: model-cache
           persistentVolumeClaim:

@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: homeassistant-stage
+resources:
+  - ../../base/homeassistant/
+  - httproute.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Namespace
+      name: homeassistant
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: homeassistant-stage

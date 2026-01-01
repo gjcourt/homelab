@@ -6,6 +6,7 @@ resources:
   - certificates
   - excalidraw
   - homepage
+  - homeassistant
   - immich
   - ingress
   - jellyfin

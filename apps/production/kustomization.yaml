@@ -6,6 +6,7 @@ resources:
   - cloudflare-tunnel
   - excalidraw
   - homepage
+  - homeassistant
   - immich
   - ingress
   - jellyfin

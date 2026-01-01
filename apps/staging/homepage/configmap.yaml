@@ -55,11 +55,11 @@ data:
             description: DNS ad blocker
         - Synology NAS:
             icon: synology-dsm.png
-            href: https://alcatraz.local:5001
+            href: https://192.168.5.8:5001
             description: Network storage
             widget:
               type: diskstation
-              url: https://alcatraz.local:5001
+              url: https://192.168.5.8:5001
               username: {{HOMEPAGE_VAR_SYNOLOGY_USER}}
               password: {{HOMEPAGE_VAR_SYNOLOGY_PASS}}
 

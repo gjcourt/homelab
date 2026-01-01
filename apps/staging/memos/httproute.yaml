@@ -70,6 +70,10 @@ spec:
             service: memos.api.v1.WorkspaceService
         - method:
             service: memos.api.v1.WorkspaceSettingService
+        - method:
+            service: memos.api.v1.InstanceService
+        - method:
+            service: memos.api.v1.AttachmentService
       backendRefs:
         - name: memos-grpc
           port: 5230

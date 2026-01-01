@@ -15,26 +15,6 @@ data:
 
   services.yaml: |
     - Applications:
-        - Memos:
-            icon: memos.png
-            href: https://memos-stage.burntbytes.com
-            description: Lightweight note-taking service
-        - Linkding:
-            icon: linkding.png
-            href: https://links-stage.burntbytes.com
-            description: Bookmark manager
-        - Excalidraw:
-            icon: excalidraw.png
-            href: https://excalidraw-stage.burntbytes.com
-            description: Virtual whiteboard for sketching
-        - Audiobookshelf:
-            icon: audiobookshelf.png
-            href: https://audiobooks-stage.burntbytes.com
-            description: Audiobook and podcast server
-        - Mealie:
-            icon: mealie.png
-            href: https://mealie-stage.burntbytes.com
-            description: Recipe management
         - Jellyfin:
             icon: jellyfin.png
             href: https://jellyfin-stage.burntbytes.com
@@ -43,6 +23,26 @@ data:
             icon: immich.png
             href: https://photos-stage.burntbytes.com
             description: Photo and video management
+        - Memos:
+            icon: memos.png
+            href: https://memos-stage.burntbytes.com
+            description: Lightweight note-taking service
+        - Linkding:
+            icon: linkding.png
+            href: https://links-stage.burntbytes.com
+            description: Bookmark manager
+        - Mealie:
+            icon: mealie.png
+            href: https://mealie-stage.burntbytes.com
+            description: Recipe management
+        - Excalidraw:
+            icon: excalidraw.png
+            href: https://excalidraw-stage.burntbytes.com
+            description: Virtual whiteboard for sketching
+        - Audiobookshelf:
+            icon: audiobookshelf.png
+            href: https://audiobooks-stage.burntbytes.com
+            description: Audiobook and podcast server
 
     - Infrastructure:
         - Home Assistant:
@@ -55,11 +55,11 @@ data:
             description: DNS ad blocker
         - Synology NAS:
             icon: synology-dsm.png
-            href: https://192.168.5.8:5001
+            href: https://alcatraz.local:5001
             description: Network storage
             widget:
               type: diskstation
-              url: https://192.168.5.8:5001
+              url: https://alcatraz.local:5001
               username: {{HOMEPAGE_VAR_SYNOLOGY_USER}}
               password: {{HOMEPAGE_VAR_SYNOLOGY_PASS}}
 

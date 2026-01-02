@@ -20,6 +20,10 @@ spec:
             # Hardware Acceleration for AMD
             - name: LIBVA_DRIVER_NAME
               value: radeonsi
+            - name: LIBVA_DRIVERS_PATH
+              value: /usr/lib/jellyfin-ffmpeg/lib/dri
+            - name: IMMICH_CONFIG_FILE
+              value: /usr/src/app/immich-config.json
             # Database connection - use CNPG service and credentials secret
             - name: DB_HOSTNAME
               value: immich-db-staging-cnpg-v1-rw.immich-stage.svc.cluster.local
@@ -39,7 +43,7 @@ spec:
               memory: "512Mi"
               cpu: "250m"
             limits:
-              memory: "4Gi"
+              memory: "8Gi"
               cpu: "4000m"
           volumeMounts:
             - name: upload
@@ -48,6 +52,9 @@ spec:
               mountPath: /mnt/photos
             - name: dri
               mountPath: /dev/dri
+            - name: config-file
+              mountPath: /usr/src/app/immich-config.json
+              subPath: immich-config.json
       volumes:
         - name: upload
           persistentVolumeClaim:
@@ -59,6 +66,9 @@ spec:
           hostPath:
             path: /dev/dri
             type: Directory
+        - name: config-file
+          configMap:
+            name: immich-config-file
 ---
 # Machine Learning with GPU acceleration
 apiVersion: apps/v1
@@ -79,8 +89,12 @@ spec:
           - 109  # render group
       containers:
         - name: immich-machine-learning
+          image: ghcr.io/immich-app/immich-machine-learning:release-rocm
           securityContext:
             privileged: true
+          env:
+            - name: HSA_OVERRIDE_GFX_VERSION
+              value: "9.0.0"
           volumeMounts:
             - name: model-cache
               mountPath: /cache

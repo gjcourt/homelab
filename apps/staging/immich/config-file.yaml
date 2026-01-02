@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: immich-config-file
+  namespace: immich-stage
+data:
+  immich-config.json: |
+    {
+      "ffmpeg": {
+        "accel": "vaapi"
+      }
+    }

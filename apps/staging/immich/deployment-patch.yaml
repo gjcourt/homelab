@@ -17,6 +17,9 @@ spec:
           securityContext:
             privileged: true
           env:
+            # Hardware Acceleration for AMD
+            - name: LIBVA_DRIVER_NAME
+              value: radeonsi
             # Database connection - use CNPG service and credentials secret
             - name: DB_HOSTNAME
               value: immich-db-staging-cnpg-v1-rw.immich-stage.svc.cluster.local
@@ -36,8 +39,8 @@ spec:
               memory: "512Mi"
               cpu: "250m"
             limits:
-              memory: "2Gi"
-              cpu: "2000m"
+              memory: "4Gi"
+              cpu: "4000m"
           volumeMounts:
             - name: upload
               mountPath: /usr/src/app/upload

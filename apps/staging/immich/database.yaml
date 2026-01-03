@@ -23,7 +23,7 @@ spec:
     enablePodMonitor: true
 
   storage:
-    size: 5Gi
+    size: 10Gi
 
   postgresql:
     shared_preload_libraries:

@@ -33,7 +33,7 @@ spec:
 
   backup:
     barmanObjectStore:
-      destinationPath: s3://gjcourt-homelab-backup/staging/immich
+      destinationPath: s3://gjcourt-homelab-backup/staging/immich/v1
       s3Credentials:
         accessKeyId:
           name: immich-aws-creds-secret
@@ -41,6 +41,10 @@ spec:
         secretAccessKey:
           name: immich-aws-creds-secret
           key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
       serverName: immich-db-staging-cnpg-v1
     retentionPolicy: 14d
 
@@ -60,7 +64,7 @@ spec:
   externalClusters:
     - name: immich-db-backup
       barmanObjectStore:
-        destinationPath: s3://gjcourt-homelab-backup/staging/immich
+        destinationPath: s3://gjcourt-homelab-backup/staging/immich/v1
         s3Credentials:
           accessKeyId:
             name: immich-aws-creds-secret

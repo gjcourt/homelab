@@ -24,7 +24,7 @@ spec:
 
   backup:
     barmanObjectStore:
-      destinationPath: s3://gjcourt-homelab-backup/staging/memos
+      destinationPath: s3://gjcourt-homelab-backup/staging/memos/v1
       s3Credentials:
         accessKeyId:
           name: memos-aws-creds-secret
@@ -32,6 +32,10 @@ spec:
         secretAccessKey:
           name: memos-aws-creds-secret
           key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
       serverName: memos-db-staging-cnpg-v1
     retentionPolicy: 14d
 
@@ -49,7 +53,7 @@ spec:
   externalClusters:
     - name: memos-db-backup
       barmanObjectStore:
-        destinationPath: s3://gjcourt-homelab-backup/staging/memos
+        destinationPath: s3://gjcourt-homelab-backup/staging/memos/v1
         s3Credentials:
           accessKeyId:
             name: memos-aws-creds-secret

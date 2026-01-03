@@ -37,6 +37,10 @@ spec:
         secretAccessKey:
           name: immich-aws-creds-secret
           key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
       serverName: immich-db-prod-cnpg-v1
     retentionPolicy: 30d
 

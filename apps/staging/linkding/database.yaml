@@ -24,7 +24,7 @@ spec:
 
   backup:
     barmanObjectStore:
-      destinationPath: s3://gjcourt-homelab-backup/staging/linkding
+      destinationPath: s3://gjcourt-homelab-backup/staging/linkding/v1
       s3Credentials:
         accessKeyId:
           name: linkding-aws-creds-secret
@@ -32,6 +32,10 @@ spec:
         secretAccessKey:
           name: linkding-aws-creds-secret
           key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
       serverName: linkding-db-staging-cnpg-v1
     retentionPolicy: 14d
 
@@ -52,7 +56,7 @@ spec:
   externalClusters:
     - name: linkding-db-backup
       barmanObjectStore:
-        destinationPath: s3://gjcourt-homelab-backup/staging/linkding
+        destinationPath: s3://gjcourt-homelab-backup/staging/linkding/v1
         s3Credentials:
           accessKeyId:
             name: linkding-aws-creds-secret

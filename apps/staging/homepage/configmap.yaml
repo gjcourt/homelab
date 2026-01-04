@@ -45,14 +45,6 @@ data:
             description: Audiobook and podcast server
 
     - Infrastructure:
-        - Home Assistant:
-            icon: home-assistant.png
-            href: https://hass-stage.burntbytes.com
-            description: Home automation platform
-        - AdGuard Home:
-            icon: adguard-home.png
-            href: https://adguard-stage.burntbytes.com
-            description: DNS ad blocker
         - Synology NAS:
             icon: synology-dsm.png
             href: https://192.168.5.8:5001
@@ -62,12 +54,20 @@ data:
               url: https://192.168.5.8:5001
               username: {{HOMEPAGE_VAR_SYNOLOGY_USER}}
               password: {{HOMEPAGE_VAR_SYNOLOGY_PASS}}
+        - Home Assistant:
+            icon: home-assistant.png
+            href: https://hass-stage.burntbytes.com
+            description: Home automation platform
+        - AdGuard Home:
+            icon: adguard-home.png
+            href: https://adguard-stage.burntbytes.com
+            description: DNS ad blocker
+
+    - Monitoring:
         - Grafana:
             icon: grafana.png
             href: https://grafana.burntbytes.com
             description: Metrics dashboard
-
-    - Monitoring:
         - Cluster Resources:
             icon: prometheus.png
             href: "#"
@@ -103,12 +103,14 @@ data:
           show: true
           cpu: true
           memory: true
+          storage: true
           showLabel: true
           label: "melodic-muse"
         nodes:
           show: true
           cpu: true
           memory: true
+          storage: true
           showLabel: true
     - search:
         provider: duckduckgo

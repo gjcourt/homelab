@@ -40,10 +40,10 @@ spec:
                   key: password
           resources:
             requests:
-              memory: "512Mi"
-              cpu: "250m"
+              memory: "2Gi"
+              cpu: "1000m"
             limits:
-              memory: "3Gi"
+              memory: "8Gi"
               cpu: "4000m"
           volumeMounts:
             - name: upload
@@ -102,11 +102,11 @@ spec:
               mountPath: /dev/dri
           resources:
             requests:
-              memory: "1Gi"
-              cpu: "500m"
-            limits:
               memory: "2Gi"
-              cpu: "2000m"
+              cpu: "1000m"
+            limits:
+              memory: "8Gi"
+              cpu: "4000m"
       volumes:
         - name: model-cache
           persistentVolumeClaim:
@@ -115,3 +115,22 @@ spec:
           hostPath:
             path: /dev/dri
             type: Directory
+---
+# Redis resource tuning
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-redis
+  namespace: immich
+spec:
+  template:
+    spec:
+      containers:
+        - name: redis
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"

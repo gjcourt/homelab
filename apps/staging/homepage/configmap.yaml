@@ -63,6 +63,22 @@ data:
               username: {{HOMEPAGE_VAR_SYNOLOGY_USER}}
               password: {{HOMEPAGE_VAR_SYNOLOGY_PASS}}
 
+    - Monitoring:
+        - Cluster Resources:
+            icon: prometheus.png
+            href: "#"
+            description: Real-time cluster metrics
+            widget:
+              type: prometheus
+              url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+              blocks:
+                - label: "CPU"
+                  query: 'sum(rate(container_cpu_usage_seconds_total{image!=""}[5m]))'
+                  unit: "cores"
+                - label: "Mem"
+                  query: 'sum(container_memory_working_set_bytes{image!=""})'
+                  formatter: "bytes"
+
   bookmarks.yaml: |
     - Developer:
         - Github:
@@ -84,7 +100,7 @@ data:
           cpu: true
           memory: true
           showLabel: true
-          label: "staging"
+          label: "melodic-muse"
         nodes:
           show: true
           cpu: true

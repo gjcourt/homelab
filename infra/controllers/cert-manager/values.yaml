@@ -16,7 +16,6 @@ approveSignerNames:
   - "clusterissuers.cert-manager.io/*"
 
 webhook:
-  # Set hostNetwork to true to allow webhook to reach API server in Talos
-  hostNetwork: true
+  hostNetwork: false
   # Use the host's DNS
   securePort: 10250

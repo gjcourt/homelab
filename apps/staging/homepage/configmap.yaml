@@ -73,13 +73,19 @@ data:
             href: "#"
             description: Real-time cluster metrics
             widget:
-              type: prometheus
+              type: prometheusmetric
               url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
-              blocks:
+              metrics:
                 - label: "CPU"
                   query: 'sum(rate(container_cpu_usage_seconds_total{image!=""}[5m]))'
+                  format:
+                    type: number
+                    options:
+                      maximumFractionDigits: 2
                 - label: "Mem"
                   query: 'sum(container_memory_working_set_bytes{image!=""})'
+                  format:
+                    type: bytes
 
   bookmarks.yaml: |
     - Developer:

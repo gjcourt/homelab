@@ -64,10 +64,6 @@ data:
             description: DNS ad blocker
 
     - Monitoring:
-        - Grafana:
-            icon: grafana.png
-            href: https://grafana.burntbytes.com
-            description: Metrics dashboard
         - Cluster Resources:
             icon: prometheus.png
             href: "#"
@@ -82,6 +78,10 @@ data:
                 - label: "Mem"
                   query: 'sum(container_memory_working_set_bytes{image!=""})'
                   formatter: "bytes"
+        - Grafana:
+            icon: grafana.png
+            href: https://grafana.burntbytes.com
+            description: Metrics dashboard
 
   bookmarks.yaml: |
     - Developer:

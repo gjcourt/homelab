@@ -16,7 +16,7 @@ spec:
   infrastructure:
     annotations:
       lbipam.cilium.io/ip-pool: single-node-pool
-      lbipam.cilium.io/sharing-cross-namespace: default,adguard-stage,audiobookshelf-stage,linkding-stage,mealie-stage,memos-stage
+      lbipam.cilium.io/sharing-cross-namespace: default,adguard-stage,audiobookshelf-stage,linkding-stage,mealie-stage,memos-stage,homeassistant-stage
       lbipam.cilium.io/sharing-key: homelab
   listeners:
     - name: http

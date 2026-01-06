@@ -73,13 +73,13 @@ data:
               url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
               metrics:
                 - label: "CPU (%)"
-                  query: '100 * sum(rate(container_cpu_usage_seconds_total{container!="POD",image!=""}[5m])) / sum(kube_node_status_allocatable_cpu_cores)'
+                  query: '100 * sum(rate(container_cpu_usage_seconds_total{container!="POD",image!=""}[5m])) / sum(kube_node_status_allocatable{resource="cpu",unit="core"})'
                   format:
                     type: number
                     options:
                       maximumFractionDigits: 1
                 - label: "Mem (%)"
-                  query: '100 * sum(container_memory_working_set_bytes{container!="POD",image!=""}) / sum(kube_node_status_allocatable_memory_bytes)'
+                  query: '100 * sum(container_memory_working_set_bytes{container!="POD",image!=""}) / sum(kube_node_status_allocatable{resource="memory",unit="byte"})'
                   format:
                     type: number
                     options:

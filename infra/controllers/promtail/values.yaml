@@ -1,0 +1,7 @@
+config:
+  logLevel: info
+  clients:
+    - url: http://loki:3100/loki/api/v1/push
+  snippets:
+    pipelineStages:
+      - cri: {}

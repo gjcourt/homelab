@@ -6,6 +6,7 @@ resources:
   - cnpg
   - kube-prometheus-stack
   - loki
+  - promtail
   # - metallb
   - renovate
   - snapshot

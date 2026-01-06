@@ -95,9 +95,9 @@ data:
             href: https://grafana.burntbytes.com
             description: Metrics dashboard
         - Loki:
-          icon: loki.png
-          href: https://grafana.burntbytes.com/explore?schemaVersion=1&panes=%7B%22jZ4%22:%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22expr%22:%22%7Bnamespace%3D%5C%22homepage-stage%5C%22%7D%22%7D%5D%7D%7D
-          description: Cluster logs (via Grafana)
+            icon: loki.png
+            href: https://grafana.burntbytes.com/explore?schemaVersion=1&panes=%7B%22jZ4%22:%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22expr%22:%22%7Bnamespace%3D%5C%22homepage-stage%5C%22%7D%22%7D%5D%7D%7D
+            description: Cluster logs (via Grafana)
 
   bookmarks.yaml: |
     - Developer:

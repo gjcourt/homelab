@@ -8,6 +8,9 @@ Kubernetes homelab, managed GitOps-style with Flux.
 - Infrastructure overview: [infra/README.md](infra/README.md)
 - Documentation: [docs/](docs/)
 	- AdGuard HA plan: [docs/TODO-adguard-ha.md](docs/TODO-adguard-ha.md)
+	- Flux and deployments: [docs/flux-and-deployments.md](docs/flux-and-deployments.md)
+	- Overlay structure: [docs/overlays-and-structure.md](docs/overlays-and-structure.md)
+	- Making changes: [docs/making-changes.md](docs/making-changes.md)
 
 ## Repository layout
 

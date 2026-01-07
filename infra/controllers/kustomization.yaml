@@ -4,6 +4,7 @@ resources:
   - cert-manager
   - cilium
   - cnpg
+  - coredns-internal
   - kube-prometheus-stack
   - loki
   - promtail

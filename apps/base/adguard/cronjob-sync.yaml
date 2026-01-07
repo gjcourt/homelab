@@ -1,0 +1,64 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: adguard-sync
+  namespace: adguard
+  labels:
+    app.kubernetes.io/name: adguard
+spec:
+  # NOTE: This CronJob is intentionally NOT referenced by any kustomization yet.
+  # Enable it later by adding it to the staging/production overlay resources.
+  schedule: "0 */6 * * *" # every 6 hours
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: adguardhome-sync
+              image: ghcr.io/bakito/adguardhome-sync:v0.8.2
+              args: ["run"]
+              env:
+                - name: LOG_LEVEL
+                  value: info
+
+                # Origin (primary). Route all UI/admin writes to the primary pod only.
+                - name: ORIGIN_URL
+                  value: http://adguard-admin:8080
+
+                # Credentials for the origin and replicas.
+                # Create these Secrets per-environment when enabling the CronJob.
+                - name: ORIGIN_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: adguard-sync-credentials
+                      key: ORIGIN_USERNAME
+                - name: ORIGIN_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: adguard-sync-credentials
+                      key: ORIGIN_PASSWORD
+
+                # Replica 1 (when you scale to 2+ replicas).
+                - name: REPLICA1_URL
+                  value: http://adguard-1.adguard-headless:80
+                - name: REPLICA1_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: adguard-sync-credentials
+                      key: REPLICA1_USERNAME
+                - name: REPLICA1_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: adguard-sync-credentials
+                      key: REPLICA1_PASSWORD
+
+                # Safety defaults: do not sync DHCP (you likely want UniFi handling DHCP).
+                - name: FEATURES_DHCP_SERVER_CONFIG
+                  value: "false"
+                - name: FEATURES_DHCP_STATIC_LEASES
+                  value: "false"

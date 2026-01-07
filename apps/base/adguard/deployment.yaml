@@ -1,11 +1,12 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: adguard
   namespace: adguard
   labels:
     app.kubernetes.io/name: adguard
 spec:
+  serviceName: adguard-headless
   replicas: 1
   selector:
     matchLabels:
@@ -15,16 +16,15 @@ spec:
       labels:
         app.kubernetes.io/name: adguard
     spec:
+      terminationGracePeriodSeconds: 30
       containers:
         - name: adguard
           image: adguard/adguardhome:latest
-
           envFrom:
             - configMapRef:
                 name: adguard-container-env
             - secretRef:
                 name: adguard-container-env-secret
-
           ports:
             - containerPort: 80
               name: http
@@ -38,5 +38,31 @@ spec:
               protocol: TCP
             - containerPort: 3000
               name: setup
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          volumeMounts:
+            - mountPath: /opt/adguardhome/conf
+              name: config
+            - mountPath: /opt/adguardhome/work
+              name: work
 
-      restartPolicy: Always
+  volumeClaimTemplates:
+    - metadata:
+        name: config
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: synology-iscsi
+        resources:
+          requests:
+            storage: 1Gi
+    - metadata:
+        name: work
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: synology-iscsi
+        resources:
+          requests:
+            storage: 1Gi

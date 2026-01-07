@@ -6,7 +6,6 @@ resources:
   - configmap.yaml
   - httproute.yaml
   - secret-adguard-container-env.yaml
-  - storage.yaml
 
 labels:
   - pairs:
@@ -15,7 +14,6 @@ labels:
     includeSelectors: false
 
 patches:
-  - path: deployment-patch.yaml
   - target:
       kind: Namespace
       name: adguard

@@ -3,4 +3,7 @@ kind: Kustomization
 resources:
   - deployment.yaml
   - namespace.yaml
+  - pdb.yaml
   - service.yaml
+  - service-admin.yaml
+  - service-headless.yaml

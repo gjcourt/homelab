@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: adguard-headless
+  namespace: adguard
+  labels:
+    app.kubernetes.io/name: adguard
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: adguard
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: https
+      port: 443
+      targetPort: https

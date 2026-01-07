@@ -37,5 +37,5 @@ spec:
     # Use port 8080 after initial setup is complete
     # During initial setup, change to port 3000 to access the setup wizard
     - backendRefs:
-      - name: adguard
+      - name: adguard-admin
         port: 8080

@@ -5,7 +5,7 @@ metadata:
   namespace: homepage-stage
 spec:
   hostnames:
-    - home-stage.burntbytes.com
+    - home.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
@@ -24,7 +24,7 @@ metadata:
   namespace: homepage-stage
 spec:
   hostnames:
-    - home-stage.burntbytes.com
+    - home.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default

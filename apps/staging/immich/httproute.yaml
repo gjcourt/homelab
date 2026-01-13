@@ -11,7 +11,7 @@ spec:
       namespace: default
       sectionName: http
   hostnames:
-    - "photos-stage.burntbytes.com"
+    - "photos.stage.burntbytes.com"
   rules:
     - matches:
         - path:
@@ -34,7 +34,7 @@ spec:
       namespace: default
       sectionName: https
   hostnames:
-    - "photos-stage.burntbytes.com"
+    - "photos.stage.burntbytes.com"
   rules:
     - matches:
         - path:

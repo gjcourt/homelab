@@ -5,7 +5,7 @@ metadata:
   namespace: mealie-stage
 spec:
   hostnames:
-    - mealie-stage.burntbytes.com # match requests for app2.example.com
+    - mealie.stage.burntbytes.com # match requests for app2.example.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
@@ -24,7 +24,7 @@ metadata:
   namespace: mealie-stage
 spec:
   hostnames:
-    - mealie-stage.burntbytes.com # match requests for app2.example.com
+    - mealie.stage.burntbytes.com # match requests for app2.example.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default

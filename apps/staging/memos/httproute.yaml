@@ -5,7 +5,7 @@ metadata:
   namespace: memos-stage
 spec:
   hostnames:
-    - memos-stage.burntbytes.com
+    - memos.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
@@ -24,7 +24,7 @@ metadata:
   namespace: memos-stage
 spec:
   hostnames:
-    - memos-stage.burntbytes.com
+    - memos.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
@@ -41,7 +41,7 @@ metadata:
   namespace: memos-stage
 spec:
   hostnames:
-    - memos-stage.burntbytes.com
+    - memos.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default

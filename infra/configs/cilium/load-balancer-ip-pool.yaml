@@ -1,9 +1,10 @@
 apiVersion: cilium.io/v2
 kind: CiliumLoadBalancerIPPool
 metadata:
-  name: home-lb-pool
+  name: home-compute-pool
 spec:
   blocks:
-    # - cidr: 192.168.4.113/32
     - start: 192.168.5.30
       stop: 192.168.5.255
+    # - start: 10.42.2.30
+    #   stop: 10.42.2.255

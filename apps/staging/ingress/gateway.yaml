@@ -22,6 +22,7 @@ spec:
     - name: http
       port: 80
       protocol: HTTP
+      hostname: "*.stage.burntbytes.com"
       allowedRoutes:
         namespaces:
           from: Selector
@@ -31,20 +32,18 @@ spec:
     - name: https
       port: 443
       protocol: HTTPS
-      hostname: "*.burntbytes.com"
+      hostname: "*.stage.burntbytes.com"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: burntbytes-wildcard-tls
+            namespace: security
       allowedRoutes:
         namespaces:
           from: Selector
           selector:
             matchLabels:
               http-ingress: "true"
-      tls:
-        mode: Terminate
-        certificateRefs:
-          - kind: Secret
-            group: ""
-            name: burntbytes-wildcard-tls
-            namespace: security
     # - name: http-metrics
     #   port: 9100
     #   protocol: HTTP

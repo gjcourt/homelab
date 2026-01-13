@@ -10,4 +10,5 @@ spec:
     kind: ClusterIssuer
   dnsNames:
     - "*.burntbytes.com"
+    - "*.stage.burntbytes.com"
     - burntbytes.com

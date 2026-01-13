@@ -7,7 +7,7 @@ metadata:
     http-ingress: "true"
 spec:
   hostnames:
-    - adguard-stage.burntbytes.com
+    - adguard.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
@@ -28,7 +28,7 @@ metadata:
     http-ingress: "true"
 spec:
   hostnames:
-    - adguard-stage.burntbytes.com
+    - adguard.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default

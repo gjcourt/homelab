@@ -5,7 +5,7 @@ metadata:
   namespace: excalidraw-stage
 spec:
   hostnames:
-    - excalidraw-stage.burntbytes.com
+    - excalidraw.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
@@ -24,7 +24,7 @@ metadata:
   namespace: excalidraw-stage
 spec:
   hostnames:
-    - excalidraw-stage.burntbytes.com
+    - excalidraw.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default

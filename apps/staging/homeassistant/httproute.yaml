@@ -5,7 +5,7 @@ metadata:
   namespace: homeassistant-stage
 spec:
   hostnames:
-    - hass-stage.burntbytes.com
+    - hass.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
@@ -24,7 +24,7 @@ metadata:
   namespace: homeassistant-stage
 spec:
   hostnames:
-    - hass-stage.burntbytes.com
+    - hass.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default

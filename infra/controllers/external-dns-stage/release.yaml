@@ -1,0 +1,43 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: external-dns
+  namespace: flux-system
+spec:
+  interval: 1h0m0s
+  url: https://kubernetes-sigs.github.io/external-dns/
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: external-dns-stage
+  namespace: dns-system
+spec:
+  interval: 1h0m0s
+  chart:
+    spec:
+      chart: external-dns
+      version: 1.14.x
+      sourceRef:
+        kind: HelmRepository
+        name: external-dns
+        namespace: flux-system
+  values:
+    provider: rfc2136
+    env:
+      - name: EXTERNAL_DNS_RFC2136_HOST
+        value: coredns-custom.dns-system.svc.cluster.local
+      - name: EXTERNAL_DNS_RFC2136_PORT
+        value: "53"
+      - name: EXTERNAL_DNS_RFC2136_ZONE
+        value: stage.burntbytes.com
+      - name: EXTERNAL_DNS_RFC2136_TSIG_UPGRADE_TCP
+        value: "true"
+      - name: EXTERNAL_DNS_RFC2136_INSECURE
+        value: "true"
+    sources:
+      - gateway-httproute
+    domainFilters:
+      - stage.burntbytes.com
+    extraArgs:
+      - --gateway-label-filter=env=staging

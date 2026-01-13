@@ -1,0 +1,72 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: coredns
+  namespace: flux-system
+spec:
+  interval: 1h0m0s
+  url: https://coredns.github.io/helm
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: coredns-custom
+  namespace: dns-system
+spec:
+  interval: 1h0m0s
+  chart:
+    spec:
+      chart: coredns
+      version: 1.28.x
+      sourceRef:
+        kind: HelmRepository
+        name: coredns
+        namespace: flux-system
+  install:
+    createNamespace: true
+  values:
+    isClusterService: false
+    serviceType: LoadBalancer
+    servers:
+      - zones:
+          - zone: stage.burntbytes.com
+        port: 53
+        plugins:
+          - name: log
+          - name: errors
+          - name: health
+            configBlock: |-
+              lameduck 5s
+          - name: ready
+          - name: kubernetes
+            parameters: cluster.local in-addr.arpa ip6.arpa
+            configBlock: |-
+              pods insecure
+              fallthrough in-addr.arpa ip6.arpa
+              ttl 30
+          - name: file
+            parameters: /var/lib/coredns/stage.burntbytes.com
+          - name: reload
+          - name: loadbalance
+    extraVolumes:
+      - name: zone-file
+        configMap:
+          name: coredns-custom-zone
+      - name: data
+        emptyDir: {}
+    extraVolumeMounts:
+      - name: zone-file
+        mountPath: /etc/coredns/zones
+        readOnly: true
+      - name: data
+        mountPath: /var/lib/coredns
+    extraContainers:
+      - name: copy-zone
+        image: busybox
+        command: ["sh", "-c", "cp /etc/coredns/zones/stage.burntbytes.com /var/lib/coredns/stage.burntbytes.com && chmod 666 /var/lib/coredns/stage.burntbytes.com && sleep 360000"]
+        volumeMounts:
+          - name: zone-file
+            mountPath: /etc/coredns/zones
+          - name: data
+            mountPath: /var/lib/coredns
+

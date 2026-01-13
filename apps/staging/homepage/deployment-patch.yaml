@@ -13,4 +13,4 @@ spec:
                 name: homepage-synology
           env:
             - name: HOMEPAGE_ALLOWED_HOSTS
-              value: home-stage.burntbytes.com
+              value: home.stage.burntbytes.com

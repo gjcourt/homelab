@@ -38,35 +38,12 @@ spec:
             configBlock: |-
               lameduck 5s
           - name: ready
-          - name: kubernetes
-            parameters: cluster.local in-addr.arpa ip6.arpa
+          - name: template
+            parameters: IN A stage.burntbytes.com
             configBlock: |-
-              pods insecure
-              fallthrough in-addr.arpa ip6.arpa
-              ttl 30
-          - name: file
-            parameters: /var/lib/coredns/stage.burntbytes.com
+              match .*
+              answer "{{ .Name }} 60 IN A 192.168.5.30"
+              fallthrough
           - name: reload
           - name: loadbalance
-    extraVolumes:
-      - name: zone-file
-        configMap:
-          name: coredns-custom-zone
-      - name: data
-        emptyDir: {}
-    extraVolumeMounts:
-      - name: zone-file
-        mountPath: /etc/coredns/zones
-        readOnly: true
-      - name: data
-        mountPath: /var/lib/coredns
-    extraContainers:
-      - name: copy-zone
-        image: busybox
-        command: ["sh", "-c", "cp /etc/coredns/zones/stage.burntbytes.com /var/lib/coredns/stage.burntbytes.com && chmod 666 /var/lib/coredns/stage.burntbytes.com && sleep 360000"]
-        volumeMounts:
-          - name: zone-file
-            mountPath: /etc/coredns/zones
-          - name: data
-            mountPath: /var/lib/coredns
 

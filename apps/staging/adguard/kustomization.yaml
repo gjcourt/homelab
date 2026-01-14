@@ -6,6 +6,7 @@ resources:
   - configmap.yaml
   - httproute.yaml
   - secret-adguard-container-env.yaml
+  - secret-sync.yaml
 
 labels:
   - pairs:
@@ -28,3 +29,13 @@ patches:
       - op: replace
         path: /metadata/name
         value: adguard-stage
+  - target:
+      kind: StatefulSet
+      name: adguard
+    patch: |-
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: adguard
+      spec:
+        replicas: 2

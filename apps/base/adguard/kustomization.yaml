@@ -7,3 +7,4 @@ resources:
   - service.yaml
   - service-admin.yaml
   - service-headless.yaml
+  - cronjob-sync.yaml

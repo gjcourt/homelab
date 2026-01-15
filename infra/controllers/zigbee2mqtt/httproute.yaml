@@ -7,11 +7,11 @@ metadata:
     http-ingress: "true"
 spec:
   hostnames:
-    - zigbee.stage.burntbytes.com
+    - zigbee.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
-      sectionName: http
+      sectionName: http-prod
   rules:
     - filters:
       - type: RequestRedirect
@@ -28,11 +28,11 @@ metadata:
     http-ingress: "true"
 spec:
   hostnames:
-    - zigbee.stage.burntbytes.com
+    - zigbee.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
-      sectionName: https
+      sectionName: https-prod
   rules:
     - backendRefs:
       - name: zigbee2mqtt

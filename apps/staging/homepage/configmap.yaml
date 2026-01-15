@@ -58,6 +58,10 @@ data:
             icon: home-assistant.png
             href: https://hass.stage.burntbytes.com
             description: Home automation platform
+        - Zigbee2MQTT:
+            icon: zigbee2mqtt.png
+            href: https://zigbee.stage.burntbytes.com
+            description: Zigbee to MQTT Bridge
         - AdGuard Home:
             icon: adguard-home.png
             href: https://adguard.stage.burntbytes.com

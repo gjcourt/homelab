@@ -1,0 +1,39 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: zigbee2mqtt-http
+  namespace: zigbee2mqtt
+  labels:
+    http-ingress: "true"
+spec:
+  hostnames:
+    - zigbee.stage.burntbytes.com
+  parentRefs:
+    - name: app-gateway-staging
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+      - type: RequestRedirect
+        requestRedirect:
+          scheme: https
+          statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: zigbee2mqtt-https
+  namespace: zigbee2mqtt
+  labels:
+    http-ingress: "true"
+spec:
+  hostnames:
+    - zigbee.stage.burntbytes.com
+  parentRefs:
+    - name: app-gateway-staging
+      namespace: default
+      sectionName: https
+  rules:
+    - backendRefs:
+      - name: zigbee2mqtt
+        port: 8080

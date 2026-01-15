@@ -30,6 +30,7 @@ spec:
     servers:
       - zones:
           - zone: stage.burntbytes.com
+          - zone: burntbytes.com
         port: 53
         plugins:
           - name: log
@@ -39,7 +40,7 @@ spec:
               lameduck 5s
           - name: ready
           - name: template
-            parameters: IN A stage.burntbytes.com
+            parameters: IN A burntbytes.com
             configBlock: |-
               match .*
               answer "{{ .Name }} 60 IN A 192.168.5.30"

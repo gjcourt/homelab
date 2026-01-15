@@ -9,7 +9,7 @@ spec:
   parentRefs:
     - name: app-gateway-staging
       namespace: default
-      sectionName: http
+      sectionName: http-prod
   rules:
     - filters:
       - type: RequestRedirect
@@ -28,7 +28,7 @@ spec:
   parentRefs:
     - name: app-gateway-staging
       namespace: default
-      sectionName: https
+      sectionName: https-prod
   rules:
     - backendRefs:
       - name: kube-prometheus-stack-grafana

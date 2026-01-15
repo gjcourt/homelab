@@ -20,4 +20,5 @@ data:
       use_x_forwarded_for: true
       trusted_proxies:
         - 10.244.0.0/16  # Trust Cluster Pod CIDR
+        - 192.168.5.0/24 # Trust Node Network (Envoy HostNetwork)
         - 127.0.0.1

@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zigbee2mqtt
+  namespace: zigbee2mqtt
+  labels:
+    app: zigbee2mqtt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zigbee2mqtt
+  template:
+    metadata:
+      labels:
+        app: zigbee2mqtt
+    spec:
+      initContainers:
+        - name: init-config
+          image: busybox
+          command: ['sh', '-c', "if [ ! -s /app/data/configuration.yaml ]; then cp -L /tmp/config/configuration.yaml /app/data/configuration.yaml; fi"]
+          volumeMounts:
+            - name: config
+              mountPath: /tmp/config
+            - name: data
+              mountPath: /app/data
+      containers:
+        - name: zigbee2mqtt
+          image: koenkk/zigbee2mqtt:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: ZIGBEE2MQTT_DATA
+              value: /app/data
+          volumeMounts:
+            - name: data
+              mountPath: /app/data
+            - name: usb
+              mountPath: /dev/ttyUSB0
+          securityContext:
+            privileged: true
+      volumes:
+        - name: config
+          configMap:
+            name: zigbee2mqtt-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: zigbee2mqtt-data-pvc
+        - name: usb
+          hostPath:
+            path: /dev/ttyUSB0

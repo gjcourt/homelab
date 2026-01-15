@@ -7,7 +7,9 @@ resources:
   - coredns-internal
   - kube-prometheus-stack
   - loki
+  - mosquitto
   - promtail
   - renovate
   - snapshot
   - synology-csi
+  - zigbee2mqtt

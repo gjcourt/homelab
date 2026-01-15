@@ -3,8 +3,4 @@ kind: Kustomization
 resources:
   - certificate-wildcard.yaml
   - certificates.yaml
-  - clusterissuer.yaml
-  - namespace.yaml
-  - referencegrant.yaml
-  - secret-cloudflare-api-token.yaml
   - secret-tls-creds.yaml

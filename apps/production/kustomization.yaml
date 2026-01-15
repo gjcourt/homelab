@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - adguard
   - audiobookshelf
+  - certificates
   - cloudflare-tunnel
   - excalidraw
   - homepage

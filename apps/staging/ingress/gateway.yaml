@@ -46,7 +46,7 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - name: burntbytes-wildcard-tls
+          - name: burntbytes-stage-tls
             namespace: security
       allowedRoutes:
         namespaces:
@@ -61,7 +61,7 @@ spec:
       tls:
         mode: Terminate
         certificateRefs:
-          - name: burntbytes-wildcard-tls
+          - name: burntbytes-prod-wildcard-tls
             namespace: security
       allowedRoutes:
         namespaces:

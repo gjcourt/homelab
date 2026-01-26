@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: go-librespot-config
+  namespace: snapcast
+  labels:
+    app: snapcast
+data:
+  config.yml: |
+    device_name: "Snapcast"
+    device_type: "speaker"
+
+    # Spotify Connect uses mDNS/zeroconf to show up in the Spotify app.
+    credentials:
+      type: zeroconf
+
+    zeroconf:
+      persist_credentials: true
+
+    audio_backend: "pipe"
+    audio_output_pipe: "/audio/spotify.fifo"
+    audio_output_pipe_format: "s16le"
+
+    bitrate: 320
+
+    normalisation_disabled: false
+    normalisation_use_album_gain: true
+    normalisation_pregain: 0.0

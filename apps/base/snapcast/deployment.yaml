@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snapcast
+  namespace: snapcast
+  labels:
+    app: snapcast
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: snapcast
+  template:
+    metadata:
+      labels:
+        app: snapcast
+    spec:
+      initContainers:
+        - name: init-fifo
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              rm -f /tmp/snapfifo
+              mkfifo /tmp/snapfifo
+              chmod 666 /tmp/snapfifo
+          volumeMounts:
+            - name: snapcast-tmp
+              mountPath: /tmp
+
+        - name: init-spotify-fifo
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              rm -f /audio/spotify.fifo
+              mkfifo /audio/spotify.fifo
+              chmod 666 /audio/spotify.fifo
+          volumeMounts:
+            - name: audio-pipes
+              mountPath: /audio
+
+      containers:
+        - name: snapserver
+          image: badaix/snapcast:0.34.0
+          ports:
+            - name: stream
+              containerPort: 1704
+            - name: control
+              containerPort: 1705
+            - name: http
+              containerPort: 1780
+          readinessProbe:
+            tcpSocket:
+              port: control
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          volumeMounts:
+            - name: snapserver-config
+              mountPath: /etc/snapserver.conf
+              subPath: snapserver.conf
+            - name: snapcast-tmp
+              mountPath: /tmp
+            - name: audio-pipes
+              mountPath: /audio
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+
+        - name: go-librespot
+          image: gjcourt/go-librespot:v0.6.2
+          env:
+            - name: HOME
+              value: /config
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              /usr/bin/go-librespot --config_dir /config
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  test -p /audio/spotify.fifo
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          volumeMounts:
+            - name: spotify-state
+              mountPath: /config
+            - name: go-librespot-config
+              mountPath: /config/config.yml
+              subPath: config.yml
+              readOnly: true
+            - name: audio-pipes
+              mountPath: /audio
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+
+      volumes:
+        - name: snapserver-config
+          configMap:
+            name: snapserver-config
+        - name: snapcast-tmp
+          emptyDir: {}
+        - name: audio-pipes
+          emptyDir: {}
+        - name: spotify-state
+          persistentVolumeClaim:
+            claimName: snapcast-spotify-state
+        - name: go-librespot-config
+          configMap:
+            name: go-librespot-config

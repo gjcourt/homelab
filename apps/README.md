@@ -15,6 +15,7 @@
 - [linkding](base/linkding/)
 - [mealie](base/mealie/)
 - [memos](base/memos/)
+- [snapcast](base/snapcast/)
 <!-- apps:list:end -->
 
 ## Future applications

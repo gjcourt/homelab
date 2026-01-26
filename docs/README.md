@@ -17,3 +17,4 @@ Short index of the most useful docs in this repo.
 ## Project plans / runbooks
 
 - AdGuard HA rollout plan: [TODO-adguard-ha.md](TODO-adguard-ha.md)
+- Snapcast (multi-room audio): [snapcast.md](snapcast.md)

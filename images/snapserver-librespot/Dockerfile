@@ -11,7 +11,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build -v ./cmd/daemon
 
 
 
-FROM alpine:3.20 AS snapweb
+FROM alpine:3.23 AS snapweb
 
 ARG SNAPWEB_VERSION="v0.9.3"
 RUN apk add --no-cache unzip wget
@@ -20,7 +20,7 @@ RUN wget https://github.com/badaix/snapweb/releases/download/${SNAPWEB_VERSION}/
 
 
 
-FROM alpine:3.20
+FROM alpine:3.23
 
 RUN apk add --no-cache python3 py3-websocket-client py3-requests musl libpulse avahi libgcc gcompat alsa-lib avahi-compat-libdns_sd alsa-lib libgcc mpv
 RUN rm /etc/apk/repositories && apk add --no-cache snapcast \

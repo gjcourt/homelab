@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - adguard
   - audiobookshelf
+  - authelia
   - certificates
   - excalidraw
   - homepage

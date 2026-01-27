@@ -1,0 +1,76 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: authelia-stage
+resources:
+  - ../../base/authelia
+  - httproute.yaml
+  - secret-authelia.yaml
+  - secret-users.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+patches:
+  - target:
+      kind: Namespace
+      name: authelia
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: authelia-stage
+  - target:
+      kind: ConfigMap
+      name: authelia-config
+    patch: |-
+      - op: replace
+        path: /data/configuration.yml
+        value: |
+          theme: dark
+
+          server:
+            address: tcp://0.0.0.0:9091
+
+          log:
+            level: info
+
+          authentication_backend:
+            file:
+              path: /config/users.yml
+              watch: true
+
+          access_control:
+            default_policy: deny
+            rules:
+              - domain: "auth.stage.burntbytes.com"
+                policy: bypass
+                resources:
+                  - "^/api/oidc/.*$"
+              - domain: "auth.stage.burntbytes.com"
+                policy: one_factor
+
+          session:
+            name: authelia_session
+            domain: stage.burntbytes.com
+            same_site: lax
+            expiration: 1h
+            inactivity: 15m
+            remember_me: 30d
+
+          storage:
+            local:
+              path: /config/db.sqlite3
+
+          notifier:
+            filesystem:
+              filename: /config/notification.txt
+
+          identity_providers:
+            oidc:
+              issuer: https://auth.stage.burntbytes.com
+              lifespans:
+                access_token: 1h
+                id_token: 1h
+                refresh_token: 720h
+              clients: []

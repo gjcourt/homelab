@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: authelia-config
+  namespace: authelia
+  labels:
+    app: authelia
+data:
+  configuration.yml: |
+    theme: dark
+
+    server:
+      address: tcp://0.0.0.0:9091
+
+    log:
+      level: info
+
+    # NOTE: Secrets are provided via environment variables from a Secret.
+    # - AUTHELIA_JWT_SECRET
+    # - AUTHELIA_SESSION_SECRET
+    # - AUTHELIA_STORAGE_ENCRYPTION_KEY
+    # - AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET
+
+    authentication_backend:
+      file:
+        path: /config/users.yml
+        watch: true
+
+    access_control:
+      default_policy: deny
+      rules:
+        # Allow public OIDC endpoints
+        - domain: "auth.example.invalid"
+          policy: bypass
+          resources:
+            - "^/api/oidc/.*$"
+
+        # Authelia portal itself requires login
+        - domain: "auth.example.invalid"
+          policy: one_factor
+
+    session:
+      name: authelia_session
+      domain: example.invalid
+      same_site: lax
+      expiration: 1h
+      inactivity: 15m
+      remember_me: 30d
+
+    storage:
+      local:
+        path: /config/db.sqlite3
+
+    notifier:
+      filesystem:
+        filename: /config/notification.txt
+
+    identity_providers:
+      oidc:
+        issuer: https://auth.example.invalid
+        lifespans:
+          access_token: 1h
+          id_token: 1h
+          refresh_token: 720h
+        clients: []

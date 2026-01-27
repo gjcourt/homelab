@@ -7,6 +7,7 @@
 <!-- apps:list:start -->
 - [adguard](base/adguard/)
 - [audiobookshelf](base/audiobookshelf/)
+- [authelia](base/authelia/)
 - [excalidraw](base/excalidraw/)
 - [homeassistant](base/homeassistant/)
 - [homepage](base/homepage/)

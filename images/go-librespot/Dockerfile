@@ -1,7 +1,7 @@
 # Multi-arch go-librespot image (no runtime GitHub dependency)
 # Downloads a pinned release binary at build time.
 
-FROM alpine:3.20
+FROM alpine:3.20 AS fetch
 
 ARG GO_LIBRESPOT_VERSION="v0.6.2"
 
@@ -32,8 +32,16 @@ RUN set -eu; \
   url="https://github.com/devgianlu/go-librespot/releases/download/${GO_LIBRESPOT_VERSION}/${file}"; \
   curl -fsSL -o /tmp/go-librespot.tgz "${url}"; \
   echo "${sha256}  /tmp/go-librespot.tgz" | sha256sum -c -; \
-  tar -xzf /tmp/go-librespot.tgz -C /usr/local/bin; \
-  chmod +x /usr/local/bin/go-librespot; \
-  rm -f /tmp/go-librespot.tgz
+  mkdir -p /out; \
+  tar -xzf /tmp/go-librespot.tgz -C /out; \
+  chmod +x /out/go-librespot
+
+FROM alpine:3.20
+
+# go-librespot release binaries are dynamically linked against glibc and ALSA.
+# These packages keep the runtime image small while providing compatibility.
+RUN apk add --no-cache ca-certificates alsa-lib libc6-compat gcompat
+
+COPY --from=fetch /out/go-librespot /usr/local/bin/go-librespot
 
 ENTRYPOINT ["/usr/local/bin/go-librespot"]

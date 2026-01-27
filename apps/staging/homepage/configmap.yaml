@@ -43,6 +43,10 @@ data:
             icon: audiobookshelf.png
             href: https://audiobooks.stage.burntbytes.com
             description: Audiobook and podcast server
+        - Snapcast:
+          icon: mdi-speaker-multiple
+          href: https://snapcast.stage.burntbytes.com
+          description: Multi-room audio (Snapweb)
 
     - Infrastructure:
         - Synology NAS:

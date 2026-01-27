@@ -87,7 +87,7 @@ spec:
             - -c
             - |
               set -e
-              /usr/bin/go-librespot --config_dir /config
+              /usr/local/bin/go-librespot --config_dir /config
           readinessProbe:
             exec:
               command:

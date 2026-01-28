@@ -1,0 +1,11 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snapcast
+  namespace: snapcast
+spec:
+  template:
+    spec:
+      containers:
+        - name: snapserver
+          image: gjcourt/snapcast:0.34.0

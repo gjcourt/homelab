@@ -19,3 +19,4 @@ patches:
       - op: replace
         path: /metadata/name
         value: snapcast-stage
+  - path: deployment-patch.yaml

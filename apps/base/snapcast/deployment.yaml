@@ -73,6 +73,11 @@ spec:
             capabilities:
               drop:
                 - ALL
+          env:
+            - name: HOME
+              value: /tmp
+            - name: XDG_CONFIG_HOME
+              value: /tmp/.config
           ports:
             - name: stream
               containerPort: 1704

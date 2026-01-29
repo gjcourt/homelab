@@ -16,7 +16,7 @@ Notes:
 ```sh
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  -t gjcourt/go-librespot:v0.6.2 \
+  -t gjcourt/go-librespot:v0.6.2-1 \
   --push \
   images/go-librespot
 ```

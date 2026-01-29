@@ -36,11 +36,13 @@ RUN set -eu; \
   tar -xzf /tmp/go-librespot.tgz -C /out; \
   chmod +x /out/go-librespot
 
-FROM alpine:3.20
+FROM debian:bookworm-slim
 
 # go-librespot release binaries are dynamically linked against glibc and ALSA.
-# These packages keep the runtime image small while providing compatibility.
-RUN apk add --no-cache ca-certificates alsa-lib libc6-compat gcompat
+# Use a glibc-based runtime to avoid Alpine/gcompat loader issues on amd64.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates libasound2 \
+  && rm -rf /var/lib/apt/lists/*
 
 COPY --from=fetch /out/go-librespot /usr/local/bin/go-librespot
 

@@ -78,7 +78,7 @@ spec:
               memory: 256Mi
 
         - name: go-librespot
-          image: gjcourt/go-librespot:v0.6.2
+          image: gjcourt/go-librespot:v0.6.2-1
           env:
             - name: HOME
               value: /config

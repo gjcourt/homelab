@@ -123,6 +123,7 @@ spec:
             - -c
             - |
               set -e
+              rm -f /config/lockfile
               /usr/local/bin/go-librespot --config_dir /config
           readinessProbe:
             exec:

@@ -15,9 +15,23 @@ spec:
       labels:
         app: snapcast
     spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: init-fifo
           image: busybox:1.37
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           command:
             - sh
             - -c
@@ -32,6 +46,11 @@ spec:
 
         - name: init-spotify-fifo
           image: busybox:1.37
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           command:
             - sh
             - -c
@@ -47,6 +66,11 @@ spec:
       containers:
         - name: snapserver
           image: badaix/snapcast:0.34.0
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: stream
               containerPort: 1704
@@ -79,6 +103,11 @@ spec:
 
         - name: go-librespot
           image: gjcourt/go-librespot:v0.6.2-1
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           env:
             - name: HOME
               value: /config

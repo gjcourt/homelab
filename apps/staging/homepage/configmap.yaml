@@ -59,9 +59,9 @@ data:
             href: https://hass.stage.burntbytes.com
             description: Home automation platform
         - Snapcast:
-          icon: mdi-speaker-multiple
-          href: https://snapcast.stage.burntbytes.com
-          description: Multi-room audio (Snapweb)
+            icon: mdi-speaker-multiple
+            href: https://snapcast.stage.burntbytes.com
+            description: Multi-room audio (Snapweb)
         - Zigbee2MQTT:
             icon: zigbee2mqtt.png
             href: https://zigbee.stage.burntbytes.com

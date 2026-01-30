@@ -16,3 +16,7 @@ data:
     # The sidecar writes raw PCM into this FIFO, snapserver reads it.
     # Sample format matches Snapcast's librespot/go-librespot expectations (44.1kHz).
     source = pipe:///audio/spotify.fifo?name=spotify&sampleformat=44100:16:2&codec=flac&mode=read
+
+    [http]
+    # Serve Snapweb (built-in UI) via the snapserver http port (1780)
+    doc_root = /usr/share/snapserver/snapweb/

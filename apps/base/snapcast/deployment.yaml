@@ -70,7 +70,7 @@ spec:
 
       containers:
         - name: snapserver
-          image: badaix/snapcast:0.34.0
+          image: gjcourt/snapcast:0.34.0-snapweb0.9.3
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -121,6 +121,9 @@ spec:
           env:
             - name: HOME
               value: /config
+          ports:
+            - name: spotify-auth
+              containerPort: 57622
           command:
             - sh
             - -c

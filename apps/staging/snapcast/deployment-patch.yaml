@@ -8,4 +8,4 @@ spec:
     spec:
       containers:
         - name: snapserver
-          image: gjcourt/snapcast:0.34.0
+          image: gjcourt/snapcast:0.34.0-snapweb0.9.3

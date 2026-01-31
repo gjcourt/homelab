@@ -24,3 +24,15 @@ spec:
       port: 1780
       targetPort: 1780
       protocol: TCP
+
+    # Spotify Connect (go-librespot zeroconf HTTP server)
+    - name: spotify-zeroconf
+      port: 57621
+      targetPort: 57621
+      protocol: TCP
+
+    # go-librespot interactive auth callback
+    - name: spotify-auth
+      port: 57622
+      targetPort: 57622
+      protocol: TCP

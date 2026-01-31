@@ -10,12 +10,14 @@ data:
     device_name: "Snapcast"
     device_type: "speaker"
 
-    # Spotify Connect uses mDNS/zeroconf to show up in the Spotify app.
-    credentials:
-      type: zeroconf
+    # Interactive auth avoids relying on LAN mDNS/zeroconf discovery.
+    # You'll complete a one-time browser login; credentials are persisted in /config.
+    zeroconf_enabled: false
 
-    zeroconf:
-      persist_credentials: true
+    credentials:
+      type: interactive
+      interactive:
+        callback_port: 57622
 
     audio_backend: "pipe"
     audio_output_pipe: "/audio/spotify.fifo"

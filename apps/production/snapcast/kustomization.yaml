@@ -19,3 +19,6 @@ patches:
       - op: replace
         path: /metadata/name
         value: snapcast-prod
+      - op: add
+        path: /metadata/labels/http-ingress
+        value: "true"

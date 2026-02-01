@@ -20,6 +20,9 @@ patches:
       - op: replace
         path: /metadata/name
         value: authelia-stage
+      - op: add
+        path: /metadata/labels/http-ingress
+        value: "true"
   - target:
       kind: ConfigMap
       name: authelia-config

@@ -17,6 +17,9 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - New apps must follow existing patterns unless there’s a strong reason to deviate.
 - New apps must include documentation in `docs/` covering usage, configuration, and operation.
 - New apps must be added to the auto-generated apps list in `apps/README.md` and added to the homepage app list in the appropriate layer if applicable.
+- Infrastructure apps generally do not follow the staging/production split; they are singleton instances shared across environments and use production URLs.
+- Infrastructure configuration should be defined in `infra/` or `apps/production/`, avoiding duplication in `apps/staging/`.
+- Ensure certificates for infrastructure domains are placed in the `apps/production` overlay.
 - Prefer deleting unused resources/config rather than commenting them out. Double-check with the user before removing anything significant.
 - Harden apps by default: use readiness/liveness probes, resource limits, and restricted Pod Security settings unless there’s a specific reason not to.
 - When adding ingress/route resources, ensure they conform to the cluster’s conventions (e.g., Gateway API + namespace label requirements).

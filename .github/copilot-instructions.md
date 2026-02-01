@@ -17,6 +17,9 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - New apps must follow existing patterns unless there’s a strong reason to deviate.
 - New apps must include documentation in `docs/` covering usage, configuration, and operation.
 - New apps must be added to the auto-generated apps list in `apps/README.md` and added to the homepage app list in the appropriate layer if applicable.
+- Prefer deleting unused resources/config rather than commenting them out. Double-check with the user before removing anything significant.
+- Harden apps by default: use readiness/liveness probes, resource limits, and restricted Pod Security settings unless there’s a specific reason not to.
+- When adding ingress/route resources, ensure they conform to the cluster’s conventions (e.g., Gateway API + namespace label requirements).
 
 ## Workflow conventions
 
@@ -66,4 +69,6 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - Never create plaintext secrets.
 - Follow existing patterns for encrypted secret files and related documentation.
 - When adding new required secret values, document how to generate/rotate them.
-- Validate SOPS-encrypted files with `sops --verify` before committing.
+- Validate SOPS-encrypted files with `sops filestatus <file>` before committing.
+- For placeholder values in docs, use clearly fake values (e.g., `your-secret-value-here`).
+- Include TODO notes in docs for any manual secret setup steps needed.

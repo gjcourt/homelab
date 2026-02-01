@@ -9,6 +9,9 @@ YAML_FMT_IMAGE ?= ghcr.io/google/yamlfmt:latest
 KUBECONFORM_IMAGE ?= ghcr.io/yannh/kubeconform:v0.6.7
 SHELLCHECK_IMAGE ?= koalaman/shellcheck:stable
 
+KUBECTL ?= kubectl
+SYNO_NS ?= synology-csi
+
 IMAGE_PREFIX ?= homelab
 TAG ?= dev
 PLATFORMS ?=
@@ -67,6 +70,42 @@ test-kubeconform: ## Validate rendered manifests with kubeconform (best-effort)
 		echo "Validating $$f"; \
 		docker run --rm -i $(KUBECONFORM_IMAGE) -strict -ignore-missing-schemas -skip Secret < "$$f"; \
 	done
+
+.PHONY: kubectl-context
+kubectl-context: ## Show current kubectl context and cluster-info
+	@command -v "$(KUBECTL)" >/dev/null 2>&1 || { echo "ERROR: kubectl not found (set KUBECTL=... or install kubectl)." >&2; exit 2; }
+	@echo "Context: $$($(KUBECTL) config current-context 2>/dev/null || echo '<none>')"
+	@$(KUBECTL) cluster-info || true
+
+.PHONY: kubectl-check
+kubectl-check: ## Verify kubectl can reach the cluster
+	@command -v "$(KUBECTL)" >/dev/null 2>&1 || { echo "ERROR: kubectl not found (set KUBECTL=... or install kubectl)." >&2; exit 2; }
+	@$(KUBECTL) version >/dev/null 2>&1 || { \
+		echo "ERROR: kubectl cannot reach a cluster (check context/kubeconfig/VPN)." >&2; \
+		echo "Try: $(KUBECTL) config current-context" >&2; \
+		echo "Try: $(KUBECTL) config get-contexts" >&2; \
+		echo "Try: make kubectl-context" >&2; \
+		exit 2; \
+	}
+
+.PHONY: synology-diag
+synology-diag: kubectl-check ## Diagnose Synology-backed storage read-only issues (requires cluster access)
+	KUBECTL="$(KUBECTL)" SYNO_NS="$(SYNO_NS)" scripts/synology-diag.sh
+
+.PHONY: synology-csi-restart
+synology-csi-restart: kubectl-check ## Restart Synology CSI workloads to force remounts (requires cluster access)
+	$(KUBECTL) -n "$(SYNO_NS)" rollout restart deployment --all
+	$(KUBECTL) -n "$(SYNO_NS)" rollout restart daemonset --all
+	$(KUBECTL) -n "$(SYNO_NS)" rollout status deployment --all --timeout=5m || true
+	$(KUBECTL) -n "$(SYNO_NS)" rollout status daemonset --all --timeout=5m || true
+
+.PHONY: synology-speedtest-nfs
+
+.PHONY: synology-speedtest
+synology-speedtest: kubectl-check ## Run a quick CSI write/read test (iSCSI/RWO) (requires cluster access)
+	KUBECTL="$(KUBECTL)" SYNO_NS="$(SYNO_NS)" scripts/synology-speedtest.sh
+
+synology-speedtest-nfs: synology-speedtest ## Alias for synology-speedtest (historical name)
 
 .PHONY: images
 images: ## List buildable images under images/

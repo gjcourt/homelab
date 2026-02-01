@@ -2,18 +2,20 @@ kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
   name: test-claim
+  namespace: synology-csi
 spec:
-#  storageClassName: syno-storage
+  storageClassName: synology-iscsi
   accessModes:
-  - ReadWriteMany
+    - ReadWriteOnce
   resources:
     requests:
-      storage: 5G
+      storage: 5Gi
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: read
+  namespace: synology-csi
 spec:
   template:
     metadata:
@@ -23,22 +25,23 @@ spec:
         job: read
     spec:
       containers:
-      - name: read
-        image: ubuntu:noble
-        command: ["dd","if=/mnt/pv/test.img","of=/dev/null","bs=8k"]
-        volumeMounts:
-        - mountPath: "/mnt/pv"
-          name: test-volume
+        - name: read
+          image: ubuntu:noble
+          command: ["dd", "if=/mnt/pv/test.img", "of=/dev/null", "bs=8k"]
+          volumeMounts:
+            - mountPath: "/mnt/pv"
+              name: test-volume
       volumes:
-      - name: test-volume
-        persistentVolumeClaim:
-          claimName: test-claim
+        - name: test-volume
+          persistentVolumeClaim:
+            claimName: test-claim
       restartPolicy: Never
 ---
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: write
+  namespace: synology-csi
 spec:
   template:
     metadata:
@@ -48,14 +51,14 @@ spec:
         job: write
     spec:
       containers:
-      - name: write
-        image: ubuntu:noble
-        command: ["dd","if=/dev/zero","of=/mnt/pv/test.img","bs=1G","count=1","oflag=dsync"]
-        volumeMounts:
-        - mountPath: "/mnt/pv"
-          name: test-volume
+        - name: write
+          image: ubuntu:noble
+          command: ["dd", "if=/dev/zero", "of=/mnt/pv/test.img", "bs=1G", "count=1", "oflag=dsync"]
+          volumeMounts:
+            - mountPath: "/mnt/pv"
+              name: test-volume
       volumes:
-      - name: test-volume
-        persistentVolumeClaim:
-          claimName: test-claim
+        - name: test-volume
+          persistentVolumeClaim:
+            claimName: test-claim
       restartPolicy: Never

@@ -50,8 +50,6 @@ spec:
         name: linkding-db-credentials
     # recovery:
     #   source: linkding-db-backup
-    #   secret:
-    #     name: linkding-db-credentials
 
   externalClusters:
     - name: linkding-db-backup
@@ -64,4 +62,5 @@ spec:
           secretAccessKey:
             name: linkding-aws-creds-secret
             key: ACCESS_SECRET_KEY
+
 

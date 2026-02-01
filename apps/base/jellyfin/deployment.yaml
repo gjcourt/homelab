@@ -31,9 +31,9 @@ spec:
               mountPath: /config
             - name: jellyfin-cache
               mountPath: /cache
-            # Media volume - to be configured in overlay
-            # - name: media
-            #   mountPath: /media
+              # Media volume - to be configured in overlay
+              # - name: media
+              #   mountPath: /media
 
           # Resource limits can be adjusted in overlays
           resources:

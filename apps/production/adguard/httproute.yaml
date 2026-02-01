@@ -12,5 +12,5 @@ spec:
       sectionName: http-internal
   rules:
     - backendRefs:
-      - name: adguard-admin
-        port: 8080
+        - name: adguard-admin
+          port: 8080

@@ -70,8 +70,8 @@ spec:
         runAsGroup: 0
         fsGroup: 0
         supplementalGroups:
-          - 44   # video group
-          - 109  # render group
+          - 44 # video group
+          - 109 # render group
       containers:
         - name: immich-machine-learning
           securityContext:

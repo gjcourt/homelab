@@ -12,5 +12,5 @@ spec:
       sectionName: http-internal
   rules:
     - backendRefs:
-      - name: linkding
-        port: 9090
+        - name: linkding
+          port: 9090

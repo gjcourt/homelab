@@ -12,8 +12,8 @@ spec:
       sectionName: http-internal
   rules:
     - backendRefs:
-      - name: memos
-        port: 5230
+        - name: memos
+          port: 5230
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute

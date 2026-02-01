@@ -1,0 +1,21 @@
+doublestar: true
+match_type: doublestar
+
+exclude:
+  - "**/.git/**"
+  - "**/node_modules/**"
+  - "**/.venv/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/tmp/**"
+  - "**/kubecraft/**"
+  - "clusters/**/flux-system/**"
+  - "infra/controllers/**"
+
+formatter:
+  type: basic
+  indent: 2
+  eof_newline: true
+  include_document_start: false
+  retain_line_breaks: true
+  pad_line_comments: 1

@@ -12,5 +12,5 @@ spec:
       sectionName: http-internal
   rules:
     - backendRefs:
-      - name: excalidraw
-        port: 80
+        - name: excalidraw
+          port: 80

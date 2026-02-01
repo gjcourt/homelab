@@ -12,10 +12,10 @@ spec:
       sectionName: http
   rules:
     - filters:
-      - type: RequestRedirect
-        requestRedirect:
-          scheme: https
-          statusCode: 301
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
@@ -31,5 +31,5 @@ spec:
       sectionName: https
   rules:
     - backendRefs:
-      - name: homeassistant
-        port: 8123
+        - name: homeassistant
+          port: 8123

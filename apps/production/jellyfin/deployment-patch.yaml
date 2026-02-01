@@ -14,8 +14,8 @@ spec:
         runAsGroup: 0
         fsGroup: 0
         supplementalGroups:
-          - 44   # video group
-          - 109  # render group (may vary by system)
+          - 44 # video group
+          - 109 # render group (may vary by system)
 
       containers:
         - name: jellyfin
@@ -36,7 +36,7 @@ spec:
               mountPath: /dev/dri
 
           securityContext:
-            privileged: true  # Required for GPU access
+            privileged: true # Required for GPU access
 
           resources:
             requests:

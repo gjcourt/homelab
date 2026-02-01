@@ -7,12 +7,12 @@ metadata:
   name: nginx-ephemeral
 spec:
   containers:
-    - image: nginx
+    - image: nginx@sha256:c881927c4077710ac4b1da63b83aa163937fb47457950c267d92f7e4dedf4aec
       name: nginx-ephemeral
       volumeMounts:
         - mountPath: /scratch
           name: scratch-volume
-    - image: busybox
+    - image: busybox@sha256:e226d6308690dbe282443c8c7e57365c96b5228f0fe7f40731b5d84d37a06839
       name: busybox-ephemeral
       command:
         - /bin/sh

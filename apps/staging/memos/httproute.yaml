@@ -12,10 +12,10 @@ spec:
       sectionName: http
   rules:
     - filters:
-      - type: RequestRedirect
-        requestRedirect:
-          scheme: https
-          statusCode: 301
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
@@ -31,8 +31,8 @@ spec:
       sectionName: https
   rules:
     - backendRefs:
-      - name: memos
-        port: 5230
+        - name: memos
+          port: 5230
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: GRPCRoute

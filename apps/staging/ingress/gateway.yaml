@@ -69,12 +69,12 @@ spec:
           selector:
             matchLabels:
               http-ingress: "true"
-    # - name: http-metrics
-    #   port: 9100
-    #   protocol: HTTP
-    #   allowedRoutes:
-    #     namespaces:
-    #       from: Selector
-    #       selector:
-    #         matchLabels:
-    #           http-ingress: "true"
+  # - name: http-metrics
+  #   port: 9100
+  #   protocol: HTTP
+  #   allowedRoutes:
+  #     namespaces:
+  #       from: Selector
+  #       selector:
+  #         matchLabels:
+  #           http-ingress: "true"

@@ -10,8 +10,8 @@ spec:
     spec:
       securityContext:
         supplementalGroups:
-          - 44   # video group
-          - 109  # render group
+          - 44 # video group
+          - 109 # render group
       containers:
         - name: immich-server
           securityContext:
@@ -85,11 +85,11 @@ spec:
         runAsGroup: 0
         fsGroup: 0
         supplementalGroups:
-          - 44   # video group
-          - 109  # render group
+          - 44 # video group
+          - 109 # render group
       containers:
         - name: immich-machine-learning
-          image: ghcr.io/immich-app/immich-machine-learning:release-rocm
+          image: ghcr.io/immich-app/immich-machine-learning@sha256:35b56970279afa31009822609f03fc892effe0107fdb796e5dae57979dc3267c
           securityContext:
             privileged: true
           env:

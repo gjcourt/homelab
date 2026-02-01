@@ -12,5 +12,5 @@ spec:
       sectionName: http-internal
   rules:
     - backendRefs:
-      - name: audiobookshelf
-        port: 3005
+        - name: audiobookshelf
+          port: 3005

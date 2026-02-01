@@ -17,10 +17,10 @@ spec:
   # nodeSelector:
   #   matchLabels:
   #     kubernetes.io/role: worker # Only worker nodes will announce the IPs
-      # Or you can use matchExpressions for more complex selections:
-      # matchExpressions:
-      #   - key: node-role.kubernetes.io/control-plane
-      #     operator: DoesNotExist # Exclude control plane nodes
+  # Or you can use matchExpressions for more complex selections:
+  # matchExpressions:
+  #   - key: node-role.kubernetes.io/control-plane
+  #     operator: DoesNotExist # Exclude control plane nodes
 
   # # interfaces (Optional): A list of regular expressions for the network interfaces
   # # on which to announce the services. If omitted, all interfaces are used.

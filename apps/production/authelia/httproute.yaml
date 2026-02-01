@@ -12,5 +12,5 @@ spec:
       sectionName: http-internal
   rules:
     - backendRefs:
-      - name: authelia
-        port: 9091
+        - name: authelia
+          port: 9091

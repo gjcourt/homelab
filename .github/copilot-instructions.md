@@ -20,6 +20,7 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - Prefer deleting unused resources/config rather than commenting them out. Double-check with the user before removing anything significant.
 - Harden apps by default: use readiness/liveness probes, resource limits, and restricted Pod Security settings unless there’s a specific reason not to.
 - When adding ingress/route resources, ensure they conform to the cluster’s conventions (e.g., Gateway API + namespace label requirements).
+- Ensure yaml lists are sorted consistently using alpha-numeric sorting (e.g., container ports, volume mounts).
 
 ## Workflow conventions
 
@@ -31,7 +32,7 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 ## Kubernetes / YAML (general)
 
 - Use `.yaml` (not `.yml`) unless the repo already uses `.yml` for a specific file.
-- Use 2-space indentation; avoid tabs.
+- Enforce 2-space indentation for all YAML in this repo (exactly 2 spaces per level). Never use tabs and never use 4-space indentation.
 - Keep manifests readable: stable key ordering, consistent quoting, avoid line-wrapping that hurts diffs.
 - Prefer explicit port names, resource requests/limits, and readiness/liveness probes where appropriate.
 - Security: follow the repo’s Pod Security stance (restricted-style) unless explicitly asked to relax it.

@@ -12,5 +12,5 @@ spec:
       sectionName: http-internal
   rules:
     - backendRefs:
-      - name: mealie
-        port: 9000
+        - name: mealie
+          port: 9000

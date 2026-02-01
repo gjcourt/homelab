@@ -1,0 +1,38 @@
+extends: default
+
+rules:
+  document-start: disable
+  comments-indentation: disable
+  new-line-at-end-of-file: disable
+  empty-lines: disable
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+    check-multi-line-strings: false
+  line-length: disable
+  trailing-spaces: enable
+  truthy:
+    allowed-values:
+      - "true"
+      - "false"
+      - "yes"
+      - "no"
+      - "on"
+      - "off"
+  comments:
+    require-starting-space: false
+    min-spaces-from-content: 1
+
+ignore: |
+  **/node_modules/**
+  **/.git/**
+  **/vendor/**
+  **/dist/**
+  **/build/**
+  **/.venv/**
+  **/.idea/**
+  **/.vscode/**
+  **/tmp/**
+  **/kubecraft/**
+  clusters/**/flux-system/**
+  infra/controllers/**

@@ -50,9 +50,9 @@ data:
             href: https://hass.burntbytes.com
             description: Home automation platform
         - Snapcast:
-          icon: mdi-speaker-multiple
-          href: https://snapcast.burntbytes.com
-          description: Multi-room audio (Snapweb)
+        icon: mdi-speaker-multiple
+        href: https://snapcast.burntbytes.com
+        description: Multi-room audio (Snapweb)
         - Zigbee2MQTT:
             icon: zigbee2mqtt.png
             href: https://zigbee.burntbytes.com
@@ -61,6 +61,10 @@ data:
             icon: adguard-home.png
             href: https://adguard.burntbytes.com
             description: DNS ad blocker
+      - Authelia:
+        icon: mdi-shield-account
+        href: https://auth.burntbytes.com
+        description: Authentication portal (SSO)
 
     - Monitoring:
         - Cluster Resources:

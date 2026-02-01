@@ -94,10 +94,27 @@ synology-diag: kubectl-check ## Diagnose Synology-backed storage read-only issue
 
 .PHONY: synology-csi-restart
 synology-csi-restart: kubectl-check ## Restart Synology CSI workloads to force remounts (requires cluster access)
-	$(KUBECTL) -n "$(SYNO_NS)" rollout restart deployment --all
-	$(KUBECTL) -n "$(SYNO_NS)" rollout restart daemonset --all
-	$(KUBECTL) -n "$(SYNO_NS)" rollout status deployment --all --timeout=5m || true
-	$(KUBECTL) -n "$(SYNO_NS)" rollout status daemonset --all --timeout=5m || true
+	@deploys="$$( $(KUBECTL) -n "$(SYNO_NS)" get deployment -o name 2>/dev/null || true )"; \
+	if [[ -n "$$deploys" ]]; then \
+		$(KUBECTL) -n "$(SYNO_NS)" rollout restart $$deploys; \
+		for d in $$deploys; do $(KUBECTL) -n "$(SYNO_NS)" rollout status "$$d" --timeout=5m || true; done; \
+	else \
+		echo "No deployments found in namespace $(SYNO_NS)"; \
+	fi
+	@dss="$$( $(KUBECTL) -n "$(SYNO_NS)" get daemonset -o name 2>/dev/null || true )"; \
+	if [[ -n "$$dss" ]]; then \
+		$(KUBECTL) -n "$(SYNO_NS)" rollout restart $$dss; \
+		for ds in $$dss; do $(KUBECTL) -n "$(SYNO_NS)" rollout status "$$ds" --timeout=5m || true; done; \
+	else \
+		echo "No daemonsets found in namespace $(SYNO_NS)"; \
+	fi
+	@stss="$$( $(KUBECTL) -n "$(SYNO_NS)" get statefulset -o name 2>/dev/null || true )"; \
+	if [[ -n "$$stss" ]]; then \
+		$(KUBECTL) -n "$(SYNO_NS)" rollout restart $$stss; \
+		for s in $$stss; do $(KUBECTL) -n "$(SYNO_NS)" rollout status "$$s" --timeout=10m || true; done; \
+	else \
+		echo "No statefulsets found in namespace $(SYNO_NS)"; \
+	fi
 
 .PHONY: synology-speedtest-nfs
 

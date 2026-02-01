@@ -19,7 +19,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: adguard
-          image: adguard/adguardhome:latest
+          image: adguard/adguardhome@sha256:92929135ced2554aaf94706f766a98ad348f211df61b0704e2db7e8498cc00b7
           envFrom:
             - configMapRef:
                 name: adguard-container-env

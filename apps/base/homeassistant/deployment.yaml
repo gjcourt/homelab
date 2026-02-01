@@ -17,13 +17,13 @@ spec:
     spec:
       initContainers:
         - name: init-files
-          image: busybox:latest
+          image: busybox@sha256:e226d6308690dbe282443c8c7e57365c96b5228f0fe7f40731b5d84d37a06839
           command: ['sh', '-c', 'touch /config/automations.yaml /config/scripts.yaml /config/scenes.yaml']
           volumeMounts:
             - name: config
               mountPath: /config
       containers:
-        - image: ghcr.io/home-assistant/home-assistant:stable
+        - image: ghcr.io/home-assistant/home-assistant@sha256:c36741490472518338323db8ee67775d7df70d2fa1f68eff9b9e63679fe64a18
           name: homeassistant
           ports:
             - containerPort: 8123

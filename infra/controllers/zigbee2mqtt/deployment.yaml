@@ -17,7 +17,7 @@ spec:
     spec:
       initContainers:
         - name: init-config
-          image: busybox
+          image: busybox@sha256:e226d6308690dbe282443c8c7e57365c96b5228f0fe7f40731b5d84d37a06839
           command: ['sh', '-c', "if [ ! -s /app/data/configuration.yaml ]; then cp -L /tmp/config/configuration.yaml /app/data/configuration.yaml; fi"]
           volumeMounts:
             - name: config
@@ -26,7 +26,7 @@ spec:
               mountPath: /app/data
       containers:
         - name: zigbee2mqtt
-          image: koenkk/zigbee2mqtt:latest
+          image: koenkk/zigbee2mqtt@sha256:60a295b40f4e7fb7ab4d995932369e50f2529837272fa4979e986ec1ffdb7fce
           ports:
             - containerPort: 8080
               name: http

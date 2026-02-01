@@ -18,7 +18,7 @@ spec:
       serviceAccountName: homepage
       containers:
         - name: homepage
-          image: "ghcr.io/gethomepage/homepage:latest"
+          image: "ghcr.io/gethomepage/homepage@sha256:7fa7b07a26bd8d90a44bb975c6455b10d8dee467ce674b040750ffb4a0f486d6"
           env:
             - name: HOMEPAGE_ALLOWED_HOSTS
               value: gethomepage.dev # required, may need port. See gethomepage.dev/installation/#homepage_allowed_hosts

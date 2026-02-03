@@ -68,12 +68,3 @@ patches:
           notifier:
             filesystem:
               filename: /config/notification.txt
-
-          identity_providers:
-            oidc:
-              issuer: https://auth.stage.burntbytes.com
-              lifespans:
-                access_token: 1h
-                id_token: 1h
-                refresh_token: 720h
-              clients: []

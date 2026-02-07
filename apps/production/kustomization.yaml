@@ -14,5 +14,5 @@ resources:
   - jellyfin
   # - linkding
   - mealie
-  - memos
+  # - memos
   - snapcast

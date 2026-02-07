@@ -12,7 +12,7 @@ resources:
   - immich
   - ingress
   - jellyfin
-  - linkding
+  # - linkding
   - mealie
   - memos
   - snapcast

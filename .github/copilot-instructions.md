@@ -9,6 +9,9 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - GitOps-first: change files in git, then commit/push; avoid imperative `kubectl apply` except for temporary debugging.
 - Use flux reconciliation to validate changes in-cluster.
 - Keep changes minimal and scoped to the user request; do not do drive-by refactors.
+- Commit changes in logical chunks with clear commit messages; avoid large, monolithic commits. Use branches and PRs for all changes; avoid direct pushes to main.
+- Commit to branches named after environments (e.g., `staging`, `production`) or features (e.g., `add-authelia`) as appropriate
+- Open pull requests for all changes; avoid direct pushes to main.
 - Prefer clear, boring solutions over clever ones; optimize for operability.
 - Never include secrets in plaintext. Use the repo’s existing secret/SOPS workflow.
 - Preserve existing naming conventions, labels, and folder structure (`apps/base`, `apps/staging`, `apps/production`).
@@ -25,6 +28,7 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - Harden apps by default: use readiness/liveness probes, resource limits, and restricted Pod Security settings unless there’s a specific reason not to.
 - When adding ingress/route resources, ensure they conform to the cluster’s conventions (e.g., Gateway API + namespace label requirements).
 - Ensure yaml lists are sorted consistently using alpha-numeric sorting (e.g., container ports, volume mounts).
+- Commit changes to incrementally
 
 ## Workflow conventions
 

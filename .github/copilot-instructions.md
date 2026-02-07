@@ -12,7 +12,8 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - Prefer clear, boring solutions over clever ones; optimize for operability.
 - Never include secrets in plaintext. Use the repo’s existing secret/SOPS workflow.
 - Preserve existing naming conventions, labels, and folder structure (`apps/base`, `apps/staging`, `apps/production`).
-- Prefer deterministic changes: pin versions/tags, avoid “latest”, avoid runtime downloads.
+- The repo operates a single physical cluster (`melodic-muse`) which manages Staging, Production, and Infra layers simultaneously via `clusters/melodic-muse`.
+- Do not create separate cluster directories for environments; everything lives in `clusters/melodic-muse`.
 - New apps must follow the 3-layer structure: base + staging + production.
 - New apps must follow existing patterns unless there’s a strong reason to deviate.
 - New apps must include documentation in `docs/` covering usage, configuration, and operation.

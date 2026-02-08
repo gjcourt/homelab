@@ -21,6 +21,7 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - New apps must follow existing patterns unless there’s a strong reason to deviate.
 - New apps must include documentation in `docs/` covering usage, configuration, and operation.
 - New apps must be added to the auto-generated apps list in `apps/README.md` and added to the homepage app list in the appropriate layer if applicable.
+- New apps must always be added to the homepage `services.yaml` in both staging and production configmaps. Ask the user which section the app belongs to (e.g., Applications, Infrastructure, Monitoring).
 - Infrastructure apps generally do not follow the staging/production split; they are singleton instances shared across environments and use production URLs.
 - Infrastructure configuration should be defined in `infra/` or `apps/production/`, avoiding duplication in `apps/staging/`.
 - Ensure certificates for infrastructure domains are placed in the `apps/production` overlay.

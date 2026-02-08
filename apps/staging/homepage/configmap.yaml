@@ -71,9 +71,9 @@ data:
             href: https://adguard.stage.burntbytes.com
             description: DNS ad blocker
         - Authelia:
-          icon: mdi-shield-account
-          href: https://auth.stage.burntbytes.com
-          description: Authentication portal (SSO)
+            icon: mdi-shield-account
+            href: https://auth.stage.burntbytes.com
+            description: Authentication portal (SSO)
 
     - Monitoring:
         - Cluster Resources:

@@ -7,9 +7,9 @@ spec:
   hostnames:
     - hass.burntbytes.com
   parentRefs:
-    - name: app-gateway-production
+    - name: app-gateway-staging
       namespace: default
-      sectionName: http
+      sectionName: http-prod
   rules:
     - filters:
         - type: RequestRedirect
@@ -26,9 +26,9 @@ spec:
   hostnames:
     - hass.burntbytes.com
   parentRefs:
-    - name: app-gateway-production
+    - name: app-gateway-staging
       namespace: default
-      sectionName: https
+      sectionName: https-prod
   rules:
     - backendRefs:
         - name: homeassistant

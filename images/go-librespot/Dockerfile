@@ -1,7 +1,7 @@
 # Multi-arch go-librespot image (no runtime GitHub dependency)
 # Downloads a pinned release binary at build time.
 
-FROM alpine:3.20 AS fetch
+FROM alpine:3.23 AS fetch
 
 ARG GO_LIBRESPOT_VERSION="v0.6.2"
 

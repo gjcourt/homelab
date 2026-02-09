@@ -9,9 +9,9 @@ spec:
   hostnames:
     - jellyfin.burntbytes.com
   parentRefs:
-    - name: app-gateway-staging
+    - name: app-gateway-production
       namespace: default
-      sectionName: http-prod
+      sectionName: http
   rules:
     - filters:
         - type: RequestRedirect
@@ -30,9 +30,9 @@ spec:
   hostnames:
     - jellyfin.burntbytes.com
   parentRefs:
-    - name: app-gateway-staging
+    - name: app-gateway-production
       namespace: default
-      sectionName: https-prod
+      sectionName: https
   rules:
     - backendRefs:
         - name: jellyfin

@@ -7,9 +7,9 @@ metadata:
     app: immich
 spec:
   parentRefs:
-    - name: app-gateway-staging
+    - name: app-gateway-production
       namespace: default
-      sectionName: http-prod
+      sectionName: http
   hostnames:
     - "photos.burntbytes.com"
   rules:
@@ -30,9 +30,9 @@ metadata:
     app: immich
 spec:
   parentRefs:
-    - name: app-gateway-staging
+    - name: app-gateway-production
       namespace: default
-      sectionName: https-prod
+      sectionName: https
   hostnames:
     - "photos.burntbytes.com"
   rules:

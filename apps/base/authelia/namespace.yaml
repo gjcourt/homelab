@@ -4,3 +4,4 @@ metadata:
   name: authelia
   labels:
     app.kubernetes.io/name: authelia
+    http-ingress: "true"

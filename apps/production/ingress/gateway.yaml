@@ -9,6 +9,33 @@ metadata:
 spec:
   gatewayClassName: cilium
   listeners:
+    # LAN HTTP listener for HTTP→HTTPS redirects
+    - name: http
+      port: 80
+      protocol: HTTP
+      hostname: "*.burntbytes.com"
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              http-ingress: "true"
+    # LAN HTTPS listener for production traffic
+    - name: https
+      port: 443
+      protocol: HTTPS
+      hostname: "*.burntbytes.com"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: burntbytes-prod-wildcard-tls
+            namespace: security
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              http-ingress: "true"
     # Internal HTTP listener for cloudflared tunnel traffic
     - name: http-internal
       port: 8080

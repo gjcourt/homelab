@@ -18,45 +18,45 @@ data:
     ingress:
       # AdGuard Home
       - hostname: adguard.burntbytes.com
-        service: http://app-gateway-production.default.svc.cluster.local:8080
+        service: https://app-gateway-production.default.svc.cluster.local
         originRequest:
-          httpHostHeader: adguard.burntbytes.com
+          originServerName: adguard.burntbytes.com
 
       # Audiobookshelf
       - hostname: audiobooks.burntbytes.com
-        service: http://app-gateway-production.default.svc.cluster.local:8080
+        service: https://app-gateway-production.default.svc.cluster.local
         originRequest:
-          httpHostHeader: audiobooks.burntbytes.com
+          originServerName: audiobooks.burntbytes.com
 
       # Excalidraw
       - hostname: excalidraw.burntbytes.com
-        service: http://app-gateway-production.default.svc.cluster.local:8080
+        service: https://app-gateway-production.default.svc.cluster.local
         originRequest:
-          httpHostHeader: excalidraw.burntbytes.com
+          originServerName: excalidraw.burntbytes.com
 
       # Homepage
       - hostname: home.burntbytes.com
-        service: http://app-gateway-production.default.svc.cluster.local:8080
+        service: https://app-gateway-production.default.svc.cluster.local
         originRequest:
-          httpHostHeader: home.burntbytes.com
+          originServerName: home.burntbytes.com
 
       # Memos
       - hostname: memos.burntbytes.com
-        service: http://app-gateway-production.default.svc.cluster.local:8080
+        service: https://app-gateway-production.default.svc.cluster.local
         originRequest:
-          httpHostHeader: memos.burntbytes.com
+          originServerName: memos.burntbytes.com
 
       # Linkding
       - hostname: links.burntbytes.com
-        service: http://app-gateway-production.default.svc.cluster.local:8080
+        service: https://app-gateway-production.default.svc.cluster.local
         originRequest:
-          httpHostHeader: links.burntbytes.com
+          originServerName: links.burntbytes.com
 
       # Mealie
       - hostname: mealie.burntbytes.com
-        service: http://app-gateway-production.default.svc.cluster.local:8080
+        service: https://app-gateway-production.default.svc.cluster.local
         originRequest:
-          httpHostHeader: mealie.burntbytes.com
+          originServerName: mealie.burntbytes.com
 
       # Catch-all returns 404
       - service: http_status:404

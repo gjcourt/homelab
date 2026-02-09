@@ -36,13 +36,4 @@ spec:
           selector:
             matchLabels:
               http-ingress: "true"
-    # Internal HTTP listener for cloudflared tunnel traffic
-    - name: http-internal
-      port: 8080
-      protocol: HTTP
-      allowedRoutes:
-        namespaces:
-          from: Selector
-          selector:
-            matchLabels:
-              http-ingress: "true"
+

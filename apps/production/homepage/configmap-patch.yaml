@@ -34,6 +34,14 @@ data:
             icon: audiobookshelf.png
             href: https://audiobooks.burntbytes.com
             description: Audiobook and podcast server
+        - Biometrics:
+            icon: mdi-heart-pulse
+            href: https://bio.burntbytes.com
+            description: Health and fitness tracker
+        - GoLinks:
+            icon: mdi-link-variant
+            href: https://go.burntbytes.com
+            description: URL shortener
 
     - Infrastructure:
         - Synology NAS:

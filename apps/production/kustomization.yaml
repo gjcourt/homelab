@@ -4,9 +4,11 @@ resources:
   - adguard
   - audiobookshelf
   - authelia
+  - biometrics
   - certificates
   - cloudflare-tunnel
   - excalidraw
+  - golinks
   - homepage
   - homeassistant
   - immich

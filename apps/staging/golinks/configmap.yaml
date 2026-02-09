@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: golinks-container-env
+  namespace: golinks-stage
+  labels:
+    app: golinks
+    env: staging
+data:
+  DB_HOST: golinks-db-staging-cnpg-v1-rw.golinks-stage.svc.cluster.local
+  GOLINKS_PORT: "8080"

@@ -18,43 +18,43 @@ data:
     ingress:
       # AdGuard Home
       - hostname: adguard.burntbytes.com
-        service: https://app-gateway-production.default.svc.cluster.local
+        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
           originServerName: adguard.burntbytes.com
 
       # Audiobookshelf
       - hostname: audiobooks.burntbytes.com
-        service: https://app-gateway-production.default.svc.cluster.local
+        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
           originServerName: audiobooks.burntbytes.com
 
       # Excalidraw
       - hostname: excalidraw.burntbytes.com
-        service: https://app-gateway-production.default.svc.cluster.local
+        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
           originServerName: excalidraw.burntbytes.com
 
       # Homepage
       - hostname: home.burntbytes.com
-        service: https://app-gateway-production.default.svc.cluster.local
+        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
           originServerName: home.burntbytes.com
 
       # Memos
       - hostname: memos.burntbytes.com
-        service: https://app-gateway-production.default.svc.cluster.local
+        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
           originServerName: memos.burntbytes.com
 
       # Linkding
       - hostname: links.burntbytes.com
-        service: https://app-gateway-production.default.svc.cluster.local
+        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
           originServerName: links.burntbytes.com
 
       # Mealie
       - hostname: mealie.burntbytes.com
-        service: https://app-gateway-production.default.svc.cluster.local
+        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
           originServerName: mealie.burntbytes.com
 

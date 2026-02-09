@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: biometrics-stage
+resources:
+  - ../../base/biometrics/
+  - configmap.yaml
+  - database.yaml
+  - httproute.yaml
+  - secret-aws-creds.yaml
+  - secret-db-credentials.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Namespace
+      name: biometrics
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: biometrics-stage

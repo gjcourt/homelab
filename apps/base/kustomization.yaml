@@ -4,6 +4,8 @@ resources:
   - adguard
   - audiobookshelf
   - authelia
+  - biometrics
+  - golinks
   - immich
   - jellyfin
   - linkding

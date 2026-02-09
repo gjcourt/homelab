@@ -4,8 +4,10 @@ resources:
   - adguard
   - audiobookshelf
   - authelia
+  - biometrics
   - certificates
   - excalidraw
+  - golinks
   - homepage
   - homeassistant
   - immich

@@ -28,11 +28,23 @@ data:
         originRequest:
           originServerName: audiobooks.burntbytes.com
 
+      # Biometrics
+      - hostname: bio.burntbytes.com
+        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+        originRequest:
+          originServerName: bio.burntbytes.com
+
       # Excalidraw
       - hostname: excalidraw.burntbytes.com
         service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
           originServerName: excalidraw.burntbytes.com
+
+      # GoLinks
+      - hostname: go.burntbytes.com
+        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+        originRequest:
+          originServerName: go.burntbytes.com
 
       # Homepage
       - hostname: home.burntbytes.com

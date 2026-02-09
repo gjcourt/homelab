@@ -1,0 +1,50 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: golinks-db-production-cnpg-v1
+  namespace: golinks-prod
+spec:
+  description: Postgres cluster for the golinks application (production)
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.5
+  instances: 3
+  inheritedMetadata:
+    labels:
+      app: golinks-database
+      env: production
+      policy-type: "database"
+  monitoring:
+    enablePodMonitor: true
+  storage:
+    size: 10Gi
+  backup:
+    barmanObjectStore:
+      destinationPath: s3://gjcourt-homelab-backup/production/golinks
+      s3Credentials:
+        accessKeyId:
+          name: golinks-aws-creds-secret
+          key: ACCESS_KEY_ID
+        secretAccessKey:
+          name: golinks-aws-creds-secret
+          key: ACCESS_SECRET_KEY
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "30d"
+  bootstrap:
+    initdb:
+      database: app
+      owner: app
+      secret:
+        name: golinks-db-credentials
+  externalClusters:
+    - name: golinks-db-backup
+      barmanObjectStore:
+        destinationPath: s3://gjcourt-homelab-backup/production/golinks
+        s3Credentials:
+          accessKeyId:
+            name: golinks-aws-creds-secret
+            key: ACCESS_KEY_ID
+          secretAccessKey:
+            name: golinks-aws-creds-secret
+            key: ACCESS_SECRET_KEY

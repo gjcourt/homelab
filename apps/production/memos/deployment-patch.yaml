@@ -21,7 +21,7 @@ spec:
             - name: MEMOS_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: memos-db-production-cnpg-v1-app
+                  name: memos-db-credentials
                   key: password
           volumeMounts:
             - name: dsn-volume

@@ -16,10 +16,11 @@ data:
     # Route all traffic to the production gateway
     # The gateway handles routing based on hostname
     ingress:
-      # AdGuard Home
-      - hostname: adguard.burntbytes.com
+      # Authelia
+      - hostname: auth.burntbytes.com
         service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
+<<<<<<< Updated upstream
           originServerName: adguard.burntbytes.com
 
       # Audiobookshelf
@@ -57,18 +58,15 @@ data:
         service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
           originServerName: memos.burntbytes.com
+=======
+          originServerName: auth.burntbytes.com
+>>>>>>> Stashed changes
 
       # Linkding
       - hostname: links.burntbytes.com
         service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
           originServerName: links.burntbytes.com
-
-      # Mealie
-      - hostname: mealie.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: mealie.burntbytes.com
 
       # Catch-all returns 404
       - service: http_status:404

@@ -6,10 +6,13 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 
 ## Global rules (always)
 
+- **CRITICAL: NEVER COMMIT DIRECTLY TO `MAIN`.**
+    - All changes, no matter how small, **MUST** be performed on a feature branch.
+    - All changes **MUST** be submitted via a Pull Request.
+    - **Do not** offer to commit to `main` or `master`. If the user asks, firmly refuse and create a branch instead.
 - GitOps-first: change files in git, then commit/push; avoid imperative `kubectl apply` except for temporary debugging.
 - Use flux reconciliation to validate changes in-cluster.
 - Keep changes minimal and scoped to the user request; do not do drive-by refactors.
-- **Never commit directly to `main`.** All changes must go through a feature branch and pull request (see Git workflow below).
 - Prefer clear, boring solutions over clever ones; optimize for operability.
 - Never include secrets in plaintext. Use the repo’s existing secret/SOPS workflow.
 - Preserve existing naming conventions, labels, and folder structure (`apps/base`, `apps/staging`, `apps/production`).
@@ -30,12 +33,22 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 
 ## Git workflow (branches & PRs)
 
-- **Always work on a branch.** Create a short-lived branch from `main` before making any changes.
-- Branch naming: use a descriptive slug — e.g. `add-golinks`, `fix-memos-signup`, `update-cilium`. Environment prefixes like `staging/` or `production/` are also acceptable when the change is scoped to one layer.
-- Commit in logical, incremental chunks with clear messages (imperative mood, e.g. "Add golinks base manifests"). Avoid large monolithic commits.
-- When all changes are ready, open a pull request against `main`. Include a short description of what changed and why.
-- After the PR is merged, delete the feature branch.
-- If a task spans multiple repos (e.g. app source + homelab manifests), create a branch in each repo and note the relationship in the PR description.
+- **MANDATORY: Always start by creating a branch.**
+    - Command: `git checkout -b <branch-name>`
+    - Never start editing files while on `main`.
+- **Branch naming**: Use a descriptive slug (kebab-case).
+    - Good: `add-golinks`, `fix-memos-signup`, `update-cilium`.
+    - Acceptable prefixes: `staging/` or `production/` (e.g. `staging/update-image`).
+- **Commits**:
+    - Commit in logical, incremental chunks.
+    - Use imperative mood: "Add golinks base manifests" (not "Added" or "Adding").
+    - Avoid large monolithic commits if possible.
+- **Pull Requests**:
+    - When changes are ready, you must signal to open a PR against `main`.
+    - Provide a short description of what changed and why.
+    - **Do not merge your own PRs** unless explicitly instructed to "merge" or "ship it".
+- **Cleanup**: After merge, locally delete the feature branch.
+- **Multi-repo**: If a task spans multiple repos, create a branch in each and cross-reference them.
 
 ## Workflow conventions
 

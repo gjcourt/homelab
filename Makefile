@@ -26,9 +26,7 @@ lint: lint-yaml lint-shell ## Run repo linters
 
 .PHONY: lint-yaml
 lint-yaml: ## Lint YAML (indentation, tabs, etc.)
-	docker run --rm -v "$(PWD)":/work -w /work $(YAMLLINT_IMAGE) -c .yamllint.yaml \
-		$(ROOT_YAML) \
-		apps clusters infra/configs docs scripts
+	docker run --rm -v "$(PWD)":/work -w /work $(YAMLLINT_IMAGE) -c .yamllint .
 
 .PHONY: fmt-yaml
 fmt-yaml: ## Format YAML to repo standard (2-space indentation)

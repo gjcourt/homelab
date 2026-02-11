@@ -23,4 +23,5 @@ rules:
 ignore: |
   .git/
   .github/pull_request_template.md
+  infra/controllers/
 

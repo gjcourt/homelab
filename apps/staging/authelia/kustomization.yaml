@@ -7,12 +7,17 @@ resources:
   - secret-authelia.yaml
   - secret-users.yaml
 
+
 labels:
   - pairs:
       env: staging
       app.kubernetes.io/instance: staging
     includeSelectors: false
 patches:
+  - path: patch-storage.yaml
+    target:
+      kind: Deployment
+      name: authelia
   - target:
       kind: Namespace
       name: authelia

@@ -6,10 +6,11 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 
 ## Global rules (always)
 
-- **CRITICAL: NEVER COMMIT DIRECTLY TO `MAIN`.**
+- **CRITICAL: NEVER COMMIT DIRECTLY TO `MAIN` or `MASTER`.**
     - All changes, no matter how small, **MUST** be performed on a feature branch.
     - All changes **MUST** be submitted via a Pull Request.
     - **Do not** offer to commit to `main` or `master`. If the user asks, firmly refuse and create a branch instead.
+    - **Pre-Commit Check**: Before running `git commit`, ALWAYS run `git branch --show-current` to ensure you are not on `main` or `master`.
 - GitOps-first: change files in git, then commit/push; avoid imperative `kubectl apply` except for temporary debugging.
 - Use flux reconciliation to validate changes in-cluster.
 - Keep changes minimal and scoped to the user request; do not do drive-by refactors.

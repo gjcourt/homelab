@@ -16,6 +16,6 @@ jobs:
       - name: YAML Lint
         uses: ibiqlik/action-yamllint@v3
         with:
-          config_file: .yamllint
+          config_file: .yamllint.yaml
           file_or_dir: .
           strict: true

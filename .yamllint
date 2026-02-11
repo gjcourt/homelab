@@ -1,16 +1,31 @@
 extends: default
 
 rules:
+  # Kubernetes manifests usually start with 'apiVersion', not '---'
   document-start: disable
+  
+  # Allow comments to be indented differently than content (often used for headers)
   comments-indentation: disable
+  
+  # Standard practice implies newline, but enforcing it is noisy
   new-line-at-end-of-file: disable
+  
+  # Allow spacing for readability blocks in long manifests
   empty-lines: disable
+  
+  # 2-space indentation to match the repo standard
   indentation:
     spaces: 2
     indent-sequences: consistent
     check-multi-line-strings: false
+    
+  # Kubernetes manifests often violate line length (base64 secrets, long annotations)
   line-length: disable
+  
+  # Trailing spaces can cause diff noise
   trailing-spaces: enable
+  
+  # Explicitly allow standard YAML booleans to prevent false positives in k8s values
   truthy:
     allowed-values:
       - "true"
@@ -19,6 +34,8 @@ rules:
       - "no"
       - "on"
       - "off"
+      
+  # Flexible comment spacing
   comments:
     require-starting-space: false
     min-spaces-from-content: 1
@@ -36,3 +53,4 @@ ignore: |
   **/kubecraft/**
   clusters/**/flux-system/**
   infra/controllers/**
+

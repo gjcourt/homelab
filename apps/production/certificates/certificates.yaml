@@ -25,3 +25,28 @@ spec:
   dnsNames:
     - grafana.burntbytes.com
 ---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: golinks-prod-tls
+  namespace: security
+spec:
+  secretName: golinks-prod-tls
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  dnsNames:
+    - go.burntbytes.com
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: biometrics-prod-tls
+  namespace: security
+spec:
+  secretName: biometrics-prod-tls
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  dnsNames:
+    - bio.burntbytes.com

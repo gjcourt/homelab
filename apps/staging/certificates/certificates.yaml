@@ -62,3 +62,29 @@ spec:
     kind: ClusterIssuer
   dnsNames:
     - auth.stage.burntbytes.com
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: golinks-stage-tls
+  namespace: security
+spec:
+  secretName: golinks-stage-tls
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  dnsNames:
+    - go.stage.burntbytes.com
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: biometrics-stage-tls
+  namespace: security
+spec:
+  secretName: biometrics-stage-tls
+  issuerRef:
+    name: letsencrypt-production
+    kind: ClusterIssuer
+  dnsNames:
+    - bio.stage.burntbytes.com

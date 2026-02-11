@@ -57,3 +57,35 @@ This setup is fully transparent to your networking layer (L2 vs BGP).
 1.  Deploy **ExternalDNS (Prod)** in `infra/controllers/external-dns-prod`.
     - Arguments: `--source=gateway-httproute`, `--provider=cloudflare`.
     - Secret: Cloudflare API Token.
+
+## Manual AdGuard Configuration (Split Horizon)
+
+Since most production applications have been removed from the Cloudflare Tunnel to be LAN-only, you must configure **DNS Rewrites** in AdGuard Home to route local traffic to your Kubernetes cluster.
+
+### 1. Find your Gateway IPs
+
+Run the following command to get the LoadBalancer IPs for your Staging and Production gateways:
+
+```bash
+kubectl get svc -n default -l gateway.networking.k8s.io/gateway-name
+```
+
+*Example Output:*
+```text
+NAME                                  TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)
+cilium-gateway-app-gateway-production LoadBalancer   10.43.149.116   192.168.5.31    80:31977/TCP,443:30950/TCP
+cilium-gateway-app-gateway-staging    LoadBalancer   10.43.238.25    192.168.5.30    80:30852/TCP,443:31742/TCP
+```
+*(Your IPs may differ. Use the values under `EXTERNAL-IP`)*
+
+### 2. Configure Rewrites in AdGuard Home
+
+Go to **Filters → DNS Rewrites** and add the following entries:
+
+| Domain | Rewrite To (IP) | Description |
+|:---|:---|:---|
+| `*.stage.burntbytes.com` | `192.168.5.30` | Directs all staging subdomains to the Staging Gateway |
+| `*.burntbytes.com` | `192.168.5.33` | Directs all production subdomains to the Production Gateway |
+
+> **Note:** These wildcards will override public Cloudflare DNS records for devices on your home network. Only `auth.burntbytes.com` and `links.burntbytes.com` will arguably work both ways (Tunnel vs LAN), but for best performance/privacy, the LAN path is preferred locally.
+

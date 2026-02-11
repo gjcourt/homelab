@@ -44,8 +44,11 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
     - Use imperative mood: "Add golinks base manifests" (not "Added" or "Adding").
     - Avoid large monolithic commits if possible.
 - **Pull Requests**:
-    - When changes are ready, you must signal to open a PR against `main`.
-    - Provide a short description of what changed and why.
+    - **Automate PR Creation**: Once the feature branch is pushed, ALWAYS attempt to create the PR immediately using `gh pr create`.
+    - Minimize user friction: The user should only have to review or answer questions. Hand off a ready-to-review PR.
+    - If `gh` CLI isn't available/auth'd, explicitly provide the `https://github.com/.../compare/...` link.
+    - Provide a concise title.
+    - **MANDATORY**: The PR body MUST follow the structure defined in `.github/pull_request_template.md`. When generating the body for `gh pr create` or the PR description, fill out all relevant sections (Description, Type of Change, Checklist).
     - **Do not merge your own PRs** unless explicitly instructed to "merge" or "ship it".
 - **Cleanup**: After merge, locally delete the feature branch.
 - **Multi-repo**: If a task spans multiple repos, create a branch in each and cross-reference them.

@@ -16,59 +16,17 @@ data:
     # Route all traffic to the production gateway
     # The gateway handles routing based on hostname
     ingress:
-      # AdGuard Home
-      - hostname: adguard.burntbytes.com
+      # Authelia
+      - hostname: auth.burntbytes.com
         service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
-          originServerName: adguard.burntbytes.com
-
-      # Audiobookshelf
-      - hostname: audiobooks.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: audiobooks.burntbytes.com
-
-      # Biometrics
-      - hostname: bio.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: bio.burntbytes.com
-
-      # Excalidraw
-      - hostname: excalidraw.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: excalidraw.burntbytes.com
-
-      # GoLinks
-      - hostname: go.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: go.burntbytes.com
-
-      # Homepage
-      - hostname: home.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: home.burntbytes.com
-
-      # Memos
-      - hostname: memos.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: memos.burntbytes.com
+          originServerName: auth.burntbytes.com
 
       # Linkding
       - hostname: links.burntbytes.com
         service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
           originServerName: links.burntbytes.com
-
-      # Mealie
-      - hostname: mealie.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: mealie.burntbytes.com
 
       # Catch-all returns 404
       - service: http_status:404

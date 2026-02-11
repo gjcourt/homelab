@@ -85,7 +85,7 @@ Go to **Filters → DNS Rewrites** and add the following entries:
 | Domain | Rewrite To (IP) | Description |
 |:---|:---|:---|
 | `*.stage.burntbytes.com` | `192.168.5.30` | Directs all staging subdomains to the Staging Gateway |
-| `*.burntbytes.com` | `192.168.5.31` | Directs all production subdomains to the Production Gateway |
+| `*.burntbytes.com` | `192.168.5.33` | Directs all production subdomains to the Production Gateway |
 
 > **Note:** These wildcards will override public Cloudflare DNS records for devices on your home network. Only `auth.burntbytes.com` and `links.burntbytes.com` will arguably work both ways (Tunnel vs LAN), but for best performance/privacy, the LAN path is preferred locally.
 

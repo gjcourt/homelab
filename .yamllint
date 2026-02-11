@@ -1,0 +1,26 @@
+extends: default
+
+rules:
+  # Kubernetes manifests often have long lines (annotations, base64 data)
+  line-length: disable
+  
+  # 2-space indentation is required by project rules
+  indentation:
+    spaces: 2
+    indent-sequences: consistent
+    
+  # '---' at start of file is optional
+  document-start: disable
+  
+  # Kubernetes uses lots of yes/no/on/off which can be parsed as booleans in YAML 1.1
+  # Disabling truthy helps avoid false positives
+  truthy: disable
+
+  # Allow comments generally
+  comments:
+    min-spaces-from-content: 1
+
+ignore: |
+  .git/
+  .github/pull_request_template.md
+  

@@ -20,47 +20,7 @@ data:
       - hostname: auth.burntbytes.com
         service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
         originRequest:
-<<<<<<< Updated upstream
-          originServerName: adguard.burntbytes.com
-
-      # Audiobookshelf
-      - hostname: audiobooks.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: audiobooks.burntbytes.com
-
-      # Biometrics
-      - hostname: bio.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: bio.burntbytes.com
-
-      # Excalidraw
-      - hostname: excalidraw.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: excalidraw.burntbytes.com
-
-      # GoLinks
-      - hostname: go.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: go.burntbytes.com
-
-      # Homepage
-      - hostname: home.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: home.burntbytes.com
-
-      # Memos
-      - hostname: memos.burntbytes.com
-        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
-        originRequest:
-          originServerName: memos.burntbytes.com
-=======
           originServerName: auth.burntbytes.com
->>>>>>> Stashed changes
 
       # Linkding
       - hostname: links.burntbytes.com

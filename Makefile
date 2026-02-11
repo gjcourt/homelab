@@ -26,29 +26,18 @@ lint: lint-yaml lint-shell ## Run repo linters
 
 .PHONY: lint-yaml
 lint-yaml: ## Lint YAML (indentation, tabs, etc.)
-	docker run --rm -v "$(PWD)":/work -w /work $(YAMLLINT_IMAGE) -c .yamllint.yaml \
-		$(ROOT_YAML) \
-		apps clusters infra/configs docs scripts
+	docker run --rm -v "$(PWD)":/work -w /work $(YAMLLINT_IMAGE) -c .yamllint .
 
 .PHONY: fmt-yaml
 fmt-yaml: ## Format YAML to repo standard (2-space indentation)
-	docker run --rm -v "$(PWD)":/work -w /work $(YAML_FMT_IMAGE) -conf .yamlfmt.yaml -dstar \
-		"*.yaml" "*.yml" \
-		"apps/**/*.yaml" "apps/**/*.yml" \
-		"clusters/**/*.yaml" "clusters/**/*.yml" \
-		"infra/configs/**/*.yaml" "infra/configs/**/*.yml" \
-		"docs/**/*.yaml" "docs/**/*.yml" \
-		"scripts/**/*.yaml" "scripts/**/*.yml"
+	docker run --rm -v "$(PWD)":/work -w /work $(YAML_FMT_IMAGE) -conf .yamlfmt.yaml -dstar "**/*.yaml" "**/*.yml"
 
 .PHONY: fmt-yaml-check
 fmt-yaml-check: ## Check YAML formatting (no changes)
-	docker run --rm -v "$(PWD)":/work -w /work $(YAML_FMT_IMAGE) -conf .yamlfmt.yaml -dstar -lint \
-		"*.yaml" "*.yml" \
-		"apps/**/*.yaml" "apps/**/*.yml" \
-		"clusters/**/*.yaml" "clusters/**/*.yml" \
-		"infra/configs/**/*.yaml" "infra/configs/**/*.yml" \
-		"docs/**/*.yaml" "docs/**/*.yml" \
-		"scripts/**/*.yaml" "scripts/**/*.yml"
+	docker run --rm -v "$(PWD)":/work -w /work $(YAML_FMT_IMAGE) -conf .yamlfmt.yaml -dstar -lint "**/*.yaml" "**/*.yml"
+
+.PHONY: format
+format: fmt-yaml ## Alias for fmt-yaml
 
 .PHONY: lint-shell
 lint-shell: ## Run shellcheck on scripts

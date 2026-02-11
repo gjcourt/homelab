@@ -14,6 +14,7 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - Use flux reconciliation to validate changes in-cluster.
 - Keep changes minimal and scoped to the user request; do not do drive-by refactors.
 - Prefer clear, boring solutions over clever ones; optimize for operability.
+- **Documentation**: Add meaningful docstrings and comments to code/manifests. Explain the "why", not just the "what".
 - Never include secrets in plaintext. Use the repo’s existing secret/SOPS workflow.
 - Preserve existing naming conventions, labels, and folder structure (`apps/base`, `apps/staging`, `apps/production`).
 - The repo operates a single physical cluster (`melodic-muse`) which manages Staging, Production, and Infra layers simultaneously via `clusters/melodic-muse`.
@@ -45,6 +46,7 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
     - Avoid large monolithic commits if possible.
 - **Pull Requests**:
     - **Automate PR Creation**: Once the feature branch is pushed, ALWAYS attempt to create the PR immediately using `gh pr create`.
+    - **Quality Check**: Run `make lint` locally and ensure it passes before creating a PR. If linting fails, run `make format` to fix common issues automatically.
     - Minimize user friction: The user should only have to review or answer questions. Hand off a ready-to-review PR.
     - If `gh` CLI isn't available/auth'd, explicitly provide the `https://github.com/.../compare/...` link.
     - Provide a concise title.

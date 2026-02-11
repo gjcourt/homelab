@@ -14,6 +14,7 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - Use flux reconciliation to validate changes in-cluster.
 - Keep changes minimal and scoped to the user request; do not do drive-by refactors.
 - Prefer clear, boring solutions over clever ones; optimize for operability.
+- **Documentation**: Add meaningful docstrings and comments to code/manifests. Explain the "why", not just the "what".
 - Never include secrets in plaintext. Use the repo’s existing secret/SOPS workflow.
 - Preserve existing naming conventions, labels, and folder structure (`apps/base`, `apps/staging`, `apps/production`).
 - The repo operates a single physical cluster (`melodic-muse`) which manages Staging, Production, and Infra layers simultaneously via `clusters/melodic-muse`.

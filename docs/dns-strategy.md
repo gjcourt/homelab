@@ -1,66 +1,51 @@
-# DNS Strategy: Split-Horizon Automation
+# DNS Strategy: Split-Horizon & Simplification
 
-To scale your homelab and automate DNS records without exposing staging IPs, we will implement a **Split-Horizon DNS** architecture using **ExternalDNS**.
+To scale your homelab and automate DNS records without exposing staging IPs, we implement a **Split-Horizon DNS** architecture.
 
-## The Architecture
+**Update (Feb 2026)**: We have simplified the architecture to rely on **Wildcard DNS** instead of complex in-cluster DNS servers (ExternalDNS + CoreDNS).
 
-We will run **two** separate instances of ExternalDNS in the cluster:
+## Current Architecture: The "Simple Wildcard"
 
-1.  **Production** (`*.burntbytes.com`)
-    - **Source**: Gateway API HTTPRoutes in `production` namespaces.
-    - **Target**: Cloudflare DNS.
-    - **Exposure**: Public (or effectively public) records.
-2.  **Staging** (`*.stage.burntbytes.com`)
-    - **Source**: Gateway API HTTPRoutes in `staging` namespaces.
-    - **Target**: An in-cluster **CoreDNS** server (Internal).
-    - **Exposure**: Private only. Records never leave your LAN.
+We use a single "dumb" wildcard record in the physical DNS layer (AdGuard Home) to route all traffic to the Kubernetes Gateway.
 
-## Component Failure Domain
+### The Flow
+1.  **Client** asks for `bio.stage.burntbytes.com`.
+2.  **AdGuard Home** has a static rewrite rule: `*.stage.burntbytes.com` -> `192.168.5.30` (Staging Gateway IP).
+3.  **AdGuard Home** answers `192.168.5.30`.
+4.  **Client** connects to `192.168.5.30`.
+5.  **Cilium Gateway** inspects the HTTP Host header (`bio.stage.burntbytes.com`) and routes to the correct Pod.
 
-### 1. Production Flow (Cloudflare)
-`App (HTTPRoute)` → `ExternalDNS (Prod)` → `Cloudflare API`
+### Why this is better
+- **Zero In-Cluster Maintenance**: No need to maintain highly-available CoreDNS/etcd inside the cluster just to resolve IPs that never change.
+- **Fail-Safe**: Even if the cluster control plane is down, DNS resolution works (debugging is easier).
+- **Less Noise**: Removed `external-dns` crash loops and `cert-manager` complexity associated with individual records.
 
-- **Result**: `myapp.burntbytes.com` resolves globally to your WAN IP (or Tunnel) or Internal VIP depending on config.
-- **Benefit**: Zero manual Cloudflare edits.
+---
 
-### 2. Staging Flow (Internal)
-`App (HTTPRoute)` → `ExternalDNS (Stage)` → `In-Cluster CoreDNS (RFC2136)` ← `AdGuard Home (Forwarding)`
+## When to use "Complex" DNS (ExternalDNS + CoreDNS)
 
-- **Why an intermediate CoreDNS?**
-    - AdGuard Home is great for filtering/clients but lacks a standard RFC2136 interface for frequent automation.
-    - We deploy a small CoreDNS configured as authoritative for `stage.burntbytes.com`.
-    - We configure your main AdGuard to **forward** `/*.stage.burntbytes.com/` queries to this CoreDNS Service IP.
-- **Result**: `myapp-stage.burntbytes.com` resolves only inside your network.
+We previously attempted a complex setup (ExternalDNS writing to an in-cluster CoreDNS). This added significant "complexity tax". You should **only** re-implement this if you hit one of these specific limits:
 
-## Scaling & BGP
+### 1. Multiple Entry Points (Apps with dedicated IPs)
+Currently, all apps sit behind the Gateway (`192.168.5.30`).
+*   **Scenario**: You deploy a game server (Minecraft) or Database that needs its *own* LoadBalancer IP (e.g., `192.168.5.50`) because it can't use the HTTP Gateway.
+*   **Failure**: The wildcard sends `minecraft.stage...` to the Gateway (`.30`), but the app is at `.50`.
+*   **Fix**: ExternalDNS detects the Service of type `LoadBalancer` and updates DNS for that specific host.
 
-This setup is fully transparent to your networking layer (L2 vs BGP).
+### 2. Headless Services (Direct Pod Access)
+Distributed systems (Kafka, Cassandra, MongoDB Replicasets) often require clients to talk to *specific* pod IPs directly.
+*   **Scenario**: `mongo-0.stage.burntbytes.com` needs to resolve to `10.42.0.5`, not the Gateway.
+*   **Fix**: ExternalDNS supports Headless settings to create A-records for every individual pod.
 
-- **Current (L2)**: ExternalDNS sees the MetalLB/Cilium L2 IP on the Gateway and publishes it.
-- **Future (BGP)**: When you switch to BGP, the Gateway gets a new VIP. ExternalDNS detects the IP change and updates Cloudflare/CoreDNS automatically.
+### 3. Non-Gateway TCP/UDP Traffic
+*   **Scenario**: A legacy protocol that doesn't support Host headers (unlike HTTP) and cannot use the Gateway's listeners.
+*   **Fix**: Similar to #1, these services get random LoadBalancer IPs that need dynamic DNS registration.
 
-## Implementation Plan
+---
 
-### Phase 1: Internal DNS Authority (Staging)
+## Configuration (AdGuard Home)
 
-1.  Deploy **CoreDNS** (Authoritative) in `infra/controllers/coredns-custom`.
-    - Expose via Service (TCP/UDP 53).
-    - Config: Authoritative zone `stage.burntbytes.com`, enable `file` plugin with reload or `etcd`.
-2.  Deploy **ExternalDNS (Staging)** in `infra/controllers/external-dns-stage`.
-    - Arguments: `--source=gateway-httproute`, `--provider=rfc2136`, `--rfc2136-host=<coredns-service>`.
-    - RSA key for secure updates (TSIG).
-3.  Configure physical **AdGuard Home**:
-    - Upstream DNS server for `/stage.burntbytes.com/`: `<Cluster-CoreDNS-LoadBalancer-IP>`.
-
-### Phase 2: Production Automation
-
-1.  Deploy **ExternalDNS (Prod)** in `infra/controllers/external-dns-prod`.
-    - Arguments: `--source=gateway-httproute`, `--provider=cloudflare`.
-    - Secret: Cloudflare API Token.
-
-## Manual AdGuard Configuration (Split Horizon)
-
-Since most production applications have been removed from the Cloudflare Tunnel to be LAN-only, you must configure **DNS Rewrites** in AdGuard Home to route local traffic to your Kubernetes cluster.
+Since we are LAN-only for Staging (and most of Production), configure **DNS Rewrites** in AdGuard Home.
 
 ### 1. Find your Gateway IPs
 
@@ -72,20 +57,19 @@ kubectl get svc -n default -l gateway.networking.k8s.io/gateway-name
 
 *Example Output:*
 ```text
-NAME                                  TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)
-cilium-gateway-app-gateway-production LoadBalancer   10.43.149.116   192.168.5.31    80:31977/TCP,443:30950/TCP
-cilium-gateway-app-gateway-staging    LoadBalancer   10.43.238.25    192.168.5.30    80:30852/TCP,443:31742/TCP
+NAME                                  EXTERNAL-IP
+cilium-gateway-app-gateway-production 192.168.5.31
+cilium-gateway-app-gateway-staging    192.168.5.30
 ```
-*(Your IPs may differ. Use the values under `EXTERNAL-IP`)*
 
-### 2. Configure Rewrites in AdGuard Home
+### 2. Configure Rewrites
 
-Go to **Filters → DNS Rewrites** and add the following entries:
+Go to **Filters → DNS Rewrites** and add:
 
 | Domain | Rewrite To (IP) | Description |
 |:---|:---|:---|
-| `*.stage.burntbytes.com` | `192.168.5.30` | Directs all staging subdomains to the Staging Gateway |
-| `*.burntbytes.com` | `192.168.5.33` | Directs all production subdomains to the Production Gateway |
+| `*.stage.burntbytes.com` | `192.168.5.30` | Staging Gateway Wildcard |
+| `*.burntbytes.com` | `192.168.5.31` | Production Gateway Wildcard |
 
-> **Note:** These wildcards will override public Cloudflare DNS records for devices on your home network. Only `auth.burntbytes.com` and `links.burntbytes.com` will arguably work both ways (Tunnel vs LAN), but for best performance/privacy, the LAN path is preferred locally.
+> **Note:** These wildcards override public Cloudflare DNS records on your LAN, ensuring traffic stays local for speed and security.
 

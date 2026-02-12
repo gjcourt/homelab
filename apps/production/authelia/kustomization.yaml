@@ -6,13 +6,20 @@ resources:
   - httproute.yaml
   - secret-authelia.yaml
   - secret-users.yaml
+  - secret-db-credentials.yaml
+  - database.yaml
 
 labels:
   - pairs:
       env: production
       app.kubernetes.io/instance: production
     includeSelectors: false
+
 patches:
+  - path: patch-deployment.yaml
+    target:
+      kind: Deployment
+      name: authelia
   - target:
       kind: Namespace
       name: authelia
@@ -59,8 +66,12 @@ patches:
             remember_me: 30d
 
           storage:
-            local:
-              path: /config/db.sqlite3
+            postgres:
+              host: authelia-db-prod-cnpg-v1-rw
+              port: 5432
+              database: authelia
+              username: authelia
+              # password loaded from env AUTHELIA_STORAGE_POSTGRES_PASSWORD
 
           notifier:
             filesystem:

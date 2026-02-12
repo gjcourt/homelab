@@ -1,0 +1,22 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: authelia-db-staging-cnpg-v1
+  namespace: authelia-stage
+spec:
+  instances: 3
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.5
+  storage:
+    size: 2Gi
+  monitoring:
+    enablePodMonitor: true
+  inheritedMetadata:
+    labels:
+      app: authelia-database
+      env: staging
+  bootstrap:
+    initdb:
+      database: authelia
+      owner: authelia
+      secret:
+        name: authelia-db-credentials

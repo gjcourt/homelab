@@ -13,6 +13,7 @@ Short index of the most useful docs in this repo.
 - How Flux applies changes + common reconcile/debug commands: [flux-and-deployments.md](flux-and-deployments.md)
 - How overlays are structured (base vs staging vs production): [overlays-and-structure.md](overlays-and-structure.md)
 - How to make changes (workflow, secrets, rollback): [making-changes.md](making-changes.md)
+- Synology iSCSI cleanup & maintenance: [synology-iscsi-cleanup.md](synology-iscsi-cleanup.md)
 
 ## Project plans / runbooks
 

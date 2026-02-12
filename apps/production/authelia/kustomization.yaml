@@ -73,4 +73,17 @@ patches:
                 access_token: 1h
                 id_token: 1h
                 refresh_token: 720h
-              clients: []
+              clients:
+                - id: immich
+                  description: Immich
+                  secret: '$env:IMMICH_OIDC_CLIENT_SECRET'
+                  public: false
+                  authorization_policy: two_factor
+                  redirect_uris:
+                    - https://photos.burntbytes.com/auth/login
+                    - app.immich:///oauth-callback
+                  scopes:
+                    - openid
+                    - profile
+                    - email
+                  userinfo_signing_algorithm: none

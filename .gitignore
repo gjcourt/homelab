@@ -2,3 +2,4 @@
 .sops.yaml
 default-values.yaml
 .vscode/
+.venv/

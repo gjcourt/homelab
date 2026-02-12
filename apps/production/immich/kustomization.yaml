@@ -8,6 +8,7 @@ resources:
   - nfs-photos.yaml
   - secret-db-credentials.yaml
   - secret-aws-creds.yaml
+  - secret-sso.yaml
 
 labels:
   - pairs:

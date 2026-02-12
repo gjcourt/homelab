@@ -36,6 +36,24 @@ spec:
                 secretKeyRef:
                   name: immich-db-prod-cnpg-v1-app
                   key: password
+            # OIDC / SSO Configuration
+            - name: OAUTH_ENABLED
+              value: "true"
+            - name: OAUTH_ISSUER_URL
+              value: "https://auth.burntbytes.com"
+            - name: OAUTH_CLIENT_ID
+              value: "immich"
+            - name: OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: immich-sso-secret
+                  key: client_secret
+            - name: OAUTH_SCOPE
+              value: "openid email profile"
+            - name: OAUTH_AUTO_REGISTER
+              value: "true"
+            - name: OAUTH_BUTTON_TEXT
+              value: "Login with Authelia"
           volumeMounts:
             - name: upload
               mountPath: /usr/src/app/upload

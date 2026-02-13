@@ -104,3 +104,10 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - Validate SOPS-encrypted files with `sops filestatus <file>` before committing.
 - For placeholder values in docs, use clearly fake values (e.g., `your-secret-value-here`).
 - Include TODO notes in docs for any manual secret setup steps needed.
+## Naming Conventions
+- **Kubernetes Resources**:
+    - **Storage**: Always name PersistentVolumeClaim and StorageClass files as `storage.yaml`. Do not use `pvc.yaml`, `pv.yaml`, or similar.
+    - **Config**: Use `configmap.yaml` and `secret.yaml`.
+    - **Workloads**: Use `deployment.yaml`, `statefulset.yaml`, `daemonset.yaml`.
+    - **Network**: Use `service.yaml`, `ingress.yaml`, `httproute.yaml`.
+    - **RBAC**: Use `rbac.yaml` or `serviceaccount.yaml`.

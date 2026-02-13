@@ -20,8 +20,8 @@ spec:
         image: python:3.11-slim
         command: ["/bin/sh", "-c"]
         args:
-          - |
-            pip install paramiko prometheus_client && python /app/exporter.py
+        - |
+          pip install paramiko prometheus_client && python /app/exporter.py
         env:
         - name: SYNOLOGY_IP
           value: "192.168.5.8"

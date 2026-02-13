@@ -71,7 +71,10 @@ patches:
 
           identity_providers:
             oidc:
-              issuer: https://auth.stage.burntbytes.com
+              jwks:
+                - key: |
+                    {{ env "OIDC_JWKS_KEY" | nindent 20 }}
+                  algorithm: RS256
               lifespans:
                 access_token: 1h
                 id_token: 1h

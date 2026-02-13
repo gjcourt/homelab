@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: synology-iscsi-exporter
+  namespace: synology-iscsi-monitor
+  labels:
+    app: synology-iscsi-exporter
+spec:
+  selector:
+    app: synology-iscsi-exporter
+  ports:
+  - port: 8000
+    targetPort: metrics
+    name: metrics

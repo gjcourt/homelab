@@ -57,7 +57,10 @@ data:
 
     identity_providers:
       oidc:
-        issuer: https://auth.example.invalid
+        jwks:
+          - key: |
+              {{ env "OIDC_JWKS_KEY" | nindent 14 }}
+            algorithm: RS256
         lifespans:
           access_token: 1h
           id_token: 1h

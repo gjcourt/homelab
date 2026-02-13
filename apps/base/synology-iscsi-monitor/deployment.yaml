@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synology-iscsi-exporter
+  namespace: synology-iscsi-monitor
+  labels:
+    app: synology-iscsi-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: synology-iscsi-exporter
+  template:
+    metadata:
+      labels:
+        app: synology-iscsi-exporter
+    spec:
+      containers:
+      - name: exporter
+        image: python:3.11-slim
+        command: ["/bin/sh", "-c"]
+        args:
+          - |
+            pip install paramiko prometheus_client && python /app/exporter.py
+        env:
+        - name: SYNOLOGY_IP
+          value: "192.168.5.8"
+        - name: SYNOLOGY_USER
+          value: "admin"
+        - name: SYNOLOGY_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: synology-secret
+              key: password
+        ports:
+        - containerPort: 8000
+          name: metrics
+        volumeMounts:
+        - name: script-volume
+          mountPath: /app
+      volumes:
+      - name: script-volume
+        configMap:
+          name: synology-iscsi-exporter-script

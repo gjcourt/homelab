@@ -1,0 +1,58 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: synology-iscsi-exporter-script
+  namespace: synology-iscsi-monitor
+data:
+  exporter.py: |
+    import os
+    import time
+    import paramiko
+    from prometheus_client import start_http_server, Gauge
+
+    SYNOLOGY_IP = os.environ.get("SYNOLOGY_IP", "192.168.5.8")
+    SYNOLOGY_USER = os.environ.get("SYNOLOGY_USER", "admin")
+    SYNOLOGY_PASSWORD = os.environ.get("SYNOLOGY_PASSWORD", "")
+    POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
+
+    # Metrics
+    ISCSI_TARGET_COUNT = Gauge('synology_iscsi_target_count', 'Number of iSCSI Targets configured')
+    ISCSI_LUN_COUNT = Gauge('synology_iscsi_lun_count', 'Number of iSCSI LUNs configured')
+
+    def count_remote_grep(filepath, grep_pattern):
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(SYNOLOGY_IP, username=SYNOLOGY_USER, password=SYNOLOGY_PASSWORD, timeout=10)
+            # -c counts occurrences
+            cmd = f"grep -c '{grep_pattern}' {filepath}"
+            stdin, stdout, stderr = client.exec_command(cmd)
+            output = stdout.read().decode().strip()
+            if not output:
+                return 0
+            return int(output)
+        except Exception as e:
+            print(f"Error scraping {filepath}: {e}")
+            return 0
+        finally:
+            client.close()
+
+    def collect():
+        # Targets start with [iqn. or [eui.
+        # We search for lines starting with [ followed by iqn or eui
+        targets = count_remote_grep("/usr/syno/etc/iscsi_target.conf", "^\\\\[\(iqn\|eui\)")
+        ISCSI_TARGET_COUNT.set(targets)
+
+        # LUNs start with [ (UUIDs)
+        # We can just count all sections in iscsi_lun.conf as it is typically just LUNs
+        luns = count_remote_grep("/usr/syno/etc/iscsi_lun.conf", "^\\\\[")
+        ISCSI_LUN_COUNT.set(luns)
+
+        print(f"Metrics updated: Targets={targets}, LUNs={luns}")
+
+    if __name__ == "__main__":
+        print("Starting Synology iSCSI Exporter on :8000")
+        start_http_server(8000)
+        while True:
+            collect()
+            time.sleep(POLL_INTERVAL)

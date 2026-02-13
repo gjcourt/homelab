@@ -18,3 +18,4 @@ resources:
   - mealie
   - memos
   - snapcast
+  - synology-iscsi-monitor

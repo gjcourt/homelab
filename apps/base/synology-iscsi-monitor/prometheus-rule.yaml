@@ -1,0 +1,27 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: synology-iscsi-alerts
+  namespace: synology-iscsi-monitor
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+  - name: synology-iscsi
+    rules:
+    - alert: SynologyISCSITargetLimitApproaching
+      expr: synology_iscsi_target_count > 100
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Synology iSCSI Target count is high ({{ $value }}/128)"
+        description: "The number of iSCSI targets is approaching the hard limit of 128. Current count: {{ $value }}. Check for orphaned targets."
+    - alert: SynologyISCSITargetLimitCritical
+      expr: synology_iscsi_target_count >= 120
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Synology iSCSI Target count is CRITICAL ({{ $value }}/128)"
+        description: "Immediate action required. Only {{ 128 - $value }} slots remaining."

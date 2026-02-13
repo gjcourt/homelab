@@ -21,3 +21,4 @@ patches:
       - op: replace
         path: /metadata/name
         value: adguard-prod
+  - secret-sync.yaml

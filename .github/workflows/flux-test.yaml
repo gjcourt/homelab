@@ -1,0 +1,29 @@
+name: Test Flux Reconciliation
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+jobs:
+  validate-kustomize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Kustomize
+        uses: fluxcd/pkg/actions/kustomize@main
+
+      - name: Build Apps Production
+        run: kustomize build ./apps/production
+
+      - name: Build Apps Staging
+        run: kustomize build ./apps/staging
+
+      - name: Build Infra Configs
+        run: kustomize build ./infra/configs
+
+      - name: Build Infra Controllers
+        run: kustomize build ./infra/controllers

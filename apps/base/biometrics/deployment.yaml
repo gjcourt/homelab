@@ -21,7 +21,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: biometrics
-          image: ghcr.io/gjcourt/biometrics:a83212c
+          image: ghcr.io/gjcourt/biometrics:2026-02-12
           ports:
             - containerPort: 8080
           env:

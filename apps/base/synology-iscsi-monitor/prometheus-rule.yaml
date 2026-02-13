@@ -24,4 +24,4 @@ spec:
         severity: critical
       annotations:
         summary: "Synology iSCSI Target count is CRITICAL ({{ $value }}/128)"
-        description: "Immediate action required. Only {{ 128 - $value }} slots remaining."
+        description: "Immediate action required. Current count is {{ $value }}. Hard limit is 128."

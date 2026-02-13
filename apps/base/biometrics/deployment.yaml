@@ -15,6 +15,8 @@ spec:
       labels:
         app: biometrics
     spec:
+      imagePullSecrets:
+        - name: secret-registry-credentials
       securityContext:
         runAsUser: 65534
         runAsGroup: 65534

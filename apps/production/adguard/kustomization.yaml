@@ -6,6 +6,7 @@ resources:
   - configmap.yaml
   - httproute.yaml
   - secret-adguard-container-env.yaml
+  - secret-sync.yaml
 
 labels:
   - pairs:
@@ -21,4 +22,3 @@ patches:
       - op: replace
         path: /metadata/name
         value: adguard-prod
-  - secret-sync.yaml

@@ -134,3 +134,24 @@ build-image: ## Build a single image: make build-image IMAGE=snapcast
 	if [[ -n "$(PLATFORMS)" ]]; then args+=(--platform "$(PLATFORMS)"); fi; \
 	if [[ "$(PUSH)" == "1" ]]; then args+=(--push); else args+=(--load); fi; \
 	"${args[@]}"
+
+.PHONY: immich-init-db
+immich-init-db: ## Initialize Immich DB helper. Usage: make immich-init-db ENV=staging|production
+	@if [ -z "$(ENV)" ]; then echo "Error: ENV variable is required. usage: make immich-init-db ENV=staging|production"; exit 1; fi
+	@case "$(ENV)" in \
+		staging) NAMESPACE="immich-stage"; CLUSTER="immich-db-staging-cnpg-v1";; \
+		production) NAMESPACE="immich-prod"; CLUSTER="immich-db-prod-cnpg-v1";; \
+		*) echo "Error: valid ENV values are 'staging' or 'production'"; exit 1;; \
+	esac; \
+	echo "Waiting for cnpg cluster $$CLUSTER in $$NAMESPACE..."; \
+	POD=$$(kubectl get pods -n $$NAMESPACE -l cnpg.io/cluster=$$CLUSTER,role=primary -o jsonpath='{.items[0].metadata.name}'); \
+	if [ -z "$$POD" ]; then echo "Error: Could not find primary pod for cluster $$CLUSTER"; exit 1; fi; \
+	echo "Found primary pod: $$POD"; \
+	echo "Initialize extensions..."; \
+	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "CREATE EXTENSION IF NOT EXISTS vectors CASCADE;"; \
+	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;"; \
+	echo "Grant permissions..."; \
+	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "GRANT ALL ON SCHEMA vectors TO immich;"; \
+	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "GRANT ALL ON ALL TABLES IN SCHEMA vectors TO immich;"; \
+	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "ALTER DEFAULT PRIVILEGES IN SCHEMA vectors GRANT ALL ON TABLES TO immich;"
+

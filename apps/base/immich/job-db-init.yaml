@@ -19,7 +19,5 @@ spec:
             - echo "Patch me"
           env:
             - name: PGPASSWORD
-              value: "dummy"
             - name: PGHOST
-              value: "dummy"
       restartPolicy: OnFailure

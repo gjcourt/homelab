@@ -53,6 +53,9 @@ spec:
       postInitSQL:
         - CREATE EXTENSION IF NOT EXISTS vectors;
         - CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;
+        - GRANT ALL ON SCHEMA vectors TO immich;
+        - GRANT ALL ON ALL TABLES IN SCHEMA vectors TO immich;
+        - ALTER DEFAULT PRIVILEGES IN SCHEMA vectors GRANT ALL ON TABLES TO immich;
 
   externalClusters:
     - name: immich-db-backup

@@ -20,6 +20,7 @@ labels:
 patches:
   - path: deployment-patch.yaml
   - path: storage.yaml
+  - path: job-patch.yaml
   - target:
       kind: Namespace
       name: immich

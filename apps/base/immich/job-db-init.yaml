@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: immich-db-init
+  # Flux/Helm hook annotations to ensure it runs during sync/upgrade
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: hook-succeeded,before-hook-creation
+spec:
+  template:
+    metadata:
+      name: immich-db-init
+    spec:
+      containers:
+        - name: db-init
+          image: postgres:16-alpine
+          command: ["/bin/sh", "-c"]
+          args:
+            - echo "Patch me"
+          env:
+            - name: PGPASSWORD
+              value: "dummy"
+            - name: PGHOST
+              value: "dummy"
+      restartPolicy: OnFailure

@@ -3,10 +3,9 @@
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: jellyfin-movies-pv-staging
+  name: jellyfin-movies-pv
   labels:
     app: jellyfin
-    env: staging
 spec:
   capacity:
     storage: 1Ti
@@ -31,15 +30,14 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: jellyfin-movies-pvc
-  namespace: jellyfin-stage
+  namespace: jellyfin
   labels:
     app: jellyfin
-    env: staging
 spec:
   accessModes:
     - ReadOnlyMany
   storageClassName: ""
-  volumeName: jellyfin-movies-pv-staging
+  volumeName: jellyfin-movies-pv
   resources:
     requests:
       storage: 1Ti
@@ -48,10 +46,9 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: jellyfin-tvshows-pv-staging
+  name: jellyfin-tvshows-pv
   labels:
     app: jellyfin
-    env: staging
 spec:
   capacity:
     storage: 1Ti
@@ -76,15 +73,14 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: jellyfin-tvshows-pvc
-  namespace: jellyfin-stage
+  namespace: jellyfin
   labels:
     app: jellyfin
-    env: staging
 spec:
   accessModes:
     - ReadOnlyMany
   storageClassName: ""
-  volumeName: jellyfin-tvshows-pv-staging
+  volumeName: jellyfin-tvshows-pv
   resources:
     requests:
       storage: 1Ti
@@ -93,10 +89,9 @@ spec:
 apiVersion: v1
 kind: PersistentVolume
 metadata:
-  name: jellyfin-tvanime-pv-staging
+  name: jellyfin-tvanime-pv
   labels:
     app: jellyfin
-    env: staging
 spec:
   capacity:
     storage: 1Ti
@@ -121,15 +116,14 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: jellyfin-tvanime-pvc
-  namespace: jellyfin-stage
+  namespace: jellyfin
   labels:
     app: jellyfin
-    env: staging
 spec:
   accessModes:
     - ReadOnlyMany
   storageClassName: ""
-  volumeName: jellyfin-tvanime-pv-staging
+  volumeName: jellyfin-tvanime-pv
   resources:
     requests:
       storage: 1Ti

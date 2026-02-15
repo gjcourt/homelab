@@ -22,6 +22,11 @@ spec:
             - containerPort: 8096
               name: http
 
+          env:
+            - name: JELLYFIN_FFmpeg__probesize
+              value: "50000000"
+            - name: JELLYFIN_FFmpeg__analyzeduration
+              value: "50000000"
           envFrom:
             - configMapRef:
                 name: jellyfin-container-env
@@ -31,18 +36,29 @@ spec:
               mountPath: /config
             - name: jellyfin-cache
               mountPath: /cache
-              # Media volume - to be configured in overlay
-              # - name: media
-              #   mountPath: /media
+            - name: dri
+              mountPath: /dev/dri
+            - name: movies
+              mountPath: /media/movies
+              readOnly: true
+            - name: tvshows
+              mountPath: /media/tvshows
+              readOnly: true
+            - name: tvanime
+              mountPath: /media/tv-anime
+              readOnly: true
+
+          securityContext:
+            privileged: true # Required for GPU access
 
           # Resource limits can be adjusted in overlays
           resources:
             requests:
-              memory: "512Mi"
-              cpu: "500m"
+              memory: "2Gi"
+              cpu: "2000m"
             limits:
-              memory: "4Gi"
-              cpu: "4000m"
+              memory: "8Gi"
+              cpu: "8000m"
 
       volumes:
         - name: jellyfin-config
@@ -51,3 +67,16 @@ spec:
         - name: jellyfin-cache
           persistentVolumeClaim:
             claimName: jellyfin-cache-pvc
+        - name: dri
+          hostPath:
+            path: /dev/dri
+            type: Directory
+        - name: movies
+          persistentVolumeClaim:
+            claimName: jellyfin-movies-pvc
+        - name: tvshows
+          persistentVolumeClaim:
+            claimName: jellyfin-tvshows-pvc
+        - name: tvanime
+          persistentVolumeClaim:
+            claimName: jellyfin-tvanime-pvc

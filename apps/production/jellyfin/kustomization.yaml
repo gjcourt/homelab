@@ -16,7 +16,6 @@ patchesStrategicMerge:
   - storage.yaml
 
 patches:
-  - path: deployment-patch.yaml
   - target:
       kind: Namespace
       name: jellyfin
@@ -24,3 +23,46 @@ patches:
       - op: replace
         path: /metadata/name
         value: jellyfin-prod
+  # Rename PVs to avoid conflict with staging
+  - target:
+      kind: PersistentVolume
+      name: jellyfin-movies-pv
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: jellyfin-movies-pv-prod
+  - target:
+      kind: PersistentVolumeClaim
+      name: jellyfin-movies-pvc
+    patch: |
+      - op: replace
+        path: /spec/volumeName
+        value: jellyfin-movies-pv-prod
+  - target:
+      kind: PersistentVolume
+      name: jellyfin-tvshows-pv
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: jellyfin-tvshows-pv-prod
+  - target:
+      kind: PersistentVolumeClaim
+      name: jellyfin-tvshows-pvc
+    patch: |
+      - op: replace
+        path: /spec/volumeName
+        value: jellyfin-tvshows-pv-prod
+  - target:
+      kind: PersistentVolume
+      name: jellyfin-tvanime-pv
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: jellyfin-tvanime-pv-prod
+  - target:
+      kind: PersistentVolumeClaim
+      name: jellyfin-tvanime-pvc
+    patch: |
+      - op: replace
+        path: /spec/volumeName
+        value: jellyfin-tvanime-pv-prod

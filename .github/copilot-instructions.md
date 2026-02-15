@@ -85,9 +85,10 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - Prefer Alpine when feasible, but choose Debian/Ubuntu when it avoids compatibility pain (e.g., glibc-dependent binaries).
 - Build multi-arch images when required by the cluster (amd64/arm64).
 
-## Scripts (shell)
+## Scripts (shell/python)
 
-- Prefer small, composable scripts; document usage at top of file.
+- Prefer small, composable scripts.
+- **Documentation Mandatory**: specific usage instructions, environment variables, and purpose MUST be documented at the top of every script file (Shell or Python).
 - Be safe by default: `set -euo pipefail` in bash-compatible scripts.
 - Avoid writing secrets to stdout; avoid leaking secret file contents.
 - Place scripts in an appropriate folder (e.g., `scripts/`); avoid scattering them.

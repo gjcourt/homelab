@@ -4,6 +4,20 @@ import json
 import urllib3
 import argparse
 
+"""
+Script: synology_rebind_luns.py
+Description:
+    Interacts with the Synology Web API to manage iSCSI Targets and LUN mappings.
+    Can be used to list targets/LUNs or perform re-linking of LUNs to Targets,
+    although the specific rebind logic is currently implemented as library functions
+    rather than a main execution path.
+
+Usage:
+    export SYNOLOGY_USER="admin_user"
+    export SYNOLOGY_PASSWORD="password"
+    python3 synology_rebind_luns.py [--dry-run]
+"""
+
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 SYNOLOGY_IP = "192.168.5.8"

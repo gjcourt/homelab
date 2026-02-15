@@ -19,6 +19,7 @@
 - [mealie](base/mealie/)
 - [memos](base/memos/)
 - [snapcast](base/snapcast/)
+- [synology-iscsi-monitor](base/synology-iscsi-monitor/)
 <!-- apps:list:end -->
 
 ## Future applications

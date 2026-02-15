@@ -1,0 +1,71 @@
+name: Deploy to Staging
+
+on:
+  schedule:
+    - cron: '*/10 * * * *' # Run every 10 minutes
+  workflow_dispatch:
+
+jobs:
+  sync-staging:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+      checks: read
+      statuses: read
+    steps:
+      - name: Checkout Master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Create Staging Candidate
+        run: |
+          # Create a fresh branch off master
+          git checkout -B staging origin/master
+
+      - name: Merge Passing PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get list of open, mergeable PRs
+          PRS=$(gh pr list --state open --json number,mergeable --limit 50 --jq '.[] | select(.mergeable == "MERGEABLE") | .number')
+
+          for PR_NUM in $PRS; do
+            echo "Checking PR #$PR_NUM..."
+
+            # Check if all checks passed
+            # We treat 'pending' as failure to merge (must wait for CI)
+            CHECKS_FAIL=$(gh pr checks $PR_NUM --json state,bucket --jq 'map(select(.bucket == "fail")) | length')
+            CHECKS_PENDING=$(gh pr checks $PR_NUM --json state,bucket --jq 'map(select(.bucket == "pending")) | length')
+
+            # If no checks found, caution? Or assume safe?
+            # Assuming we only want tested code: if Checks > 0 and Fail == 0 and Pending == 0
+            CHECKS_COUNT=$(gh pr checks $PR_NUM --json state --jq 'length')
+
+            if [ "$CHECKS_COUNT" -gt 0 ] && [ "$CHECKS_FAIL" -eq 0 ] && [ "$CHECKS_PENDING" -eq 0 ]; then
+              echo "PR #$PR_NUM passes CI. Attempting merge..."
+
+              # Fetch and Merge
+              git fetch origin pull/$PR_NUM/head:pr-$PR_NUM
+              if git merge pr-$PR_NUM --no-edit -m "Merge PR #$PR_NUM to staging"; then
+                echo "Successfully merged PR #$PR_NUM"
+              else
+                echo "Conflict merging PR #$PR_NUM. Aborting."
+                git merge --abort
+              fi
+            else
+              echo "PR #$PR_NUM not ready (Fail: $CHECKS_FAIL, Pending: $CHECKS_PENDING). Skipping."
+            fi
+          done
+
+      - name: Push to Staging
+        run: |
+          # Force push the new staging state
+          git push origin staging --force

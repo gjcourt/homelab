@@ -1,0 +1,28 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: immich-db-init
+  annotations:
+    kustomize.toolkit.fluxcd.io/force: enabled
+spec:
+  template:
+    spec:
+      containers:
+        - name: db-init
+          env:
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: immich-db-staging-cnpg-v1-superuser
+                  key: password
+            - name: PGHOST
+              value: immich-db-staging-cnpg-v1-rw
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              until pg_isready -h $PGHOST; do echo "Waiting for database..."; sleep 2; done;
+              psql -U postgres -d immich -c "CREATE EXTENSION IF NOT EXISTS vectors CASCADE;"
+              psql -U postgres -d immich -c "CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;"
+              psql -U postgres -d immich -c "GRANT ALL ON SCHEMA vectors TO immich;"
+              psql -U postgres -d immich -c "GRANT ALL ON ALL TABLES IN SCHEMA vectors TO immich;"
+              psql -U postgres -d immich -c "ALTER DEFAULT PRIVILEGES IN SCHEMA vectors GRANT ALL ON TABLES TO immich;"

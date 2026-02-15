@@ -6,3 +6,4 @@ resources:
   - deployment.yaml
   - service.yaml
   - storage.yaml
+  - job-db-init.yaml

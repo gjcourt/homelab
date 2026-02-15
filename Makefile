@@ -149,8 +149,8 @@ immich-init-db: ## Initialize Immich DB helper. Usage: make immich-init-db ENV=s
 	echo "Found primary pod: $$POD"; \
 	echo "Initialize extensions..."; \
 	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "CREATE EXTENSION IF NOT EXISTS vectors CASCADE;"; \
-	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;"; \
-	echo "Grant permissions..."; \
+	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;"; \	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "UPDATE pg_extension SET extowner = (SELECT oid FROM pg_roles WHERE rolname = 'immich') WHERE extname = 'vectors';"
+	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "UPDATE pg_extension SET extowner = (SELECT oid FROM pg_roles WHERE rolname = 'immich') WHERE extname = 'earthdistance';"	echo "Grant permissions..."; \
 	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "GRANT ALL ON SCHEMA vectors TO immich;"; \
 	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "GRANT ALL ON ALL TABLES IN SCHEMA vectors TO immich;"; \
 	kubectl exec -n $$NAMESPACE -it $$POD -- psql -U postgres -d immich -c "ALTER DEFAULT PRIVILEGES IN SCHEMA vectors GRANT ALL ON TABLES TO immich;"

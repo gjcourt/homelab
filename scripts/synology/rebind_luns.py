@@ -130,16 +130,16 @@ def main():
 
     # Map LUN ID to LUN Object
     lun_by_id = {l['lun_id']: l for l in luns}
-    
+
     # Track which LUNs are mapped
     mapped_lun_ids = set()
-    
+
     # 1. Check Existing Targets
     for t in targets:
         target_name = t['name']
         target_id = t['target_id']
         mapped_luns = t.get('mapped_lun_list', [])
-        
+
         for m in mapped_luns:
             mapped_lun_ids.add(m['lun_id'])
 
@@ -151,26 +151,26 @@ def main():
 
     # 2. Find Orphaned LUNs (LUNs with no Target)
     orphaned_luns = [l for l in luns if l['lun_id'] not in mapped_lun_ids]
-    
+
     print(f"Found {len(orphaned_luns)} Orphaned LUNs (No Target attached).")
 
     for lun in orphaned_luns:
         lun_name = lun['name'] # Usually the PVC name e.g. "pvc-..."
         lun_uuid = lun['uuid']
         lun_id = lun['lun_id']
-        
+
         # We need to create a Target for this LUN.
         # Naming convention: The previous targets often use the IQN format.
         # We'll construct a valid IQN.
         # iqn.2000-01.com.synology:kube. is a robust prefix
-        
+
         target_iqn = f"iqn.2000-01.com.synology:kube.{lun_name}"
         # Target Name (Display Name)
-        target_name = f"kube-{lun_name}" 
-        
+        target_name = f"kube-{lun_name}"
+
         print(f"Restoring Target for LUN '{lun_name}'...")
         print(f"  > Proposed IQN: {target_iqn}")
-        
+
         if not args.dry_run:
             resp = create_target(session, target_name, target_iqn, lun_id)
             if resp.get('success'):

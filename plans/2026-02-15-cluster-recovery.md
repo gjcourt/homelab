@@ -17,9 +17,8 @@ Methodically identify and fix issues with failing applications in the cluster.
 1.  **Image Pull Auth**: The current PAT in `secret-ghcr.yaml` is invalid (verified via 401 Unauthorized to `ghcr.io`). The user confirmed the key works locally, but the one in the repo is likely expired or invalid for this environment. **The key must be rotated.**
 2.  **iSCSI Storage Failure**:
     - `repair_iscsi_conf.py` found no "recovery" blocks to remove, meaning the config is clean.
-    - However, multiple apps (`homeassistant`, `jellyfin`) still fail to mount volumes.
-    - This indicates that the LUNs are likely **unmapped** or the Targets are in a "zombie" state where the API sees them but they aren't working.
-    - **Action**: Run `scripts/synology_rebind_luns.py` to identify and fix unmapped/broken targets.
+    - However, stuck "zombie" targets exist that the API cannot modify (Error `18990710`).
+    - **Action**: Use the new SSH-based force delete script (`scripts/synology/force_delete_target.py`) to surgically remove the stuck targets, then let the rebind script (`scripts/synology/rebind_luns.py`) recreate them.
 
 ## Execution Plan & Progress
 
@@ -32,18 +31,24 @@ Methodically identify and fix issues with failing applications in the cluster.
     3.  Re-encrypt with SOPS.
     4.  Commit and push.
 
-### 2. Recover iSCSI Storage
+### 2. Recover iSCSI Storage (Zombie Targets)
 - **Status**: **User Action Required**
-- **Task**: Rebind orphaned LUNs on Synology.
-- **Instruction**: Run the rebind script which uses the Synology Web API to map LUNs to Targets.
-    ```bash
-    export SYNOLOGY_USER="your-user"
-    export SYNOLOGY_PASSWORD="your-password"
-    # First, dry run to see what will happen
-    python3 scripts/synology_rebind_luns.py --dry-run
-    # If it proposes fixes (Mapping or Recreating), run without dry-run
-    # python3 scripts/synology_rebind_luns.py
-    ```
+- **Task**: Force delete stuck targets via SSH and recreate them.
+- **New Tool**: `scripts/synology/force_delete_target.py`
+- **Instruction**:
+    1.  Identify the stuck target IQN/Name using `scripts/synology/list_targets.py` or from error logs.
+    2.  Run the force delete script for that target:
+        ```bash
+        export SYNOLOGY_USER="your-user"
+        export SYNOLOGY_PASSWORD="your-password"
+        # Example using the ID found in your error logs:
+        python3 scripts/synology/force_delete_target.py --target-name "pvc-0dc9b880-f873-4865-b258-d23f23593867"
+        ```
+    3.  Run the rebind script again to recreate the target and map it correctly:
+        ```bash
+        python3 scripts/synology/rebind_luns.py
+        ```
+    4.  Repeat for other stuck targets if necessary.
 
 ### 3. Application Checks (Post-Storage Fix)
 - Once storage is back:

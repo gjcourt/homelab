@@ -15,10 +15,14 @@ This is the lightweight workflow used for most changes in this repo.
 
 Secrets are expected to be encrypted with SOPS and decrypted in-cluster via the `sops-agekey` key referenced by Flux Kustomizations.
 
-Related scripts (if used):
+Encrypt/decrypt secrets using `sops` directly:
 
-- `scripts/encrypt-secret.sh`
-- `scripts/decrypt-secret.sh`
+```bash
+sops --encrypt --in-place path/to/secret.yaml
+sops --decrypt --in-place path/to/secret.yaml
+```
+
+The `.sops.yaml` at the repo root configures which files and fields are encrypted.
 
 ## Adding a new app
 

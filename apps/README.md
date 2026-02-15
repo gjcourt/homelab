@@ -21,10 +21,3 @@
 - [snapcast](base/snapcast/)
 - [synology-iscsi-monitor](base/synology-iscsi-monitor/)
 <!-- apps:list:end -->
-
-## Future applications
-- PostgresDB
-- Excalidraw
-- Homepage (gethomepage)
-- Pod info?
-- PiHole

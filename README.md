@@ -2,56 +2,96 @@
 
 GitOps-managed Kubernetes cluster, powered by [Flux](https://fluxcd.io/) and [Kustomize](https://kustomize.io/).
 
-## 📖 Overview
+## Cluster
 
-This repository drives the state of the home infrastructure. It uses a **GitOps** workflow: changes are made in Git (via Pull Requests), and Flux reconciles the cluster to match this state.
+| | |
+|---|---|
+| **Name** | `melodic-muse` |
+| **Nodes** | Single-node (Talos Linux) |
+| **CNI** | Cilium (+ Gateway API, LB IPAM) |
+| **Storage** | Synology NAS via iSCSI (synology-csi) |
+| **Secrets** | SOPS + age, decrypted in-cluster by Flux |
+| **DNS** | AdGuard Home with split-horizon wildcard rewrites |
+| **Certificates** | cert-manager + Let's Encrypt |
+| **Monitoring** | Prometheus + Grafana (kube-prometheus-stack), Loki + Promtail |
+| **Databases** | CloudNativePG (PostgreSQL operator) |
 
-**Cluster**: `melodic-muse` (Single physical cluster)
-**Storage**: Synology NAS (iSCSI via CSI)
-**Networking**: Cilium (CNI), MetalLB, ExternalDNS
+## Applications
 
-## 🏗 Architecture
+All apps run in both staging and production environments via Kustomize overlays.
+See [apps/README.md](apps/README.md) for the full auto-generated list.
 
-The repository follows a **dry (Don't Repeat Yourself)** structure using Kustomize bases and overlays:
+| App | Description |
+|-----|-------------|
+| [AdGuard Home](apps/base/adguard/) | DNS ad-blocking and filtering |
+| [Audiobookshelf](apps/base/audiobookshelf/) | Audiobook and podcast server |
+| [Authelia](apps/base/authelia/) | SSO / OIDC identity provider |
+| [Excalidraw](apps/base/excalidraw/) | Collaborative whiteboard |
+| [Golinks](apps/base/golinks/) | Short link service (`go/` links) |
+| [Home Assistant](apps/base/homeassistant/) | Home automation |
+| [Homepage](apps/base/homepage/) | Dashboard / service overview |
+| [Immich](apps/base/immich/) | Photo and video management |
+| [Jellyfin](apps/base/jellyfin/) | Media server |
+| [Linkding](apps/base/linkding/) | Bookmark manager |
+| [Mealie](apps/base/mealie/) | Recipe management |
+| [Memos](apps/base/memos/) | Note-taking / micro-blog |
+| [Snapcast](apps/base/snapcast/) | Multi-room audio streaming |
 
-- **`apps/base`**: The "source of truth" for application manifests. Agnostic of environment.
-- **`apps/staging`**: Test environment. Applies specific patches (limited resources, staging ingress).
-- **`apps/production`**: Live environment. Applies production patches (full resources, public ingress, persistent storage).
-- **`infra/`**: Core system services (Cert Manager, Monitoring, CNI) that run cluster-wide.
+## Infrastructure
 
-> Read more: [Overlays and Structure Strategy](docs/overlays-and-structure.md)
+Core services that run cluster-wide. See [infra/README.md](infra/README.md) for details.
 
-## 🛠 Operations
+cert-manager · Cilium · CloudNativePG · kube-prometheus-stack · Loki · Promtail ·
+Mosquitto · Renovate · Snapshot controller · Synology CSI · Zigbee2MQTT
 
-### Common Tasks
+## Quick Start
 
-| Task | Guide |
-|------|-------|
-| **Submit a Change** | [Workflow & PRs](docs/making-changes.md) |
-| **Add a New App**   | [App Structure](docs/overlays-and-structure.md) |
-| **Manage Secrets**  | [Encryption (SOPS)](scripts/README.md) |
-| **Debug Deployment**| [Flux & Debugging](docs/flux-and-deployments.md) |
-| **Storage Cleanup** | [Synology Maintenance](docs/synology-iscsi-cleanup.md) |
-| **Update Apps List**| `scripts/update-apps-readme.sh` |
+```bash
+# Check cluster connectivity
+make kubectl-context
 
-### Quick Commands
+# Lint manifests
+make lint
 
-*   **List Apps**: `kubectl get kustomizations -n flux-system`
-*   **Reconcile Now**: `flux reconcile ks apps-production`
-*   **Check Alerts**: `kubectl get alerts -A`
+# Render and validate
+make test
 
-## 📂 Repository Layout
+# Force Flux to reconcile
+flux reconcile ks apps-production
+flux reconcile ks apps-staging
+```
 
-*   [`apps/`](apps/) - Application definitions.
-    *   [`base/`](apps/base/) - Shared configuration.
-    *   [`production/`](apps/production/) - Live overlays.
-    *   [`staging/`](apps/staging/) - Test overlays.
-*   [`clusters/`](clusters/) - Flux entrypoints.
-*   [`infra/`](infra/) - System-level controllers & configs.
-*   [`docs/`](docs/) - Runbooks and architecture notes.
-*   [`scripts/`](scripts/) - Automation & maintenance tools.
+## Documentation
 
-## 🔎 Status
+All docs are in [`docs/`](docs/README.md):
 
-- **Applications Index**: [See apps/README.md](apps/README.md)
-- **Infrastructure Index**: [See infra/README.md](infra/README.md)
+| Topic | Link |
+|-------|------|
+| **Making changes** | [docs/runbooks/making-changes.md](docs/runbooks/making-changes.md) |
+| **Flux & debugging** | [docs/runbooks/flux-and-deployments.md](docs/runbooks/flux-and-deployments.md) |
+| **iSCSI storage ops** | [docs/runbooks/synology-iscsi-operations.md](docs/runbooks/synology-iscsi-operations.md) |
+| **Repo structure** | [docs/overlays-and-structure.md](docs/overlays-and-structure.md) |
+| **DNS strategy** | [docs/dns-strategy.md](docs/dns-strategy.md) |
+| **Authelia SSO** | [docs/authelia.md](docs/authelia.md) |
+| **Incident history** | [docs/incidents/](docs/incidents/) |
+
+## Repository Layout
+
+```
+apps/
+  base/          # Shared app manifests (environment-agnostic)
+  staging/       # Staging overlays (limited resources, staging ingress)
+  production/    # Production overlays (full resources, public ingress)
+clusters/
+  melodic-muse/  # Flux entry points (apps-production, apps-staging, infra)
+docs/
+  runbooks/      # Operational procedures
+  incidents/     # Post-mortems
+  plans/         # Future work
+infra/
+  controllers/   # System operators (cert-manager, Cilium, CNPG, monitoring, etc.)
+  configs/       # Cluster-wide config (gateway, certificates, LB pools)
+images/          # Custom container image Dockerfiles
+scripts/
+  synology/      # iSCSI storage management tools
+```

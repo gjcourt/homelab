@@ -50,7 +50,6 @@ ignore: |
   **/.idea/**
   **/.vscode/**
   **/tmp/**
-  **/kubecraft/**
   clusters/**/flux-system/**
   infra/controllers/**
   **/secret-*.yaml

@@ -1,22 +1,35 @@
 # Documentation
 
-Short index of the most useful docs in this repo.
+Index of documentation in this repo.
 
-## Start here
+## Architecture & Design
 
-- Repo structure and pointers: [README.md](../README.md)
-- Apps overview (auto-generated list): [apps/README.md](../apps/README.md)
-- Infra overview: [infra/README.md](../infra/README.md)
+- [Overlays and structure](overlays-and-structure.md) — base/staging/production Kustomize strategy
+- [DNS strategy](dns-strategy.md) — split-horizon DNS with AdGuard wildcard rewrites
+- [Authelia](authelia.md) — SSO/OIDC setup, secret generation, client config
+- [Snapcast](snapcast.md) — multi-room audio deployment
 
-## How to operate this repo
+## Runbooks
 
-- How Flux applies changes + common reconcile/debug commands: [flux-and-deployments.md](flux-and-deployments.md)
-- How overlays are structured (base vs staging vs production): [overlays-and-structure.md](overlays-and-structure.md)
-- How to make changes (workflow, secrets, rollback): [making-changes.md](making-changes.md)
-- Synology iSCSI cleanup & maintenance: [synology-iscsi-cleanup.md](synology-iscsi-cleanup.md)
+Operational procedures for day-to-day cluster management.
 
-## Project plans / runbooks
+- [Making changes](runbooks/making-changes.md) — workflow, secrets, adding apps, rollback
+- [Flux and deployments](runbooks/flux-and-deployments.md) — entry points, reconcile commands, debugging
+- [Synology iSCSI operations](runbooks/synology-iscsi-operations.md) — storage troubleshooting, orphan cleanup, target management
 
-- AdGuard HA rollout plan: [TODO-adguard-ha.md](TODO-adguard-ha.md)
-- Authelia (SSO / OIDC): [authelia.md](authelia.md)
-- Snapcast (multi-room audio): [snapcast.md](snapcast.md)
+## Incidents
+
+Post-mortems from past outages.
+
+- [2026-02-15: Disabled iSCSI targets](incidents/2026-02-15-iscsi-targets-disabled.md)
+- [2026-02-12: Zombie iSCSI targets](incidents/2026-02-12-iscsi-zombie-targets.md)
+- [2026-02-08: PV recovery](incidents/2026-02-08-pv-recovery.md)
+
+## Plans
+
+- [Authelia SSO rollout](plans/authelia-sso-rollout.md) — OIDC integration for apps
+- [AdGuard HA](TODO-adguard-ha.md) — future high-availability AdGuard setup
+
+## Other
+
+- [Synology iSCSI monitor setup](todo/setup-synology-iscsi-monitor.md)

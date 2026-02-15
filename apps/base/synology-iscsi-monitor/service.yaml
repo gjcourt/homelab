@@ -9,6 +9,6 @@ spec:
   selector:
     app: synology-iscsi-exporter
   ports:
-  - port: 8000
-    targetPort: metrics
-    name: metrics
+    - port: 8000
+      targetPort: metrics
+      name: metrics

@@ -10,8 +10,8 @@ spec:
     matchLabels:
       app: synology-iscsi-exporter
   endpoints:
-  - port: metrics
-    interval: 60s
+    - port: metrics
+      interval: 60s
   namespaceSelector:
     matchNames:
-    - synology-iscsi-monitor
+      - synology-iscsi-monitor

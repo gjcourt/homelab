@@ -15,6 +15,8 @@ spec:
       labels:
         app: golinks
     spec:
+      imagePullSecrets:
+        - name: ghcr-secret
       securityContext:
         runAsUser: 65534
         runAsGroup: 65534

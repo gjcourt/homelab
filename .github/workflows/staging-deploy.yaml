@@ -2,7 +2,7 @@ name: Deploy to Staging
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # Run every 30 minutes
+    - cron: '*/10 * * * *' # Run every 10 minutes
   workflow_dispatch:
 
 jobs:

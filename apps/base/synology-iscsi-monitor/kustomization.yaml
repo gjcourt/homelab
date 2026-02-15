@@ -1,18 +1,18 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-- namespace.yaml
-- script-cm.yaml
-- deployment.yaml
-- service.yaml
-- servicemonitor.yaml
-- prometheus-rule.yaml
+  - namespace.yaml
+  - script-cm.yaml
+  - deployment.yaml
+  - service.yaml
+  - servicemonitor.yaml
+  - prometheus-rule.yaml
 
 configMapGenerator:
-- name: synology-iscsi-dashboard
-  namespace: synology-iscsi-monitor
-  files:
-  - dashboard.json
-  options:
-    labels:
-      grafana_dashboard: "1"
+  - name: synology-iscsi-dashboard
+    namespace: synology-iscsi-monitor
+    files:
+      - dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"

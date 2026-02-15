@@ -16,7 +16,7 @@ spec:
         app: biometrics
     spec:
       imagePullSecrets:
-      - name: ghcr-secret
+        - name: ghcr-secret
       securityContext:
         runAsUser: 65534
         runAsGroup: 65534

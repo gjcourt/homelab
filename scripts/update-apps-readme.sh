@@ -1,4 +1,19 @@
 #!/usr/bin/env bash
+#
+# Script: update-apps-readme.sh
+# Description:
+#   Automatically updates the apps/README.md file with a list of applications
+#   found in the apps/base directory. It looks for specific start/end markers
+#   in the README and replaces the content between them.
+#
+# Usage:
+#   ./scripts/update-apps-readme.sh
+#
+# Requirements:
+#   - Must be run from within the repository (or have correct relative paths).
+#   - apps/README.md must exist and contain the markers:
+#     <!-- apps:list:start --> and <!-- apps:list:end -->
+
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

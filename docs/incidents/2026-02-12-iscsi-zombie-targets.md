@@ -34,28 +34,11 @@ We bypassed the blocked API entirely and performed a "Deep Clean" on the persist
 
 ## 5. Corrective Measures (Scripts)
 
-Two scripts were created and preserved in `scripts/` for future use.
-
-### A. `scripts/repair_iscsi_conf.py`
-**Purpose**: Removes specific "recovery" targets acting as zombies.
-**Use Case**: stuck `recovery-target-*` entries that reappear after reboot.
-**Usage**:
-```bash
-export SYNOLOGY_USER="manager"
-export SYNOLOGY_PASSWORD="your_password"
-python3 scripts/repair_iscsi_conf.py
-```
-
-### B. `scripts/synology_prune_orphans.py`
-**Purpose**: Audits and removes ALL orphaned Targets and LUNs.
-**Definition of Orphan**: An object defined in `_conf` files but NOT linked in `iscsi_mapping.conf`.
-**Use Case**: Reclaiming slots when you hit the 128 target limit.
-**Usage**:
-```bash
-export SYNOLOGY_USER="manager"
-export SYNOLOGY_PASSWORD="your_password"
-python3 scripts/synology_prune_orphans.py
-```
+> **Note (2026-02-15):** The scripts referenced below (`repair_iscsi_conf.py`,
+> `synology_prune_orphans.py`) have been superseded and deleted. The current
+> operational toolkit lives in `scripts/synology/`. See
+> [scripts/synology/README.md](../../scripts/synology/README.md) and the
+> [operations runbook](../synology-iscsi-operations.md) for current procedures.
 
 ## 6. Prevention & Recommendations
 1.  **Avoid Hard Shutdowns**: Ensure Kubernetes nodes unmount PVCs cleanly before Synology reboots to prevent "stale" sessions that create these zombie targets.

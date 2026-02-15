@@ -23,6 +23,8 @@ spec:
               until pg_isready -h $PGHOST; do echo "Waiting for database..."; sleep 2; done;
               psql -U postgres -d immich -c "CREATE EXTENSION IF NOT EXISTS vectors CASCADE;"
               psql -U postgres -d immich -c "CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;"
+              psql -U postgres -d immich -c "UPDATE pg_extension SET extowner = (SELECT oid FROM pg_roles WHERE rolname = 'immich') WHERE extname = 'vectors';"
+              psql -U postgres -d immich -c "UPDATE pg_extension SET extowner = (SELECT oid FROM pg_roles WHERE rolname = 'immich') WHERE extname = 'earthdistance';"
               psql -U postgres -d immich -c "GRANT ALL ON SCHEMA vectors TO immich;"
               psql -U postgres -d immich -c "GRANT ALL ON ALL TABLES IN SCHEMA vectors TO immich;"
               psql -U postgres -d immich -c "ALTER DEFAULT PRIVILEGES IN SCHEMA vectors GRANT ALL ON TABLES TO immich;"

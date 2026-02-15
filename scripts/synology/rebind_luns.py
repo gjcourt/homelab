@@ -3,35 +3,37 @@ import requests
 import json
 import urllib3
 import argparse
+import sys
 
 """
-Script: synology_rebind_luns.py
+Script: scripts/synology/rebind_luns.py
 Description:
     Interacts with the Synology Web API to manage iSCSI Targets and LUN mappings.
-    Can be used to list targets/LUNs or perform re-linking of LUNs to Targets,
-    although the specific rebind logic is currently implemented as library functions
-    rather than a main execution path.
+    Diagnoses missing targets (where a LUN exists but no Target maps to it)
+    and recreates them.
 
 Usage:
     export SYNOLOGY_USER="admin_user"
     export SYNOLOGY_PASSWORD="password"
-    python3 synology_rebind_luns.py [--dry-run]
+    export SYNOLOGY_HOST="192.168.1.50" (Optional, defaults to 192.168.1.50)
+    python3 scripts/synology/rebind_luns.py [--dry-run]
 """
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-SYNOLOGY_IP = "192.168.5.8"
+SYNOLOGY_IP = os.getenv("SYNOLOGY_HOST", "192.168.1.50")
 SYNOLOGY_PORT = "5001"
 SYNOLOGY_USER = os.getenv("SYNOLOGY_USER")
 SYNOLOGY_PASS = os.getenv("SYNOLOGY_PASSWORD")
 
 if not SYNOLOGY_USER or not SYNOLOGY_PASS:
     print("Error: SYNOLOGY_USER and SYNOLOGY_PASSWORD environment variables must be set.")
-    exit(1)
+    sys.exit(1)
 
 BASE_URL = f"https://{SYNOLOGY_IP}:{SYNOLOGY_PORT}/webapi"
 
 def login(session):
+    print(f"Logging in to {BASE_URL}...")
     auth_url = f"{BASE_URL}/auth.cgi"
     params = {
         "api": "SYNO.API.Auth",
@@ -42,13 +44,15 @@ def login(session):
         "session": "Core",
         "format": "cookie"
     }
-    r = session.get(auth_url, params=params, verify=False)
     try:
+        r = session.get(auth_url, params=params, verify=False, timeout=10)
         data = r.json()
         if data.get("success"):
             return True, data.get("data", {}).get("sid")
-    except:
-        pass
+        else:
+            print(f"Login Response: {data}")
+    except Exception as e:
+        print(f"Login Connection Error: {e}")
     return False, None
 
 def list_targets(session):
@@ -85,7 +89,7 @@ def create_target(session, name, iqn, lun_id):
         "name": name,
         "iqn": iqn,
         "auth_type": 0,
-        "max_sessions": 1,
+        "max_sessions": 0, # 0 = Unlimited
         "lun_id_list": f"[{lun_id}]"
     }
     r = session.post(url, data=params, verify=False)
@@ -111,73 +115,70 @@ def main():
     session = requests.Session()
     success, sid = login(session)
     if not success:
-        print("Login failed")
-        exit(1)
+        print("Login failed. Check IP, Credentials, and Network.")
+        sys.exit(1)
 
     print("Fetching Targets and LUNs...")
-    targets = list_targets(session)
-    luns = list_luns(session)
+    try:
+        targets = list_targets(session)
+        luns = list_luns(session)
+    except Exception as e:
+        print(f"Error listing resources: {e}")
+        sys.exit(1)
 
-    # Map LUNs by name for easy lookup
-    lun_map = {l['name']: l['lun_id'] for l in luns}
+    print(f"Found {len(targets)} Targets and {len(luns)} LUNs.")
 
-    mapped_count = 0
-    recreated_count = 0
-    cleaned_count = 0
-
+    # Map LUN ID to LUN Object
+    lun_by_id = {l['lun_id']: l for l in luns}
+    
+    # Track which LUNs are mapped
+    mapped_lun_ids = set()
+    
+    # 1. Check Existing Targets
     for t in targets:
         target_name = t['name']
         target_id = t['target_id']
-        mapping_index = t.get('mapping_index', -1)
+        mapped_luns = t.get('mapped_lun_list', [])
+        
+        for m in mapped_luns:
+            mapped_lun_ids.add(m['lun_id'])
 
-        # Cleanup "recovery-target"
+        # cleanup
         if "recovery-target" in target_name:
-            print(f"Cleanup: Deleting {target_name}...")
-            if not args.dry_run:
-                resp = delete_target(session, target_id)
-                if resp.get('success'):
-                    print("  > Deleted.")
-                    cleaned_count += 1
-                else:
-                     print(f"  > Delete Failed: {resp}")
-            continue
+             if not args.dry_run:
+                 resp = delete_target(session, target_id)
+                 print(f"Deleted temp target {target_name}: {resp.get('success')}")
 
-        if mapping_index != -1:
-            continue
+    # 2. Find Orphaned LUNs (LUNs with no Target)
+    orphaned_luns = [l for l in luns if l['lun_id'] not in mapped_lun_ids]
+    
+    print(f"Found {len(orphaned_luns)} Orphaned LUNs (No Target attached).")
 
-        if target_name in lun_map:
-            lun_id = lun_map[target_name]
-            iqn = t.get('iqn')
-
-            print(f"Found orphaned Target '{target_name}' (ID: {target_id}) -> LUN: {lun_id}")
-
-            if not args.dry_run:
-                # Primary Strategy: Just Map (Talos is offline, so locks should be gone)
-                print("  > Attempting to MAP LUN to Target...")
-                map_resp = map_lun_to_target(session, target_id, lun_id)
-                if map_resp.get('success'):
-                    print("    > Map Success!")
-                    mapped_count += 1
-                else:
-                    print(f"    > Map Failed: {map_resp}. Attempting DELETE & RECREATE...")
-
-                    # Secondary Strategy: Delete & Recreate
-                    del_resp = delete_target(session, target_id)
-                    if not del_resp.get('success'):
-                         print(f"    > Delete Failed: {del_resp}. Cannot fix this target.")
-                    else:
-                        print(f"    > Creating replacement target with IQN: {iqn}...")
-                        create_resp = create_target(session, target_name, iqn, lun_id)
-                        if create_resp.get('success'):
-                            print("      > Recreate Success!")
-                            recreated_count += 1
-                        else:
-                            print(f"      > Recreate Failed! CRITICAL: Target deleted but not recreated! Error: {create_resp}")
-
+    for lun in orphaned_luns:
+        lun_name = lun['name'] # Usually the PVC name e.g. "pvc-..."
+        lun_uuid = lun['uuid']
+        lun_id = lun['lun_id']
+        
+        # We need to create a Target for this LUN.
+        # Naming convention: The previous targets often use the IQN format.
+        # We'll construct a valid IQN.
+        # iqn.2000-01.com.synology:kube. is a robust prefix
+        
+        target_iqn = f"iqn.2000-01.com.synology:kube.{lun_name}"
+        # Target Name (Display Name)
+        target_name = f"kube-{lun_name}" 
+        
+        print(f"Restoring Target for LUN '{lun_name}'...")
+        print(f"  > Proposed IQN: {target_iqn}")
+        
+        if not args.dry_run:
+            resp = create_target(session, target_name, target_iqn, lun_id)
+            if resp.get('success'):
+                print(f"  > SUCCESS: Created target {target_name}")
             else:
-                print("  > [Dry Run] Would MAP (and fallback to DELETE + CREATE)")
-
-    print(f"\nProcessing complete. Recreated {recreated_count} targets. Mapped {mapped_count} targets. Cleaned {cleaned_count} temporary targets.")
+                print(f"  > FAILED: {resp}")
+        else:
+            print("  > [Dry Run] Would create target.")
 
 if __name__ == "__main__":
     main()

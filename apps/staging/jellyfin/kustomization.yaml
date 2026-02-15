@@ -4,7 +4,6 @@ namespace: jellyfin-stage
 resources:
   - ../../base/jellyfin/
   - httproute.yaml
-  - nfs-media.yaml
 
 labels:
   - pairs:
@@ -17,7 +16,6 @@ patchesStrategicMerge:
   - storage.yaml
 
 patches:
-  - path: deployment-patch.yaml
   - target:
       kind: Namespace
       name: jellyfin
@@ -25,3 +23,46 @@ patches:
       - op: replace
         path: /metadata/name
         value: jellyfin-stage
+  # Rename PVs to avoid conflict with production
+  - target:
+      kind: PersistentVolume
+      name: jellyfin-movies-pv
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: jellyfin-movies-pv-staging
+  - target:
+      kind: PersistentVolumeClaim
+      name: jellyfin-movies-pvc
+    patch: |
+      - op: replace
+        path: /spec/volumeName
+        value: jellyfin-movies-pv-staging
+  - target:
+      kind: PersistentVolume
+      name: jellyfin-tvshows-pv
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: jellyfin-tvshows-pv-staging
+  - target:
+      kind: PersistentVolumeClaim
+      name: jellyfin-tvshows-pvc
+    patch: |
+      - op: replace
+        path: /spec/volumeName
+        value: jellyfin-tvshows-pv-staging
+  - target:
+      kind: PersistentVolume
+      name: jellyfin-tvanime-pv
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: jellyfin-tvanime-pv-staging
+  - target:
+      kind: PersistentVolumeClaim
+      name: jellyfin-tvanime-pvc
+    patch: |
+      - op: replace
+        path: /spec/volumeName
+        value: jellyfin-tvanime-pv-staging

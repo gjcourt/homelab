@@ -151,7 +151,7 @@ kubectl get pods --all-namespaces --field-selector 'status.phase!=Running,status
 
 ## Related Documentation
 
-- [Incident: Zombie targets (2026-02-12)](incidents/2026-02-12-iscsi-zombie-targets.md)
-- [Incident: Disabled targets (2026-02-15)](incidents/2026-02-15-iscsi-targets-disabled.md)
-- [PV recovery (2026-02-08)](incidents/2026-02-08-pv-recovery.md)
+- [Incident: Zombie targets (2026-02-12)](../incidents/2026-02-12-iscsi-zombie-targets.md)
+- [Incident: Disabled targets (2026-02-15)](../incidents/2026-02-15-iscsi-targets-disabled.md)
+- [Incident: PV recovery (2026-02-08)](../incidents/2026-02-08-pv-recovery.md)
 - [Synology iSCSI cleanup](synology-iscsi-cleanup.md)

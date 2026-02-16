@@ -15,10 +15,18 @@ spec:
       labels:
         app: homeassistant
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       initContainers:
         - name: init-files
           image: busybox@sha256:b3255e7dfbcd10cb367af0d409747d511aeb66dfac98cf30e97e87e4207dd76f
           command: ['sh', '-c', 'touch /config/automations.yaml /config/scripts.yaml /config/scenes.yaml']
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: config
               mountPath: /config
@@ -27,6 +35,18 @@ spec:
           name: homeassistant
           ports:
             - containerPort: 8123
+          resources:
+            requests:
+              cpu: 10m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: config
               mountPath: /config

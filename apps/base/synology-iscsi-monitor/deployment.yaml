@@ -15,6 +15,12 @@ spec:
       labels:
         app: synology-iscsi-exporter
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: exporter
           image: python:3.14-slim
@@ -35,6 +41,18 @@ spec:
           ports:
             - containerPort: 8000
               name: metrics
+          resources:
+            requests:
+              cpu: 5m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: script-volume
               mountPath: /app

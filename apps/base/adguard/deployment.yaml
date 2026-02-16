@@ -17,6 +17,9 @@ spec:
         app.kubernetes.io/name: adguard
     spec:
       terminationGracePeriodSeconds: 30
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: adguard
           image: adguard/adguardhome@sha256:92929135ced2554aaf94706f766a98ad348f211df61b0704e2db7e8498cc00b7
@@ -26,16 +29,16 @@ spec:
             - secretRef:
                 name: adguard-container-env-secret
           ports:
-            - containerPort: 80
-              name: http
-            - containerPort: 443
-              name: https
             - containerPort: 53
               name: dns
               protocol: UDP
             - containerPort: 53
               name: dns-tcp
               protocol: TCP
+            - containerPort: 80
+              name: http
+            - containerPort: 443
+              name: https
             - containerPort: 3000
               name: setup
           readinessProbe:
@@ -44,6 +47,20 @@ spec:
               path: /
             initialDelaySeconds: 10
             periodSeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              add:
+                - NET_BIND_SERVICE
+              drop:
+                - ALL
           volumeMounts:
             - mountPath: /opt/adguardhome/conf
               name: config

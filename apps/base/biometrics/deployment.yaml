@@ -18,9 +18,12 @@ spec:
       imagePullSecrets:
         - name: ghcr-secret
       securityContext:
+        runAsNonRoot: true
         runAsUser: 65534
         runAsGroup: 65534
         fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: biometrics
           image: ghcr.io/gjcourt/biometrics:2026-02-15
@@ -63,4 +66,7 @@ spec:
             periodSeconds: 30
           securityContext:
             allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
             readOnlyRootFilesystem: true

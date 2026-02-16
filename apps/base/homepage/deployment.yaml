@@ -15,7 +15,15 @@ spec:
       labels:
         app.kubernetes.io/name: homepage
     spec:
+      automountServiceAccountToken: true
       serviceAccountName: homepage
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: homepage
           image: "ghcr.io/gethomepage/homepage@sha256:0b596092c0b55fe4c65379a428a3fe90bd192f10d1b07d189a34fe5fabe7eedb"
@@ -24,6 +32,18 @@ spec:
               value: gethomepage.dev # required, may need port. See gethomepage.dev/installation/#homepage_allowed_hosts
           ports:
             - containerPort: 3000
+          resources:
+            requests:
+              cpu: 5m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - mountPath: /app/config/custom.js
               name: homepage-config

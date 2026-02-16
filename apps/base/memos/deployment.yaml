@@ -16,9 +16,12 @@ spec:
         app: memos
     spec:
       securityContext:
+        runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
 
       containers:
         - name: memos
@@ -34,8 +37,18 @@ spec:
             - name: memos-data
               mountPath: /var/opt/memos
 
+          resources:
+            requests:
+              cpu: 5m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
           securityContext:
             allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
 
       volumes:
         - name: memos-data

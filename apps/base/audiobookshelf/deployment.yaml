@@ -17,9 +17,12 @@ spec:
     spec:
       # App runs as node user, limits the scope of pods to the same user.
       securityContext:
+        runAsNonRoot: true
         runAsUser: 1000 # node user ID
         runAsGroup: 1000 # node group ID
         fsGroup: 1000 # node group ID
+        seccompProfile:
+          type: RuntimeDefault
 
       containers:
         - image: ghcr.io/advplyr/audiobookshelf@sha256:a52dc5db694a5bf041ce38f285dd6c6a660a4b1b21e37ad6b6746433263b2ae5
@@ -29,6 +32,18 @@ spec:
           envFrom:
             - configMapRef:
                 name: audiobookshelf-container-env
+          resources:
+            requests:
+              cpu: 5m
+              memory: 96Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: audiobookshelf-data
               mountPath: /usr/share/audiobookshelf/config

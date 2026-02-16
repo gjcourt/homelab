@@ -15,11 +15,26 @@ spec:
       labels:
         app: mealie
     spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - image: ghcr.io/mealie-recipes/mealie:v3.10.2
           name: mealie
           ports:
             - containerPort: 9000
+          resources:
+            requests:
+              cpu: 5m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: mealie-data
               mountPath: /app/data

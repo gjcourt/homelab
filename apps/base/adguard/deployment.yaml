@@ -40,7 +40,7 @@ spec:
               name: setup
           readinessProbe:
             httpGet:
-              port: setup
+              port: http
               path: /
             initialDelaySeconds: 10
             periodSeconds: 5

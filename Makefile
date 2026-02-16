@@ -77,10 +77,6 @@ kubectl-check: ## Verify kubectl can reach the cluster
 		exit 2; \
 	}
 
-.PHONY: synology-diag
-synology-diag: kubectl-check ## Diagnose Synology-backed storage read-only issues (requires cluster access)
-	KUBECTL="$(KUBECTL)" SYNO_NS="$(SYNO_NS)" scripts/synology-diag.sh
-
 .PHONY: synology-csi-restart
 synology-csi-restart: kubectl-check ## Restart Synology CSI workloads to force remounts (requires cluster access)
 	@deploys="$$( $(KUBECTL) -n "$(SYNO_NS)" get deployment -o name 2>/dev/null || true )"; \
@@ -104,14 +100,6 @@ synology-csi-restart: kubectl-check ## Restart Synology CSI workloads to force r
 	else \
 		echo "No statefulsets found in namespace $(SYNO_NS)"; \
 	fi
-
-.PHONY: synology-speedtest-nfs
-
-.PHONY: synology-speedtest
-synology-speedtest: kubectl-check ## Run a quick CSI write/read test (iSCSI/RWO) (requires cluster access)
-	KUBECTL="$(KUBECTL)" SYNO_NS="$(SYNO_NS)" scripts/synology-speedtest.sh
-
-synology-speedtest-nfs: synology-speedtest ## Alias for synology-speedtest (historical name)
 
 .PHONY: images
 images: ## List buildable images under images/
@@ -140,7 +128,7 @@ immich-init-db: ## Initialize Immich DB helper. Usage: make immich-init-db ENV=s
 	@if [ -z "$(ENV)" ]; then echo "Error: ENV variable is required. usage: make immich-init-db ENV=staging|production"; exit 1; fi
 	@case "$(ENV)" in \
 		staging) NAMESPACE="immich-stage"; CLUSTER="immich-db-staging-cnpg-v1";; \
-		production) NAMESPACE="immich-prod"; CLUSTER="immich-db-prod-cnpg-v1";; \
+		production) NAMESPACE="immich-prod"; CLUSTER="immich-db-prod-cnpg-v2";; \
 		*) echo "Error: valid ENV values are 'staging' or 'production'"; exit 1;; \
 	esac; \
 	echo "Waiting for cnpg cluster $$CLUSTER in $$NAMESPACE..."; \

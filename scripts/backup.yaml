@@ -1,8 +1,0 @@
-apiVersion: postgresql.cnpg.io/v1
-kind: Backup
-metadata:
-  name: backup-example
-  namespace: linkding
-spec:
-  cluster:
-    name: linkding-db-staging-cnpg-v1

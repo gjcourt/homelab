@@ -8,7 +8,7 @@ This repository drives the state of the home infrastructure. It uses a **GitOps*
 
 **Cluster**: `melodic-muse` (Single physical cluster)
 **Storage**: Synology NAS (iSCSI via CSI)
-**Networking**: Cilium (CNI), MetalLB, ExternalDNS
+**Networking**: Cilium (CNI + Gateway API)
 
 ## 🏗 Architecture
 
@@ -19,7 +19,7 @@ The repository follows a **dry (Don't Repeat Yourself)** structure using Kustomi
 - **`apps/production`**: Live environment. Applies production patches (full resources, public ingress, persistent storage).
 - **`infra/`**: Core system services (Cert Manager, Monitoring, CNI) that run cluster-wide.
 
-> Read more: [Overlays and Structure Strategy](docs/overlays-and-structure.md)
+> Read more: [Overlays and Structure Strategy](docs/architecture/overlays-and-structure.md)
 
 ## 🛠 Operations
 
@@ -27,11 +27,10 @@ The repository follows a **dry (Don't Repeat Yourself)** structure using Kustomi
 
 | Task | Guide |
 |------|-------|
-| **Submit a Change** | [Workflow & PRs](docs/making-changes.md) |
-| **Add a New App**   | [App Structure](docs/overlays-and-structure.md) |
-| **Manage Secrets**  | [Encryption (SOPS)](scripts/README.md) |
-| **Debug Deployment**| [Flux & Debugging](docs/flux-and-deployments.md) |
-| **Storage Cleanup** | [Synology Maintenance](docs/synology-iscsi-cleanup.md) |
+| **Submit a Change** | [Workflow & PRs](docs/guides/making-changes.md) |
+| **Add a New App**   | [App Structure](docs/architecture/overlays-and-structure.md) |
+| **Debug Deployment**| [Flux & Debugging](docs/guides/flux-and-deployments.md) |
+| **Storage Issues**  | [Synology iSCSI Ops](docs/guides/synology-iscsi-operations.md) |
 | **Update Apps List**| `scripts/update-apps-readme.sh` |
 
 ### Quick Commands

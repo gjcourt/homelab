@@ -1,0 +1,24 @@
+# Immich OIDC/OAuth configuration file
+# Immich v2.x requires config file or admin UI for OAuth settings;
+# the legacy OAUTH_* environment variables are no longer supported.
+#
+# The __CLIENT_SECRET_PLACEHOLDER__ is replaced at runtime by the init
+# container using the value from the immich-sso-secret Secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: immich-oauth-config
+  namespace: immich
+  labels:
+    app: immich
+data:
+  immich-config.yaml: |
+    oauth:
+      enabled: true
+      issuerUrl: "https://auth.burntbytes.com"
+      clientId: "immich"
+      clientSecret: "__CLIENT_SECRET_PLACEHOLDER__"
+      scope: "openid email profile"
+      buttonText: "Login with Authelia"
+      autoRegister: true
+      autoLaunch: false

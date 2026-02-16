@@ -1,4 +1,6 @@
 # Deployment patches for production - GPU acceleration and database connection
+# Immich v2.x requires IMMICH_CONFIG_FILE for OAuth settings. An init container
+# injects the client_secret from the immich-sso-secret into the config template.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,6 +9,42 @@ metadata:
 spec:
   template:
     spec:
+      initContainers:
+        - name: oauth-config
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - |
+              sed "s/__CLIENT_SECRET_PLACEHOLDER__/${CLIENT_SECRET}/g" \
+                /config-template/immich-config.yaml > /config/immich-config.yaml
+          env:
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: immich-sso-secret
+                  key: client_secret
+          volumeMounts:
+            - name: oauth-config-template
+              mountPath: /config-template
+              readOnly: true
+            - name: oauth-config
+              mountPath: /config
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "32Mi"
+              cpu: "50m"
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       containers:
         - name: immich-server
           env:
@@ -36,29 +74,17 @@ spec:
                 secretKeyRef:
                   name: immich-db-prod-cnpg-v2-app
                   key: password
-            # OIDC / SSO Configuration
-            - name: OAUTH_ENABLED
-              value: "true"
-            - name: OAUTH_ISSUER_URL
-              value: "https://auth.burntbytes.com"
-            - name: OAUTH_CLIENT_ID
-              value: "immich"
-            - name: OAUTH_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: immich-sso-secret
-                  key: client_secret
-            - name: OAUTH_SCOPE
-              value: "openid email profile"
-            - name: OAUTH_AUTO_REGISTER
-              value: "true"
-            - name: OAUTH_BUTTON_TEXT
-              value: "Login with Authelia"
+            # Immich v2.x config file for OAuth/OIDC settings
+            - name: IMMICH_CONFIG_FILE
+              value: "/etc/immich/immich-config.yaml"
           volumeMounts:
             - name: upload
               mountPath: /usr/src/app/upload
             - name: photos
               mountPath: /mnt/photos
+            - name: oauth-config
+              mountPath: /etc/immich
+              readOnly: true
           resources:
             requests:
               memory: "1Gi"
@@ -73,6 +99,11 @@ spec:
         - name: photos
           persistentVolumeClaim:
             claimName: immich-photos-pvc
+        - name: oauth-config-template
+          configMap:
+            name: immich-oauth-config
+        - name: oauth-config
+          emptyDir: {}
 ---
 # Machine Learning with GPU acceleration
 apiVersion: apps/v1

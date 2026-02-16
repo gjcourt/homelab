@@ -8,5 +8,15 @@ data:
     {
       "ffmpeg": {
         "accel": "vaapi"
+      },
+      "oauth": {
+        "enabled": true,
+        "issuerUrl": "https://auth.stage.burntbytes.com",
+        "clientId": "immich",
+        "clientSecret": "__CLIENT_SECRET_PLACEHOLDER__",
+        "scope": "openid email profile",
+        "buttonText": "Login with Authelia",
+        "autoRegister": true,
+        "autoLaunch": false
       }
     }

@@ -1,9 +1,19 @@
 name: Deploy to Staging
 
+# Rebuilds the staging branch by merging master + all passing PRs.
+# Triggers:
+#   - When PR checks complete (check_suite) — ensures we pick up newly-passing PRs
+#   - On PR events — catches new/updated PRs immediately
+#   - Every 5 minutes (cron) — safety net to catch anything missed
+#   - Manual dispatch — for ad-hoc rebuilds
 on:
+  check_suite:
+    types: [completed]
   pull_request:
     types: [opened, synchronize, reopened, closed]
     branches: [master]
+  schedule:
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 concurrency:
@@ -13,6 +23,10 @@ concurrency:
 jobs:
   sync-staging:
     runs-on: ubuntu-latest
+    # Only run on check_suite events for PRs targeting master
+    if: >-
+      github.event_name != 'check_suite' ||
+      github.event.check_suite.head_branch != github.event.repository.default_branch
     permissions:
       contents: write
       pull-requests: read
@@ -39,36 +53,59 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get list of open, mergeable PRs
-          PRS=$(gh pr list --state open --json number,mergeable --limit 50 --jq '.[] | select(.mergeable == "MERGEABLE") | .number')
+          MERGED=0
+          SKIPPED=0
+
+          # Get list of open, mergeable PRs targeting master
+          PRS=$(gh pr list --state open --base master --json number,mergeable --limit 50 \
+            --jq '.[] | select(.mergeable == "MERGEABLE") | .number')
+
+          if [ -z "$PRS" ]; then
+            echo "No mergeable PRs found."
+          fi
 
           for PR_NUM in $PRS; do
+            echo "::group::PR #$PR_NUM"
             echo "Checking PR #$PR_NUM..."
 
-            # Check if all checks passed
-            # We treat 'pending' as failure to merge (must wait for CI)
-            CHECKS_FAIL=$(gh pr checks $PR_NUM --json state,bucket --jq 'map(select(.bucket == "fail")) | length')
-            CHECKS_PENDING=$(gh pr checks $PR_NUM --json state,bucket --jq 'map(select(.bucket == "pending")) | length')
+            # Get check results, excluding this workflow's own check to avoid
+            # chicken-and-egg problem where staging-deploy is always "pending"
+            CHECKS_JSON=$(gh pr checks "$PR_NUM" --json name,state,bucket 2>/dev/null || echo "[]")
 
-            # If no checks found, caution? Or assume safe?
-            # Assuming we only want tested code: if Checks > 0 and Fail == 0 and Pending == 0
-            CHECKS_COUNT=$(gh pr checks $PR_NUM --json state --jq 'length')
+            # Filter out the staging-deploy check itself
+            FILTERED=$(echo "$CHECKS_JSON" | jq '[.[] | select(.name != "sync-staging")]')
 
-            if [ "$CHECKS_COUNT" -gt 0 ] && [ "$CHECKS_FAIL" -eq 0 ] && [ "$CHECKS_PENDING" -eq 0 ]; then
-              echo "PR #$PR_NUM passes CI. Attempting merge..."
+            CHECKS_COUNT=$(echo "$FILTERED" | jq 'length')
+            CHECKS_FAIL=$(echo "$FILTERED" | jq '[.[] | select(.bucket == "fail")] | length')
+            CHECKS_PENDING=$(echo "$FILTERED" | jq '[.[] | select(.bucket == "pending")] | length')
 
-              # Fetch and Merge
-              git fetch origin pull/$PR_NUM/head:pr-$PR_NUM
-              if git merge pr-$PR_NUM --no-edit -m "Merge PR #$PR_NUM to staging"; then
-                echo "Successfully merged PR #$PR_NUM"
+            echo "  Checks: total=$CHECKS_COUNT fail=$CHECKS_FAIL pending=$CHECKS_PENDING"
+
+            # Merge if: all checks passed (none failing/pending), OR no checks exist
+            # PRs with no checks are safe to preview in staging (they still need
+            # PR review before merging to master)
+            if [ "$CHECKS_FAIL" -eq 0 ] && [ "$CHECKS_PENDING" -eq 0 ]; then
+              echo "  PR #$PR_NUM is ready. Attempting merge into staging..."
+
+              git fetch origin "pull/$PR_NUM/head:pr-$PR_NUM"
+              if git merge "pr-$PR_NUM" --no-edit -m "Merge PR #$PR_NUM into staging"; then
+                echo "  Successfully merged PR #$PR_NUM"
+                MERGED=$((MERGED + 1))
               else
-                echo "Conflict merging PR #$PR_NUM. Aborting."
+                echo "  Conflict merging PR #$PR_NUM — skipping."
                 git merge --abort
+                SKIPPED=$((SKIPPED + 1))
               fi
             else
-              echo "PR #$PR_NUM not ready (Fail: $CHECKS_FAIL, Pending: $CHECKS_PENDING). Skipping."
+              echo "  PR #$PR_NUM not ready (fail=$CHECKS_FAIL, pending=$CHECKS_PENDING) — skipping."
+              SKIPPED=$((SKIPPED + 1))
             fi
+            echo "::endgroup::"
           done
+
+          echo "### Staging build summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Merged: $MERGED" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Skipped: $SKIPPED" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Push to Staging
         run: |

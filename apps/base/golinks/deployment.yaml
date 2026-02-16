@@ -23,7 +23,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: golinks
-          image: ghcr.io/gjcourt/golinks:sha-2b1d036
+          image: ghcr.io/gjcourt/golinks:2026-02-15
           ports:
             - containerPort: 8080
           env:

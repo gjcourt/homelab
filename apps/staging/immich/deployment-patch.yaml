@@ -1,4 +1,6 @@
 # Deployment patches for staging - GPU acceleration and database connection
+# Immich v2.x requires IMMICH_CONFIG_FILE for OAuth settings. An init container
+# injects the client_secret from the immich-sso-secret into the config template.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -12,6 +14,40 @@ spec:
         supplementalGroups:
           - 44 # video group
           - 109 # render group
+      initContainers:
+        - name: oauth-config
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - |
+              sed "s/__CLIENT_SECRET_PLACEHOLDER__/${CLIENT_SECRET}/g" \
+                /config-template/immich-config.json > /config/immich-config.json
+          env:
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: immich-sso-secret
+                  key: client_secret
+          volumeMounts:
+            - name: config-template
+              mountPath: /config-template
+              readOnly: true
+            - name: config-rendered
+              mountPath: /config
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "32Mi"
+              cpu: "50m"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
       containers:
         - name: immich-server
           securityContext:
@@ -22,8 +58,9 @@ spec:
               value: radeonsi
             - name: LIBVA_DRIVERS_PATH
               value: /usr/lib/jellyfin-ffmpeg/lib/dri
+            # Immich v2.x config file for OAuth/OIDC and ffmpeg settings
             - name: IMMICH_CONFIG_FILE
-              value: /usr/src/app/immich-config.json
+              value: /etc/immich/immich-config.json
             # Database connection - use CNPG service and credentials secret
             - name: DB_HOSTNAME
               value: immich-db-staging-cnpg-v1-rw.immich-stage.svc.cluster.local
@@ -38,24 +75,6 @@ spec:
                 secretKeyRef:
                   name: immich-db-credentials
                   key: password
-            # OIDC / SSO Configuration
-            - name: OAUTH_ENABLED
-              value: "true"
-            - name: OAUTH_ISSUER_URL
-              value: "https://auth.stage.burntbytes.com"
-            - name: OAUTH_CLIENT_ID
-              value: "immich"
-            - name: OAUTH_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: immich-sso-secret
-                  key: client_secret
-            - name: OAUTH_SCOPE
-              value: "openid email profile"
-            - name: OAUTH_AUTO_REGISTER
-              value: "true"
-            - name: OAUTH_BUTTON_TEXT
-              value: "Login with Authelia"
           resources:
             requests:
               memory: "2Gi"
@@ -70,9 +89,9 @@ spec:
               mountPath: /mnt/photos
             - name: dri
               mountPath: /dev/dri
-            - name: config-file
-              mountPath: /usr/src/app/immich-config.json
-              subPath: immich-config.json
+            - name: config-rendered
+              mountPath: /etc/immich
+              readOnly: true
       volumes:
         - name: upload
           persistentVolumeClaim:
@@ -84,9 +103,11 @@ spec:
           hostPath:
             path: /dev/dri
             type: Directory
-        - name: config-file
+        - name: config-template
           configMap:
             name: immich-config-file
+        - name: config-rendered
+          emptyDir: {}
 ---
 # Machine Learning with GPU acceleration
 apiVersion: apps/v1

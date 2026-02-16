@@ -80,17 +80,18 @@ patches:
                 id_token: 1h
                 refresh_token: 720h
               clients:
-                - id: immich
-                  description: Immich (Staging)
-                  secret: '{{ env "IMMICH_OIDC_CLIENT_SECRET" }}'
+                - client_id: immich
+                  client_name: Immich (Staging)
+                  client_secret: '{{ env "IMMICH_OIDC_CLIENT_SECRET" }}'
                   public: false
                   authorization_policy: two_factor
                   redirect_uris:
                     - https://photos.stage.burntbytes.com/auth/login
+                    - https://photos.stage.burntbytes.com/user-settings
                     - app.immich:///oauth-callback
                   scopes:
                     - openid
                     - profile
                     - email
-                  userinfo_signing_algorithm: none
+                  userinfo_signed_response_alg: none
 

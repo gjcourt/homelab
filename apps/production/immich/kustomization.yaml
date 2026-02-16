@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: immich-prod
 resources:
   - ../../base/immich/
+  - configmap-oauth.yaml
   - httproute.yaml
   - database.yaml
   - nfs-photos.yaml

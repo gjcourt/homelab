@@ -1,9 +1,14 @@
 name: Deploy to Staging
 
 on:
-  schedule:
-    - cron: '*/10 * * * *' # Run every 10 minutes
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches: [master]
   workflow_dispatch:
+
+concurrency:
+  group: staging-deploy
+  cancel-in-progress: true
 
 jobs:
   sync-staging:

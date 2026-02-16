@@ -16,35 +16,37 @@ spec:
     enablePodMonitor: true
   storage:
     size: 10Gi
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://gjcourt-homelab-backup/production/biometrics
-      s3Credentials:
-        accessKeyId:
-          name: biometrics-aws-creds-secret
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: biometrics-aws-creds-secret
-          key: ACCESS_SECRET_KEY
-      wal:
-        compression: gzip
-      data:
-        compression: gzip
-    retentionPolicy: "30d"
+  # TODO: Re-enable backup once real S3 credentials are configured
+  # backup:
+  #   barmanObjectStore:
+  #     destinationPath: s3://gjcourt-homelab-backup/production/biometrics
+  #     s3Credentials:
+  #       accessKeyId:
+  #         name: biometrics-aws-creds-secret
+  #         key: ACCESS_KEY_ID
+  #       secretAccessKey:
+  #         name: biometrics-aws-creds-secret
+  #         key: ACCESS_SECRET_KEY
+  #     wal:
+  #       compression: gzip
+  #     data:
+  #       compression: gzip
+  #   retentionPolicy: "30d"
   bootstrap:
     initdb:
       database: app
       owner: app
       secret:
         name: biometrics-db-credentials
-  externalClusters:
-    - name: biometrics-db-backup
-      barmanObjectStore:
-        destinationPath: s3://gjcourt-homelab-backup/production/biometrics
-        s3Credentials:
-          accessKeyId:
-            name: biometrics-aws-creds-secret
-            key: ACCESS_KEY_ID
-          secretAccessKey:
-            name: biometrics-aws-creds-secret
-            key: ACCESS_SECRET_KEY
+  # TODO: Re-enable externalClusters once real S3 credentials are configured
+  # externalClusters:
+  #   - name: biometrics-db-backup
+  #     barmanObjectStore:
+  #       destinationPath: s3://gjcourt-homelab-backup/production/biometrics
+  #       s3Credentials:
+  #         accessKeyId:
+  #           name: biometrics-aws-creds-secret
+  #           key: ACCESS_KEY_ID
+  #         secretAccessKey:
+  #           name: biometrics-aws-creds-secret
+  #           key: ACCESS_SECRET_KEY

@@ -16,36 +16,38 @@ spec:
     enablePodMonitor: true
   storage:
     size: 2Gi
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://gjcourt-homelab-backup/staging/golinks/v1
-      s3Credentials:
-        accessKeyId:
-          name: golinks-aws-creds-secret
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: golinks-aws-creds-secret
-          key: ACCESS_SECRET_KEY
-      wal:
-        compression: gzip
-      data:
-        compression: gzip
-      serverName: golinks-db-staging-cnpg-v1
-    retentionPolicy: 14d
+  # TODO: Re-enable backup once real S3 credentials are configured
+  # backup:
+  #   barmanObjectStore:
+  #     destinationPath: s3://gjcourt-homelab-backup/staging/golinks/v1
+  #     s3Credentials:
+  #       accessKeyId:
+  #         name: golinks-aws-creds-secret
+  #         key: ACCESS_KEY_ID
+  #       secretAccessKey:
+  #         name: golinks-aws-creds-secret
+  #         key: ACCESS_SECRET_KEY
+  #     wal:
+  #       compression: gzip
+  #     data:
+  #       compression: gzip
+  #     serverName: golinks-db-staging-cnpg-v1
+  #   retentionPolicy: 14d
   bootstrap:
     initdb:
       database: app
       owner: app
       secret:
         name: golinks-db-credentials
-  externalClusters:
-    - name: golinks-db-backup
-      barmanObjectStore:
-        destinationPath: s3://gjcourt-homelab-backup/staging/golinks/v1
-        s3Credentials:
-          accessKeyId:
-            name: golinks-aws-creds-secret
-            key: ACCESS_KEY_ID
-          secretAccessKey:
-            name: golinks-aws-creds-secret
-            key: ACCESS_SECRET_KEY
+  # TODO: Re-enable externalClusters once real S3 credentials are configured
+  # externalClusters:
+  #   - name: golinks-db-backup
+  #     barmanObjectStore:
+  #       destinationPath: s3://gjcourt-homelab-backup/staging/golinks/v1
+  #       s3Credentials:
+  #         accessKeyId:
+  #           name: golinks-aws-creds-secret
+  #           key: ACCESS_KEY_ID
+  #         secretAccessKey:
+  #           name: golinks-aws-creds-secret
+  #           key: ACCESS_SECRET_KEY

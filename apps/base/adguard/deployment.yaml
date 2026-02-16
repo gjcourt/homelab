@@ -39,8 +39,9 @@ spec:
             - containerPort: 3000
               name: setup
           readinessProbe:
-            tcpSocket:
-              port: http
+            httpGet:
+              port: setup
+              path: /
             initialDelaySeconds: 10
             periodSeconds: 5
           volumeMounts:

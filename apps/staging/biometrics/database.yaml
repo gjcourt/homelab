@@ -16,36 +16,38 @@ spec:
     enablePodMonitor: true
   storage:
     size: 2Gi
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://gjcourt-homelab-backup/staging/biometrics/v1
-      s3Credentials:
-        accessKeyId:
-          name: biometrics-aws-creds-secret
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: biometrics-aws-creds-secret
-          key: ACCESS_SECRET_KEY
-      wal:
-        compression: gzip
-      data:
-        compression: gzip
-      serverName: biometrics-db-staging-cnpg-v1
-    retentionPolicy: 14d
+  # TODO: Re-enable backup once real S3 credentials are configured
+  # backup:
+  #   barmanObjectStore:
+  #     destinationPath: s3://gjcourt-homelab-backup/staging/biometrics/v1
+  #     s3Credentials:
+  #       accessKeyId:
+  #         name: biometrics-aws-creds-secret
+  #         key: ACCESS_KEY_ID
+  #       secretAccessKey:
+  #         name: biometrics-aws-creds-secret
+  #         key: ACCESS_SECRET_KEY
+  #     wal:
+  #       compression: gzip
+  #     data:
+  #       compression: gzip
+  #     serverName: biometrics-db-staging-cnpg-v1
+  #   retentionPolicy: 14d
   bootstrap:
     initdb:
       database: app
       owner: app
       secret:
         name: biometrics-db-credentials
-  externalClusters:
-    - name: biometrics-db-backup
-      barmanObjectStore:
-        destinationPath: s3://gjcourt-homelab-backup/staging/biometrics/v1
-        s3Credentials:
-          accessKeyId:
-            name: biometrics-aws-creds-secret
-            key: ACCESS_KEY_ID
-          secretAccessKey:
-            name: biometrics-aws-creds-secret
-            key: ACCESS_SECRET_KEY
+  # TODO: Re-enable externalClusters once real S3 credentials are configured
+  # externalClusters:
+  #   - name: biometrics-db-backup
+  #     barmanObjectStore:
+  #       destinationPath: s3://gjcourt-homelab-backup/staging/biometrics/v1
+  #       s3Credentials:
+  #         accessKeyId:
+  #           name: biometrics-aws-creds-secret
+  #           key: ACCESS_KEY_ID
+  #         secretAccessKey:
+  #           name: biometrics-aws-creds-secret
+  #           key: ACCESS_SECRET_KEY

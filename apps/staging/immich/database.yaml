@@ -27,11 +27,11 @@ spec:
 
   resources:
     requests:
-      memory: "2Gi"
-      cpu: "1000m"
+      memory: "512Mi"
+      cpu: "250m"
     limits:
-      memory: "8Gi"
-      cpu: "4000m"
+      memory: "4Gi"
+      cpu: "2000m"
 
   postgresql:
     shared_preload_libraries:

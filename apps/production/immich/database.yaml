@@ -1,11 +1,13 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: immich-db-prod-cnpg-v1
+  name: immich-db-prod-cnpg-v2
   namespace: immich-prod
 spec:
   description: Postgres cluster for Immich with pgvecto.rs for ML search
-  imageName: ghcr.io/tensorchord/cloudnative-pgvecto.rs:17-v0.4.0
+  # Use pgvecto.rs 0.3.0 image (compatible with Immich's requirement >=0.2 <0.4)
+  # Note: pg17 not available with v0.3.0, using pg16 instead
+  imageName: ghcr.io/tensorchord/cloudnative-pgvecto.rs:16-v0.3.0
 
   instances: 3
 
@@ -43,7 +45,7 @@ spec:
         compression: gzip
       data:
         compression: gzip
-      serverName: immich-db-prod-cnpg-v1
+      serverName: immich-db-prod-cnpg-v2
     retentionPolicy: 30d
 
   bootstrap:

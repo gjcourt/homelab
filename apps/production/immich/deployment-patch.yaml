@@ -14,27 +14,27 @@ spec:
             - name: DB_HOSTNAME
               valueFrom:
                 secretKeyRef:
-                  name: immich-db-prod-cnpg-v1-app
+                  name: immich-db-prod-cnpg-v2-app
                   key: host
             - name: DB_PORT
               valueFrom:
                 secretKeyRef:
-                  name: immich-db-prod-cnpg-v1-app
+                  name: immich-db-prod-cnpg-v2-app
                   key: port
             - name: DB_DATABASE_NAME
               valueFrom:
                 secretKeyRef:
-                  name: immich-db-prod-cnpg-v1-app
+                  name: immich-db-prod-cnpg-v2-app
                   key: dbname
             - name: DB_USERNAME
               valueFrom:
                 secretKeyRef:
-                  name: immich-db-prod-cnpg-v1-app
+                  name: immich-db-prod-cnpg-v2-app
                   key: user
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: immich-db-prod-cnpg-v1-app
+                  name: immich-db-prod-cnpg-v2-app
                   key: password
             # OIDC / SSO Configuration
             - name: OAUTH_ENABLED

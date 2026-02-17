@@ -21,6 +21,7 @@ Operational how-to guides for day-to-day work.
 
 - [Making changes](guides/making-changes.md) — workflow, secrets, rollback
 - [Flux and deployments](guides/flux-and-deployments.md) — how Flux applies changes, reconcile and debug commands
+- [Staging workflow](guides/staging-workflow.md) — how PRs auto-deploy to staging via CI and Flux
 - [Synology iSCSI operations](guides/synology-iscsi-operations.md) — common storage scenarios and runbook
 - [Synology iSCSI cleanup](guides/synology-iscsi-cleanup.md) — orphan LUN/target concepts and cleanup process
 

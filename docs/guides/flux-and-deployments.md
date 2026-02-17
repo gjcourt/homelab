@@ -10,7 +10,7 @@ The cluster `melodic-muse` runs both staging and production from a single set of
 - `clusters/melodic-muse/apps-production.yaml` (applies `./apps/production`)
 - `clusters/melodic-muse/infra.yaml` (applies `./infra/controllers` + `./infra/configs`)
 
-All of these reference the `GitRepository` named `flux-system` and use SOPS decryption via the `sops-agekey` secret.
+Production (`apps-production`, `infra`) references the `GitRepository` named `flux-system` which tracks the `master` branch. Staging (`apps-staging`) references `flux-system-staging` which tracks the `staging` branch (see [Staging workflow](staging-workflow.md) for details). All Kustomizations use SOPS decryption via the `sops-agekey` secret.
 
 ## What gets applied (high level)
 
@@ -22,10 +22,8 @@ All of these reference the `GitRepository` named `flux-system` and use SOPS decr
 
 Staging:
 
-- `flux reconcile source git flux-system`
-- `flux reconcile kustomization infra-controllers -n flux-system`
-- `flux reconcile kustomization infra-configs -n flux-system`
-- `flux reconcile kustomization apps -n flux-system`
+- `flux reconcile source git flux-system-staging`
+- `flux reconcile kustomization apps-staging -n flux-system`
 
 Production:
 

@@ -82,7 +82,7 @@ patches:
               clients:
                 - client_id: immich
                   client_name: Immich (Staging)
-                  client_secret: '{{ env "IMMICH_OIDC_CLIENT_SECRET" }}'
+                  client_secret: '$pbkdf2-sha512$310000$Pme279V/67W4F2HqrBGnRA$PcP3u0qImnLqMPrYHlqedL6Y/MwNcjXMKDhYuqA9mf44wGeWoHuQAo6uvgNGmj1nPgTBIVyQUsmL0w0qojB1KA'
                   public: false
                   authorization_policy: two_factor
                   redirect_uris:

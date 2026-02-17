@@ -31,6 +31,8 @@ spec:
             - secretRef:
                 name: authelia-secrets
           volumeMounts:
+            - name: app-tmp
+              mountPath: /app
             - name: config
               mountPath: /config/configuration.yml
               subPath: configuration.yml
@@ -65,6 +67,8 @@ spec:
               cpu: 500m
               memory: 512Mi
       volumes:
+        - name: app-tmp
+          emptyDir: {}
         - name: config
           configMap:
             name: authelia-config

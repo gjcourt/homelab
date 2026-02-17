@@ -2,18 +2,18 @@ name: Deploy to Staging
 
 # Rebuilds the staging branch by merging master + all passing PRs.
 # Triggers:
-#   - When PR checks complete (check_suite) — ensures we pick up newly-passing PRs
-#   - On PR events — catches new/updated PRs immediately
-#   - Every 5 minutes (cron) — safety net to catch anything missed
+#   - When PR checks complete (check_suite) — pick up newly-passing PRs
+#   - On PR events — catches new/updated/closed PRs immediately
 #   - Manual dispatch — for ad-hoc rebuilds
+#
+# No cron: the event triggers above cover all state changes that matter.
+# A diff guard before push avoids no-op force-pushes.
 on:
   check_suite:
     types: [completed]
   pull_request:
     types: [opened, synchronize, reopened, closed]
     branches: [master]
-  schedule:
-    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 concurrency:
@@ -109,5 +109,17 @@ jobs:
 
       - name: Push to Staging
         run: |
-          # Force push the new staging state
+          # Compare the staging candidate to the current staging branch.
+          # Skip the push if the tree is identical (no-op rebuild).
+          CURRENT_TREE=$(git rev-parse origin/staging^{tree} 2>/dev/null || echo "none")
+          CANDIDATE_TREE=$(git rev-parse HEAD^{tree})
+
+          if [ "$CURRENT_TREE" = "$CANDIDATE_TREE" ]; then
+            echo "Staging is already up to date — skipping push."
+            echo "### Staging build summary" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **No changes** — staging branch already matches candidate." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          echo "Staging has changes — pushing."
           git push origin staging --force

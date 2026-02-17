@@ -32,10 +32,13 @@ The rebuild is handled by `.github/workflows/staging-deploy.yaml`:
 |---|---|
 | `check_suite` completed | Pick up newly-passing PRs |
 | `pull_request` opened/updated/closed | React to PR changes immediately |
-| Every 5 minutes (cron) | Safety net for missed events |
 | `workflow_dispatch` | Manual rebuild |
 
+There is no cron — the event triggers cover all state changes that matter (CI completion, PR updates, PR close/merge). Use `workflow_dispatch` for ad-hoc rebuilds.
+
 The workflow uses `concurrency: staging-deploy` to prevent parallel runs from racing.
+
+**Diff guard**: Before force-pushing, the workflow compares the candidate tree to the current `staging` branch tree using `git rev-parse HEAD^{tree}`. If they match, the push is skipped entirely. This avoids unnecessary Flux reconciliations and PR notification noise.
 
 **Conflict handling**: If a PR conflicts with another during the merge, it is skipped (not failed). The workflow logs which PRs were merged and which were skipped in the GitHub Actions summary.
 
@@ -88,8 +91,6 @@ Trigger the workflow manually:
 ```bash
 gh workflow run staging-deploy.yaml
 ```
-
-Or wait up to 5 minutes for the cron trigger.
 
 ### Check Flux reconciliation
 

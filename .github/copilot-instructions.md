@@ -41,7 +41,7 @@ These are repo-wide rules for Copilot contributions in this GitOps/Kustomize hom
 - **Branch naming**: Use a descriptive slug (kebab-case).
     - Good: `add-golinks`, `fix-memos-signup`, `update-cilium`.
     - Acceptable prefixes: `staging/` or `production/` (e.g. `staging/update-image`).
-- **Staging branch**: The `staging` branch is **automatically rebuilt** by CI (`.github/workflows/staging-deploy.yaml`). It starts from `master` and merges every open PR whose CI checks pass (no failures, no pending). The Flux `apps-staging` Kustomization tracks the `flux-system-staging` GitRepository which points at the `staging` branch. This means **every CI-passing PR is automatically deployed to the staging environment** without manual intervention. Do not manually push to the `staging` branch; CI force-pushes it on every rebuild.
+- **Staging branch**: The `staging` branch is **automatically rebuilt** by CI (`.github/workflows/staging-deploy.yaml`). It starts from `master` and merges every open PR whose CI checks pass (no failures, no pending). Rebuilds are event-driven (`check_suite`, `pull_request` events) with no cron; a diff guard skips the push when nothing changed. The Flux `apps-staging` Kustomization tracks the `flux-system-staging` GitRepository which points at the `staging` branch. This means **every CI-passing PR is automatically deployed to the staging environment** without manual intervention. Do not manually push to the `staging` branch; CI force-pushes it on every rebuild.
 - **Production branch**: The `master` branch is the production branch. Merging a PR to `master` deploys to production via the `flux-system` GitRepository.
 - **Commits**:
     - Commit in logical, incremental chunks.

@@ -34,11 +34,11 @@ spec:
                 name: audiobookshelf-container-env
           resources:
             requests:
-              cpu: 5m
-              memory: 96Mi
+              cpu: 10m
+              memory: 128Mi
             limits:
-              cpu: 200m
-              memory: 192Mi
+              cpu: 500m
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

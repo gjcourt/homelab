@@ -25,11 +25,11 @@ spec:
             - containerPort: 9000
           resources:
             requests:
-              cpu: 5m
-              memory: 256Mi
-            limits:
-              cpu: 500m
+              cpu: 10m
               memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
           volumeMounts:
             - name: mealie-data
               mountPath: /app/data

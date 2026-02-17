@@ -17,9 +17,12 @@ spec:
     spec:
       # App runs as www-data user, limits the scope of pods to the same user.
       securityContext:
+        runAsNonRoot: true
         runAsUser: 33 # www-data user ID
         runAsGroup: 33 # www-data group ID
         fsGroup: 33 # www-data group ID
+        seccompProfile:
+          type: RuntimeDefault
 
       containers:
         - name: linkding
@@ -46,8 +49,18 @@ spec:
             - name: linkding-data
               mountPath: /etc/linkding/data
 
+          resources:
+            requests:
+              cpu: 10m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
 
       # TODO upgrade this to a postgres backed DB instead of a PV
       volumes:

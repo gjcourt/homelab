@@ -5,6 +5,7 @@ resources:
   - ../../base/mealie/
   - configmap-oidc.yaml
   - httproute.yaml
+  - secret-oidc.yaml
 
 labels:
   - pairs:

@@ -8,7 +8,8 @@ metadata:
     env: staging
 data:
   # OpenID Connect (OIDC) - Authelia integration
-  # Mealie uses PKCE with a public client (no client_secret needed)
+  # Mealie requires OIDC_CLIENT_SECRET even with PKCE; using confidential client.
+  # The secret value is stored in secret-oidc.yaml (SOPS-encrypted).
   OIDC_AUTH_ENABLED: "true"
   OIDC_SIGNUP_ENABLED: "true"
   OIDC_CONFIGURATION_URL: "https://auth.stage.burntbytes.com/.well-known/openid-configuration"

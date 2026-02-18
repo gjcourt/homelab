@@ -116,8 +116,10 @@ patches:
                   userinfo_signed_response_alg: none
                 - client_id: mealie
                   client_name: Mealie (Staging)
-                  public: true
+                  client_secret: '$pbkdf2-sha512$310000$qQeJX8+exIvIkk1PHrGpng$5+1hWhldxg8bq+0SjS0JRQirELRVw8qoMjgacKpU09B1yll3ghocoY2Tw0bsZx9vegj4A1y6CinDk+4A5CZRhg'
+                  public: false
                   authorization_policy: two_factor
+                  token_endpoint_auth_method: client_secret_post
                   redirect_uris:
                     - https://mealie.stage.burntbytes.com/login
                     - https://mealie.stage.burntbytes.com/login?direct=1

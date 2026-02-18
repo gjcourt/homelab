@@ -131,7 +131,7 @@ patches:
                   userinfo_signed_response_alg: none
                 - client_id: memos
                   client_name: Memos (Staging)
-                  client_secret: '$pbkdf2-sha512$310000$sKaAMDkeuQHcPK0uCKpjVg$qBpVGxICTPPKttsvb2tp76J9xB8RR.7L9bXJO.H/BmpxWA/XY9V4V3o0WnazxJnUgKZapKptt6IPCH.hP4U.Bw'
+                  client_secret: '$pbkdf2-sha512$310000$WuahPAJrwnNIZ1GGc8VWTQ$I1uUDetS4bzmpuHQKKitvr88UT2leSWrSxm2RmJZomI0z3jztYp7zfBZ1gygvUWe2t/ayWQ85vhZGR9NlCFrkQ'
                   public: false
                   authorization_policy: two_factor
                   token_endpoint_auth_method: client_secret_post

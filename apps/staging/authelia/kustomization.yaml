@@ -116,7 +116,7 @@ patches:
                   userinfo_signed_response_alg: none
                 - client_id: mealie
                   client_name: Mealie (Staging)
-                  client_secret: '$pbkdf2-sha512$310000$qQeJX8+exIvIkk1PHrGpng$5+1hWhldxg8bq+0SjS0JRQirELRVw8qoMjgacKpU09B1yll3ghocoY2Tw0bsZx9vegj4A1y6CinDk+4A5CZRhg'
+                  client_secret: '$pbkdf2-sha512$310000$Dnlukmo3wBBT88TeEsF54w$qQDHz3DSBrv/CcQwNS5G/rGXT9o1LmFM9RUMpIoUCs6Z8me/lpHUlBcSQyIfV.5cC.1i4yjgK0wYsaXWolUftw'
                   public: false
                   authorization_policy: two_factor
                   token_endpoint_auth_method: client_secret_post
@@ -131,7 +131,7 @@ patches:
                   userinfo_signed_response_alg: none
                 - client_id: memos
                   client_name: Memos (Staging)
-                  client_secret: '$pbkdf2-sha512$310000$HZQ1BIdTsa4+WdOlJ1jGNg$IDMOqPptecD6sukIb1FtMu5o3hR+8LtvOzIqKOKMs+ehGR9kTRzfXWH1Tdscs64hJCCk6gAWAkUSJwqsns+1yQ'
+                  client_secret: '$pbkdf2-sha512$310000$sKaAMDkeuQHcPK0uCKpjVg$qBpVGxICTPPKttsvb2tp76J9xB8RR.7L9bXJO.H/BmpxWA/XY9V4V3o0WnazxJnUgKZapKptt6IPCH.hP4U.Bw'
                   public: false
                   authorization_policy: two_factor
                   token_endpoint_auth_method: client_secret_post

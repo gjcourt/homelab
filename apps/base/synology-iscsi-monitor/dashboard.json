@@ -128,7 +128,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
-          "expr": "sum(synology_iscsi_lun_size_bytes)",
+          "expr": "sum(synology_iscsi_lun_size_bytes{environment=~\"$environment\", app=~\"$app\"})",
           "legendFormat": "Total",
           "range": true,
           "refId": "A"
@@ -162,7 +162,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
-          "expr": "sum by (environment) (synology_iscsi_lun_size_bytes)",
+          "expr": "sum by (environment) (synology_iscsi_lun_size_bytes{environment=~\"$environment\", app=~\"$app\"})",
           "legendFormat": "{{ environment }}",
           "range": true,
           "refId": "A"
@@ -196,7 +196,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
-          "expr": "sort_desc(sum by (app) (synology_iscsi_lun_size_bytes))",
+          "expr": "sort_desc(sum by (app) (synology_iscsi_lun_size_bytes{environment=~\"$environment\", app=~\"$app\"}))",
           "legendFormat": "{{ app }}",
           "range": true,
           "refId": "A"
@@ -224,7 +224,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 4, "w": 12, "x": 0, "y": 6 },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 6 },
       "id": 6,
       "options": {
         "displayMode": "gradient",
@@ -240,13 +240,57 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
-          "expr": "sort_desc(sum by (app) (synology_iscsi_lun_size_bytes))",
+          "expr": "sort_desc(sum by (app) (synology_iscsi_lun_size_bytes{environment=~\"$environment\", app=~\"$app\"}))",
           "legendFormat": "{{ app }}",
           "range": true,
           "refId": "A"
         }
       ],
       "title": "Storage per App",
+      "type": "bargauge"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "production": { "color": "red", "index": 0, "text": "production" } }, "type": "value" },
+            { "options": { "staging": { "color": "blue", "index": 1, "text": "staging" } }, "type": "value" },
+            { "options": { "infra": { "color": "purple", "index": 2, "text": "infra" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 6 },
+      "id": 13,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sort_desc(count by (environment) (synology_iscsi_lun_size_bytes{environment=~\"$environment\", app=~\"$app\"}))",
+          "legendFormat": "{{ environment }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "LUN Count by Environment",
       "type": "bargauge"
     },
     {
@@ -339,7 +383,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
-          "expr": "synology_iscsi_lun_size_bytes",
+          "expr": "synology_iscsi_lun_size_bytes{environment=~\"$environment\", app=~\"$app\"}",
           "format": "table",
           "instant": true,
           "legendFormat": "__auto",
@@ -407,7 +451,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 24 },
       "id": 8,
       "options": {
         "legend": { "calcs": [], "displayMode": "list", "placement": "bottom", "showLegend": true },
@@ -469,7 +513,61 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 24 },
+      "id": 14,
+      "options": {
+        "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "editorMode": "code",
+          "expr": "sum by (environment) (synology_iscsi_lun_size_bytes{environment=~\"$environment\", app=~\"$app\"})",
+          "legendFormat": "{{ environment }}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Storage by Environment (History)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 30,
+            "gradientMode": "opacity",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "normal" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 24 },
       "id": 9,
       "options": {
         "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -479,7 +577,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "editorMode": "code",
-          "expr": "sum by (app) (synology_iscsi_lun_size_bytes)",
+          "expr": "sum by (app) (synology_iscsi_lun_size_bytes{environment=~\"$environment\", app=~\"$app\"})",
           "legendFormat": "{{ app }}",
           "range": true,
           "refId": "A"
@@ -539,6 +637,6 @@
   "timezone": "",
   "title": "Synology iSCSI Monitor",
   "uid": "synology-iscsi",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }

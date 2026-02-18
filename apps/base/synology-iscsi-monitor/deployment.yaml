@@ -27,12 +27,16 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              pip install paramiko prometheus_client && python /app/exporter.py
+              pip install --user paramiko prometheus_client && python /app/exporter.py
           env:
+            - name: HOME
+              value: "/tmp"
+            - name: PYTHONUNBUFFERED
+              value: "1"
             - name: SYNOLOGY_IP
               value: "192.168.5.8"
             - name: SYNOLOGY_USER
-              value: "admin"
+              value: "melodic-muse-app"
             - name: SYNOLOGY_PASSWORD
               valueFrom:
                 secretKeyRef:

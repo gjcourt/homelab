@@ -1,0 +1,23 @@
+# Deployment patches for staging - OIDC and DNS
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mealie
+  namespace: mealie
+spec:
+  template:
+    spec:
+      # Authelia OIDC issuerUrl must resolve from within the pod.
+      # AdGuard DNS rewrites are not visible to CoreDNS, so we add
+      # a hostAlias pointing at the staging gateway.
+      hostAliases:
+        - ip: "192.168.5.30"
+          hostnames:
+            - auth.stage.burntbytes.com
+      containers:
+        - name: mealie
+          envFrom:
+            - configMapRef:
+                name: mealie-oidc-config
+            - secretRef:
+                name: mealie-oidc-secret

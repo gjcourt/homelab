@@ -1,0 +1,93 @@
+theme: dark
+
+server:
+  address: tcp://0.0.0.0:9091
+
+log:
+  level: info
+
+authentication_backend:
+  file:
+    path: /config/users.yml
+    watch: true
+
+access_control:
+  default_policy: deny
+  rules:
+    - domain: "auth.stage.burntbytes.com"
+      policy: bypass
+      resources:
+        - "^/api/oidc/.*$"
+    - domain: "auth.stage.burntbytes.com"
+      policy: one_factor
+
+session:
+  name: authelia_session
+  domain: stage.burntbytes.com
+  same_site: lax
+  expiration: 1h
+  inactivity: 15m
+  remember_me: 30d
+
+storage:
+  local:
+    path: /config/db.sqlite3
+
+notifier:
+  filesystem:
+    filename: /config/notification.txt
+
+identity_providers:
+  oidc:
+    jwks:
+      - key: |
+          {{ env "OIDC_JWKS_KEY" | nindent 14 }}
+        algorithm: RS256
+    lifespans:
+      access_token: 1h
+      id_token: 1h
+      refresh_token: 720h
+    clients:
+      - client_id: immich
+        client_name: Immich (Staging)
+        client_secret: '$pbkdf2-sha512$310000$Pme279V/67W4F2HqrBGnRA$PcP3u0qImnLqMPrYHlqedL6Y/MwNcjXMKDhYuqA9mf44wGeWoHuQAo6uvgNGmj1nPgTBIVyQUsmL0w0qojB1KA'
+        public: false
+        authorization_policy: two_factor
+        token_endpoint_auth_method: client_secret_post
+        redirect_uris:
+          - https://photos.stage.burntbytes.com/auth/login
+          - https://photos.stage.burntbytes.com/user-settings
+          - app.immich:///oauth-callback
+        scopes:
+          - email
+          - openid
+          - profile
+        userinfo_signed_response_alg: none
+      - client_id: mealie
+        client_name: Mealie (Staging)
+        client_secret: '$pbkdf2-sha512$310000$Dnlukmo3wBBT88TeEsF54w$qQDHz3DSBrv/CcQwNS5G/rGXT9o1LmFM9RUMpIoUCs6Z8me/lpHUlBcSQyIfV.5cC.1i4yjgK0wYsaXWolUftw'
+        public: false
+        authorization_policy: two_factor
+        token_endpoint_auth_method: client_secret_post
+        redirect_uris:
+          - https://mealie.stage.burntbytes.com/login
+          - https://mealie.stage.burntbytes.com/login?direct=1
+        scopes:
+          - email
+          - groups
+          - openid
+          - profile
+        userinfo_signed_response_alg: none
+      - client_id: memos
+        client_name: Memos (Staging)
+        client_secret: '$pbkdf2-sha512$310000$WuahPAJrwnNIZ1GGc8VWTQ$I1uUDetS4bzmpuHQKKitvr88UT2leSWrSxm2RmJZomI0z3jztYp7zfBZ1gygvUWe2t/ayWQ85vhZGR9NlCFrkQ'
+        public: false
+        authorization_policy: two_factor
+        token_endpoint_auth_method: client_secret_post
+        redirect_uris:
+          - https://memos.stage.burntbytes.com/auth/callback
+        scopes:
+          - email
+          - openid
+          - profile
+        userinfo_signed_response_alg: none

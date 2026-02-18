@@ -6,6 +6,13 @@ metadata:
 spec:
   template:
     spec:
+      # Authelia OIDC issuerUrl must resolve from within the pod.
+      # AdGuard DNS rewrites are not visible to CoreDNS, so we add
+      # a hostAlias pointing at the staging gateway.
+      hostAliases:
+        - ip: "192.168.5.30"
+          hostnames:
+            - auth.stage.burntbytes.com
       initContainers:
         # Construct DSN from environment variables including CNPG password
         - name: init-dsn

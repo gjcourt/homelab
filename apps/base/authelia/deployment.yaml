@@ -76,7 +76,10 @@ spec:
             capabilities:
               drop:
                 - ALL
-            readOnlyRootFilesystem: true
+            # Authelia writes /app/.healthcheck.env at startup in the same
+            # directory as its binaries. An emptyDir at /app would shadow the
+            # binaries, so we must allow writes to the root filesystem.
+            readOnlyRootFilesystem: false
       volumes:
         - name: config
           configMap:

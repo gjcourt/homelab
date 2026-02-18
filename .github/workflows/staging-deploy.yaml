@@ -2,15 +2,18 @@ name: Deploy to Staging
 
 # Rebuilds the staging branch by merging master + all passing PRs.
 # Triggers:
-#   - When PR checks complete (check_suite) — ensures we pick up newly-passing PRs
-#   - On PR events — catches new/updated PRs immediately
-#   - Every 5 minutes (cron) — safety net to catch anything missed
-#   - Manual dispatch — for ad-hoc rebuilds
+#   - workflow_run — fires AFTER Lint / Flux-test finish, avoiding the
+#     race where staging-deploy ran before CI completed and skipped the PR.
+#   - pull_request:closed — immediately rebuild when a PR is merged/closed
+#     (no pending-check race since we are removing, not adding).
+#   - Every 5 minutes (cron) — safety net to catch anything missed.
+#   - Manual dispatch — for ad-hoc rebuilds.
 on:
-  check_suite:
+  workflow_run:
+    workflows: ["Lint", "Test Flux Reconciliation"]
     types: [completed]
   pull_request:
-    types: [opened, synchronize, reopened, closed]
+    types: [closed]
     branches: [master]
   schedule:
     - cron: "*/5 * * * *"
@@ -23,10 +26,11 @@ concurrency:
 jobs:
   sync-staging:
     runs-on: ubuntu-latest
-    # Only run on check_suite events for PRs targeting master
+    # For workflow_run events, only rebuild staging when the completed
+    # workflow was triggered by a pull_request (skip master-push CI runs).
     if: >-
-      github.event_name != 'check_suite' ||
-      github.event.check_suite.head_branch != github.event.repository.default_branch
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.event == 'pull_request'
     permissions:
       contents: write
       pull-requests: read

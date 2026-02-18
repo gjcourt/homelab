@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: mealie-stage
 resources:
   - ../../base/mealie/
+  - configmap-oidc.yaml
   - httproute.yaml
 
 labels:
@@ -12,6 +13,7 @@ labels:
     includeSelectors: false
 
 patches:
+  - path: deployment-patch.yaml
   - target:
       kind: Namespace
       name: mealie

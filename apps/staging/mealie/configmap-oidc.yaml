@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mealie-oidc-config
+  namespace: mealie-stage
+  labels:
+    app: mealie
+    env: staging
+data:
+  # OpenID Connect (OIDC) - Authelia integration
+  # Mealie uses PKCE with a public client (no client_secret needed)
+  OIDC_AUTH_ENABLED: "true"
+  OIDC_SIGNUP_ENABLED: "true"
+  OIDC_CONFIGURATION_URL: "https://auth.stage.burntbytes.com/.well-known/openid-configuration"
+  OIDC_CLIENT_ID: "mealie"
+  OIDC_AUTO_REDIRECT: "false"
+  OIDC_PROVIDER_NAME: "Authelia"
+  OIDC_REMEMBER_ME: "true"
+  OIDC_SIGNING_ALGORITHM: "RS256"
+  OIDC_USER_CLAIM: "email"

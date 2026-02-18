@@ -17,7 +17,7 @@ configMapGenerator:
     namespace: authelia
     behavior: replace
     files:
-      - configuration.yml
+      - configuration.yaml
 patches:
   - target:
       kind: Deployment

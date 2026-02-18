@@ -28,7 +28,7 @@ spec:
           image: authelia/authelia:4.39.15
           args:
             - --config
-            - /config/configuration.yml
+            - /config/configuration.yaml
             - --config.experimental.filters
             - template
           ports:
@@ -39,8 +39,8 @@ spec:
                 name: authelia-secrets
           volumeMounts:
             - name: config
-              mountPath: /config/configuration.yml
-              subPath: configuration.yml
+              mountPath: /config/configuration.yaml
+              subPath: configuration.yaml
               readOnly: true
             - name: users
               mountPath: /config/users.yml

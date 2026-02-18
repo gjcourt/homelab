@@ -45,5 +45,6 @@ Postmortems for past outages.
 Active plans and TODOs.
 
 - [Authelia SSO rollout](plans/authelia-sso-rollout.md)
+- [Authelia SMTP notifier](plans/authelia-smtp-notifier.md)
 - [AdGuard HA](plans/adguard-ha.md)
 - [Synology iSCSI monitor setup](plans/setup-synology-iscsi-monitor.md)

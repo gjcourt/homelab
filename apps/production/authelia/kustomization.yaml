@@ -14,6 +14,25 @@ labels:
     includeSelectors: false
 patches:
   - target:
+      kind: Deployment
+      name: authelia
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: authelia
+      spec:
+        template:
+          spec:
+            containers:
+              - name: authelia
+                securityContext:
+                  readOnlyRootFilesystem: false
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+  - target:
       kind: Namespace
       name: authelia
     patch: |-
@@ -82,9 +101,10 @@ patches:
               clients:
                 - client_id: immich
                   client_name: Immich
-                  client_secret: '{{ env "IMMICH_OIDC_CLIENT_SECRET" }}'
+                  client_secret: '$pbkdf2-sha512$310000$gLTQr4wXrVsILURMfIYP.w$31SWWVagnN5T8vomT8saWHSfGpuXRgqy.PGU0e9Fr/kREgGaUrKUivliJJ/P8UCkzcgWoRU.0WKhQBdXmLY.zQ'
                   public: false
                   authorization_policy: two_factor
+                  token_endpoint_auth_method: client_secret_post
                   redirect_uris:
                     - https://photos.burntbytes.com/auth/login
                     - https://photos.burntbytes.com/user-settings

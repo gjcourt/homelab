@@ -66,3 +66,26 @@ and re-encrypt any client secrets you store in Kubernetes Secrets.
 ## Future: forward-auth
 
 For apps that do **not** support OIDC, Authelia can also be used as a reverse-proxy “forward auth” provider. If you want that next, we can add Gateway API auth filters / middleware patterns per app.
+## Notifications (2FA codes, password resets)
+
+Authelia uses a **notifier** to send verification codes needed for TOTP enrollment, password resets, and other identity verification flows.
+
+### Current: filesystem notifier (development mode)
+
+Both staging and production use `notifier.filesystem`, which writes "emails" to a file inside the pod instead of sending real emails. This is a development convenience — **no actual email is sent**.
+
+To retrieve a one-time code:
+
+```bash
+# Staging
+kubectl exec -n authelia-stage deploy/authelia -- cat /config/notification.txt
+
+# Production
+kubectl exec -n authelia-prod deploy/authelia -- cat /config/notification.txt
+```
+
+The file contains the most recent notification only. Trigger the action in the browser, then run the command above to get the code.
+
+### Future: SMTP notifier
+
+To enable real email delivery, replace the `notifier.filesystem` block in the configuration with `notifier.smtp`. See [SMTP setup plan](../plans/authelia-smtp-notifier.md) for details.

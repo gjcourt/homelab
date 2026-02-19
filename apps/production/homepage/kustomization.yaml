@@ -21,3 +21,10 @@ patches:
       - op: replace
         path: /metadata/name
         value: homepage-prod
+
+configMapGenerator:
+  - name: homepage
+    namespace: homepage
+    behavior: merge
+    files:
+      - services.yaml

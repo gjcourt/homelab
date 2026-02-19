@@ -1,0 +1,110 @@
+- Media:
+    - Jellyfin:
+        icon: jellyfin.png
+        href: https://jellyfin.burntbytes.com
+        description: Media streaming server
+    - Immich:
+        icon: immich.png
+        href: https://photos.burntbytes.com
+        description: Photo and video management
+    - Audiobookshelf:
+        icon: audiobookshelf.png
+        href: https://audiobooks.burntbytes.com
+        description: Audiobook and podcast server
+    - Navidrome:
+        icon: navidrome.png
+        href: https://music.burntbytes.com
+        description: Music server and streamer
+
+- Tools:
+    - Memos:
+        icon: memos.png
+        href: https://memos.burntbytes.com
+        description: Lightweight note-taking service
+    - Linkding:
+        icon: linkding.png
+        href: https://links.burntbytes.com
+        description: Bookmark manager
+    - Mealie:
+        icon: mealie.png
+        href: https://mealie.burntbytes.com
+        description: Recipe management
+    - Excalidraw:
+        icon: excalidraw.png
+        href: https://excalidraw.burntbytes.com
+        description: Virtual whiteboard for sketching
+    - Biometrics:
+        icon: mdi-heart-pulse
+        href: https://bio.burntbytes.com
+        description: Health and fitness tracker
+    - GoLinks:
+        icon: mdi-link-variant
+        href: https://go.burntbytes.com
+        description: URL shortener
+
+- Infrastructure:
+    - Synology NAS:
+        icon: synology-dsm.png
+        href: https://192.168.5.8:5001
+        description: Network storage
+        widget:
+          type: diskstation
+          url: https://192.168.5.8:5001
+          username: {? {HOMEPAGE_VAR_SYNOLOGY_USER: ''} : ''}
+          password: {? {HOMEPAGE_VAR_SYNOLOGY_PASS: ''} : ''}
+    - Home Assistant:
+        icon: home-assistant.png
+        href: https://hass.burntbytes.com
+        description: Home automation platform
+    - Snapcast:
+        icon: mdi-speaker-multiple
+        href: https://snapcast.burntbytes.com
+        description: Multi-room audio (Snapweb)
+    - Zigbee2MQTT:
+        icon: zigbee2mqtt.png
+        href: https://zigbee.burntbytes.com
+        description: Zigbee to MQTT Bridge
+    - AdGuard Home:
+        icon: adguard-home.png
+        href: https://adguard.burntbytes.com
+        description: DNS ad blocker
+    - Authelia:
+        icon: mdi-shield-account
+        href: https://auth.burntbytes.com
+        description: Authentication portal (SSO)
+
+- Monitoring:
+    - Cluster Resources:
+        icon: prometheus.png
+        href: "#"
+        description: Real-time cluster metrics
+        widget:
+          type: prometheusmetric
+          url: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+          metrics:
+            - label: "CPU (%)"
+              query: '100 * sum(rate(container_cpu_usage_seconds_total{container!="POD",image!=""}[5m])) / sum(kube_node_status_allocatable{resource="cpu",unit="core"})'
+              format:
+                type: number
+                options:
+                  maximumFractionDigits: 1
+            - label: "Mem (%)"
+              query: '100 * sum(container_memory_working_set_bytes{container!="POD",image!=""}) / sum(kube_node_status_allocatable{resource="memory",unit="byte"})'
+              format:
+                type: number
+                options:
+                  maximumFractionDigits: 1
+            - label: "PVC (%)"
+              query: '100 * sum(kubelet_volume_stats_used_bytes{persistentvolumeclaim!=""}) / sum(kubelet_volume_stats_capacity_bytes{persistentvolumeclaim!=""})'
+              format:
+                type: number
+                options:
+                  maximumFractionDigits: 1
+    - Grafana:
+        icon: grafana.png
+        href: https://grafana.burntbytes.com
+        description: Metrics dashboard
+    - Loki:
+        icon: loki.png
+        href: https://grafana.burntbytes.com/explore?schemaVersion=1&panes=%7B%22jZ4%22:%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22expr%22:%22%7Bnamespace%3D%5C%22homepage-prod%5C%22%7D%22%7D%5D%7D%7D
+        description: Cluster logs (via Grafana)

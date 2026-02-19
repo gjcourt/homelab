@@ -5,7 +5,7 @@ metadata:
   namespace: navidrome-prod
 spec:
   hostnames:
-    - navidrome.burntbytes.com
+    - music.burntbytes.com
   parentRefs:
     - name: app-gateway-production
       namespace: default
@@ -24,7 +24,7 @@ metadata:
   namespace: navidrome-prod
 spec:
   hostnames:
-    - navidrome.burntbytes.com
+    - music.burntbytes.com
   parentRefs:
     - name: app-gateway-production
       namespace: default

@@ -47,8 +47,8 @@ spec:
       owner: app
       secret:
         name: linkding-db-credentials
-    # recovery:
-    #   source: linkding-db-backup
+        # recovery:
+        #   source: linkding-db-backup
 
   # TODO: Re-enable externalClusters once real S3 credentials are configured
   # externalClusters:

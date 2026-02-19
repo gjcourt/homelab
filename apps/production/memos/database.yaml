@@ -47,8 +47,8 @@ spec:
       owner: app
       secret:
         name: memos-db-credentials
-    # recovery:
-    #   source: memos-db-backup
+        # recovery:
+        #   source: memos-db-backup
 
   # TODO: Re-enable externalClusters once real S3 credentials are configured
   # externalClusters:

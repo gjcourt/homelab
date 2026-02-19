@@ -6,22 +6,37 @@ metadata:
   labels:
     app.kubernetes.io/name: adguard
 spec:
-  # NOTE: This CronJob is intentionally NOT referenced by any kustomization yet.
-  # Enable it later by adding it to the staging/production overlay resources.
-  schedule: "0 */6 * * *" # every 6 hours
+  # Syncs config from adguard-0 (origin) to adguard-1 (replica) every 6 hours.
+  schedule: "0 */6 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
+      activeDeadlineSeconds: 120
       backoffLimit: 1
       template:
         spec:
           restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
           containers:
             - name: adguardhome-sync
               image: ghcr.io/bakito/adguardhome-sync:v0.8.2
-              args: ["run"]
+              args: ["run", "--runOnStart", "--api-port", "0"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 64Mi
               env:
                 - name: LOG_LEVEL
                   value: info

@@ -4,6 +4,7 @@ namespace: navidrome-stage
 resources:
   - ../../base/navidrome/
   - httproute.yaml
+  - nfs-music.yaml
 
 labels:
   - pairs:

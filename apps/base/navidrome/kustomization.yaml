@@ -5,4 +5,3 @@ resources:
   - namespace.yaml
   - service.yaml
   - storage.yaml
-  - media/nfs-music.yaml

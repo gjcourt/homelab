@@ -1,0 +1,51 @@
+# NFS-backed PersistentVolume for the shared music library (production).
+# A dedicated PV per-environment is required because a PV can only be
+# claimed by a single PVC at a time. This PV is pre-bound to the
+# production namespace claim to prevent accidental cross-environment binding.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: navidrome-music-pv-prod
+  labels:
+    app: navidrome
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  # Pre-bind to the production PVC to prevent the staging claim from
+  # accidentally acquiring this volume.
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: navidrome-music-pvc
+    namespace: navidrome-prod
+  mountOptions:
+    - nfsvers=3
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+    - nolock
+  nfs:
+    server: 192.168.5.8
+    path: /volume1/family/audio/music
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: navidrome-music-pvc
+  namespace: navidrome
+  labels:
+    app: navidrome
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Ti
+  volumeName: navidrome-music-pv-prod
+  storageClassName: ""

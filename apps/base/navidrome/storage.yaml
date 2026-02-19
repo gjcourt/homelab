@@ -11,4 +11,5 @@ spec:
   resources:
     requests:
       storage: 1Gi
-
+# navidrome-music-pvc is defined per-environment (see nfs-music.yaml in each
+# overlay) to allow staging and production to each bind a dedicated NFS PV.

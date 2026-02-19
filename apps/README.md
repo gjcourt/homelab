@@ -18,6 +18,7 @@
 - [linkding](base/linkding/)
 - [mealie](base/mealie/)
 - [memos](base/memos/)
+- [navidrome](base/navidrome/)
 - [snapcast](base/snapcast/)
 - [synology-iscsi-monitor](base/synology-iscsi-monitor/)
 <!-- apps:list:end -->

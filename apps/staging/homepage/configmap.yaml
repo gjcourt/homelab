@@ -51,6 +51,10 @@ data:
             icon: mdi-link-variant
             href: https://go.stage.burntbytes.com
             description: URL shortener
+        - Navidrome:
+            icon: navidrome.png
+            href: https://navidrome.stage.burntbytes.com
+            description: Music server and streamer
 
     - Infrastructure:
         - Synology NAS:

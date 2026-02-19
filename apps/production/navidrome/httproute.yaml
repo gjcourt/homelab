@@ -1,0 +1,35 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: navidrome-http
+  namespace: navidrome-prod
+spec:
+  hostnames:
+    - navidrome.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: navidrome-https
+  namespace: navidrome-prod
+spec:
+  hostnames:
+    - navidrome.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: navidrome
+          port: 4533

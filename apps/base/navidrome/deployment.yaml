@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: navidrome
+  namespace: navidrome
+  labels:
+    app: navidrome
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: navidrome
+  template:
+    metadata:
+      labels:
+        app: navidrome
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: navidrome
+          image: ghcr.io/navidrome/navidrome:0.60.3
+          ports:
+            - containerPort: 4533
+              name: http
+          env:
+            - name: ND_DATAFOLDER
+              value: /data
+            - name: ND_MUSICFOLDER
+              value: /music
+            - name: ND_LOGLEVEL
+              value: info
+            - name: ND_SCANSCHEDULE
+              value: 1h
+            - name: ND_SESSIONTIMEOUT
+              value: 24h
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          volumeMounts:
+            - name: navidrome-data
+              mountPath: /data
+            - name: navidrome-music
+              mountPath: /music
+      volumes:
+        - name: navidrome-data
+          persistentVolumeClaim:
+            claimName: navidrome-data-pvc
+        - name: navidrome-music
+          persistentVolumeClaim:
+            claimName: navidrome-music-pvc

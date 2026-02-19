@@ -48,8 +48,8 @@ spec:
       owner: app
       secret:
         name: linkding-db-credentials
-    # recovery:
-    #   source: linkding-db-backup
+        # recovery:
+        #   source: linkding-db-backup
 
   externalClusters:
     - name: linkding-db-backup

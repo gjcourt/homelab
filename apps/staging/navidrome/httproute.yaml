@@ -5,7 +5,7 @@ metadata:
   namespace: navidrome-stage
 spec:
   hostnames:
-    - navidrome.stage.burntbytes.com
+    - music.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
@@ -24,7 +24,7 @@ metadata:
   namespace: navidrome-stage
 spec:
   hostnames:
-    - navidrome.stage.burntbytes.com
+    - music.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default

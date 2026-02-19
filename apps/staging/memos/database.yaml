@@ -47,8 +47,8 @@ spec:
       owner: app
       secret:
         name: memos-db-credentials
-    # recovery:
-    #   source: memos-db-backup
+        # recovery:
+        #   source: memos-db-backup
 
   externalClusters:
     - name: memos-db-backup

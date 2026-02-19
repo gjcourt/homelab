@@ -5,7 +5,7 @@ metadata:
   namespace: homepage
 data:
   services.yaml: |
-    - Applications:
+    - Media:
         - Jellyfin:
             icon: jellyfin.png
             href: https://jellyfin.burntbytes.com
@@ -14,6 +14,16 @@ data:
             icon: immich.png
             href: https://photos.burntbytes.com
             description: Photo and video management
+        - Audiobookshelf:
+            icon: audiobookshelf.png
+            href: https://audiobooks.burntbytes.com
+            description: Audiobook and podcast server
+        - Navidrome:
+            icon: navidrome.png
+            href: https://navidrome.burntbytes.com
+            description: Music server and streamer
+
+    - Tools:
         - Memos:
             icon: memos.png
             href: https://memos.burntbytes.com
@@ -30,10 +40,6 @@ data:
             icon: excalidraw.png
             href: https://excalidraw.burntbytes.com
             description: Virtual whiteboard for sketching
-        - Audiobookshelf:
-            icon: audiobookshelf.png
-            href: https://audiobooks.burntbytes.com
-            description: Audiobook and podcast server
         - Biometrics:
             icon: mdi-heart-pulse
             href: https://bio.burntbytes.com
@@ -42,10 +48,6 @@ data:
             icon: mdi-link-variant
             href: https://go.burntbytes.com
             description: URL shortener
-        - Navidrome:
-            icon: navidrome.png
-            href: https://navidrome.burntbytes.com
-            description: Music server and streamer
 
     - Infrastructure:
         - Synology NAS:

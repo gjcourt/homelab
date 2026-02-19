@@ -14,7 +14,7 @@ data:
     color: slate
 
   services.yaml: |
-    - Applications:
+    - Media:
         - Jellyfin:
             icon: jellyfin.png
             href: https://jellyfin.stage.burntbytes.com
@@ -23,6 +23,16 @@ data:
             icon: immich.png
             href: https://photos.stage.burntbytes.com
             description: Photo and video management
+        - Audiobookshelf:
+            icon: audiobookshelf.png
+            href: https://audiobooks.stage.burntbytes.com
+            description: Audiobook and podcast server
+        - Navidrome:
+            icon: navidrome.png
+            href: https://navidrome.stage.burntbytes.com
+            description: Music server and streamer
+
+    - Tools:
         - Memos:
             icon: memos.png
             href: https://memos.stage.burntbytes.com
@@ -39,10 +49,6 @@ data:
             icon: excalidraw.png
             href: https://excalidraw.stage.burntbytes.com
             description: Virtual whiteboard for sketching
-        - Audiobookshelf:
-            icon: audiobookshelf.png
-            href: https://audiobooks.stage.burntbytes.com
-            description: Audiobook and podcast server
         - Biometrics:
             icon: mdi-heart-pulse
             href: https://bio.stage.burntbytes.com
@@ -51,10 +57,6 @@ data:
             icon: mdi-link-variant
             href: https://go.stage.burntbytes.com
             description: URL shortener
-        - Navidrome:
-            icon: navidrome.png
-            href: https://navidrome.stage.burntbytes.com
-            description: Music server and streamer
 
     - Infrastructure:
         - Synology NAS:

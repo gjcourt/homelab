@@ -58,3 +58,7 @@ data:
         provider: duckduckgo
         target: _blank
   docker.yaml: ""
+  # proxmox.yaml is required by homepage v1.10+ - if absent at startup, the app
+  # tries to copy it from the read-only skeleton dir into the ConfigMap-backed
+  # /app/config mount, which fails (EACCES) and causes a crash-loop.
+  proxmox.yaml: ""

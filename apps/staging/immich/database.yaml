@@ -41,7 +41,10 @@ spec:
 
   backup:
     barmanObjectStore:
-      destinationPath: s3://gjcourt-homelab-backup/staging/immich/v1
+      # v2 path: the v1 path contains WAL from a previous cluster (different
+      # system ID), which causes barman-cloud-check-wal-archive to fail with
+      # "Expected empty archive". Using v2 gives a clean, empty prefix.
+      destinationPath: s3://gjcourt-homelab-backup/staging/immich/v2
       s3Credentials:
         accessKeyId:
           name: immich-aws-creds-secret
@@ -72,7 +75,8 @@ spec:
   externalClusters:
     - name: immich-db-backup
       barmanObjectStore:
-        destinationPath: s3://gjcourt-homelab-backup/staging/immich/v1
+        # Keep in sync with backup.barmanObjectStore.destinationPath above
+        destinationPath: s3://gjcourt-homelab-backup/staging/immich/v2
         s3Credentials:
           accessKeyId:
             name: immich-aws-creds-secret

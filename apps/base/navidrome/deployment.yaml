@@ -17,7 +17,12 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
+        # UID 1028 is the owner of /volume1/family/audio/music on the Synology NAS
+        # (mode 700). The NFS export passes UIDs verbatim (no all_squash), so the
+        # pod must run as the directory owner to gain read access to the music library.
+        # runAsGroup and fsGroup remain 1000 so the app retains write access to
+        # /data (the iSCSI-backed data volume, owned by 0:1000 with mode rwxrwsr-x).
+        runAsUser: 1028
         runAsGroup: 1000
         fsGroup: 1000
         seccompProfile:

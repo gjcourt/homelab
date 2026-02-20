@@ -69,6 +69,11 @@ spec:
             - mountPath: /app/config/widgets.yaml
               name: homepage-config
               subPath: widgets.yaml
+            # proxmox.yaml is required by homepage v1.10+ as a config skeleton file;
+            # mounting an empty file prevents the app from crashing on startup
+            - mountPath: /app/config/proxmox.yaml
+              name: homepage-config
+              subPath: proxmox.yaml
             - mountPath: /app/config/logs
               name: logs
 

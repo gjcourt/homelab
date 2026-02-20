@@ -23,9 +23,4 @@ patches:
         path: /metadata/name
         value: homepage-stage
 
-configMapGenerator:
-  - name: homepage
-    namespace: homepage
-    behavior: merge
-    files:
-      - services.yaml
+

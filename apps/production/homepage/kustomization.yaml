@@ -4,6 +4,7 @@ namespace: homepage-prod
 resources:
   - ../../base/homepage/
   - httproute.yaml
+  - secret-synology.yaml
 
 labels:
   - pairs:

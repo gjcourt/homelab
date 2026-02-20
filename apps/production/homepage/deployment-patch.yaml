@@ -8,6 +8,9 @@ spec:
     spec:
       containers:
         - name: homepage
+          envFrom:
+            - secretRef:
+                name: homepage-synology
           env:
             - name: HOMEPAGE_ALLOWED_HOSTS
               value: home.burntbytes.com

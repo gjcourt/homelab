@@ -101,8 +101,8 @@ data:
             widget:
               type: diskstation
               url: https://192.168.5.8:5001
-              username: "{? {HOMEPAGE_VAR_SYNOLOGY_USER: ''} : ''}"
-              password: "{? {HOMEPAGE_VAR_SYNOLOGY_PASS: ''} : ''}"
+              username: "{{HOMEPAGE_VAR_SYNOLOGY_USER}}"
+              password: "{{HOMEPAGE_VAR_SYNOLOGY_PASS}}"
         - Home Assistant:
             icon: home-assistant.png
             href: https://hass.stage.burntbytes.com

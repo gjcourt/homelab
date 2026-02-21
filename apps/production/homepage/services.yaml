@@ -1,22 +1,30 @@
 - Media:
-    - Jellyfin:
-        icon: jellyfin.png
-        href: https://jellyfin.burntbytes.com
-        description: Media streaming server
     - Immich:
         icon: immich.png
         href: https://photos.burntbytes.com
         description: Photo and video management
-    - Audiobookshelf:
-        icon: audiobookshelf.png
-        href: https://audiobooks.burntbytes.com
-        description: Audiobook and podcast server
+    - Jellyfin:
+        icon: jellyfin.png
+        href: https://jellyfin.burntbytes.com
+        description: Media streaming server
     - Navidrome:
         icon: navidrome.png
         href: https://music.burntbytes.com
         description: Music server and streamer
+    - Snapcast:
+        icon: mdi-speaker-multiple
+        href: https://snapcast.burntbytes.com
+        description: Multi-room audio (Snapweb)
+    - Audiobookshelf:
+        icon: audiobookshelf.png
+        href: https://audiobooks.burntbytes.com
+        description: Audiobook and podcast server
 
 - Tools:
+    - Biometrics:
+        icon: mdi-heart-pulse
+        href: https://bio.burntbytes.com
+        description: Health and fitness tracker
     - Memos:
         icon: memos.png
         href: https://memos.burntbytes.com
@@ -29,18 +37,14 @@
         icon: mealie.png
         href: https://mealie.burntbytes.com
         description: Recipe management
-    - Excalidraw:
-        icon: excalidraw.png
-        href: https://excalidraw.burntbytes.com
-        description: Virtual whiteboard for sketching
-    - Biometrics:
-        icon: mdi-heart-pulse
-        href: https://bio.burntbytes.com
-        description: Health and fitness tracker
     - GoLinks:
         icon: mdi-link-variant
         href: https://go.burntbytes.com
         description: URL shortener
+    - Excalidraw:
+        icon: excalidraw.png
+        href: https://excalidraw.burntbytes.com
+        description: Virtual whiteboard for sketching
 
 - Infrastructure:
     - Synology NAS:
@@ -56,14 +60,6 @@
         icon: home-assistant.png
         href: https://hass.burntbytes.com
         description: Home automation platform
-    - Snapcast:
-        icon: mdi-speaker-multiple
-        href: https://snapcast.burntbytes.com
-        description: Multi-room audio (Snapweb)
-    - Zigbee2MQTT:
-        icon: zigbee2mqtt.png
-        href: https://zigbee.burntbytes.com
-        description: Zigbee to MQTT Bridge
     - AdGuard Home:
         icon: adguard-home.png
         href: https://adguard.burntbytes.com
@@ -72,6 +68,10 @@
         icon: mdi-shield-account
         href: https://auth.burntbytes.com
         description: Authentication portal (SSO)
+    - Zigbee2MQTT:
+        icon: zigbee2mqtt.png
+        href: https://zigbee.burntbytes.com
+        description: Zigbee to MQTT Bridge
 
 - Monitoring:
     - Cluster Resources:

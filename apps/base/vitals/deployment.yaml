@@ -26,7 +26,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: vitals
-          image: ghcr.io/gjcourt/biometrics:2026-02-21
+          image: ghcr.io/gjcourt/vitals:2026-02-21
           ports:
             - containerPort: 8080
           env:

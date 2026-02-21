@@ -21,9 +21,9 @@
         description: Audiobook and podcast server
 
 - Tools:
-    - Biometrics:
+    - Vitals:
         icon: mdi-heart-pulse
-        href: https://bio.stage.burntbytes.com
+        href: https://vitals.stage.burntbytes.com
         description: Health and fitness tracker
     - Memos:
         icon: memos.png

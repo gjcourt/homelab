@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: biometrics
-  namespace: biometrics
+  name: vitals
+  namespace: vitals
   labels:
-    app: biometrics
+    app: vitals
 spec:
   type: ClusterIP
   selector:
-    app: biometrics
+    app: vitals
   ports:
     - name: http
       port: 8080

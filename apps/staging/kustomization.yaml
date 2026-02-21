@@ -4,7 +4,7 @@ resources:
   - adguard
   - audiobookshelf
   - authelia
-  - biometrics
+  - vitals
   - certificates
   - excalidraw
   - golinks

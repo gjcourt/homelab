@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vitals
+  namespace: vitals
+  labels:
+    app: vitals
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vitals
+  template:
+    metadata:
+      labels:
+        app: vitals
+    spec:
+      imagePullSecrets:
+        - name: ghcr-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vitals
+          image: ghcr.io/gjcourt/biometrics:2026-02-20-v2
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: vitals-container-env
+                  key: DB_HOST
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: vitals-db-credentials
+                  key: password
+            - name: DATABASE_URL
+              value: "postgres://app:$(DB_PASSWORD)@$(DB_HOST):5432/app?sslmode=disable"
+          envFrom:
+            - configMapRef:
+                name: vitals-container-env
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true

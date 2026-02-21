@@ -8,7 +8,7 @@
 - [adguard](base/adguard/)
 - [audiobookshelf](base/audiobookshelf/)
 - [authelia](base/authelia/)
-- [biometrics](base/biometrics/)
+- [vitals](base/vitals/)
 - [excalidraw](base/excalidraw/)
 - [golinks](base/golinks/)
 - [homeassistant](base/homeassistant/)

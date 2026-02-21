@@ -15,7 +15,7 @@ labels:
 
 patches:
   - path: deployment-patch.yaml
-  - path: configmap.yaml
+  - path: configmap-patch.yaml
   - target:
       kind: Namespace
       name: homepage
@@ -23,5 +23,12 @@ patches:
       - op: replace
         path: /metadata/name
         value: homepage-stage
+
+configMapGenerator:
+  - name: homepage
+    namespace: homepage
+    behavior: merge
+    files:
+      - services.yaml
 
 

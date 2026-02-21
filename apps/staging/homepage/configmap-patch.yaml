@@ -33,13 +33,16 @@ data:
           show: true
           cpu: true
           memory: true
+          storage: true
           showLabel: true
-          label: "production"
+          label: "melodic-muse"
         nodes:
           show: true
           cpu: true
           memory: true
+          storage: true
           showLabel: true
     - search:
         provider: duckduckgo
         target: _blank
+

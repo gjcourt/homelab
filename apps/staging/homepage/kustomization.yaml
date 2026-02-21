@@ -5,6 +5,7 @@ resources:
   - ../../base/homepage/
   - httproute.yaml
   - secret-synology.yaml
+  - rbac.yaml
 
 labels:
   - pairs:
@@ -21,23 +22,6 @@ patches:
     patch: |
       - op: replace
         path: /metadata/name
-        value: homepage-stage
-  - target:
-      kind: ClusterRole
-      name: homepage
-    patch: |
-      - op: replace
-        path: /metadata/name
-        value: homepage-stage
-  - target:
-      kind: ClusterRoleBinding
-      name: homepage
-    patch: |
-      - op: replace
-        path: /metadata/name
-        value: homepage-stage
-      - op: replace
-        path: /roleRef/name
         value: homepage-stage
 
 

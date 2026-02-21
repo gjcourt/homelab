@@ -16,6 +16,10 @@ spec:
         - ip: "192.168.5.33"
           hostnames:
             - auth.burntbytes.com
+      securityContext:
+        supplementalGroups:
+          - 44 # video group
+          - 109 # render group
       initContainers:
         - name: oauth-config
           image: busybox:1.37
@@ -46,15 +50,20 @@ spec:
               cpu: "50m"
           securityContext:
             readOnlyRootFilesystem: true
-            runAsNonRoot: true
-            runAsUser: 1000
             allowPrivilegeEscalation: false
             capabilities:
               drop:
                 - ALL
       containers:
         - name: immich-server
+          securityContext:
+            privileged: true
           env:
+            # Hardware Acceleration for AMD
+            - name: LIBVA_DRIVER_NAME
+              value: radeonsi
+            - name: LIBVA_DRIVERS_PATH
+              value: /usr/lib/jellyfin-ffmpeg/lib/dri
             # Database connection from CNPG
             - name: DB_HOSTNAME
               valueFrom:
@@ -89,6 +98,8 @@ spec:
               mountPath: /usr/src/app/upload
             - name: photos
               mountPath: /mnt/photos
+            - name: dri
+              mountPath: /dev/dri
             - name: oauth-config
               mountPath: /etc/immich
               readOnly: true
@@ -106,6 +117,10 @@ spec:
         - name: photos
           persistentVolumeClaim:
             claimName: immich-photos-pvc
+        - name: dri
+          hostPath:
+            path: /dev/dri
+            type: Directory
         - name: oauth-config-template
           configMap:
             name: immich-oauth-config
@@ -130,8 +145,12 @@ spec:
           - 109 # render group
       containers:
         - name: immich-machine-learning
+          image: ghcr.io/immich-app/immich-machine-learning@sha256:35b56970279afa31009822609f03fc892effe0107fdb796e5dae57979dc3267c
           securityContext:
             privileged: true
+          env:
+            - name: HSA_OVERRIDE_GFX_VERSION
+              value: "9.0.0"
           volumeMounts:
             - name: model-cache
               mountPath: /cache
@@ -152,3 +171,22 @@ spec:
           hostPath:
             path: /dev/dri
             type: Directory
+---
+# Redis resource tuning
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-redis
+  namespace: immich
+spec:
+  template:
+    spec:
+      containers:
+        - name: redis
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"

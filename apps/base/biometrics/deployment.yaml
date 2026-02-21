@@ -26,7 +26,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: biometrics
-          image: ghcr.io/gjcourt/biometrics:2026-02-20
+          image: ghcr.io/gjcourt/biometrics:2026-02-20-v2
           ports:
             - containerPort: 8080
           env:

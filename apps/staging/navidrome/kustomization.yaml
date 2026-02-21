@@ -5,6 +5,7 @@ resources:
   - ../../base/navidrome/
   - httproute.yaml
   - nfs-music.yaml
+  - secret-lastfm.yaml
 
 labels:
   - pairs:

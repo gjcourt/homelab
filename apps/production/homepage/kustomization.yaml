@@ -22,6 +22,23 @@ patches:
       - op: replace
         path: /metadata/name
         value: homepage-prod
+  - target:
+      kind: ClusterRole
+      name: homepage
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: homepage-prod
+  - target:
+      kind: ClusterRoleBinding
+      name: homepage
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: homepage-prod
+      - op: replace
+        path: /roleRef/name
+        value: homepage-prod
 
 configMapGenerator:
   - name: homepage

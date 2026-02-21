@@ -1,53 +1,52 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: biometrics-db-staging-cnpg-v1
-  namespace: biometrics-stage
+  name: vitals-db-production-cnpg-v1
+  namespace: vitals-prod
 spec:
-  description: Postgres cluster for the biometrics application
+  description: Postgres cluster for the vitals application (production)
   imageName: ghcr.io/cloudnative-pg/postgresql:17.5
   instances: 3
   inheritedMetadata:
     labels:
-      app: biometrics-database
-      env: staging
+      app: vitals-database
+      env: production
       policy-type: "database"
   monitoring:
     enablePodMonitor: true
   storage:
-    size: 2Gi
+    size: 10Gi
   # TODO: Re-enable backup once real S3 credentials are configured
   # backup:
   #   barmanObjectStore:
-  #     destinationPath: s3://gjcourt-homelab-backup/staging/biometrics/v1
+  #     destinationPath: s3://gjcourt-homelab-backup/production/vitals
   #     s3Credentials:
   #       accessKeyId:
-  #         name: biometrics-aws-creds-secret
+  #         name: vitals-aws-creds-secret
   #         key: ACCESS_KEY_ID
   #       secretAccessKey:
-  #         name: biometrics-aws-creds-secret
+  #         name: vitals-aws-creds-secret
   #         key: ACCESS_SECRET_KEY
   #     wal:
   #       compression: gzip
   #     data:
   #       compression: gzip
-  #     serverName: biometrics-db-staging-cnpg-v1
-  #   retentionPolicy: 14d
+  #   retentionPolicy: "30d"
   bootstrap:
     initdb:
       database: app
       owner: app
       secret:
-        name: biometrics-db-credentials
+        name: vitals-db-credentials
   # TODO: Re-enable externalClusters once real S3 credentials are configured
   # externalClusters:
-  #   - name: biometrics-db-backup
+  #   - name: vitals-db-backup
   #     barmanObjectStore:
-  #       destinationPath: s3://gjcourt-homelab-backup/staging/biometrics/v1
+  #       destinationPath: s3://gjcourt-homelab-backup/production/vitals
   #       s3Credentials:
   #         accessKeyId:
-  #           name: biometrics-aws-creds-secret
+  #           name: vitals-aws-creds-secret
   #           key: ACCESS_KEY_ID
   #         secretAccessKey:
-  #           name: biometrics-aws-creds-secret
+  #           name: vitals-aws-creds-secret
   #           key: ACCESS_SECRET_KEY

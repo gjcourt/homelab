@@ -1,8 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-namespace: biometrics-stage
+namespace: vitals-prod
 resources:
-  - ../../base/biometrics/
+  - ../../base/vitals/
   - configmap.yaml
   - database.yaml
   - httproute.yaml
@@ -11,15 +11,15 @@ resources:
 
 labels:
   - pairs:
-      env: staging
-      app.kubernetes.io/instance: staging
+      env: production
+      app.kubernetes.io/instance: production
     includeSelectors: false
 
 patches:
   - target:
       kind: Namespace
-      name: biometrics
+      name: vitals
     patch: |
       - op: replace
         path: /metadata/name
-        value: biometrics-stage
+        value: vitals-prod

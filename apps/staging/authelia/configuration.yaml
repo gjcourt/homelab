@@ -93,7 +93,7 @@ identity_providers:
         userinfo_signed_response_alg: none
       - client_id: audiobookshelf
         client_name: Audiobookshelf (Staging)
-        client_secret: '$pbkdf2-sha512$310000$elg360lp8ocez.nishZSNw$uIBTyxZBaa/.RE85Fdz.vNmIGkz6uTmMXWxwKs7vdfAK8LzUhuI3kZSS.bv8h35qxtrYu8EmXMvS7lfFQJubrw'
+        client_secret: '$pbkdf2-sha512$310000$4n4jpPtegOu1focJkTSi7g$.NNDDcHb3XSs/LI6CJvVWrNtwCD8R0LKmvsLkwMpRrVc8i8oBIJiwqPK2fkCeAHAzoRngd4nUSeBmPzYgiEt7g'
         public: false
         authorization_policy: two_factor
         token_endpoint_auth_method: client_secret_basic

@@ -63,3 +63,18 @@ identity_providers:
           - openid
           - profile
         userinfo_signed_response_alg: none
+      - client_id: mealie
+        client_name: Mealie
+        client_secret: '$pbkdf2-sha512$310000$12BKlQUaHPemvEEJvSwUcg$zkxW/lBSAq9qOUFRmJtj5/biYyKLTMDrCLR/lVcJU7keEhyN.JK1wGY/00QHO2n/rcmP8NT9mR1TA8a9n48v8g'
+        public: false
+        authorization_policy: two_factor
+        token_endpoint_auth_method: client_secret_basic
+        redirect_uris:
+          - https://mealie.burntbytes.com/login
+          - https://mealie.burntbytes.com/login?direct=1
+        scopes:
+          - email
+          - groups
+          - openid
+          - profile
+        userinfo_signed_response_alg: none

@@ -104,3 +104,16 @@ identity_providers:
           - openid
           - profile
         userinfo_signed_response_alg: none
+      - client_id: linkding
+        client_name: Linkding (Staging)
+        client_secret: '$pbkdf2-sha512$310000$LcNKEJIOusQbT5zBxQTj6Q$gvF9Jb/p/1DlvQh3bkD2cVRhaBZ/zuRfS/476HyNIYvOjQs9dERERkugCe1J0LmYlmtIagwQjBLK4KhdIYoyiw'
+        public: false
+        authorization_policy: two_factor
+        token_endpoint_auth_method: client_secret_basic
+        redirect_uris:
+          - https://bookmarks.stage.burntbytes.com/oidc/callback/
+        scopes:
+          - email
+          - openid
+          - profile
+        userinfo_signed_response_alg: none

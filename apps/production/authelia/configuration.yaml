@@ -104,3 +104,16 @@ identity_providers:
           - openid
           - profile
         userinfo_signed_response_alg: none
+      - client_id: linkding
+        client_name: Linkding
+        client_secret: '$pbkdf2-sha512$310000$eWX2beD4kQWLM1ac7RnHpg$uTYXLam1CCNsN9.0HjeJDyYPDFGgsOw3k9a8as9PJDRqpdgCV4zugL4VK/kfDk2O7fkInLW5ZBy3V7tDCM29nQ'
+        public: false
+        authorization_policy: two_factor
+        token_endpoint_auth_method: client_secret_basic
+        redirect_uris:
+          - https://bookmarks.burntbytes.com/oidc/callback/
+        scopes:
+          - email
+          - openid
+          - profile
+        userinfo_signed_response_alg: none

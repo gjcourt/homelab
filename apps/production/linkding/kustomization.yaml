@@ -4,11 +4,13 @@ namespace: linkding-prod
 resources:
   - ../../base/linkding/
   - configmap.yaml
+  - configmap-oidc.yaml
   - database.yaml
   - httproute.yaml
   - secret-app.yaml
   - secret-aws-creds.yaml
   - secret-db-credentials.yaml
+  - secret-oidc.yaml
 
 labels:
   - pairs:
@@ -17,6 +19,7 @@ labels:
     includeSelectors: false
 
 patches:
+  - path: deployment-patch.yaml
   - target:
       kind: Namespace
       name: linkding

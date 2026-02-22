@@ -6,6 +6,13 @@ metadata:
 spec:
   template:
     spec:
+      # Authelia OIDC issuerUrl must resolve from within the pod.
+      # AdGuard DNS rewrites are not visible to CoreDNS, so we add
+      # a hostAlias pointing at the production gateway.
+      hostAliases:
+        - ip: "192.168.5.33"
+          hostnames:
+            - auth.burntbytes.com
       initContainers:
         - name: init-dsn
           image: busybox:1.37

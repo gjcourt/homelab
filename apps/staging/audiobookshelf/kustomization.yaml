@@ -4,6 +4,11 @@ namespace: audiobookshelf-stage
 resources:
   - ../../base/audiobookshelf/
   - httproute.yaml
+  - secret-sso.yaml
+
+patchesStrategicMerge:
+  - deployment-patch.yaml
+
 
 labels:
   - pairs:

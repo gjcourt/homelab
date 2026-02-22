@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: linkding-oidc-config
+  namespace: linkding-stage
+data:
+  LD_OIDC_ENABLED: "True"
+  LD_OIDC_PROVIDER_URL: "https://auth.stage.burntbytes.com"
+  LD_OIDC_CLIENT_ID: "linkding"
+  LD_OIDC_SCOPES: "openid email profile"
+  LD_OIDC_USER_IDENTIFIER: "email"
+  LD_OIDC_CREATE_USERS: "True"
+  # Optional: Map groups if desired, but user/email is sufficient
+  LD_OIDC_USERNAME_CLAIM: "email"
+  LD_OIDC_EMAIL_CLAIM: "email"

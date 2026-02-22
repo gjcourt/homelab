@@ -9,6 +9,12 @@ resources:
   - secret-app.yaml
   - secret-aws-creds.yaml
   - secret-db-credentials.yaml
+  - secret-oidc.yaml
+  - configmap-oidc.yaml
+
+patchesStrategicMerge:
+  - deployment-patch.yaml
+
 
 labels:
   - pairs:

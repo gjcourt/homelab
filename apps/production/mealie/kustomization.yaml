@@ -4,6 +4,12 @@ namespace: mealie-prod
 resources:
   - ../../base/mealie/
   - httproute.yaml
+  - secret-oidc.yaml
+  - configmap-oidc.yaml
+
+patchesStrategicMerge:
+  - deployment-patch.yaml
+
 
 labels:
   - pairs:

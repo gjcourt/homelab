@@ -5,12 +5,14 @@ resources:
   - ../../base/linkding/
   # - cloudflare.yaml
   - configmap.yaml
+  - configmap-oidc.yaml
   - database.yaml
   - httproute.yaml
   - secret-app.yaml
   - secret-aws-creds.yaml
   - secret-cloudflare-tunnel.yaml
   - secret-db-credentials.yaml
+  - secret-oidc.yaml
 
 labels:
   - pairs:
@@ -19,6 +21,7 @@ labels:
     includeSelectors: false
 
 patches:
+  - path: deployment-patch.yaml
   - target:
       kind: Namespace
       name: linkding

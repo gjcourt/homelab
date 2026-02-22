@@ -65,7 +65,7 @@ identity_providers:
         userinfo_signed_response_alg: none
       - client_id: mealie
         client_name: Mealie
-        client_secret: '$pbkdf2-sha512$310000$nzkutVYer8qyEemeg1Gy4A$VwxEChhTvkZAWGO8KNjFpDJt321cjswXzTb6dvGGvuKzQ8tF/niO.kkK4nNAd3PoZIM/VuP.D5AxdVGhVxnq8Q'
+        client_secret: '$pbkdf2-sha512$310000$12BKlQUaHPemvEEJvSwUcg$zkxW/lBSAq9qOUFRmJtj5/biYyKLTMDrCLR/lVcJU7keEhyN.JK1wGY/00QHO2n/rcmP8NT9mR1TA8a9n48v8g'
         public: false
         authorization_policy: two_factor
         token_endpoint_auth_method: client_secret_basic

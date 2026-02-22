@@ -8,6 +8,8 @@ metadata:
 data:
   # Immich configuration
   IMMICH_MACHINE_LEARNING_URL: "http://immich-machine-learning:3003"
+  MACHINE_LEARNING_WORKERS: "1"
+  MACHINE_LEARNING_WORKER_TIMEOUT: "300"
   REDIS_HOSTNAME: "immich-redis"
   REDIS_PORT: "6379"
   # Paths

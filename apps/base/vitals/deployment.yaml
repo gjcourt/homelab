@@ -26,22 +26,26 @@ spec:
           type: RuntimeDefault
       containers:
         - name: vitals
-          image: ghcr.io/gjcourt/biometrics:2026-02-20-v2
+          image: ghcr.io/gjcourt/vitals:2026-02-21
           ports:
             - containerPort: 8080
           env:
-            - name: DB_HOST
+            - name: PGHOST
               valueFrom:
                 configMapKeyRef:
                   name: vitals-container-env
                   key: DB_HOST
-            - name: DB_PASSWORD
+            - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
                   name: vitals-db-credentials
                   key: password
-            - name: DATABASE_URL
-              value: "postgres://app:$(DB_PASSWORD)@$(DB_HOST):5432/app?sslmode=disable"
+            - name: PGUSER
+              value: "app"
+            - name: PGDATABASE
+              value: "app"
+            - name: PGSSLMODE
+              value: "disable"
           envFrom:
             - configMapRef:
                 name: vitals-container-env

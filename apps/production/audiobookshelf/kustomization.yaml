@@ -4,6 +4,7 @@ namespace: audiobookshelf-prod
 resources:
   - ../../base/audiobookshelf/
   - httproute.yaml
+  - secret-sso.yaml
 
 labels:
   - pairs:
@@ -12,6 +13,7 @@ labels:
     includeSelectors: false
 
 patches:
+  - path: deployment-patch.yaml
   - target:
       kind: Namespace
       name: audiobookshelf

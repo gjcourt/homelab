@@ -13,6 +13,8 @@ metadata:
     app: immich
 data:
   immich-config.yaml: |
+    ffmpeg:
+      accel: vaapi
     oauth:
       enabled: true
       issuerUrl: "https://auth.burntbytes.com"

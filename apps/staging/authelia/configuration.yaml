@@ -91,3 +91,16 @@ identity_providers:
           - openid
           - profile
         userinfo_signed_response_alg: none
+      - client_id: audiobookshelf
+        client_name: Audiobookshelf (Staging)
+        client_secret: '$pbkdf2-sha512$310000$elg360lp8ocez.nishZSNw$uIBTyxZBaa/.RE85Fdz.vNmIGkz6uTmMXWxwKs7vdfAK8LzUhuI3kZSS.bv8h35qxtrYu8EmXMvS7lfFQJubrw'
+        public: false
+        authorization_policy: two_factor
+        token_endpoint_auth_method: client_secret_basic
+        redirect_uris:
+          - https://audiobooks.stage.burntbytes.com/auth/openid/callback
+        scopes:
+          - email
+          - openid
+          - profile
+        userinfo_signed_response_alg: none

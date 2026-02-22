@@ -8,7 +8,6 @@
 - [adguard](base/adguard/)
 - [audiobookshelf](base/audiobookshelf/)
 - [authelia](base/authelia/)
-- [vitals](base/vitals/)
 - [excalidraw](base/excalidraw/)
 - [golinks](base/golinks/)
 - [homeassistant](base/homeassistant/)
@@ -21,4 +20,5 @@
 - [navidrome](base/navidrome/)
 - [snapcast](base/snapcast/)
 - [synology-iscsi-monitor](base/synology-iscsi-monitor/)
+- [vitals](base/vitals/)
 <!-- apps:list:end -->

@@ -31,9 +31,9 @@ Enable Single Sign-On (SSO) across the homelab using Authelia as the OpenID Conn
 3.  **DNS**: `hostAliases` added to resolve `auth.stage.burntbytes.com` / `auth.burntbytes.com` (CoreDNS can't resolve AdGuard DNS rewrites).
 4.  **Tested**: Web + mobile app login flow working.
 
-### Phase 3: Fast Followers (Mealie, Memos) — In Progress
+### Phase 3: Fast Followers (Mealie, Memos, Audiobookshelf, Linkding) — In Progress
 
-#### Mealie
+#### Mealie (Staging & Production)
 *   **Client type**: Public (PKCE, no client_secret needed).
 *   **Authelia client**: `client_id: mealie`, `public: true`, scopes: `openid profile email groups`.
 *   **Redirect URIs**: `https://mealie.stage.burntbytes.com/login`, `https://mealie.stage.burntbytes.com/login?direct=1`.
@@ -44,24 +44,50 @@ Enable Single Sign-On (SSO) across the homelab using Authelia as the OpenID Conn
     *   `OIDC_PROVIDER_NAME=Authelia`
     *   `OIDC_SIGNING_ALGORITHM=RS256`
     *   `OIDC_USER_CLAIM=email`
-*   **DNS**: `hostAliases` for `auth.stage.burntbytes.com` → `192.168.5.30`.
+*   **DNS**: `hostAliases` for `auth.stage.burntbytes.com` → `192.168.5.30` (Staging) / `.33` (Prod).
 
 #### Memos (v0.26.0)
-*   **Client type**: Confidential (`token_endpoint_auth_method: client_secret_post`).
+*   **Client type**: Confidential (`token_endpoint_auth_method: client_secret_basic`).
 *   **Authelia client**: `client_id: memos`, hashed secret in config.
 *   **Redirect URI**: `https://memos.stage.burntbytes.com/auth/callback`.
-*   **Memos config**: SSO is configured through the **admin UI** (Settings → SSO), not environment variables.
-*   **DNS**: `hostAliases` for `auth.stage.burntbytes.com` → `192.168.5.30`.
+*   **Memos config**: SSO is configured through the **admin UI** (Settings → SSO).
+*   **DNS**: `hostAliases` for `auth.stage.burntbytes.com` → `192.168.5.30` (Staging) / `.33` (Prod).
+*   **Secret**: `memos-sso-secret` contains the plaintext `client_secret`.
 *   **Manual setup**: After deployment, configure identity provider in Memos admin UI:
     *   Name: `Authelia`
     *   Type: `OAuth2`
     *   Client ID: `memos`
-    *   Client Secret: *(from `memos-sso-secret`, decrypt with `sops -d`)*
+    *   Client Secret: *(Retrieve from `memos-sso-secret` via `kubectl get secret memos-sso-secret -o go-template='{{.data.OIDC_CLIENT_SECRET | base64decode}}'`)*
     *   Authorization URL: `https://auth.stage.burntbytes.com/api/oidc/authorization`
     *   Token URL: `https://auth.stage.burntbytes.com/api/oidc/token`
     *   User Info URL: `https://auth.stage.burntbytes.com/api/oidc/userinfo`
     *   Scopes: `openid profile email`
     *   Identifier: `email`
+
+#### Audiobookshelf
+*   **Client type**: Confidential (`token_endpoint_auth_method: client_secret_post`).
+*   **Authelia client**: `client_id: audiobookshelf`.
+*   **Redirect URI**: `https://audiobooks.stage.burntbytes.com/auth/openid/callback`.
+*   **ABS Config**: Configured via Admin UI.
+*   **Manual setup**:
+    1.  Log in as Admin.
+    2.  Go to **Settings** -> **Auth** -> **OpenID Connect**.
+    3.  Click **Add Provider**.
+    4.  Issuer URL: `https://auth.stage.burntbytes.com` (Staging) or `https://auth.burntbytes.com` (Prod).
+    5.  Client ID: `audiobookshelf`.
+    6.  Client Secret: *(Retrieve from `audiobookshelf-sso-secret`)*.
+    7.  Button Text: "Login with Authelia".
+    8.  Auto Register: ON.
+
+#### Linkding
+*   **Client type**: Confidential (`token_endpoint_auth_method: client_secret_basic`).
+*   **Authelia client**: `client_id: linkding`.
+*   **Redirect URI**: `https://links.stage.burntbytes.com/oidc/callback/`.
+*   **Linkding Config**: Configured via Environment Variables.
+    *   `LD_OIDC_ENABLED=True`
+    *   `LD_OIDC_PROVIDER_URL=https://auth.stage.burntbytes.com`
+    *   `LD_OIDC_CLIENT_ID=linkding`
+    *   `LD_OIDC_CLIENT_SECRET` (from `linkding-oidc-secret`)
 
 ### Phase 4: Complex Integrations
 *   **Home Assistant**: Validating if OIDC or Trusted Header is better.

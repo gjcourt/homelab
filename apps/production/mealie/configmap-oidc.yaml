@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mealie-oidc-config
+  namespace: mealie
+  labels:
+    app: mealie
+    env: production
+data:
+  # OpenID Connect (OIDC) - Authelia integration
+  # Mealie requires OIDC_CLIENT_SECRET even with PKCE; using confidential client.
+  # The secret value is stored in secret-oidc.yaml (SOPS-encrypted).
+  OIDC_AUTH_ENABLED: "true"
+  OIDC_SIGNUP_ENABLED: "true"
+  OIDC_CONFIGURATION_URL: "https://auth.burntbytes.com/.well-known/openid-configuration"
+  OIDC_CLIENT_ID: "mealie"
+  OIDC_AUTO_REDIRECT: "false"
+  OIDC_PROVIDER_NAME: "Authelia"
+  OIDC_REMEMBER_ME: "true"
+  OIDC_SIGNING_ALGORITHM: "RS256"
+  OIDC_USER_CLAIM: "email"

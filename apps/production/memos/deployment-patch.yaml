@@ -6,6 +6,10 @@ metadata:
 spec:
   template:
     spec:
+      hostAliases:
+        - ip: "192.168.5.33"
+          hostnames:
+            - "auth.burntbytes.com"
       initContainers:
         - name: init-dsn
           image: busybox:1.37

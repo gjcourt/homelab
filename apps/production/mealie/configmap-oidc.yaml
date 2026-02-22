@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mealie-oidc-config
+  namespace: mealie
+data:
+  OIDC_AUTH_ENABLED: "true"
+  OIDC_CONFIGURATION_URL: "https://auth.burntbytes.com/.well-known/openid-configuration"
+  OIDC_CLIENT_ID: "mealie"
+  OIDC_PROVIDER_NAME: "Authelia"
+  OIDC_SIGNING_ALGORITHM: "RS256"
+  OIDC_USER_CLAIM: "email"
+  OIDC_JIT_ENABLED: "true"
+  OIDC_REMEMBER_ME: "true"

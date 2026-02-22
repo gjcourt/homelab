@@ -11,6 +11,11 @@ resources:
   - secret-aws-creds.yaml
   - secret-cloudflare-tunnel.yaml
   - secret-db-credentials.yaml
+  - secret-oidc.yaml
+  - configmap-oidc.yaml
+
+patchesStrategicMerge:
+  - deployment-patch.yaml
 
 labels:
   - pairs:

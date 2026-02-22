@@ -63,3 +63,57 @@ identity_providers:
           - openid
           - profile
         userinfo_signed_response_alg: none
+      - client_id: mealie
+        client_name: Mealie
+        client_secret: '$pbkdf2-sha512$310000$wS53QNgsa4AkqCrmhBm2cQ$QplB3z7RyFyz934BHk/gsOtcOQSyYZsWEex1E4/FjR7GUHCl33/zvRHsIisLW0.z5gX8uEuyWLU5Eq17nFR6GA'
+        public: false
+        authorization_policy: two_factor
+        token_endpoint_auth_method: client_secret_basic
+        redirect_uris:
+          - https://mealie.burntbytes.com/login
+          - https://mealie.burntbytes.com/login?direct=1
+        scopes:
+          - email
+          - groups
+          - openid
+          - profile
+        userinfo_signed_response_alg: none
+      - client_id: memos
+        client_name: Memos
+        client_secret: '$pbkdf2-sha512$310000$QVFgCaxd3yEqhDEHLm6l0Q$bzRwIZl8H.8oxoVDdJia6Fxn1Qizg7xwGlAInlK.2QzZA1h07YA7Ul9Ub2vrDlue0CH4B8UEx5wzlqmss1kQ/g'
+        public: false
+        authorization_policy: two_factor
+        token_endpoint_auth_method: client_secret_basic
+        redirect_uris:
+          - https://memos.burntbytes.com/auth/callback
+        scopes:
+          - email
+          - openid
+          - profile
+        userinfo_signed_response_alg: none
+      - client_id: audiobookshelf
+        client_name: Audiobookshelf
+        client_secret: '$pbkdf2-sha512$310000$S.fq7zXjvNRq9i42uNiCYw$NdnwtfnaD1w2xgQXG4jiogSFK8RV1sycCEMq3HvG3cLwhWI4v6RaOoPDYdGZK04wajTTaDv3mMtxQLUXg1iZ3A'
+        public: false
+        authorization_policy: two_factor
+        token_endpoint_auth_method: client_secret_post
+        redirect_uris:
+          - https://audiobooks.burntbytes.com/auth/openid/callback
+        scopes:
+          - email
+          - openid
+          - profile
+        userinfo_signed_response_alg: none
+      - client_id: linkding
+        client_name: Linkding
+        client_secret: '$pbkdf2-sha512$310000$mgMZP1LSwVtJkdKYzvZyKQ$x/cAIME6wXURPO/ScRAYQwtJN6InJ4dcHGouxiBA0Q2IfCWlKck0Xk8QleoYvBDhIOoReAsbsuxfr7wnkZ8ARw'
+        public: false
+        authorization_policy: two_factor
+        token_endpoint_auth_method: client_secret_basic
+        redirect_uris:
+          - https://links.burntbytes.com/oidc/callback/
+        scopes:
+          - email
+          - openid
+          - profile
+        userinfo_signed_response_alg: none

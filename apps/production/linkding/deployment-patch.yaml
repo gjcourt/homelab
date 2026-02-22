@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linkding
+  namespace: linkding
+spec:
+  template:
+    spec:
+      hostAliases:
+        - ip: "192.168.5.33"
+          hostnames:
+            - "auth.burntbytes.com"
+      containers:
+        - name: linkding
+          envFrom:
+            - configMapRef:
+                name: linkding-oidc-config
+            - secretRef:
+                name: linkding-oidc-secret

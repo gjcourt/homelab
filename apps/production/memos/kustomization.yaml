@@ -8,6 +8,7 @@ resources:
   - httproute.yaml
   - secret-aws-creds.yaml
   - secret-db-credentials.yaml
+  - secret-sso.yaml
 
 labels:
   - pairs:

@@ -30,11 +30,11 @@ lint-yaml: ## Lint YAML (indentation, tabs, etc.)
 
 .PHONY: fmt-yaml
 fmt-yaml: ## Format YAML to repo standard (2-space indentation)
-	docker run --rm -v "$(PWD)":/work -w /work $(YAML_FMT_IMAGE) -conf .yamlfmt.yaml -dstar "**/*.yaml" "**/*.yml"
+	docker run --rm -v "$(PWD)":/work -w /work $(YAML_FMT_IMAGE) -conf .yamlfmt -dstar "**/*.yaml" "**/*.yml"
 
 .PHONY: fmt-yaml-check
 fmt-yaml-check: ## Check YAML formatting (no changes)
-	docker run --rm -v "$(PWD)":/work -w /work $(YAML_FMT_IMAGE) -conf .yamlfmt.yaml -dstar -lint "**/*.yaml" "**/*.yml"
+	docker run --rm -v "$(PWD)":/work -w /work $(YAML_FMT_IMAGE) -conf .yamlfmt -dstar -lint "**/*.yaml" "**/*.yml"
 
 .PHONY: format
 format: fmt-yaml ## Alias for fmt-yaml

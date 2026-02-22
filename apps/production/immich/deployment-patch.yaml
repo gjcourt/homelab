@@ -19,6 +19,7 @@ spec:
       securityContext:
         supplementalGroups:
           - 44 # video group
+          - 100 # users group
           - 109 # render group
       initContainers:
         - name: oauth-config
@@ -58,6 +59,8 @@ spec:
         - name: immich-server
           securityContext:
             privileged: true
+            runAsUser: 0
+            runAsGroup: 0
           env:
             # Hardware Acceleration for AMD
             - name: LIBVA_DRIVER_NAME

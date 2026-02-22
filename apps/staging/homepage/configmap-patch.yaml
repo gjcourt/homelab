@@ -17,7 +17,7 @@ data:
     - Developer:
         - Github:
             - abbr: GH
-              href: https://github.com/
+              href: https://github.com/gjcourt/homelab
 
     - Reference:
         - Kubernetes Docs:

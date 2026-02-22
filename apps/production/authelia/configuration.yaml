@@ -80,7 +80,7 @@ identity_providers:
         userinfo_signed_response_alg: none
       - client_id: memos
         client_name: Memos
-        client_secret: '$pbkdf2-sha512$310000$B57jz2Dmyn9/pJZbS7uZ0w$1mFULD487y8jWeYOqvGK2repxdRmSzrZEKOXaBVuPsdaw5ONeFt1tHoqTVrlYFhtEg28OERJrl49UQcWFsUOkQ'
+        client_secret: '$pbkdf2-sha512$310000$g9/0sjF27Sl/aIUTbJdq3w$h4cvRLnPPJQBS8UhE17k8fQBgnWQTPi2wz9sHbEVQ29VK2sQ7Ubon8ihcyL8DMtUj2T6yVgFWNBNbqFr/Q/6sw'
         public: false
         authorization_policy: two_factor
         token_endpoint_auth_method: client_secret_basic

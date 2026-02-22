@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: linkding-oidc-config
+  namespace: linkding-prod
+  labels:
+    app: linkding
+    env: production
+data:
+  LD_OIDC_ENABLED: "True"
+  LD_OIDC_PROVIDER_NAME: "Authelia"
+  LD_OIDC_CLIENT_ID: "linkding"
+  LD_OIDC_AUTH_URL: "https://auth.burntbytes.com/api/oidc/authorization"
+  LD_OIDC_TOKEN_URL: "https://auth.burntbytes.com/api/oidc/token"
+  LD_OIDC_USER_URL: "https://auth.burntbytes.com/api/oidc/userinfo"
+  LD_OIDC_JWS_ALGORITHM: "RS256"
+  LD_OIDC_SCOPES: "openid email profile"
+  LD_OIDC_VERIFY_SSL: "True"
+  LD_OIDC_AUTO_CREATE_USERS: "True"
+  LD_OIDC_AUTO_CREATE_GROUPS: "False"
+  LD_OIDC_AUTO_CREATE_SUPERUSER: "False"

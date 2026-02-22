@@ -184,9 +184,10 @@ spec:
             httpGet:
               path: /ping
               port: http
-            initialDelaySeconds: 120
+            initialDelaySeconds: 300
             periodSeconds: 10
             timeoutSeconds: 10
+            failureThreshold: 6
           readinessProbe:
             httpGet:
               path: /ping
@@ -194,6 +195,7 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 5
             timeoutSeconds: 10
+            failureThreshold: 6
       volumes:
         - name: model-cache
           persistentVolumeClaim:

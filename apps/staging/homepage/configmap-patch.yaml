@@ -5,6 +5,19 @@ metadata:
   namespace: homepage
 data:
   settings.yaml: |
+    title: BurntBytes Staging
+    description: Staging Environment
+    headerStyle: clean
+    layout:
+      Media:
+        style: row
+        columns: 4
+      Tools:
+        style: row
+        columns: 4
+      Infrastructure:
+        style: row
+        columns: 4
     background:
       image: https://images.unsplash.com/photo-1502790671504-542ad42d5189?auto=format&fit=crop&w=2560&q=80
       blur: sm

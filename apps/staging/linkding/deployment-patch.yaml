@@ -18,6 +18,10 @@ spec:
         - name: linkding
           envFrom:
             - configMapRef:
+                name: linkding-container-env
+            - secretRef:
+                name: linkding-app-secret
+            - configMapRef:
                 name: linkding-oidc-config
             - secretRef:
                 name: linkding-oidc-secret

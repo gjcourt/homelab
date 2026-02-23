@@ -63,14 +63,3 @@ data:
     - search:
         provider: duckduckgo
         target: _blank
-    - openweathermap:
-      label: San Francisco #optional
-      latitude: 37.7891831
-      longitude: -122.4539026
-      units: metric # or imperial
-      provider: openweathermap
-      apiKey: e7c097e4557ef6b8c8f141d3c1b7578a # required only if not using provider, this reveals api key in requests
-      cache: 5 # Time in minutes to cache API responses, to stay within limits
-      format: # optional, Intl.NumberFormat options
-        maximumFractionDigits: 1
-

@@ -11,7 +11,7 @@ Snapcast is deployed as a Kubernetes `Deployment` with a single replica in the `
 - **Storage**:
   - **Spotify State**: Uses a PersistentVolumeClaim (`snapcast-spotify-state`) backed by the `synology-iscsi` storage class to store Spotify credentials and pairing state.
   - **Shared Audio**: Uses an `emptyDir` volume (`shared-audio`) to share the named pipe (`/audio/spotify.fifo`) between the `go-librespot` sidecar and `snapserver`.
-- **Networking**: 
+- **Networking**:
   - The `snapcast` Service is a `LoadBalancer` (via Cilium IPAM) exposing:
     - `1704/TCP`: Snapcast audio stream
     - `1705/TCP`: Snapcast control / RPC
@@ -66,13 +66,13 @@ kubectl -n snapcast-prod exec deploy/snapcast -c snapserver -- sh -c 'cat /dev/u
   2. Re-deploy the Snapcast manifests. If the Spotify state is lost, you will simply need to re-pair the device in the Spotify app.
 
 ## 9. Troubleshooting
-- **Spotify Connect Device Not Showing Up**: 
+- **Spotify Connect Device Not Showing Up**:
   - Verify the `go-librespot` sidecar is running and hasn't crashed.
   - Check the `go-librespot` logs for authentication or mDNS discovery errors. Note that mDNS discovery across VLANs/subnets may require an mDNS repeater (e.g., Avahi) on your router.
-- **No Audio on Clients**: 
+- **No Audio on Clients**:
   - Verify the client is connected to the correct stream in the Snapweb UI.
   - Check the `snapserver` logs for errors reading from the FIFO (`/audio/spotify.fifo`).
   - Ensure the client is not muted in Snapweb.
-- **Audio Sync Issues**: 
+- **Audio Sync Issues**:
   - Ensure all clients and the server have accurate time synchronization (NTP).
   - Adjust the latency offset for specific clients in the Snapweb UI if necessary.

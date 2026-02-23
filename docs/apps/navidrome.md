@@ -52,9 +52,9 @@ To verify Navidrome is working:
   3. Re-deploy the Navidrome manifests.
 
 ## 9. Troubleshooting
-- **Music Not Showing Up**: 
+- **Music Not Showing Up**:
   - Verify the NFS volume is mounted correctly and the pod has read permissions (UID 1028).
   - Trigger a manual "Quick Scan" or "Full Scan" from the Navidrome web UI (Activity icon -> Quick Scan).
-- **Last.fm Integration Failing**: 
+- **Last.fm Integration Failing**:
   - Verify the `navidrome-lastfm` secret contains valid API keys.
   - Check the pod logs for API rate limiting or authentication errors.

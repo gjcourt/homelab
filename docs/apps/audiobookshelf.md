@@ -48,10 +48,10 @@ To verify Audiobookshelf is working:
   3. Re-deploy the Audiobookshelf manifests.
 
 ## 9. Troubleshooting
-- **OIDC Login Failing**: 
+- **OIDC Login Failing**:
   - Verify the `audiobookshelf-sso-secret` contains the correct client secret.
   - Check the pod logs for OIDC redirect URI mismatches or connection errors to Authelia.
   - Ensure the `hostAliases` patch is correctly resolving `auth.burntbytes.com` to the Gateway API IP.
-- **Media Not Showing Up**: 
+- **Media Not Showing Up**:
   - Verify the media volume is mounted correctly and the pod has read permissions.
   - Trigger a manual library scan from the Audiobookshelf web UI.

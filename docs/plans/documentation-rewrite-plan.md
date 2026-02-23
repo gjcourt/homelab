@@ -46,9 +46,9 @@ Rewrite documentation for core infrastructure components:
 
 Rewrite documentation for essential applications:
 
-*   [ ] `docs/apps/authelia.md`: Expand existing docs with DR and monitoring.
-*   [ ] `docs/apps/homepage.md`: Configuration, widget setup, and troubleshooting.
-*   [ ] `docs/apps/adguard.md`: DNS configuration, HA setup, and sync jobs.
+*   [x] `docs/apps/authelia.md`: Expand existing docs with DR and monitoring.
+*   [x] `docs/apps/homepage.md`: Configuration, widget setup, and troubleshooting.
+*   [x] `docs/apps/adguard.md`: DNS configuration, HA setup, and sync jobs.
 
 ### Phase 3: Media & Data Applications Documentation
 

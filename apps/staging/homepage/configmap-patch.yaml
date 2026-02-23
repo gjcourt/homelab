@@ -52,7 +52,6 @@ data:
           show: true
           cpu: true
           memory: true
-          storage: true
           showLabel: true
           label: "melodic-muse"
         nodes:

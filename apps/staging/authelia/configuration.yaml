@@ -111,7 +111,7 @@ identity_providers:
         authorization_policy: two_factor
         token_endpoint_auth_method: client_secret_basic
         redirect_uris:
-          - https://bookmarks.stage.burntbytes.com/oidc/callback/
+          - https://links.stage.burntbytes.com/oidc/callback/
         scopes:
           - email
           - openid

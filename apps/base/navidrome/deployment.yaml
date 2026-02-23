@@ -44,6 +44,10 @@ spec:
               value: 1h
             - name: ND_SESSIONTIMEOUT
               value: 24h
+            - name: ND_EXTAUTH_TRUSTEDSOURCES
+              value: "10.0.0.0/8,192.168.0.0/16,172.16.0.0/12"
+            - name: ND_EXTAUTH_USERHEADER
+              value: "Remote-User"
           # Last.fm credentials are injected from the navidrome-lastfm Secret
           # (defined per-environment overlay). They enable album cover art and
           # artist biography/image fetching, and allow per-user scrobbling.

@@ -36,11 +36,11 @@ Every application document (e.g., `docs/apps/<app-name>.md`) should follow this 
 
 Rewrite documentation for core infrastructure components:
 
-*   [ ] `docs/infra/flux.md`: Detailed guide on Flux CD, reconciliation, and troubleshooting.
-*   [ ] `docs/infra/cilium.md`: Cilium CNI, Gateway API, and LoadBalancer IPAM.
-*   [ ] `docs/infra/cert-manager.md`: Certificate management and Cloudflare DNS-01 challenges.
-*   [ ] `docs/infra/storage.md`: Synology CSI driver, NFS mounts, and iSCSI operations.
-*   [ ] `docs/infra/monitoring.md`: Kube-Prometheus-Stack, Loki, Promtail, and Grafana.
+*   [x] `docs/infra/flux.md`: Detailed guide on Flux CD, reconciliation, and troubleshooting.
+*   [x] `docs/infra/cilium.md`: Cilium CNI, Gateway API, and LoadBalancer IPAM.
+*   [x] `docs/infra/cert-manager.md`: Certificate management and Cloudflare DNS-01 challenges.
+*   [x] `docs/infra/storage.md`: Synology CSI driver, NFS mounts, and iSCSI operations.
+*   [x] `docs/infra/monitoring.md`: Kube-Prometheus-Stack, Loki, Promtail, and Grafana.
 
 ### Phase 2: Core Applications Documentation
 

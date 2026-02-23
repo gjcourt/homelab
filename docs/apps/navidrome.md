@@ -1,53 +1,60 @@
 # Navidrome
 
-[Navidrome](https://www.navidrome.org/) is a self-hosted music server and streamer compatible with the Subsonic API.
+## 1. Overview
+Navidrome is an open-source, web-based music collection server and streamer. It gives you the freedom to listen to your music collection from any browser or mobile device. It is compatible with the Subsonic API, allowing you to use a wide variety of client applications.
 
-## URLs
+## 2. Architecture
+Navidrome is deployed as a standard Kubernetes `Deployment` with a single replica in the `navidrome-prod` (and `navidrome-stage`) namespace.
+- **Storage**:
+  - **Data**: Uses a PersistentVolumeClaim (`navidrome-data-pvc`) backed by the `synology-iscsi` storage class to store its SQLite database, cache, and configuration.
+  - **Music**: Uses an NFS PersistentVolume (`navidrome-music-pvc`) to mount the music library directly from the Synology NAS (`/volume1/family/audio/music`).
+- **Security Context**: The pod runs as UID `1028` to match the owner of the music directory on the Synology NAS, ensuring read access to the NFS share.
+- **Networking**: Exposed via Cilium Gateway API (`HTTPRoute`).
 
-| Environment | URL |
-|---|---|
-| Staging | `https://navidrome.stage.burntbytes.com` |
-| Production | `https://navidrome.burntbytes.com` |
+## 3. URLs
+- **Staging**: https://music.stage.burntbytes.com
+- **Production**: https://music.burntbytes.com
 
-## Configuration
+## 4. Configuration
+- **Environment Variables**:
+  - `ND_DATAFOLDER`: `/data`
+  - `ND_MUSICFOLDER`: `/music`
+  - `ND_LOGLEVEL`: `info`
+  - `ND_SCANSCHEDULE`: `1h` (Scans for new music every hour)
+  - `ND_SESSIONTIMEOUT`: `24h`
+- **ConfigMaps/Secrets**:
+  - `navidrome-lastfm` (Secret): Contains Last.fm API credentials (`ND_LASTFM_APIKEY`, `ND_LASTFM_SECRET`) used for fetching album art, artist biographies, and enabling user scrobbling. Managed via SOPS.
 
-Navidrome runs with minimal configuration via environment variables set in the base deployment:
+## 5. Usage Instructions
+- **Web UI**: Navigate to the URL and log in. The first user created becomes the administrator.
+- **Subsonic Clients**: You can use any Subsonic-compatible client (e.g., Symfonium on Android, play:Sub on iOS, Sonixd on Desktop). Point the client to the Navidrome URL and use your credentials.
 
-| Variable | Value | Description |
-|---|---|---|
-| `ND_DATAFOLDER` | `/data` | Database and cache storage |
-| `ND_MUSICFOLDER` | `/music` | Music library root |
-| `ND_LOGLEVEL` | `info` | Log verbosity |
-| `ND_SCANSCHEDULE` | `1h` | How often to scan for new music |
-| `ND_SESSIONTIMEOUT` | `24h` | User session duration |
+## 6. Testing
+To verify Navidrome is working:
+1. Navigate to the web UI and ensure the music library loads.
+2. Play a song and verify it streams correctly.
+3. Verify the pod is running: `kubectl get pods -n navidrome-prod`
 
-## Storage
+## 7. Monitoring & Alerting
+- **Metrics**: Navidrome does not expose Prometheus metrics natively.
+- **Logs**: Check the pod logs for library scan errors or Last.fm API issues:
+  ```bash
+  kubectl logs -n navidrome-prod deploy/navidrome
+  ```
 
-Two PVCs are provisioned per environment:
+## 8. Disaster Recovery
+- **Backup Strategy**:
+  - **Music**: The NFS share (`/volume1/family/audio/music`) is backed up natively on the Synology NAS.
+  - **Data**: The `navidrome-data-pvc` contains the SQLite database (user accounts, playlists, play counts). This is backed up via Synology Snapshot Replication.
+- **Restore Procedure**:
+  1. Restore the `navidrome-data` LUN via Synology DSM if necessary.
+  2. Ensure the NFS music share is intact.
+  3. Re-deploy the Navidrome manifests.
 
-- **navidrome-data-pvc** (1 Gi) — database, cache, and configuration
-- **navidrome-music-pvc** (10 Gi) — music library files
-
-## First-time setup
-
-1. Navigate to the Navidrome URL for your environment.
-2. Create an initial admin account on the first-run wizard.
-3. Upload music to the `/music` volume (e.g. via `kubectl cp` or by mounting shared storage).
-
-## Subsonic API
-
-Navidrome exposes a Subsonic-compatible API at `/rest/`. Compatible clients include:
-
-- [Symfonium](https://symfonium.app/) (Android)
-- [play:Sub](https://apps.apple.com/app/play-sub-subsonic-client/id955329386) (iOS)
-- [Sublime Music](https://sublimemusic.app/) (Linux)
-- [Sonixd](https://github.com/jeffvli/sonixd) (Desktop)
-
-## Health checks
-
-The deployment includes readiness and liveness probes on `/ping` (port 4533).
-
-## Operation
-
-- Navidrome auto-scans the music folder every hour. To trigger an immediate scan, use the admin UI or the Subsonic API endpoint `/rest/startScan`.
-- Logs can be viewed via Grafana/Loki by filtering on `namespace=navidrome-stage` or `namespace=navidrome-prod`.
+## 9. Troubleshooting
+- **Music Not Showing Up**: 
+  - Verify the NFS volume is mounted correctly and the pod has read permissions (UID 1028).
+  - Trigger a manual "Quick Scan" or "Full Scan" from the Navidrome web UI (Activity icon -> Quick Scan).
+- **Last.fm Integration Failing**: 
+  - Verify the `navidrome-lastfm` secret contains valid API keys.
+  - Check the pod logs for API rate limiting or authentication errors.

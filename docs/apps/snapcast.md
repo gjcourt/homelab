@@ -1,84 +1,78 @@
 # Snapcast (Snapserver)
 
-This repo deploys **snapserver** (from the Snapcast project) into Kubernetes, so you can run multi-room audio with Snapcast clients (Raspberry Pis, PCs, etc.) on your network.
+## 1. Overview
+Snapcast is a multi-room client-server audio player, where all clients are time-synchronized with the server to play perfectly synced audio. In this homelab, it serves as the backbone for multi-room audio, allowing various clients (Raspberry Pis, PCs, mobile devices) to play synchronized music.
 
-## What gets deployed
+## 2. Architecture
+Snapcast is deployed as a Kubernetes `Deployment` with a single replica in the `snapcast-prod` (and `snapcast-stage`) namespace.
+- **Containers**:
+  - `snapserver`: The main Snapcast server that reads audio streams and serves them to clients.
+  - `go-librespot` (Sidecar): An open-source Spotify client that acts as a Spotify Connect receiver. It outputs raw PCM audio to a shared named pipe (FIFO) that `snapserver` reads.
+- **Storage**:
+  - **Spotify State**: Uses a PersistentVolumeClaim (`snapcast-spotify-state`) backed by the `synology-iscsi` storage class to store Spotify credentials and pairing state.
+  - **Shared Audio**: Uses an `emptyDir` volume (`shared-audio`) to share the named pipe (`/audio/spotify.fifo`) between the `go-librespot` sidecar and `snapserver`.
+- **Networking**: 
+  - The `snapcast` Service is a `LoadBalancer` (via Cilium IPAM) exposing:
+    - `1704/TCP`: Snapcast audio stream
+    - `1705/TCP`: Snapcast control / RPC
+    - `1780/TCP`: Snapweb (web UI)
+  - Exposed via Cilium Gateway API (`HTTPRoute`) for the web UI.
 
-- Base app: [apps/base/snapcast/](../apps/base/snapcast/)
-- Overlays:
-  - Staging: [apps/staging/snapcast/](../apps/staging/snapcast/)
-  - Production: [apps/production/snapcast/](../apps/production/snapcast/)
+## 3. URLs
+- **Staging**: https://snapcast.stage.burntbytes.com
+- **Production**: https://snapcast.burntbytes.com
 
-## Ports
+## 4. Configuration
+- **Environment Variables**: N/A
+- **ConfigMaps/Secrets**:
+  - `snapcast-config` (ConfigMap): Contains the `snapserver.conf` file, defining the audio streams (e.g., `pipe:///audio/spotify.fifo?name=Spotify&sampleformat=44100:16:2`).
+- **Spotify Connect**: The `go-librespot` sidecar is configured via command-line arguments in the deployment to output to the shared FIFO.
 
-The `snapcast` Service is a `LoadBalancer` (Cilium LB IPAM) exposing:
+## 5. Usage Instructions
+- **Web UI (Snapweb)**: Navigate to the URL to control client volume, group clients, and select the active audio stream for each group.
+- **Clients**: Run `snapclient` on your devices (e.g., Raspberry Pi) pointing to the `snapserver` LoadBalancer IP:
+  ```bash
+  snapclient -h <snapserver-lb-ip>
+  ```
+- **Spotify Connect**: Open the Spotify app on your phone or computer, select "Devices Available", and choose "Snapcast". Playback will be routed through the Snapserver to all connected clients.
 
-- `1704/TCP`: Snapcast audio stream
-- `1705/TCP`: Snapcast control / RPC
-- `1780/TCP`: Snapweb (web UI)
+## 6. Testing
+To verify Snapcast is working:
+1. Navigate to the Snapweb UI and ensure it loads.
+2. Connect a `snapclient` and verify it appears in the Snapweb UI.
+3. Play music via Spotify Connect to the "Snapcast" device and verify audio plays on the connected client.
+4. Verify the pod is running: `kubectl get pods -n snapcast-prod`
 
-## Web UI
+### Quick Test (Noise)
+To test audio output without Spotify, you can pipe random noise into a test FIFO:
+```bash
+kubectl -n snapcast-prod exec deploy/snapcast -c snapserver -- sh -c 'cat /dev/urandom > /tmp/snapfifo'
+```
 
-- Staging: `https://snapcast.stage.burntbytes.com`
-- Production: `https://snapcast.burntbytes.com`
+## 7. Monitoring & Alerting
+- **Metrics**: Snapcast does not expose Prometheus metrics natively.
+- **Logs**: Check the pod logs for server errors or Spotify Connect issues:
+  ```bash
+  kubectl logs -n snapcast-prod deploy/snapcast -c snapserver
+  kubectl logs -n snapcast-prod deploy/snapcast -c go-librespot
+  ```
 
-## Connecting clients
+## 8. Disaster Recovery
+- **Backup Strategy**:
+  - **Spotify State**: The `snapcast-spotify-state` PVC contains the Spotify pairing credentials. This is backed up via Synology Snapshot Replication.
+  - **Config**: The `snapserver.conf` is stored in Git.
+- **Restore Procedure**:
+  1. Restore the `snapcast-spotify-state` LUN via Synology DSM if necessary.
+  2. Re-deploy the Snapcast manifests. If the Spotify state is lost, you will simply need to re-pair the device in the Spotify app.
 
-On each room/device, run `snapclient` pointing to the snapserver LoadBalancer IP (or DNS you map to it):
-
-- `snapclient -h <snapserver-lb-ip>`
-
-Tip: the Android app Snapdroid and Home Assistant’s Snapcast integration can control grouping/volume.
-
-## Feeding audio into the server
-
-The default config uses a named pipe inside the pod:
-
-- FIFO path: `/tmp/snapfifo`
-- Sample format: `48000:16:2`
-
-### Quick test (noise)
-
-This should make connected clients play noise:
-
-- `kubectl -n snapcast-prod exec deploy/snapcast -- sh -c 'cat /dev/urandom > /tmp/snapfifo'`
-
-(Use `snapcast-stage` instead of `snapcast-prod` for staging.)
-
-### Stream real audio via `ffmpeg` (ad-hoc)
-
-If you have `ffmpeg` locally, you can pipe raw PCM into the FIFO through `kubectl exec`:
-
-- `ffmpeg -re -i <input> -f s16le -acodec pcm_s16le -ac 2 -ar 48000 - | kubectl -n snapcast-prod exec -i deploy/snapcast -- sh -c 'cat > /tmp/snapfifo'`
-
-This is good for testing, but for “always-on” audio sources you’ll usually want a dedicated player/source (e.g. Music Assistant, Mopidy/MPD, Shairport-sync, librespot) feeding Snapcast.
-
-## Spotify Connect (librespot)
-
-The Snapserver config includes a `spotify` stream which is fed by a **go-librespot sidecar** writing raw PCM into a shared FIFO (so Snapserver itself stays on the stock image).
-
-- The device should appear in Spotify as `Snapcast`.
-- Pair it once from the Spotify app (choose `Snapcast` in “Connect to a device”).
-- Credentials/state are stored on the PVC `snapcast-spotify-state` mounted at `/config` inside the go-librespot container.
-
-### How it works
-
-- go-librespot outputs `s16le` PCM to `/audio/spotify.fifo`.
-- snapserver reads from the same FIFO as a `pipe://` stream source.
-
-### Notes
-
-To avoid GitHub being required at pod startup, the sidecar uses a small `gjcourt/go-librespot:v0.6.2` image (built from [images/go-librespot/](../images/go-librespot/)). Build/push it once with buildx and then deployments won’t depend on GitHub availability.
-
-If Spotify Connect discovery/pairing becomes flaky later (often due to zeroconf/mDNS in Kubernetes networks), consider:
-
-- Switching the readiness probe to check go-librespot’s internal HTTP server port (instead of just “FIFO exists”) so “Ready” more closely reflects “Spotify is reachable/healthy”.
-- Using `hostNetwork: true` for the go-librespot container (tradeoffs), or adding explicit network support for mDNS/Avahi in your cluster.
-
-## Changing the stream source
-
-Snapserver streams are configured in the ConfigMap:
-
-- [apps/base/snapcast/configmap.yaml](../apps/base/snapcast/configmap.yaml)
-
-If you’d rather push audio over the network instead of a FIFO, Snapcast also supports TCP-based sources; that’s a good next step if you want an external audio source process to feed the server without `kubectl exec`.
+## 9. Troubleshooting
+- **Spotify Connect Device Not Showing Up**: 
+  - Verify the `go-librespot` sidecar is running and hasn't crashed.
+  - Check the `go-librespot` logs for authentication or mDNS discovery errors. Note that mDNS discovery across VLANs/subnets may require an mDNS repeater (e.g., Avahi) on your router.
+- **No Audio on Clients**: 
+  - Verify the client is connected to the correct stream in the Snapweb UI.
+  - Check the `snapserver` logs for errors reading from the FIFO (`/audio/spotify.fifo`).
+  - Ensure the client is not muted in Snapweb.
+- **Audio Sync Issues**: 
+  - Ensure all clients and the server have accurate time synchronization (NTP).
+  - Adjust the latency offset for specific clients in the Snapweb UI if necessary.

@@ -12,8 +12,10 @@ authentication_backend:
     watch: true
 
 access_control:
-  default_policy: deny
+  default_policy: bypass
   rules:
+    - domain: "music.burntbytes.com"
+      policy: one_factor
     - domain: "auth.burntbytes.com"
       policy: bypass
       resources:

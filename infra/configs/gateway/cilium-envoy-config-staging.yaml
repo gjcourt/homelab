@@ -1,0 +1,55 @@
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideEnvoyConfig
+metadata:
+  name: cilium-gateway-authelia-ext-authz-staging
+  namespace: default
+spec:
+  services:
+    - name: cilium-gateway-app-gateway-staging
+      namespace: default
+  resources:
+    - "@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
+      name: authelia_staging_service
+      connect_timeout: 5s
+      type: LOGICAL_DNS
+      lb_policy: ROUND_ROBIN
+      load_assignment:
+        cluster_name: authelia_staging_service
+        endpoints:
+          - lb_endpoints:
+              - endpoint:
+                  address:
+                    socket_address:
+                      address: authelia.authelia-stage.svc.cluster.local
+                      port_value: 9091
+    - "@type": type.googleapis.com/envoy.extensions.filters.http.ext_authz.v3.ExtAuthz
+      name: envoy.filters.http.ext_authz
+      transport_api_version: V3
+      status_on_error:
+        code: ServiceUnavailable
+      failure_mode_allow: false
+      http_service:
+        server_uri:
+          uri: http://authelia.authelia-stage.svc.cluster.local:9091/api/authz/ext-authz
+          cluster: authelia_staging_service
+          timeout: 5s
+        authorization_request:
+          allowed_headers:
+            patterns:
+              - exact: cookie
+              - exact: user-agent
+              - exact: accept
+              - exact: referer
+              - exact: x-forwarded-proto
+              - exact: x-forwarded-host
+              - exact: x-forwarded-for
+        authorization_response:
+          allowed_upstream_headers:
+            patterns:
+              - exact: remote-user
+              - exact: remote-name
+              - exact: remote-email
+              - exact: remote-groups
+          allowed_client_headers:
+            patterns:
+              - exact: set-cookie

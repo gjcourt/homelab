@@ -86,7 +86,7 @@ sequenceDiagram
 
 ### Configuration Details
 
-- **Global Envoy Filter**: `infra/configs/gateway/cilium-envoy-config-production.yaml` defines the `ext_authz` filter pointing to Authelia.
+- **Global Envoy Filter**: `infra/configs/gateway/cilium-envoy-config-production.yaml` defines the `ext_authz` filter pointing to Authelia. See [Gateway Authentication Architecture](../architecture/gateway-auth.md) for details on why and how this works.
 - **Authelia Policy**: `apps/production/authelia/configuration.yaml` defines the rule for `music.burntbytes.com` (Policy: `one_factor`) which triggers the header injection.
 - **Navidrome Config**: `ND_EXTAUTH_USERHEADER` is set to `Remote-User` and trusted proxies are configured via `ND_EXTAUTH_TRUSTEDSOURCES`.
 

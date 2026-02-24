@@ -135,7 +135,7 @@ spec:
           - 109 # render group
       containers:
         - name: immich-machine-learning
-          image: ghcr.io/immich-app/immich-machine-learning@sha256:35b56970279afa31009822609f03fc892effe0107fdb796e5dae57979dc3267c
+          image: ghcr.io/immich-app/immich-machine-learning
           securityContext:
             privileged: true
           env:

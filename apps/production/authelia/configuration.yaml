@@ -39,6 +39,11 @@ notifier:
   filesystem:
     filename: /config/notification.txt
 
+telemetry:
+  metrics:
+    enabled: true
+    address: tcp://0.0.0.0:9959
+
 identity_providers:
   oidc:
     jwks:

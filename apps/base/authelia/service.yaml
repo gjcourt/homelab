@@ -13,3 +13,6 @@ spec:
     - name: http
       port: 9091
       targetPort: http
+    - name: metrics
+      port: 9959
+      targetPort: metrics

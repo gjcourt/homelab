@@ -5,6 +5,8 @@ resources:
   - storage.yaml
   - deployment.yaml
   - service.yaml
+  - servicemonitor.yaml
+  - dashboard.yaml
 configMapGenerator:
   - name: authelia-config
     namespace: authelia

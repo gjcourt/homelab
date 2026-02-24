@@ -8,29 +8,22 @@ spec:
   # Use pgvecto.rs 0.3.0 image (compatible with Immich's requirement >=0.2 <0.4)
   # Note: pg17 not available with v0.3.0, using pg16 instead
   imageName: ghcr.io/tensorchord/cloudnative-pgvecto.rs:16-v0.3.0
-
   instances: 3
-
   enableSuperuserAccess: true
-
   inheritedMetadata:
     labels:
       app: immich-database
       env: production
       policy-type: "database"
-
   monitoring:
     enablePodMonitor: true
-
   storage:
     size: 20Gi
-
   postgresql:
     shared_preload_libraries:
       - "vectors.so"
     parameters:
       search_path: '"$user", public, vectors'
-
   backup:
     barmanObjectStore:
       destinationPath: s3://gjcourt-homelab-backup/production/immich
@@ -47,7 +40,6 @@ spec:
         compression: gzip
       serverName: immich-db-prod-cnpg-v2
     retentionPolicy: 30d
-
   bootstrap:
     initdb:
       database: immich
@@ -60,7 +52,6 @@ spec:
         - GRANT ALL ON SCHEMA vectors TO immich;
         - GRANT ALL ON ALL TABLES IN SCHEMA vectors TO immich;
         - ALTER DEFAULT PRIVILEGES IN SCHEMA vectors GRANT ALL ON TABLES TO immich;
-
   externalClusters:
     - name: immich-db-backup
       barmanObjectStore:
@@ -72,3 +63,10 @@ spec:
           secretAccessKey:
             name: immich-aws-creds-secret
             key: ACCESS_SECRET_KEY
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "4Gi"
+      cpu: "2000m"

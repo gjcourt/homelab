@@ -6,3 +6,4 @@ resources:
   - namespace.yaml
   - serviceaccount.yaml
   - service.yaml
+  - dashboard.yaml

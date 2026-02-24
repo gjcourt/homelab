@@ -8,3 +8,4 @@ resources:
   - service-admin.yaml
   - service-headless.yaml
   - cronjob-sync.yaml
+  - dashboard.yaml

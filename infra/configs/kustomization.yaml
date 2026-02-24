@@ -4,4 +4,5 @@ resources:
   - cert-manager-issuers
   - certificates
   - cilium
+  - dashboards
   - gateway

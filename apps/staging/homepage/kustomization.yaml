@@ -4,8 +4,8 @@ namespace: homepage-stage
 resources:
   - ../../base/homepage/
   - httproute.yaml
-  - secret-synology.yaml
   - rbac.yaml
+  - secret-synology.yaml
 
 labels:
   - pairs:

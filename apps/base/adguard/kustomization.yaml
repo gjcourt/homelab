@@ -1,11 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
+  - cronjob-sync.yaml
   - deployment.yaml
   - namespace.yaml
   - pdb.yaml
   - service.yaml
   - service-admin.yaml
   - service-headless.yaml
-  - cronjob-sync.yaml
-  - dashboard.yaml

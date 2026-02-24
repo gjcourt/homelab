@@ -4,13 +4,12 @@ resources:
   - adguard
   - audiobookshelf
   - authelia
-  - vitals
   - certificates
   - cloudflare-tunnel
   - excalidraw
   - golinks
-  - homepage
   - homeassistant
+  - homepage
   - immich
   - ingress
   - jellyfin
@@ -20,3 +19,4 @@ resources:
   - navidrome
   - snapcast
   - synology-iscsi-monitor
+  - vitals

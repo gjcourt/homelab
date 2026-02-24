@@ -3,8 +3,8 @@ kind: Kustomization
 namespace: linkding-prod
 resources:
   - ../../base/linkding/
-  - configmap.yaml
   - configmap-oidc.yaml
+  - configmap.yaml
   - database.yaml
   - httproute.yaml
   - secret-app.yaml

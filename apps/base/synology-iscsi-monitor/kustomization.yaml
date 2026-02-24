@@ -1,12 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - namespace.yaml
-  - script-cm.yaml
   - deployment.yaml
+  - namespace.yaml
+  - prometheus-rule.yaml
+  - script-cm.yaml
   - service.yaml
   - servicemonitor.yaml
-  - prometheus-rule.yaml
 
 configMapGenerator:
   - name: synology-iscsi-dashboard

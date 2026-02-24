@@ -25,7 +25,8 @@ Topic-specific instructions live in `.github/instructions/`.
 - Preserve existing naming conventions, labels, and folder structure (`apps/base`, `apps/staging`, `apps/production`).
 - Prefer deleting unused resources/config rather than commenting them out. Double-check with the user before removing anything significant.
 - Harden apps by default: use readiness/liveness probes, resource limits, and restricted Pod Security settings unless there's a specific reason not to.
-- Ensure yaml lists are sorted consistently using alpha-numeric sorting (e.g., container ports, volume mounts).
+- Ensure yaml lists are sorted consistently using alpha-numeric sorting (e.g., container ports, volume mounts, kustomize resource lists).
+- Ensure Kustomize `resources`, `components`, and `transformers` lists are sorted alphabetically.
 
 ## Cluster & environment layout
 

@@ -1,9 +1,9 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - namespace.yaml
   - configmap.yaml
   - deployment.yaml
+  - job-db-init.yaml
+  - namespace.yaml
   - service.yaml
   - storage.yaml
-  - job-db-init.yaml

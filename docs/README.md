@@ -14,6 +14,7 @@ Design decisions and system context.
 
 - [Overlays and structure](architecture/overlays-and-structure.md) — base vs staging vs production
 - [DNS strategy](architecture/dns-strategy.md) — split-horizon DNS with wildcard records
+- [Gateway Authentication](architecture/gateway-auth.md) — Global Forward Auth and Envoy filters
 
 ## Guides
 

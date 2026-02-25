@@ -58,3 +58,36 @@ To verify Navidrome is working:
 - **Last.fm Integration Failing**:
   - Verify the `navidrome-lastfm` secret contains valid API keys.
   - Check the pod logs for API rate limiting or authentication errors.
+
+## 10. Authentication
+Navidrome is configured to use Authelia for single sign-on (SSO). The authentication flow is handled by a globally injected Envoy `ext_authz` filter on the Cilium Gateway.
+
+### Flow Diagram
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant G as Gateway (Cilium)
+    participant A as Authelia
+    participant N as Navidrome
+
+    U->>G: HTTP Request (music.burntbytes.com)
+    G->>A: Envoy ExtAuthz Check
+    alt Session Valid
+        A-->>G: 200 OK (Header: Remote-User=user)
+        G->>N: Request + Remote-User
+        N-->>G: 200 OK (App Response)
+        G-->>U: 200 OK
+    else Session Invalid
+        A-->>G: 401 Unauthorized (Redirect to Login)
+        G-->>U: 302 Found (Location: auth.burntbytes.com)
+    end
+```
+
+### Configuration Details
+
+- **Global Envoy Filter**: `infra/configs/gateway/cilium-envoy-config-production.yaml` defines the `ext_authz` filter pointing to Authelia. See [Gateway Authentication Architecture](../architecture/gateway-auth.md) for details on why and how this works.
+- **Authelia Policy**: `apps/production/authelia/configuration.yaml` defines the rule for `music.burntbytes.com` (Policy: `one_factor`) which triggers the header injection.
+- **Navidrome Config**: `ND_EXTAUTH_USERHEADER` is set to `Remote-User` and trusted proxies are configured via `ND_EXTAUTH_TRUSTEDSOURCES`.
+
+See [Navidrome Documentation](https://www.navidrome.org/docs/getting-started/extauth-quickstart/) for more details on External Authentication.

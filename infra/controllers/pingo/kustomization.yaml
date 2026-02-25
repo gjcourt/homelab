@@ -4,3 +4,4 @@ resources:
   - daemonset.yaml
   - namespace.yaml
   - secret.yaml
+  - secret-ghcr.yaml

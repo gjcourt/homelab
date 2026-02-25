@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: pingo
 resources:
-  - daemonset.yaml
+  - cronjob.yaml
   - namespace.yaml
   - secret.yaml
   - secret-ghcr.yaml

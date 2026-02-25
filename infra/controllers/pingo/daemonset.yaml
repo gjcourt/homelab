@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: pingo
+  namespace: pingo
+  labels:
+    app.kubernetes.io/name: pingo
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pingo
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pingo
+    spec:
+      containers:
+        - name: pingo
+          image: ghcr.io/gjcourt/pingo:2026-02-25
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - secretRef:
+                name: pingo-secret
+          resources:
+            limits:
+              memory: 128Mi
+            requests:
+              cpu: 10m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 1000

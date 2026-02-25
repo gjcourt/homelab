@@ -13,6 +13,7 @@ Cluster-level controllers and configuration managed by Flux.
 | loki | Log aggregation |
 | promtail | Log shipping to Loki |
 | mosquitto | MQTT broker |
+| pingo | DNS updater for vpn.burnbytes.com |
 | renovate | Dependency update bot |
 | snapshot | Volume snapshot controller |
 | synology-csi | Synology iSCSI CSI driver |

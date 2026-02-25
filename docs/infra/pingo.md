@@ -1,10 +1,10 @@
 # Pingo
 
-Pingo is a background job that runs as a DaemonSet to update DNS records for `vpn.burnbytes.com`.
+Pingo is a background job that runs as a CronJob to update DNS records for `vpn.burntbytes.com`.
 
 ## Architecture
 
-- **Deployment Type**: DaemonSet
+- **Deployment Type**: CronJob (runs every 5 minutes)
 - **Namespace**: `pingo`
 - **Image**: `ghcr.io/gjcourt/pingo`
 
@@ -23,23 +23,23 @@ metadata:
 type: Opaque
 stringData:
   CLOUDFLARE_API_TOKEN: "your-api-token"
-  DOMAIN: "vpn.burnbytes.com"
+  DOMAINS: "vpn.burntbytes.com"
 ```
 
 ## Operations
 
 ### Viewing Logs
 
-To view the logs for the Pingo DaemonSet:
+To view the logs for the latest Pingo job:
 
 ```bash
 kubectl logs -n pingo -l app.kubernetes.io/name=pingo
 ```
 
-### Restarting
+### Triggering a Manual Run
 
-To restart the Pingo DaemonSet:
+To trigger a manual run of the Pingo CronJob:
 
 ```bash
-kubectl rollout restart daemonset pingo -n pingo
+kubectl create job --from=cronjob/pingo pingo-manual-run -n pingo
 ```

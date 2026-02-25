@@ -22,7 +22,7 @@ metadata:
   namespace: pingo
 type: Opaque
 stringData:
-  API_TOKEN: "your-api-token"
+  CLOUDFLARE_API_TOKEN: "your-api-token"
   DOMAIN: "vpn.burnbytes.com"
 ```
 

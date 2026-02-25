@@ -60,7 +60,7 @@ Topic-specific instructions live in `.github/instructions/`.
     - **Automate Git Operations**: Do not ask the user to commit or create PRs manually. YOU are responsible for `git add`, `git commit`, `git push`, and `gh pr create`.
     - **Automate PR Creation**: Once the feature branch is pushed, ALWAYS attempt to create the PR immediately using `gh pr create`.
     - **NEVER merge PRs** without explicit user approval. Creating a PR is the final automated step.
-    - **Quality Check**: Run `make lint` locally and ensure it passes before creating a PR. If linting fails, run `make format` to fix common issues automatically.
+    - **Quality Check**: Run `make lint` locally and ensure it passes before creating a PR. This includes `yamllint` which MUST pass before creating PRs. If linting fails, run `make format` to fix common issues automatically.
     - **Reconciliation Check**: Before submitting a PR, ALWAYS verify that the manifests can be built and applied. Run `kubectl kustomize apps/production > /tmp/prod.yaml && kubectl apply -f /tmp/prod.yaml --dry-run=server` (or similar for staging/infra) to catch validation errors early.
     - **PR Descriptions**: All PRs MUST have a description that follows the structure of `.github/pull_request_template.md` (What changed, Why, Notes). Do not simply use `--fill`. You must explicitly generate the body content to answer these questions.
     - **Secrets**: If encryption keys are unavailable, commit placeholder secret files (e.g., `value: "PLACEHOLDER"`) and instruct the user in the PR description to encrypt them before merging.

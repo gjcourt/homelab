@@ -57,6 +57,7 @@ Topic-specific instructions live in `.github/instructions/`.
     - Use imperative mood: "Add golinks base manifests" (not "Added" or "Adding").
     - Avoid large monolithic commits if possible.
 - **Pull Requests**:
+    - **Check PR Status**: Before pushing commits to an existing branch or PR, ALWAYS check if the PR has already been merged (e.g., using `gh pr view`). If the PR is already merged, you MUST create a new branch and a new PR for any subsequent changes.
     - **Automate Git Operations**: Do not ask the user to commit or create PRs manually. YOU are responsible for `git add`, `git commit`, `git push`, and `gh pr create`.
     - **Automate PR Creation**: Once the feature branch is pushed, ALWAYS attempt to create the PR immediately using `gh pr create`.
     - **NEVER merge PRs** without explicit user approval. Creating a PR is the final automated step.

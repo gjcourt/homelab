@@ -72,7 +72,10 @@
         icon: zigbee2mqtt.png
         href: https://zigbee.stage.burntbytes.com
         description: Zigbee to MQTT Bridge
-
+    - Pingo:
+        icon: mdi-dns
+        href: https://vpn.burnbytes.com
+        description: DNS updater for vpn.burnbytes.com
 - Monitoring:
     - Cluster Resources:
         icon: prometheus.png

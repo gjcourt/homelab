@@ -34,6 +34,12 @@ Per-app usage, configuration, and operation docs.
 - [Navidrome (music server)](apps/navidrome.md)
 - [Snapcast (multi-room audio)](apps/snapcast.md)
 
+## Infra
+
+Infrastructure component documentation.
+
+- [Pingo (DNS updater)](infra/pingo.md)
+
 ## Incidents
 
 Postmortems for past outages.

@@ -4,7 +4,6 @@ resources:
   - adguard
   - audiobookshelf
   - authelia
-  - vitals
   - golinks
   - immich
   - jellyfin
@@ -13,3 +12,4 @@ resources:
   - memos
   - navidrome
   - snapcast
+  - vitals

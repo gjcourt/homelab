@@ -3,13 +3,13 @@ kind: Kustomization
 namespace: immich-stage
 resources:
   - ../../base/immich/
-  - httproute.yaml
-  - database.yaml
-  - nfs-photos.yaml
-  - secret-db-credentials.yaml
-  - secret-aws-creds.yaml
-  - secret-sso.yaml
   - config-file.yaml
+  - database.yaml
+  - httproute.yaml
+  - nfs-photos.yaml
+  - secret-aws-creds.yaml
+  - secret-db-credentials.yaml
+  - secret-sso.yaml
 
 labels:
   - pairs:

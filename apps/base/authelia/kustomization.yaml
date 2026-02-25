@@ -1,12 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - namespace.yaml
-  - storage.yaml
   - deployment.yaml
+  - namespace.yaml
   - service.yaml
   - servicemonitor.yaml
-  - dashboard.yaml
+  - storage.yaml
 configMapGenerator:
   - name: authelia-config
     namespace: authelia

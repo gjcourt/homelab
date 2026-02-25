@@ -26,6 +26,7 @@ Topic-specific instructions live in `.github/instructions/`.
 - Prefer deleting unused resources/config rather than commenting them out. Double-check with the user before removing anything significant.
 - Harden apps by default: use readiness/liveness probes, resource limits, and restricted Pod Security settings unless there's a specific reason not to.
 - Ensure yaml lists are sorted consistently using alpha-numeric sorting (e.g., container ports, volume mounts).
+- Kustomize `resources`, `components`, and `transformers` lists MUST be sorted alphabetically.
 
 ## Cluster & environment layout
 

@@ -1,52 +1,51 @@
 # Application Health Dashboards Plan
 
-This document outlines a comprehensive plan for adding detailed Grafana dashboards to monitor application health for all apps in both staging and production overlays.
+This document outlines a plan for creating a centralized, filterable Grafana dashboard to monitor application health for all apps across staging and production environments.
 
 ## Objectives
 
-1.  **Visibility**: Provide a clear, real-time view of the health and performance of every application deployed in the homelab.
-2.  **Proactive Monitoring**: Enable early detection of issues before they impact users.
-3.  **Standardization**: Create a consistent dashboard layout and metric set across all applications.
-4.  **Environment Separation**: Clearly distinguish between staging and production metrics.
+1.  **Centralization**: Consolidate application monitoring into a single, comprehensive dashboard.
+2.  **Dynamic Filtering**: Allow operators to filter metrics by Namespace, Application (Pod), and Environment.
+3.  **Standardization**: Apply a uniform set of "Golden Signal" metrics to all applications.
 
-## Standard Dashboard Layout
+## Single Dashboard Strategy
 
-Every application dashboard should follow a standard layout, organized into rows:
+Instead of maintaining individual dashboards for each application, we will deploy a single **"Application Health"** dashboard.
 
-### Row 1: Overview & Golden Signals
+### Templating Variables
+- **Datasource**: Select the Prometheus datasource.
+- **Namespace**: Dropdown list of namespaces (e.g., `immich-prod`, `authelia-stage`).
+- **Pod**: Regex-enabled dropdown to select one or multiple pods within the selected namespace.
 
-*   **Uptime/Availability**: Percentage of time the application is reachable (via Blackbox Exporter or ingress metrics).
-*   **Request Rate**: Total HTTP requests per second (via Cilium/Gateway API or ingress metrics).
-*   **Error Rate**: Percentage of HTTP 5xx errors.
-*   **Latency (P95/P99)**: Response time percentiles.
-*   **Active Connections/Sessions**: If applicable to the application.
+## Dashboard Layout
 
-### Row 2: Pod & Container Resources
+### Row 1: Resource Usage (Universal)
+*   **CPU Usage**: Per-pod CPU usage (rate).
+*   **Memory Usage**: Per-pod Memory working set.
+*   **Network I/O**: Per-pod Receive/Transmit bandwidth.
 
-*   **CPU Usage**: CPU cores used vs. requested/limited.
-*   **Memory Usage**: Memory bytes used vs. requested/limited.
-*   **Network I/O**: Bytes received/transmitted per second.
-*   **Restarts**: Number of container restarts over time.
-*   **Pod Status**: Current state of the pods (Running, Pending, CrashLoopBackOff).
+### Row 2: Performance & Reliability (Future)
+*   These will require standardizing on Ingress/Gateway API metrics or Service Meshes.
+*   **Request Rate**: HTTP Request/s.
+*   **Error Rate**: HTTP 5xx %.
+*   **Latency**: Request duration P95.
 
-### Row 3: Storage & Database (If Applicable)
-
-*   **PVC Usage**: Persistent Volume Claim space used vs. capacity.
-*   **Database Connections**: Active connections to the Postgres/Redis backend.
-*   **Database Query Latency**: Average query execution time.
-*   **Database Cache Hit Ratio**: Percentage of queries served from cache.
-
-### Row 4: Application-Specific Metrics
-
-*   Custom metrics exposed by the application itself (e.g., Immich background jobs, Navidrome active streams, Authelia authentication failures).
+### Row 3: Application Specifics (Future)
+*   Potential for conditional rows that only show up if specific metrics (e.g., `pg_stat_activity`) are present.
 
 ## Execution Plan
 
-### Phase 1: Infrastructure Preparation
+### Phase 1: Core Resource Dashboard (Complete)
+- [x] Create generic `Application Health` dashboard with Namespace and Pod variables.
+- [x] Deploy via `infra/configs/dashboards` ConfigMap.
+- [x] Remove legacy individual dashboards from `apps/base`.
 
-1.  **Verify Metrics Collection**: Ensure `kube-prometheus-stack` is correctly scraping metrics from all namespaces.
-2.  **Standardize Labels**: Ensure all applications have consistent labels (e.g., `app.kubernetes.io/name`, `env`) to allow for easy filtering in Grafana.
-3.  **Dashboard Provisioning**: Configure Grafana to automatically load dashboards from a specific directory or ConfigMap (e.g., using Grafana sidecar).
+### Phase 2: Enhanced Metrics
+- [ ] Integrate Cilium/Envoy metrics for Request/Error/Latency rows.
+- [ ] Add basic storage (PVC) usage metrics.
+
+### Phase 3: Alerting
+- [ ] Define universal alerts for High CPU, OOM Kills, and CrashLoopBackOff.
 
 ### Phase 2: Core Application Dashboards
 

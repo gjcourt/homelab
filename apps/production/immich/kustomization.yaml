@@ -4,11 +4,11 @@ namespace: immich-prod
 resources:
   - ../../base/immich/
   - configmap-oauth.yaml
-  - httproute.yaml
   - database.yaml
+  - httproute.yaml
   - nfs-photos.yaml
-  - secret-db-credentials.yaml
   - secret-aws-creds.yaml
+  - secret-db-credentials.yaml
   - secret-sso.yaml
 
 labels:

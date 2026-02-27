@@ -24,7 +24,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: adguardhome-sync
-              image: ghcr.io/bakito/adguardhome-sync:v0.8.2
+              image: ghcr.io/bakito/adguardhome-sync:v0.9.0
               args: ["run", "--runOnStart", "--api-port", "0"]
               securityContext:
                 allowPrivilegeEscalation: false

@@ -90,7 +90,8 @@ identity_providers:
         client_secret: '$pbkdf2-sha512$310000$WuahPAJrwnNIZ1GGc8VWTQ$I1uUDetS4bzmpuHQKKitvr88UT2leSWrSxm2RmJZomI0z3jztYp7zfBZ1gygvUWe2t/ayWQ85vhZGR9NlCFrkQ'
         public: false
         authorization_policy: two_factor
-        token_endpoint_auth_method: client_secret_basic
+        # Memos uses client_secret_post (credentials in POST body)
+        token_endpoint_auth_method: client_secret_post
         redirect_uris:
           - https://memos.stage.burntbytes.com/auth/callback
         scopes:

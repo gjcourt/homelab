@@ -5,6 +5,11 @@ metadata:
   namespace: default
 spec:
   services:
+    # Associates this CCEC with the staging Gateway's Envoy listener.
+    # NOTE: See production CCEC for details on why HTTP filter injection is
+    # currently broken for Cilium 1.18 Gateway API listeners. This CCEC
+    # registers the Authelia cluster and ExtAuthz config so it is ready when
+    # the injection mechanism is fixed.
     - name: cilium-gateway-app-gateway-staging
       namespace: default
   resources:

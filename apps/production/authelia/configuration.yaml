@@ -90,7 +90,8 @@ identity_providers:
         client_secret: '$pbkdf2-sha512$310000$g9/0sjF27Sl/aIUTbJdq3w$h4cvRLnPPJQBS8UhE17k8fQBgnWQTPi2wz9sHbEVQ29VK2sQ7Ubon8ihcyL8DMtUj2T6yVgFWNBNbqFr/Q/6sw'
         public: false
         authorization_policy: two_factor
-        token_endpoint_auth_method: client_secret_basic
+        # Memos uses client_secret_post (credentials in POST body)
+        token_endpoint_auth_method: client_secret_post
         redirect_uris:
           - https://memos.burntbytes.com/auth/callback
         scopes:
@@ -113,7 +114,7 @@ identity_providers:
         userinfo_signed_response_alg: none
       - client_id: linkding
         client_name: Linkding
-        client_secret: '$pbkdf2-sha512$310000$Mqi2hTE4IsP1NUnXO7gdbA$m77zcB2XGxoPUX/kwDKxEiWkd8td.GQY3VsZ103ftCV.h8LtFQqSzaaDjasbRHfXOzXkVYTxhUm6CVWG1zsreA'
+        client_secret: '$pbkdf2-sha512$310000$Hq0OAAyA19598ZQx8/4SWA$Ndwbf3BIVY7S8xyGK6VoEKyR1R2WMqkL8.rEidHXsZWZMsb2KETR7d3LZHNZH1miH2/eS/oDIGNbGu414xW0BQ'
         public: false
         authorization_policy: two_factor
         token_endpoint_auth_method: client_secret_basic

@@ -8,6 +8,9 @@ metadata:
     env: staging
 data:
   LD_ENABLE_OIDC: "True"
+  # Tell Django to trust the staging origin for CSRF checks on the OIDC
+  # callback endpoint (POST from Authelia redirect → /oidc/callback/).
+  LD_CSRF_TRUSTED_ORIGINS: "https://links.stage.burntbytes.com"
   OIDC_RP_CLIENT_ID: "linkding"
   OIDC_OP_AUTHORIZATION_ENDPOINT: "https://auth.stage.burntbytes.com/api/oidc/authorization"
   OIDC_OP_TOKEN_ENDPOINT: "https://auth.stage.burntbytes.com/api/oidc/token"

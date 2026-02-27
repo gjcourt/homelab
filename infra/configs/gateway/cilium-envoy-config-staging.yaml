@@ -52,4 +52,10 @@ spec:
               - exact: remote-groups
           allowed_client_headers:
             patterns:
+              # Passes Authelia's Set-Cookie (session cookie) on login redirect
               - exact: set-cookie
+              # Passes Authelia's 302 Location header so the browser is
+              # redirected to the Authelia login page on unauthenticated requests
+              - exact: location
+              # Passes WWW-Authenticate on 401 responses
+              - exact: www-authenticate

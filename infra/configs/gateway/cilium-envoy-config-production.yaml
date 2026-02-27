@@ -7,6 +7,7 @@ spec:
   services:
     - name: cilium-gateway-app-gateway-production
       namespace: default
+      listener: https
   resources:
     - "@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
       name: authelia_production_service
@@ -52,4 +53,10 @@ spec:
               - exact: remote-groups
           allowed_client_headers:
             patterns:
+              # Passes Authelia's Set-Cookie (session cookie) on login redirect
               - exact: set-cookie
+              # Passes Authelia's 302 Location header so the browser is
+              # redirected to the Authelia login page on unauthenticated requests
+              - exact: location
+              # Passes WWW-Authenticate on 401 responses
+              - exact: www-authenticate

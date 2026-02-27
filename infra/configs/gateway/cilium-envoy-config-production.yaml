@@ -5,9 +5,23 @@ metadata:
   namespace: default
 spec:
   services:
+    # Associates this CCEC with the production Gateway's Envoy listener.
+    # NOTE: The `listener` field is intentionally omitted.
+    # In Cilium ≤1.14 (pre-single-listener Gateway API), `listener: https` would
+    # match the HTTPS sectionName and correctly inject HTTP filters. In Cilium
+    # 1.15+, the Gateway API controller creates a single combined listener (named
+    # "listener") for all sectionNames, so there is no `https` listener to match.
+    # Setting `listener: listener` or `listener: https` with the current Cilium
+    # version results in "cache unmodified by transaction" — Cilium constructs the
+    # merged listener but the Gateway API internal listener is not updated.
+    # The HTTP filter injection mechanism is currently broken for Cilium 1.18
+    # Gateway API listeners regardless of the `listener` field value.
+    #
+    # TODO: Investigate Cilium GatewayAPI ext-authz once
+    #   https://github.com/cilium/cilium/issues/32793 is resolved, or migrate
+    #   Navidrome to a native OIDC approach.
     - name: cilium-gateway-app-gateway-production
       namespace: default
-      listener: https
   resources:
     - "@type": type.googleapis.com/envoy.config.cluster.v3.Cluster
       name: authelia_production_service

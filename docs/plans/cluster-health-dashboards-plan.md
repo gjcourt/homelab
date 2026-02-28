@@ -1,3 +1,8 @@
+---
+status: planned
+last_modified: 2026-02-27
+---
+
 # Cluster Health Dashboards Plan
 
 This document outlines a comprehensive plan for creating a detailed suite of Grafana dashboards specifically for monitoring the health of the `melodic-muse` cluster. The plan assumes the cluster will eventually scale to a 6-node configuration, with each node having identical hardware (except for 64GB of RAM per node).

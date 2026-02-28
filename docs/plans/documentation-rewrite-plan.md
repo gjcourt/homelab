@@ -1,3 +1,8 @@
+---
+status: in-progress
+last_modified: 2026-02-27
+---
+
 # Documentation Rewrite Plan
 
 This document outlines a comprehensive plan for rewriting the entire suite of documentation for the homelab repository. The goal is to provide detailed, consistent, and actionable instructions for every application and infrastructure component.
@@ -54,11 +59,11 @@ Rewrite documentation for essential applications:
 
 Rewrite documentation for media and data-heavy applications:
 
-*   [ ] `docs/apps/immich.md`: Machine learning, hardware acceleration, Postgres vector DB, and NFS storage.
-*   [ ] `docs/apps/jellyfin.md`: Hardware transcoding and media mounts.
-*   [ ] `docs/apps/navidrome.md`: Expand existing docs with DR and monitoring.
-*   [ ] `docs/apps/audiobookshelf.md`: Storage and backup procedures.
-*   [ ] `docs/apps/snapcast.md`: Expand existing docs with DR and monitoring.
+*   [x] `docs/apps/immich.md`: Machine learning, hardware acceleration, Postgres vector DB, and NFS storage.
+*   [x] `docs/apps/jellyfin.md`: Hardware transcoding and media mounts.
+*   [x] `docs/apps/navidrome.md`: Expand existing docs with DR and monitoring.
+*   [x] `docs/apps/audiobookshelf.md`: Storage and backup procedures.
+*   [x] `docs/apps/snapcast.md`: Expand existing docs with DR and monitoring.
 
 ### Phase 4: Utility Applications Documentation
 

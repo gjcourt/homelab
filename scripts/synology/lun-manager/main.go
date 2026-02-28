@@ -2,10 +2,10 @@
 //
 // Subcommands:
 //
-//	audit   - Compare NAS iSCSI config against Kubernetes PVs and report
-//	          bound/released/orphaned LUNs.
-//	cleanup - Delete orphaned LUNs and their targets from the NAS.
-//             Pass --dry-run to preview without making changes.
+//		audit   - Compare NAS iSCSI config against Kubernetes PVs and report
+//		          bound/released/orphaned LUNs.
+//		cleanup - Delete orphaned LUNs and their targets from the NAS.
+//	            Pass --dry-run to preview without making changes.
 //
 // Required environment variables:
 //

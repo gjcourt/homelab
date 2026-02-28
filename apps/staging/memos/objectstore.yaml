@@ -1,0 +1,24 @@
+# ObjectStore for the Barman Cloud Plugin — memos staging.
+# Defines where CNPG should store WAL archives and base backups in S3.
+# Referenced by the Cluster resource via plugins[].parameters.barmanObjectName.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: memos-db-staging-cnpg-v1-backup
+  namespace: memos-stage
+spec:
+  configuration:
+    # v2 path: avoids WAL archive conflicts with any previous cluster system ID.
+    destinationPath: s3://gjcourt-homelab-backup/staging/memos/v2
+    s3Credentials:
+      accessKeyId:
+        name: memos-aws-creds-secret
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: memos-aws-creds-secret
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: 14d

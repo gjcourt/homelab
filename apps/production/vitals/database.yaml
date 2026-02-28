@@ -18,37 +18,25 @@ spec:
     # Actual usage: ~178Mi; target = 20% headroom → 512Mi.
     # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
     size: 512Mi
-  # TODO: Re-enable backup once real S3 credentials are configured
-  # backup:
-  #   barmanObjectStore:
-  #     destinationPath: s3://gjcourt-homelab-backup/production/vitals
-  #     s3Credentials:
-  #       accessKeyId:
-  #         name: vitals-aws-creds-secret
-  #         key: ACCESS_KEY_ID
-  #       secretAccessKey:
-  #         name: vitals-aws-creds-secret
-  #         key: ACCESS_SECRET_KEY
-  #     wal:
-  #       compression: gzip
-  #     data:
-  #       compression: gzip
-  #   retentionPolicy: "30d"
+  # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
+  # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: vitals-db-production-cnpg-v1-backup
+        serverName: vitals-db-production-cnpg-v1
   bootstrap:
     initdb:
       database: app
       owner: app
       secret:
         name: vitals-db-credentials
-  # TODO: Re-enable externalClusters once real S3 credentials are configured
-  # externalClusters:
-  #   - name: vitals-db-backup
-  #     barmanObjectStore:
-  #       destinationPath: s3://gjcourt-homelab-backup/production/vitals
-  #       s3Credentials:
-  #         accessKeyId:
-  #           name: vitals-aws-creds-secret
-  #           key: ACCESS_KEY_ID
-  #         secretAccessKey:
-  #           name: vitals-aws-creds-secret
-  #           key: ACCESS_SECRET_KEY
+  # externalClusters references the ObjectStore via the plugin for PITR/restore.
+  externalClusters:
+    - name: vitals-db-backup
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: vitals-db-production-cnpg-v1-backup
+          serverName: vitals-db-production-cnpg-v1

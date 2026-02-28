@@ -22,22 +22,14 @@ spec:
   storage:
     size: 2Gi
 
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://gjcourt-homelab-backup/staging/linkding/v1
-      s3Credentials:
-        accessKeyId:
-          name: linkding-aws-creds-secret
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: linkding-aws-creds-secret
-          key: ACCESS_SECRET_KEY
-      wal:
-        compression: gzip
-      data:
-        compression: gzip
-      serverName: linkding-db-staging-cnpg-v1
-    retentionPolicy: 14d
+  # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
+  # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: linkding-db-staging-cnpg-v1-backup
+        serverName: linkding-db-staging-cnpg-v1
 
   # Bootstrap from backup if available, otherwise initialize fresh
   # To restore: uncomment recovery section and comment out initdb
@@ -51,16 +43,13 @@ spec:
         # recovery:
         #   source: linkding-db-backup
 
+  # externalClusters references the ObjectStore via the plugin for PITR/restore.
   externalClusters:
     - name: linkding-db-backup
-      barmanObjectStore:
-        destinationPath: s3://gjcourt-homelab-backup/staging/linkding/v1
-        s3Credentials:
-          accessKeyId:
-            name: linkding-aws-creds-secret
-            key: ACCESS_KEY_ID
-          secretAccessKey:
-            name: linkding-aws-creds-secret
-            key: ACCESS_SECRET_KEY
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: linkding-db-staging-cnpg-v1-backup
+          serverName: linkding-db-staging-cnpg-v1
 
 

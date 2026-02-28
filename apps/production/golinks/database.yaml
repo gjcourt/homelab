@@ -18,37 +18,25 @@ spec:
     # Actual usage: ~488Mi; target = 20% headroom → 1Gi.
     # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
     size: 1Gi
-  # TODO: Re-enable backup once real S3 credentials are configured
-  # backup:
-  #   barmanObjectStore:
-  #     destinationPath: s3://gjcourt-homelab-backup/production/golinks
-  #     s3Credentials:
-  #       accessKeyId:
-  #         name: golinks-aws-creds-secret
-  #         key: ACCESS_KEY_ID
-  #       secretAccessKey:
-  #         name: golinks-aws-creds-secret
-  #         key: ACCESS_SECRET_KEY
-  #     wal:
-  #       compression: gzip
-  #     data:
-  #       compression: gzip
-  #   retentionPolicy: "30d"
+  # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
+  # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: golinks-db-production-cnpg-v1-backup
+        serverName: golinks-db-production-cnpg-v1
   bootstrap:
     initdb:
       database: app
       owner: app
       secret:
         name: golinks-db-credentials
-  # TODO: Re-enable externalClusters once real S3 credentials are configured
-  # externalClusters:
-  #   - name: golinks-db-backup
-  #     barmanObjectStore:
-  #       destinationPath: s3://gjcourt-homelab-backup/production/golinks
-  #       s3Credentials:
-  #         accessKeyId:
-  #           name: golinks-aws-creds-secret
-  #           key: ACCESS_KEY_ID
-  #         secretAccessKey:
-  #           name: golinks-aws-creds-secret
-  #           key: ACCESS_SECRET_KEY
+  # externalClusters references the ObjectStore via the plugin for PITR/restore.
+  externalClusters:
+    - name: golinks-db-backup
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: golinks-db-production-cnpg-v1-backup
+          serverName: golinks-db-production-cnpg-v1

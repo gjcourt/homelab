@@ -1,0 +1,17 @@
+# ScheduledBackup — vitals production.
+# Triggers a daily base backup at 02:00 UTC via the Barman Cloud Plugin.
+# The plugin configuration must match the HelmRelease name installed in cnpg-system.
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: vitals-db-production-cnpg-v1-backup
+  namespace: vitals-prod
+spec:
+  cluster:
+    name: vitals-db-production-cnpg-v1
+  # 6-field cron: seconds minutes hours dom month dow
+  schedule: "0 0 2 * * *"
+  backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io

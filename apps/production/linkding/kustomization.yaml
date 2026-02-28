@@ -7,6 +7,8 @@ resources:
   - configmap.yaml
   - database.yaml
   - httproute.yaml
+  - objectstore.yaml
+  - scheduledbackup.yaml
   - secret-app.yaml
   - secret-aws-creds.yaml
   - secret-db-credentials.yaml

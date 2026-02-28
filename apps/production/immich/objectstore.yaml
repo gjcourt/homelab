@@ -1,0 +1,23 @@
+# ObjectStore for the Barman Cloud Plugin — immich production.
+# Defines where CNPG should store WAL archives and base backups in S3.
+# Referenced by the Cluster resource via plugins[].parameters.barmanObjectName.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: immich-db-prod-cnpg-v2-backup
+  namespace: immich-prod
+spec:
+  configuration:
+    destinationPath: s3://gjcourt-homelab-backup/production/immich
+    s3Credentials:
+      accessKeyId:
+        name: immich-aws-creds-secret
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: immich-aws-creds-secret
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: 30d

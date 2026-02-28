@@ -7,6 +7,8 @@ resources:
   - database.yaml
   - httproute.yaml
   - nfs-photos.yaml
+  - objectstore.yaml
+  - scheduledbackup.yaml
   - secret-aws-creds.yaml
   - secret-db-credentials.yaml
   - secret-sso.yaml

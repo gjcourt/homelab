@@ -1,0 +1,23 @@
+# ObjectStore for the Barman Cloud Plugin — linkding production.
+# Defines where CNPG should store WAL archives and base backups in S3.
+# Referenced by the Cluster resource via plugins[].parameters.barmanObjectName.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: linkding-db-production-cnpg-v1-backup
+  namespace: linkding-prod
+spec:
+  configuration:
+    destinationPath: s3://gjcourt-homelab-backup/production/linkding
+    s3Credentials:
+      accessKeyId:
+        name: linkding-aws-creds-secret
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: linkding-aws-creds-secret
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: 30d

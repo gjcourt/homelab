@@ -106,10 +106,13 @@ spec:
             httpGet:
               path: /ping
               port: http
-            initialDelaySeconds: 300
+            # ROCm/ONNX model loading can take 10+ minutes on first inference;
+            # give the container 600s before the first liveness check and allow
+            # 30 consecutive failures (5 min window) before killing.
+            initialDelaySeconds: 600
             periodSeconds: 10
             timeoutSeconds: 10
-            failureThreshold: 6
+            failureThreshold: 30
           readinessProbe:
             httpGet:
               path: /ping

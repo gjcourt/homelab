@@ -54,21 +54,21 @@ same SSH client.
 Deletes orphaned LUNs (and their associated Targets) from the NAS.
 
 ```
-# Dry-run (default — safe to run any time)
-lun-manager cleanup
+# Dry-run — preview what would be deleted (default: execute)
+lun-manager cleanup --dry-run
 
 # Actually delete
-lun-manager cleanup --execute
+lun-manager cleanup
 
 # Delete with 4 parallel workers
-lun-manager cleanup --execute --workers 4
+lun-manager cleanup --workers 4
 ```
 
 Flags:
 
 | Flag         | Default | Description                              |
 |--------------|---------|------------------------------------------|
-| `--execute`  | false   | Actually delete (omit for dry-run)       |
+| `--dry-run`  | false   | Preview deletions; do not make changes   |
 | `--workers`  | 1       | Number of concurrent deletion goroutines |
 
 Each deletion performs three steps per LUN: unmap → delete LUN → delete
@@ -94,5 +94,5 @@ Total LUNs: 64  |  Bound: 64  |  Released: 0  |  Orphaned: 0
 DRY RUN — would delete 3 orphaned LUN(s):
   LUN k8s-csi-pvc-aaa111  UUID xxxxxxxx-...  TID 42
   ...
-Re-run with --execute to delete.
+Re-run without --dry-run to delete.
 ```

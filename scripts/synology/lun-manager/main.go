@@ -5,7 +5,7 @@
 //	audit   - Compare NAS iSCSI config against Kubernetes PVs and report
 //	          bound/released/orphaned LUNs.
 //	cleanup - Delete orphaned LUNs and their targets from the NAS.
-//	          Safe by default (dry-run); pass --execute to actually delete.
+//             Pass --dry-run to preview without making changes.
 //
 // Required environment variables:
 //
@@ -512,7 +512,7 @@ func deleteLUN(client *ssh.Client, password, name, uuid, tid string) error {
 	return nil
 }
 
-func cmdCleanup(execute bool, workers int) error {
+func cmdCleanup(dryRun bool, workers int) error {
 	client, password, err := newSSHClient()
 	if err != nil {
 		return err
@@ -563,12 +563,12 @@ func cmdCleanup(execute bool, workers int) error {
 		return nil
 	}
 
-	if !execute {
+	if dryRun {
 		fmt.Printf("DRY RUN — would delete %d orphaned LUN(s):\n", len(orphans))
 		for _, o := range orphans {
 			fmt.Printf("  LUN %-50s  UUID %s  TID %s\n", o.Name, o.UUID, o.TID)
 		}
-		fmt.Println("\nRe-run with --execute to delete.")
+		fmt.Println("\nRe-run without --dry-run to delete.")
 		return nil
 	}
 
@@ -648,7 +648,7 @@ USAGE
 SUBCOMMANDS
   audit     Compare NAS iSCSI LUNs with Kubernetes PVs and print a report.
   cleanup   Delete orphaned LUNs from the NAS.
-              --execute   Actually delete (default: dry-run).
+              --dry-run   Preview deletions without making any changes.
               --workers N Concurrent deletion workers (default: 1).
 
 ENVIRONMENT VARIABLES
@@ -679,13 +679,13 @@ func main() {
 
 	case "cleanup":
 		fs := flag.NewFlagSet("cleanup", flag.ExitOnError)
-		execute := fs.Bool("execute", false, "Actually delete (default: dry-run)")
+		dryRun := fs.Bool("dry-run", false, "Preview deletions without making any changes")
 		workers := fs.Int("workers", 1, "Concurrent deletion workers")
 		if err := fs.Parse(os.Args[2:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		if err := cmdCleanup(*execute, *workers); err != nil {
+		if err := cmdCleanup(*dryRun, *workers); err != nil {
 			fmt.Fprintf(os.Stderr, "cleanup: %v\n", err)
 			os.Exit(1)
 		}

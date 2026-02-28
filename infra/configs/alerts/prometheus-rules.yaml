@@ -73,6 +73,35 @@ spec:
               pod whose PVC is backed by this device to force a CSI detach/reattach.
 
     # -------------------------------------------------------------------------
+    # DaemonSet pod readiness
+    #
+    # The built-in KubeDaemonSetRolloutStuck alert only fires on
+    # scheduling/update divergence. It does NOT fire when pods are scheduled
+    # and running but fail their readiness probe (0/1 Ready). This gap allowed
+    # promtail to be 0/1 for 8+ days without any alert firing.
+    #
+    # This rule fires when the number of ready pods is less than the desired
+    # scheduled count — i.e. at least one pod is running but not passing its
+    # readiness probe.
+    # -------------------------------------------------------------------------
+    - name: daemonset
+      rules:
+        - alert: DaemonSetPodNotReady
+          expr: >
+            kube_daemonset_status_number_ready
+            < kube_daemonset_status_desired_number_scheduled
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset }} has pods not ready"
+            description: >
+              DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset }} has
+              only {{ $value }} ready pod(s) out of the desired scheduled count.
+              At least one pod is running but failing its readiness probe.
+              Check: kubectl get pods -n {{ $labels.namespace }} -l app.kubernetes.io/name={{ $labels.daemonset }}
+
+    # -------------------------------------------------------------------------
     # Loki push errors
     #
     # Fires when Loki returns HTTP 5xx responses to push requests. Loki returns

@@ -1,3 +1,8 @@
+---
+status: planned
+last_modified: 2026-02-27
+---
+
 # Linkding Staging DB Restore Test Plan
 
 This document outlines the plan to run a live test of destroying the Linkding staging database and restoring it from a backup.

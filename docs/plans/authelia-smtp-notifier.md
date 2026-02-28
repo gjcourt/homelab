@@ -1,3 +1,8 @@
+---
+status: planned
+last_modified: 2026-02-27
+---
+
 # Plan: Authelia SMTP notifier
 
 ## Status: Not started

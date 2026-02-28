@@ -1,3 +1,8 @@
+---
+status: in-progress
+last_modified: 2026-02-28
+---
+
 # Application Health Dashboards Plan
 
 This document outlines a plan for creating a centralized, filterable Grafana dashboard to monitor application health for all apps across staging and production environments.
@@ -42,10 +47,10 @@ Instead of maintaining individual dashboards for each application, we will deplo
 
 ### Phase 2: Enhanced Metrics
 - [ ] Integrate Cilium/Envoy metrics for Request/Error/Latency rows.
-- [ ] Add basic storage (PVC) usage metrics.
+- [x] Add basic storage (PVC) usage metrics.
 
 ### Phase 3: Alerting
-- [ ] Define universal alerts for High CPU, OOM Kills, and CrashLoopBackOff.
+- [x] Define universal alerts for High CPU, OOM Kills, and CrashLoopBackOff.
 
 ### Phase 2: Core Application Dashboards
 

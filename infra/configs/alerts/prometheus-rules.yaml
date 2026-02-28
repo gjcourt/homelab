@@ -127,3 +127,68 @@ spec:
               at a rate of {{ $value | humanize }}/s. Log ingestion is degraded.
               Common cause: iSCSI WAL volume is read-only. Check:
               kubectl logs -n monitoring loki-0 | grep -i 'read-only\|wal'
+
+    # -------------------------------------------------------------------------
+    # Application: CrashLoopBackOff
+    #
+    # Fires when any container has been in CrashLoopBackOff for more than 5
+    # minutes. This catches pods that restart repeatedly due to misconfiguration,
+    # missing secrets, or application panics.
+    # -------------------------------------------------------------------------
+    - name: application
+      rules:
+        - alert: ContainerCrashLoopBackOff
+          expr: kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"} == 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} is CrashLoopBackOff"
+            description: >
+              Container {{ $labels.container }} in pod {{ $labels.pod }}
+              (namespace {{ $labels.namespace }}) has been in CrashLoopBackOff
+              for more than 5 minutes. Check logs:
+              kubectl logs -n {{ $labels.namespace }} {{ $labels.pod }} -c {{ $labels.container }} --previous
+
+        # Fires when a container's most recent exit was an OOM kill. Combined
+        # with a restart counter increase to avoid re-alerting indefinitely on
+        # pods that have stabilised but whose last_terminated_reason is stale.
+        - alert: ContainerOOMKilled
+          expr: >
+            (
+              increase(kube_pod_container_status_restarts_total[1h]) > 0
+            ) * on(namespace, pod, container)
+            (
+              kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+            )
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} was OOM killed"
+            description: >
+              Container {{ $labels.container }} in pod {{ $labels.pod }}
+              (namespace {{ $labels.namespace }}) was killed by the OOM killer
+              in the last hour. Increase the container's memory limit or
+              investigate a memory leak. Check:
+              kubectl describe pod -n {{ $labels.namespace }} {{ $labels.pod }}
+
+        # Fires when a container sustains CPU usage above 90% of its configured
+        # limit for 10+ minutes. Only matches containers with limits set.
+        - alert: ContainerHighCPU
+          expr: >
+            (
+              sum(rate(container_cpu_usage_seconds_total{image!="",container!="POD"}[5m])) by (namespace, pod, container)
+              /
+              sum(kube_pod_container_resource_limits{resource="cpu"}) by (namespace, pod, container)
+            ) > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} CPU > 90% of limit"
+            description: >
+              Container {{ $labels.container }} in pod {{ $labels.pod }}
+              (namespace {{ $labels.namespace }}) has been using more than 90%
+              of its CPU limit for 10+ minutes (current: {{ $value | humanizePercentage }}).
+              Consider increasing the CPU limit or investigating a busy loop.

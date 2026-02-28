@@ -1,3 +1,8 @@
+---
+status: in-progress
+last_modified: 2026-02-28
+---
+
 # Cluster Health Dashboards Plan
 
 This document outlines a comprehensive plan for creating a detailed suite of Grafana dashboards specifically for monitoring the health of the `melodic-muse` cluster. The plan assumes the cluster will eventually scale to a 6-node configuration, with each node having identical hardware (except for 64GB of RAM per node).
@@ -106,3 +111,11 @@ This dashboard monitors the health of the Kubernetes control plane components.
     *   Integrate Cilium and Gateway API metrics.
 4.  **Configure Alerting**: Define Alertmanager rules for critical cluster events (e.g., NodeNotReady, HighCPUUsage, StorageNearingCapacity).
 5.  **GitOps Integration**: Export the finalized dashboards as JSON and commit them to the repository to be managed by Flux.
+
+## Progress
+
+- [x] **Cluster Overview dashboard** (`infra/configs/dashboards/cluster-overview-cm.yaml`): Deployed via Flux. Includes node/pod status stat panels, cluster CPU/memory %, active alert count, top namespaces by CPU/memory (time series), and top 10 pods by CPU/memory (tables).
+- [x] **Node Details dashboard** (`infra/configs/dashboards/node-details-cm.yaml`): Deployed via Flux. Node selector variable (`instance`), CPU %, memory %, load averages, uptime, total memory stat panels, CPU-by-mode stacked time series, memory breakdown time series, disk I/O, and network I/O panels.
+- [ ] Storage & CSI Dashboard
+- [ ] Networking & Gateway Dashboard
+- [ ] Control Plane Dashboard

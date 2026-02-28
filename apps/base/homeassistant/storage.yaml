@@ -8,4 +8,6 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 10Gi
+      # Actual usage: ~9Mi; provisioned 1Gi with growth headroom for HA config,
+      # automations, SQLite DB, and scripts. Requires PVC deletion to take effect.
+      storage: 1Gi

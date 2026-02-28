@@ -12,7 +12,9 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 5Gi
+      # Actual usage: ~227Mi; target = 20% headroom → 512Mi.
+      # Requires PVC deletion to take effect (PVCs cannot shrink in-place).
+      storage: 512Mi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -28,4 +30,7 @@ spec:
   storageClassName: synology-iscsi
   resources:
     requests:
-      storage: 50Gi
+      # Actual usage: ~32Mi; this is a pure cache - safe to recreate.
+      # Target = 20% headroom → 256Mi (was 50Gi, massively over-provisioned).
+      # Requires PVC deletion to take effect.
+      storage: 256Mi

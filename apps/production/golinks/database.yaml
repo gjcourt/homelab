@@ -15,7 +15,9 @@ spec:
   monitoring:
     enablePodMonitor: true
   storage:
-    size: 10Gi
+    # Actual usage: ~488Mi; target = 20% headroom → 1Gi.
+    # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
+    size: 1Gi
   # TODO: Re-enable backup once real S3 credentials are configured
   # backup:
   #   barmanObjectStore:

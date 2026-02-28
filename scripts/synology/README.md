@@ -1,111 +1,61 @@
 # Synology iSCSI Operations Toolkit
 
-Scripts for managing Synology NAS iSCSI storage used by the Kubernetes cluster's
-CSI driver (`synology-csi`). All scripts use SSH + the `synoiscsiwebapi` CLI
-tool on the NAS — they do **not** use the Synology Web API.
+Tools for managing Synology NAS iSCSI storage used by the Kubernetes cluster's
+CSI driver (`synology-csi`).
+
+## lun-manager (Go binary)
+
+The primary tool is `lun-manager/`, a compiled Go binary that:
+
+- **Audits** iSCSI LUNs on the NAS against Kubernetes PersistentVolumes.
+- **Cleans up** orphaned LUNs and their Targets (LUNs with no matching K8s PV).
+
+See [`lun-manager/README.md`](lun-manager/README.md) for full documentation.
+
+### Quick start
+
+```bash
+cd scripts/synology/lun-manager
+go build -o lun-manager .
+
+export SYNOLOGY_HOST="192.168.5.8"
+export SYNOLOGY_USER="manager"
+export SYNOLOGY_PASSWORD="..."
+
+# Audit: show Bound / Released / ORPHAN status for every LUN
+./lun-manager audit
+
+# Preview what cleanup would delete
+./lun-manager cleanup --dry-run
+
+# Delete orphans (with 4 parallel workers)
+./lun-manager cleanup --workers 4
+```
 
 ## Prerequisites
 
-- Python 3 with `paramiko`:
-  ```bash
-  pip3 install paramiko
-  ```
+- Go 1.22+ (for building `lun-manager`).
 - SSH access to the Synology NAS (user in `administrators` group).
-- Environment variables:
-  ```bash
-  export SYNOLOGY_HOST="192.168.5.8"   # NAS IP
-  export SYNOLOGY_USER="manager"        # SSH user
-  export SYNOLOGY_PASSWORD="..."        # SSH password
-  ```
-- `kubectl` configured with cluster access (for K8s cross-referencing).
-
-## Scripts
-
-### `audit_luns.py` — Audit LUN/target state
-
-Cross-references LUNs and targets on the NAS with Kubernetes PersistentVolumes.
-Reports counts for Bound, Released, and Orphaned LUNs, plus targets with no LUN.
-
-```bash
-python3 scripts/synology/audit_luns.py
-```
-
-Output example:
-```
-=== LUN AUDIT ===
-Total LUNs on NAS: 70
-Total Targets on NAS: 70
-  Matched to Bound PV: 62
-  Matched to Released/Available PV: 8
-  No K8s PV (orphaned): 0
-```
-
-**When to use:** Before and after any repair operation, or as a periodic health
-check. Always run this first to understand current state.
-
-### `cleanup_orphans.py` — Remove orphaned LUNs
-
-Deletes LUNs that have no matching Kubernetes PV (orphaned). For each orphan,
-unmaps the LUN from its target, deletes the LUN, then deletes the target.
-
-```bash
-# Dry run (default) — shows what would be deleted
-python3 scripts/synology/cleanup_orphans.py
-
-# Execute deletions
-python3 scripts/synology/cleanup_orphans.py --execute
-```
-
-**When to use:** After `audit_luns.py` shows orphaned LUNs. Always do a dry run
-first.
-
-### `enable_targets.py` — Enable disabled targets
-
-Finds iSCSI targets with `enabled=no` in the config and enables them via the
-CLI. Disabled targets cause pods to fail with "volume not found" errors even
-when LUN mappings are correct.
-
-```bash
-python3 scripts/synology/enable_targets.py
-```
-
-**When to use:** After mass LUN rebinding, firmware updates, or any operation
-that may have disabled targets. Symptoms: pods stuck in `ContainerCreating` with
-iSCSI connection errors.
-
-### `rebind_luns_ssh.py` — Rebind orphaned LUNs to targets
-
-Finds LUNs that exist on the NAS but are not mapped to any target, matches them
-to existing targets by PVC UUID, and creates the mapping. Run `enable_targets.py`
-afterward since newly-mapped targets may start disabled.
-
-```bash
-python3 scripts/synology/rebind_luns_ssh.py
-```
-
-**When to use:** When LUNs exist on the NAS but are unmapped from their targets
-(usually after iSCSI service restarts or config corruption). Symptoms: pods fail
-with "LUN not found" in CSI driver logs.
+- `kubectl` configured with cluster access (for K8s PV cross-referencing).
 
 ## Typical Recovery Workflow
 
 ```
-1. Diagnose:    python3 scripts/synology/audit_luns.py
-2. Rebind:      python3 scripts/synology/rebind_luns_ssh.py  (if unmapped LUNs)
-3. Enable:      python3 scripts/synology/enable_targets.py   (if disabled targets)
-4. Clean:       python3 scripts/synology/cleanup_orphans.py  (dry run, then --execute)
-5. Verify:      python3 scripts/synology/audit_luns.py
+1. Audit:    lun-manager audit
+2. Preview:  lun-manager cleanup --dry-run
+3. Clean:    lun-manager cleanup [--workers N]
+4. Verify:   lun-manager audit
 ```
 
 ## How It Works
 
 - **Name mapping**: The CSI driver creates LUNs named `k8s-csi-pvc-<UUID>` and
-  targets named with IQN `iqn.2000-01.com.synology:*.pvc-<UUID>`. The scripts
-  match them by extracting the PVC UUID from both sides.
-- **SSH + CLI**: Scripts SSH to the NAS and run
-  `/usr/local/bin/synoiscsiwebapi` with `sudo`. This is the internal CLI tool
-  that the DSM UI calls; it is more reliable than the HTTP-based Web API for
-  bulk operations.
+  targets named with IQN `iqn.2000-01.com.synology:*.pvc-<UUID>`. The tools
+  match them by stripping the `k8s-csi-` prefix from the LUN name to recover
+  the Kubernetes PV name.
+- **SSH + CLI**: The binary SSHes to the NAS and runs
+  `/usr/syno/bin/synoiscsitool` with `sudo`. This is the internal CLI tool that
+  the DSM UI calls — more reliable than the HTTP API for bulk operations.
 - **Config files**: The NAS stores iSCSI config in:
   - `/usr/syno/etc/iscsi_target.conf` — target definitions
   - `/usr/syno/etc/iscsi_lun.conf` — LUN definitions

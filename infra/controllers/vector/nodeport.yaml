@@ -1,0 +1,26 @@
+# Expose Vector's TCP socket source on a fixed NodePort so that Talos
+# machine.logging.destinations can forward kernel logs from the host network.
+#
+# Talos is configured to send json_lines logs to tcp://192.168.5.1:30600.
+# externalTrafficPolicy: Local ensures that each Talos node's log stream is
+# received by the Vector pod running on the same node, preserving host context.
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector-talos-logs
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: vector
+    app.kubernetes.io/part-of: vector
+spec:
+  type: NodePort
+  externalTrafficPolicy: Local
+  selector:
+    # Matches the podLabels.talos-log-receiver label set in values.yaml
+    talos-log-receiver: "true"
+  ports:
+    - name: talos-logs
+      port: 6000
+      targetPort: 6000
+      protocol: TCP
+      nodePort: 30600

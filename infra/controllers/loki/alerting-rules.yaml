@@ -1,0 +1,55 @@
+# Loki ruler alerting rules for Talos kernel log events.
+#
+# These rules are evaluated by Loki's built-in ruler component using LogQL.
+# Alerts are forwarded to kube-prometheus-stack's Alertmanager.
+#
+# Rule file must live at /var/loki/rules/<tenant_id>/<file>.yaml.
+# With auth_enabled: false, the tenant_id is "fake".
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loki-alerting-rules
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: loki
+    app.kubernetes.io/part-of: loki
+data:
+  rules.yaml: |
+    groups:
+      - name: talos-btrfs
+        rules:
+          # BTRFS "parent transid verify failed" indicates that the iSCSI volume
+          # is serving stale data from a reconnect. The filesystem remains mounted
+          # rw in error state EA and does NOT trigger node_filesystem_readonly,
+          # so kernel log scraping is the only observable signal.
+          - alert: BTRFSCorruptionDetected
+            expr: |
+              sum(count_over_time({job="talos-kernel"} |= "parent transid verify failed" [5m])) > 0
+            for: 0m
+            labels:
+              severity: critical
+            annotations:
+              summary: "BTRFS corruption detected on a Talos node"
+              description: >
+                Talos kernel logs report "parent transid verify failed" on a BTRFS
+                device. An iSCSI volume is likely serving stale data after a
+                session reconnect. Find the affected PVC via `talosctl dmesg` and
+                recycle it. The NodeFilesystemReadOnly alert will NOT fire for
+                this failure mode.
+
+      - name: talos-iscsi
+        rules:
+          # iSCSI transport or login errors in kernel logs indicate a storage
+          # session has been dropped or failed to reconnect cleanly.
+          - alert: ISCSIKernelError
+            expr: |
+              sum(count_over_time({job="talos-kernel"} |~ "(?i)(iscsid|iscsi).*(error|failed|timeout|lost)" [5m])) > 0
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "iSCSI error in Talos kernel logs"
+              description: >
+                Talos kernel logs contain iSCSI-related error messages. A PVC
+                may have lost its backing storage connection. Check
+                `talosctl dmesg` and verify iSCSI session state on the Synology.

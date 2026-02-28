@@ -1,0 +1,129 @@
+# Custom PrometheusRule alerts for homelab infrastructure.
+#
+# These rules address alert gaps identified in the 2026-02-28 iSCSI mass
+# read-only incident where failures accumulated silently for 8–12 days:
+#
+#   - CNPG replica pods crashing left clusters degraded without alerting.
+#   - iSCSI volumes going read-only on block-device filesystems went undetected.
+#   - Loki WAL becoming read-only caused the entire log ingestion pipeline to
+#     fail silently (promtail was retrying against a Loki returning HTTP 500).
+#
+# Prometheus discovers this rule via ruleSelector: {} (select all) and
+# ruleNamespaceSelector: {} in the kube-prometheus-stack values.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: homelab-infrastructure-alerts
+  namespace: monitoring
+  labels:
+    # Matched by kube-prometheus-stack's ruleSelector label filter (if any).
+    release: kube-prometheus-stack
+spec:
+  groups:
+    # -------------------------------------------------------------------------
+    # CNPG cluster health
+    #
+    # Fires when a CloudNative-PG primary pod reports fewer than 2 streaming
+    # replicas, indicating at least one replica is down or failing to stream.
+    # cnpg_collector_replica_mode == 0 identifies the primary; replicas have
+    # mode == 1 and always report 0 streaming replicas (they are the receiver).
+    # -------------------------------------------------------------------------
+    - name: cnpg
+      rules:
+        - alert: CNPGClusterDegraded
+          expr: >
+            (cnpg_pg_replication_streaming_replicas < 2)
+            * on(namespace, pod)
+            (cnpg_collector_replica_mode == 0)
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CNPG cluster {{ $labels.namespace }} has fewer than 2 streaming replicas"
+            description: >
+              The primary pod {{ $labels.pod }} in namespace {{ $labels.namespace }}
+              reports {{ $value }} streaming replica(s). Expected 2 for a 3-instance
+              cluster. A replica may be in CrashLoopBackOff or experiencing iSCSI
+              I/O errors. Check: kubectl get cluster -n {{ $labels.namespace }}
+
+    # -------------------------------------------------------------------------
+    # Node filesystem read-only
+    #
+    # Fires when a block-device filesystem (xfs, ext4) on the node goes
+    # read-only. This is the primary signal for Synology iSCSI volumes reverting
+    # to read-only mode after a session disruption.
+    #
+    # Filtered to real block-device fstypes only — rootfs, tmpfs, squashfs, and
+    # overlay are intentionally read-only in Talos and would produce false
+    # positives.
+    # -------------------------------------------------------------------------
+    - name: node
+      rules:
+        - alert: NodeFilesystemReadOnly
+          expr: node_filesystem_readonly{fstype=~"xfs|ext4|ext3|ext2|btrfs"} == 1
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Read-only filesystem on {{ $labels.instance }}: {{ $labels.mountpoint }}"
+            description: >
+              Filesystem {{ $labels.mountpoint }} (device {{ $labels.device }},
+              fstype {{ $labels.fstype }}) on {{ $labels.instance }} is read-only.
+              This is the iSCSI volume read-only failure pattern. Fix: delete the
+              pod whose PVC is backed by this device to force a CSI detach/reattach.
+
+    # -------------------------------------------------------------------------
+    # DaemonSet pod readiness
+    #
+    # The built-in KubeDaemonSetRolloutStuck alert only fires on
+    # scheduling/update divergence. It does NOT fire when pods are scheduled
+    # and running but fail their readiness probe (0/1 Ready). This gap allowed
+    # promtail to be 0/1 for 8+ days without any alert firing.
+    #
+    # This rule fires when the number of ready pods is less than the desired
+    # scheduled count — i.e. at least one pod is running but not passing its
+    # readiness probe.
+    # -------------------------------------------------------------------------
+    - name: daemonset
+      rules:
+        - alert: DaemonSetPodNotReady
+          expr: >
+            kube_daemonset_status_number_ready
+            < kube_daemonset_status_desired_number_scheduled
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset }} has pods not ready"
+            description: >
+              DaemonSet {{ $labels.namespace }}/{{ $labels.daemonset }} has
+              only {{ $value }} ready pod(s) out of the desired scheduled count.
+              At least one pod is running but failing its readiness probe.
+              Check: kubectl get pods -n {{ $labels.namespace }} -l app.kubernetes.io/name={{ $labels.daemonset }}
+
+    # -------------------------------------------------------------------------
+    # Loki push errors
+    #
+    # Fires when Loki returns HTTP 5xx responses to push requests. Loki returns
+    # 5xx when the WAL or storage is unavailable (e.g. iSCSI read-only).
+    # Promtail will silently retry, masking the failure — this alert surfaces it.
+    # -------------------------------------------------------------------------
+    - name: loki
+      rules:
+        - alert: LokiPushErrors
+          expr: >
+            rate(loki_request_duration_seconds_count{
+              route="loki_api_v1_push",
+              status_code=~"5.."
+            }[5m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Loki is returning 5xx errors on the push endpoint"
+            description: >
+              Loki pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is
+              returning HTTP {{ $labels.status_code }} errors for log push requests
+              at a rate of {{ $value | humanize }}/s. Log ingestion is degraded.
+              Common cause: iSCSI WAL volume is read-only. Check:
+              kubectl logs -n monitoring loki-0 | grep -i 'read-only\|wal'

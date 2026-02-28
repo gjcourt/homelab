@@ -10,7 +10,9 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      # Actual usage: ~6Mi; target = 20% headroom → 256Mi.
+      # Requires PVC deletion to take effect (PVCs cannot shrink in-place).
+      storage: 256Mi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -24,4 +26,6 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 2Gi
+      # Actual usage: ~6Mi; target = 20% headroom → 256Mi.
+      # Requires PVC deletion to take effect (PVCs cannot shrink in-place).
+      storage: 256Mi

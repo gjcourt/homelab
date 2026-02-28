@@ -12,8 +12,9 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      # Jellyfin requires at least 2GiB free space for config/data
-      storage: 5Gi
+      # Actual usage: ~220Mi; target = 20% headroom → 512Mi.
+      # Requires PVC deletion to take effect (PVCs cannot shrink in-place).
+      storage: 512Mi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -28,4 +29,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 10Gi
+      # Actual usage: ~14Mi; this is a pure cache - safe to recreate.
+      # Target = 20% headroom → 256Mi (was 10Gi, massively over-provisioned).
+      # Requires PVC deletion to take effect.
+      storage: 256Mi

@@ -12,4 +12,5 @@ resources:
   - renovate
   - snapshot
   - synology-csi
+  - vector
   - zigbee2mqtt

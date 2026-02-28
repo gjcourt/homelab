@@ -1,0 +1,62 @@
+# Deploy Vector as a DaemonSet so it runs on every Talos node and processes
+# kernel/service logs sent from Talos machine.logging destinations.
+role: DaemonSet
+
+# Add a well-known label so the NodePort service can select the pods without
+# depending on Vector's internal chart labels.
+podLabels:
+  talos-log-receiver: "true"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+# Full Vector configuration.
+# Receives Talos json_lines logs over TCP, labels them, and ships to Loki.
+customConfig:
+  data_dir: /vector-data-dir
+
+  sources:
+    # Receive Talos kernel and service logs sent via machine.logging.destinations.
+    # Format: newline-delimited JSON (Talos json_lines format, one event per line).
+    talos_logs:
+      type: socket
+      address: "0.0.0.0:6000"
+      mode: tcp
+      framing:
+        method: newline_delimited
+      decoding:
+        codec: json
+
+  transforms:
+    # Normalise Talos field names. Talos uses "talos-service" (hyphenated) which
+    # is invalid in VRL without quoting; rename to talos_service. Also ensure
+    # that level and msg are always present.
+    normalize_talos:
+      type: remap
+      inputs:
+        - talos_logs
+      source: |
+        .talos_service = string(del(."talos-service")) ?? "kernel"
+        .level = string(.level) ?? "info"
+        .msg = string(.msg) ?? ""
+
+  sinks:
+    # Forward all Talos log events to Loki with structured labels for querying.
+    loki_output:
+      type: loki
+      inputs:
+        - normalize_talos
+      endpoint: http://loki.monitoring.svc.cluster.local:3100
+      encoding:
+        codec: json
+      labels:
+        job: talos-kernel
+        talos_service: "{{ talos_service }}"
+        level: "{{ level }}"
+      batch:
+        max_events: 500
+        timeout_secs: 5

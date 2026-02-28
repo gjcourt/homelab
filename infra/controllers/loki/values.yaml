@@ -19,6 +19,24 @@ loki:
           prefix: loki_index_
           period: 24h
 
+  # Ruler config: enables the built-in Loki ruler component to evaluate LogQL
+  # alerting rules and forward firing alerts to Alertmanager.
+  # Rules are mounted from the loki-alerting-rules ConfigMap at the path
+  # expected by storage.local.directory (/var/loki/rules/<tenant_id>/).
+  rulerConfig:
+    storage:
+      type: local
+      local:
+        # auth_enabled: false → tenant ID is "fake"
+        directory: /var/loki/rules
+    rule_path: /var/loki/rules-temp
+    alertmanager_url: http://kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
+    ring:
+      kvstore:
+        store: inmemory
+    enable_api: true
+    enable_alertmanager_v2: true
+
 singleBinary:
   replicas: 1
   persistence:
@@ -31,6 +49,16 @@ singleBinary:
     requests:
       cpu: 100m
       memory: 512Mi
+  # Mount the loki-alerting-rules ConfigMap into the pod at the path that
+  # matches rulerConfig.storage.local.directory + the "fake" tenant directory.
+  extraVolumes:
+    - name: loki-rules
+      configMap:
+        name: loki-alerting-rules
+  extraVolumeMounts:
+    - name: loki-rules
+      mountPath: /var/loki/rules/fake
+      readOnly: true
 
 # Disable unused components for single binary mode
 read:

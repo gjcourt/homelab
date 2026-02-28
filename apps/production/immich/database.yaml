@@ -26,22 +26,14 @@ spec:
       - "vectors.so"
     parameters:
       search_path: '"$user", public, vectors'
-  backup:
-    barmanObjectStore:
-      destinationPath: s3://gjcourt-homelab-backup/production/immich
-      s3Credentials:
-        accessKeyId:
-          name: immich-aws-creds-secret
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: immich-aws-creds-secret
-          key: ACCESS_SECRET_KEY
-      wal:
-        compression: gzip
-      data:
-        compression: gzip
-      serverName: immich-db-prod-cnpg-v2
-    retentionPolicy: 30d
+  # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
+  # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: immich-db-prod-cnpg-v2-backup
+        serverName: immich-db-prod-cnpg-v2
   bootstrap:
     initdb:
       database: immich
@@ -54,17 +46,14 @@ spec:
         - GRANT ALL ON SCHEMA vectors TO immich;
         - GRANT ALL ON ALL TABLES IN SCHEMA vectors TO immich;
         - ALTER DEFAULT PRIVILEGES IN SCHEMA vectors GRANT ALL ON TABLES TO immich;
+  # externalClusters references the ObjectStore via the plugin for PITR/restore.
   externalClusters:
     - name: immich-db-backup
-      barmanObjectStore:
-        destinationPath: s3://gjcourt-homelab-backup/production/immich
-        s3Credentials:
-          accessKeyId:
-            name: immich-aws-creds-secret
-            key: ACCESS_KEY_ID
-          secretAccessKey:
-            name: immich-aws-creds-secret
-            key: ACCESS_SECRET_KEY
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: immich-db-prod-cnpg-v2-backup
+          serverName: immich-db-prod-cnpg-v2
   resources:
     requests:
       memory: "512Mi"

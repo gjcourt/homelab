@@ -24,22 +24,14 @@ spec:
     # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
     size: 1Gi
 
-  # TODO: Re-enable backup once real S3 credentials are configured
-  # backup:
-  #   barmanObjectStore:
-  #     destinationPath: s3://gjcourt-homelab-backup/production/linkding
-  #     s3Credentials:
-  #       accessKeyId:
-  #         name: linkding-aws-creds-secret
-  #         key: ACCESS_KEY_ID
-  #       secretAccessKey:
-  #         name: linkding-aws-creds-secret
-  #         key: ACCESS_SECRET_KEY
-  #     wal:
-  #       compression: gzip
-  #     data:
-  #       compression: gzip
-  #   retentionPolicy: "30d"
+  # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
+  # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: linkding-db-production-cnpg-v1-backup
+        serverName: linkding-db-production-cnpg-v1
 
   # Bootstrap from backup if available, otherwise initialize fresh
   # To restore: uncomment recovery section and comment out initdb
@@ -52,15 +44,11 @@ spec:
         # recovery:
         #   source: linkding-db-backup
 
-  # TODO: Re-enable externalClusters once real S3 credentials are configured
-  # externalClusters:
-  #   - name: linkding-db-backup
-  #     barmanObjectStore:
-  #       destinationPath: s3://gjcourt-homelab-backup/production/linkding
-  #       s3Credentials:
-  #         accessKeyId:
-  #           name: linkding-aws-creds-secret
-  #           key: ACCESS_KEY_ID
-  #         secretAccessKey:
-  #           name: linkding-aws-creds-secret
-  #           key: ACCESS_SECRET_KEY
+  # externalClusters references the ObjectStore via the plugin for PITR/restore.
+  externalClusters:
+    - name: linkding-db-backup
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: linkding-db-production-cnpg-v1-backup
+          serverName: linkding-db-production-cnpg-v1

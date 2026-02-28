@@ -41,25 +41,15 @@ spec:
     parameters:
       search_path: '"$user", public, vectors'
 
-  backup:
-    barmanObjectStore:
-      # v2 path: the v1 path contains WAL from a previous cluster (different
-      # system ID), which causes barman-cloud-check-wal-archive to fail with
-      # "Expected empty archive". Using v2 gives a clean, empty prefix.
-      destinationPath: s3://gjcourt-homelab-backup/staging/immich/v2
-      s3Credentials:
-        accessKeyId:
-          name: immich-aws-creds-secret
-          key: ACCESS_KEY_ID
-        secretAccessKey:
-          name: immich-aws-creds-secret
-          key: ACCESS_SECRET_KEY
-      wal:
-        compression: gzip
-      data:
-        compression: gzip
-      serverName: immich-db-staging-cnpg-v1
-    retentionPolicy: 14d
+  # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
+  # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
+  # Note: uses /v2 path in S3 to avoid WAL conflicts from previous cluster system ID.
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: immich-db-staging-cnpg-v1-backup
+        serverName: immich-db-staging-cnpg-v1
 
   bootstrap:
     initdb:
@@ -74,15 +64,11 @@ spec:
         - GRANT ALL ON ALL TABLES IN SCHEMA vectors TO immich;
         - ALTER DEFAULT PRIVILEGES IN SCHEMA vectors GRANT ALL ON TABLES TO immich;
 
+  # externalClusters references the ObjectStore via the plugin for PITR/restore.
   externalClusters:
     - name: immich-db-backup
-      barmanObjectStore:
-        # Keep in sync with backup.barmanObjectStore.destinationPath above
-        destinationPath: s3://gjcourt-homelab-backup/staging/immich/v2
-        s3Credentials:
-          accessKeyId:
-            name: immich-aws-creds-secret
-            key: ACCESS_KEY_ID
-          secretAccessKey:
-            name: immich-aws-creds-secret
-            key: ACCESS_SECRET_KEY
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: immich-db-staging-cnpg-v1-backup
+          serverName: immich-db-staging-cnpg-v1

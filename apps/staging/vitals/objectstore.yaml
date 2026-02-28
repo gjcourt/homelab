@@ -1,0 +1,23 @@
+# ObjectStore for the Barman Cloud Plugin — vitals staging.
+# Defines where CNPG should store WAL archives and base backups in S3.
+# Referenced by the Cluster resource via plugins[].parameters.barmanObjectName.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: vitals-db-staging-cnpg-v1-backup
+  namespace: vitals-stage
+spec:
+  configuration:
+    destinationPath: s3://gjcourt-homelab-backup/staging/vitals/v1
+    s3Credentials:
+      accessKeyId:
+        name: vitals-aws-creds-secret
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: vitals-aws-creds-secret
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: 14d

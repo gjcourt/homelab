@@ -1,0 +1,26 @@
+# ObjectStore for the Barman Cloud Plugin — immich staging.
+# Uses the /v2 path to avoid WAL archive conflicts from the previous cluster system ID.
+# Defines where CNPG should store WAL archives and base backups in S3.
+# Referenced by the Cluster resource via plugins[].parameters.barmanObjectName.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: immich-db-staging-cnpg-v1-backup
+  namespace: immich-stage
+spec:
+  configuration:
+    # v2 path: the v1 path contains WAL from a previous cluster (different system
+    # ID), causing barman-cloud-check-wal-archive to fail. /v2 is a clean prefix.
+    destinationPath: s3://gjcourt-homelab-backup/staging/immich/v2
+    s3Credentials:
+      accessKeyId:
+        name: immich-aws-creds-secret
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: immich-aws-creds-secret
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: 14d

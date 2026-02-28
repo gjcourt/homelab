@@ -1,3 +1,8 @@
+---
+status: in-progress
+last_modified: 2026-02-27
+---
+
 # Authelia SSO Rollout Plan
 
 ## Objective

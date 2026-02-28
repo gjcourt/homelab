@@ -1,3 +1,8 @@
+---
+status: complete
+last_modified: 2026-02-27
+---
+
 # CNPG Backup Upgrade Plan
 
 This document outlines the plan to upgrade the CloudNativePG (CNPG) backup configuration from the deprecated in-tree `barmanObjectStore` to the new Barman Cloud Plugin architecture.

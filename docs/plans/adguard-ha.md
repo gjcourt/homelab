@@ -1,3 +1,8 @@
+---
+status: planned
+last_modified: 2026-02-27
+---
+
 # TODO: AdGuard Home HA (DNS + UI-driven config)
 
 This repo is structured so staging uses a `-stage` suffix and production has no suffix (desired end-state). Today, AdGuard overlays are:

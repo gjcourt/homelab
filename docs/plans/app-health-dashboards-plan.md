@@ -1,3 +1,8 @@
+---
+status: in-progress
+last_modified: 2026-02-27
+---
+
 # Application Health Dashboards Plan
 
 This document outlines a plan for creating a centralized, filterable Grafana dashboard to monitor application health for all apps across staging and production environments.

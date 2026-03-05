@@ -25,10 +25,3 @@ spec:
       interval: 12h
   driftDetection:
     mode: enabled
-
-  # CRDs for this plugin are managed by infra/crds/barman-cloud and installed
-  # via the infra-crds Kustomization before this HelmRelease runs.  Disable
-  # Helm's own CRD templating to avoid dual ownership.
-  values:
-    crds:
-      create: false

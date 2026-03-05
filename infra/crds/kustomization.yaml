@@ -1,17 +1,14 @@
 # CRD pre-installation layer.
 #
-# These CRDs are managed here (rather than by their respective Helm charts) to
-# ensure they exist before any controller or config Kustomization runs on a
-# fresh bootstrap.  The infra-crds Flux Kustomization is applied first and the
-# infra-controllers Kustomization dependsOn it.
+# These CRDs are managed here to ensure they exist before any controller or
+# config Kustomization runs on a fresh bootstrap.  The infra-crds Flux
+# Kustomization is applied first and the infra-controllers Kustomization
+# dependsOn it.
 #
 # VERSION PINS – update these files when bumping the corresponding component:
-#   cert-manager/crds.yaml   → matches infra/controllers/cert-manager release version
-#   barman-cloud/crds.yaml   → matches infra/controllers/barman-cloud chart version
-#   gateway-api/crds.yaml    → independent; keep in sync with Cilium's supported Gateway API version
+#   gateway-api/crds.yaml    → independent; keep in sync with Cilium's supported
+#   Gateway API version
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - barman-cloud
-  - cert-manager
   - gateway-api

@@ -6,9 +6,11 @@
 # dependsOn it.
 #
 # VERSION PINS – update these files when bumping the corresponding component:
+#   cilium/crds.yaml         → matches infra/controllers/cilium release version
 #   gateway-api/crds.yaml    → independent; keep in sync with Cilium's supported
 #   Gateway API version
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
+  - cilium
   - gateway-api

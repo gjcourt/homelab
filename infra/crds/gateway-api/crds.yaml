@@ -16035,7 +16035,10 @@ spec:
           required:
             - spec
           type: object
-      served: false
+      # kept served:true for Cilium 1.18.x compatibility — operator registers a
+      # field indexer against gateway.networking.k8s.io/v1alpha2/TLSRoute and
+      # will fatal if the version is not served, even though it is "optional".
+      served: true
       storage: false
       subresources:
         status: {}

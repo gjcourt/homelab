@@ -15,9 +15,11 @@ spec:
         namespace: security
       interval: 12h
   install:
-    crds: Create
+    remediation:
+      retries: 3
   upgrade:
-    crds: CreateReplace
+    remediation:
+      retries: 3
   driftDetection:
     mode: enabled
 

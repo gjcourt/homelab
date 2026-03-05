@@ -15,10 +15,8 @@ spec:
         name: cilium
         namespace: kube-system
       interval: 12h
-  install:
-    crds: Create
-  upgrade:
-    crds: CreateReplace
+  # CRDs are pre-installed by infra/crds/cilium (infra-crds Kustomization) and
+  # managed by the Cilium operator at runtime; no Helm CRD ownership needed.
   driftDetection:
     mode: enabled
 

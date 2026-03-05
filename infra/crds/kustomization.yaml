@@ -1,0 +1,14 @@
+# CRD pre-installation layer.
+#
+# These CRDs are managed here to ensure they exist before any controller or
+# config Kustomization runs on a fresh bootstrap.  The infra-crds Flux
+# Kustomization is applied first and the infra-controllers Kustomization
+# dependsOn it.
+#
+# VERSION PINS – update these files when bumping the corresponding component:
+#   gateway-api/crds.yaml    → independent; keep in sync with Cilium's supported
+#   Gateway API version
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - gateway-api

@@ -55,8 +55,10 @@ customConfig:
         codec: json
       labels:
         job: talos-kernel
-        talos_service: "{{ talos_service }}"
-        level: "{{ level }}"
+        # Use Helm tpl-safe escaping: {{ "{{" }} renders to {{ in the final config,
+        # which is the Vector field-reference syntax for dynamic Loki labels.
+        talos_service: '{{ "{{" }} talos_service {{ "}}" }}'
+        level: '{{ "{{" }} level {{ "}}" }}'
       batch:
         max_events: 500
         timeout_secs: 5

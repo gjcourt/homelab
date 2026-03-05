@@ -1,0 +1,14 @@
+# Cilium v1.19.1 CRDs – pre-installed before infra-controllers so that the
+# Cilium operator can register them on startup and cilium-agent can complete
+# its initialisation.
+#
+# Source: https://github.com/cilium/cilium/tree/v1.19.1/pkg/k8s/apis/cilium.io/client/crds
+# Covers: cilium.io/v2 (17 CRDs) and cilium.io/v2alpha1 (4 CRDs)
+#
+# VERSION PINS – when bumping Cilium, regenerate crds.yaml by downloading all
+# files under pkg/k8s/apis/cilium.io/client/crds/{v2,v2alpha1}/ from the
+# matching tag and concatenating them with '---' separators.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - crds.yaml

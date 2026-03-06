@@ -1,7 +1,7 @@
 # Storage
 
 ## 1. Overview
-Storage in the homelab is provided by a Synology NAS (`192.168.5.8`). The cluster uses the Synology CSI driver to dynamically provision both iSCSI LUNs (for block storage) and NFS shares (for shared file storage).
+Storage in the homelab is provided by a Synology NAS (`10.42.2.21`). The cluster uses the Synology CSI driver to dynamically provision both iSCSI LUNs (for block storage) and NFS shares (for shared file storage).
 
 ## 2. Architecture
 The Synology CSI driver is deployed in the `synology-csi` namespace. It communicates with the Synology DSM API to create, delete, and manage storage volumes.
@@ -9,7 +9,7 @@ The Synology CSI driver is deployed in the `synology-csi` namespace. It communic
 - **NFS**: Used for ReadWriteMany (RWX) shared file storage (e.g., media libraries).
 
 ## 3. URLs
-- **Synology DSM**: https://192.168.5.8:5001
+- **Synology DSM**: https://10.42.2.21:5001
 
 ## 4. Configuration
 - **Storage Classes**:
@@ -59,15 +59,15 @@ kubectl get pvc example-pvc
   ```
 
 ## 8. Disaster Recovery
-- **Backup Strategy**: 
+- **Backup Strategy**:
   - iSCSI LUNs are backed up using Synology Snapshot Replication or Hyper Backup on the NAS itself.
   - Application-level backups (e.g., CNPG for Postgres) are preferred over raw block snapshots for databases.
-- **Restore Procedure**: 
+- **Restore Procedure**:
   - Restore the LUN via Synology DSM.
   - Recreate the PV/PVC in Kubernetes pointing to the restored LUN.
 
 ## 9. Troubleshooting
-- **PVC stuck in Pending**: 
+- **PVC stuck in Pending**:
   - Check the CSI controller logs for API errors (e.g., invalid credentials, target limits reached).
   - Verify the Synology NAS is reachable from the cluster.
 - **iSCSI Zombie Targets**: The Synology NAS has a hard limit of 128 iSCSI targets. If this limit is reached, new PVCs cannot be provisioned. See `docs/guides/synology-iscsi-operations.md` for cleanup procedures.

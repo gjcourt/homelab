@@ -14,7 +14,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 192.168.5.8
+    server: 10.42.2.21
     path: /volume1/family/images/photos
     readOnly: false
   mountOptions:

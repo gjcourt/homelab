@@ -18,7 +18,7 @@ See [`lun-manager/README.md`](lun-manager/README.md) for full documentation.
 cd scripts/synology/lun-manager
 go build -o lun-manager .
 
-export SYNOLOGY_HOST="192.168.5.8"
+export SYNOLOGY_HOST="10.42.2.21"
 export SYNOLOGY_USER="manager"
 export SYNOLOGY_PASSWORD="..."
 

@@ -1,6 +1,6 @@
 # Synology iSCSI / Volume Debugging
 
-This cluster uses a Synology NAS (192.168.5.8) as the iSCSI storage backend via the `synology-csi` driver. Volume issues are among the most common failure modes. Use this section to diagnose and fix them efficiently.
+This cluster uses a Synology NAS (10.42.2.21) as the iSCSI storage backend via the `synology-csi` driver. Volume issues are among the most common failure modes. Use this section to diagnose and fix them efficiently.
 
 ## Architecture
 
@@ -39,7 +39,7 @@ This cluster uses a Synology NAS (192.168.5.8) as the iSCSI storage backend via 
 
 ## Synology NAS access
 
-- **DSM API**: `https://192.168.5.8:5001` (HTTPS, self-signed cert — use `-k` with curl).
+- **DSM API**: `https://10.42.2.21:5001` (HTTPS, self-signed cert — use `-k` with curl).
 - **SSH**: Port 22, same credentials.
 - **Credentials**: Stored in `client-info-secret` in the `synology-csi` namespace. Retrieve with: `kubectl get secret -n synology-csi client-info-secret -o jsonpath='{.data.client-info\.yaml}' | base64 -d`.
 - **Scripts**: All operational scripts are in `scripts/synology/`. See `scripts/synology/README.md`.

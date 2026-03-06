@@ -9,7 +9,7 @@ driver.
 ```
 ┌─────────────────┐     iSCSI      ┌──────────────────────┐
 │  K8s Node        │◄──────────────►│  Synology NAS        │
-│  (melodic-muse)  │               │  (192.168.5.8)       │
+│  (melodic-muse)  │               │  (10.42.2.21)       │
 │                  │               │                      │
 │  synology-csi    │               │  LUN ──► Target      │
 │  driver creates: │               │  (block)  (iSCSI     │
@@ -30,7 +30,7 @@ driver.
 
 ```bash
 pip3 install paramiko
-export SYNOLOGY_HOST="192.168.5.8"
+export SYNOLOGY_HOST="10.42.2.21"
 export SYNOLOGY_USER="manager"
 export SYNOLOGY_PASSWORD="your-password-here"
 ```

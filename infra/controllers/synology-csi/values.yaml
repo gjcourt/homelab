@@ -5,7 +5,7 @@ storageClasses:
   synology-iscsi: # Persistent storage class
     isDefault: true
     parameters:
-      dsm: 192.168.5.8
+      dsm: 10.42.2.21
       location: /volume1
       protocol: iscsi
       fsType: btrfs
@@ -13,7 +13,7 @@ storageClasses:
 
   synology-iscsi-ephemeral: # Ephemeral storage class
     parameters:
-      dsm: 192.168.5.8
+      dsm: 10.42.2.21
       location: /volume1
       protocol: iscsi
       fsType: btrfs
@@ -22,7 +22,7 @@ storageClasses:
 
   synology-nfs: # NFS storage class for shared media
     parameters:
-      dsm: 192.168.5.8
+      dsm: 10.42.2.21
       location: /volume1
       protocol: nfs
     reclaimPolicy: Retain

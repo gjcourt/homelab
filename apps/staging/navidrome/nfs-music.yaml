@@ -30,7 +30,7 @@ spec:
     - retrans=2
     - nolock
   nfs:
-    server: 192.168.5.8
+    server: 10.42.2.21
     path: /volume1/family/audio/music
     readOnly: true
 ---

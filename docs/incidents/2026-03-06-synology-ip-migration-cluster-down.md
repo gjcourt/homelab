@@ -1,7 +1,7 @@
 # Incident: Synology NAS IP Migration — Full Cluster Outage
 
 **Date:** 2026-03-06
-**Status:** Partially Resolved (iSCSI provisioning still blocked pending DSM host registration)
+**Status:** Resolved
 **Severity:** Critical — all iSCSI-backed PVCs Pending, ~50 pods unschedulable, Flux stuck
 **Duration:** ~20+ hours (Flux divergence pre-dated detection; all PVCs Pending from IP change onward)
 **Environments affected:** Production + Staging
@@ -40,7 +40,7 @@ orphaned LUNs accumulated on the NAS during the outage period.
 
 ## Root Cause Chain
 
-This incident had four distinct, compounding root causes:
+This incident had six distinct, compounding root causes:
 
 ### Root Cause 1: Flux GitRepository SSH Egress Block (pre-existing)
 
@@ -80,6 +80,43 @@ was unblocked. This was already fixed in commit `766ab51` but had never reached
 the cluster (see Root Cause 1). Without `infra-controllers` reconciling, the
 updated CSI secret could not be applied from git.
 
+### Root Cause 5: StorageClasses Had Old IP (Immutable Parameters)
+
+The three Synology CSI StorageClasses (`synology-iscsi`, `synology-iscsi-ephemeral`,
+`synology-nfs`) had `dsm: 192.168.5.8` hardcoded in their `parameters:` block.
+Kubernetes StorageClass parameters are immutable after creation. When Flux tried
+to apply the updated `synology-csi` HelmRelease (which referenced `10.42.2.21`
+via the CSI secret), Helm failed with:
+
+```
+StorageClass parameters: Forbidden: updates to parameters are forbidden
+```
+
+The HelmRelease remained stuck in `HelmChartNotFound` / upgrade-failure state,
+meaning even after registering the node IQN in DSM, the StorageClasses kept
+pointing provisioning requests to the old IP address.
+
+**Fix:** All three StorageClasses were deleted manually, then the HelmRelease was
+suspended and resumed to force a clean re-install with the correct IP.
+
+### Root Cause 6: Sub-1G PVC Requests Rejected by Synology iSCSI
+
+Synology's iSCSI CSI driver enforces a minimum LUN size of **1 GiB**. Nine PVCs
+(audiobookshelf data/meta 256Mi each, jellyfin config 512Mi, jellyfin cache 256Mi,
+vitals CNPG 512Mi — prod + stage copies) had been provisioned (or attempted) with
+requests below this minimum. After fixing the StorageClass IP, these PVCs began
+failing with:
+
+```
+rpc error: code = InvalidArgument desc = Invalid input: required bytes is smaller than 1G
+```
+
+**Fix:** All affected manifests were bumped to `1Gi` (`apps/base/audiobookshelf/storage.yaml`,
+`apps/base/jellyfin/storage.yaml`, `apps/production/jellyfin/storage.yaml`,
+`apps/staging/jellyfin/storage.yaml`, `apps/production/vitals/database.yaml`).
+The Pending PVCs were deleted and recreated from the updated local kustomize
+overlays before Flux could re-apply the old (sub-1G) sizes from master.
+
 ---
 
 ## Timeline
@@ -104,6 +141,12 @@ updated CSI secret could not be applied from git.
 | 2026-03-06 | `lun-manager audit`: 64 orphaned LUNs found (all `k8s-csi-pvc-*`, no matching K8s PVs) |
 | 2026-03-06 | `lun-manager cleanup`: 64 orphans deleted from NAS (64/64 OK) |
 | 2026-03-06 | **Remaining blocker**: CSI `Couldn't find any host available to create Volume` — node IQN not registered in Synology DSM SAN Manager |
+| 2026-03-06 | User registers node IQN `iqn.2017-11.dev.talos:6343ec686596213800761170f72f363e` in DSM SAN Manager Hosts |
+| 2026-03-06 | CSI logs still failing — new root cause found: StorageClasses have stale `dsm: 192.168.5.8` (HelmRelease stuck on parameters immutability) |
+| 2026-03-06 | All 3 StorageClasses deleted manually; `synology-csi` HelmRelease suspended + resumed → reconciled OK with `10.42.2.21` |
+| 2026-03-06 | 42 → 33 → 9 PVCs Pending; new error: `required bytes is smaller than 1G` (sub-1G PVC size requests) |
+| 2026-03-06 | Updated 5 manifests to bump all sub-1G PVC requests to `1Gi`; deleted 9 Pending + 5 staging PVCs; recreated from local kustomize overlays |
+| 2026-03-06 | All 66 PVCs Bound ✅ — incident fully resolved |
 
 ---
 
@@ -186,28 +229,51 @@ SYNOLOGY_HOST=10.42.2.21 SYNOLOGY_USER=manager SYNOLOGY_PASSWORD='...' \
   ./lun-manager cleanup         # Deleted 64/64
 ```
 
-### Outstanding Blocker: iSCSI CSI Provisioning
+### Fix 5: StorageClasses Replaced (Old IP → New IP)
 
-The CSI driver reports `Couldn't find any host available to create Volume` for all
-new PVC provisioning attempts. This means the Kubernetes node's iSCSI initiator
-IQN is not registered as a "Host" in the Synology DSM SAN Manager.
-
-**Node IQN:** `iqn.2017-11.dev.talos:6343ec686596213800761170f72f363e`
-
-**Manual action required in Synology DSM:**
-
-1. Open DSM → SAN Manager → iSCSI → Hosts tab
-2. Click **Add** → enter the node IQN above → save
-3. After registering the host, restart synology-csi:
+All three Synology CSI StorageClasses had `dsm: 192.168.5.8` (immutable parameter).
+The `synology-csi` HelmRelease was stuck and could not update them:
 
 ```bash
-kubectl rollout restart statefulset/synology-csi-controller -n synology-csi
-kubectl rollout restart daemonset/synology-csi-node -n synology-csi
+# Delete all three StorageClasses to allow HelmRelease to recreate them
+kubectl delete storageclass synology-iscsi synology-iscsi-ephemeral synology-nfs
+
+# Force HelmRelease to re-run install/upgrade
+flux suspend helmrelease synology-csi -n synology-csi
+flux resume helmrelease synology-csi -n synology-csi
+# Wait for: ✔ applied revision 0.9.4
 ```
 
-4. Force reconcile PVCs to trigger reprovisioning:
+Post-fix: all StorageClasses recreated with `dsm: 10.42.2.21`.
+
+### Fix 6: Sub-1G PVC Requests Bumped to 1Gi
+
+Synology iSCSI minimum LUN size is 1 GiB. Affected PVCs (Pending after Fix 5):
+- `audiobookshelf`: `data-pvc` 256Mi → 1Gi, `meta-data-pvc` 256Mi → 1Gi
+- `jellyfin`: `cache-pvc` 256Mi → 1Gi, `config-pvc` 512Mi → 1Gi
+- `vitals` (CNPG): `512Mi` → 1Gi
+
+Manifests updated in PR #214:
+- `apps/base/audiobookshelf/storage.yaml`
+- `apps/base/jellyfin/storage.yaml`
+- `apps/production/jellyfin/storage.yaml`
+- `apps/staging/jellyfin/storage.yaml`
+- `apps/production/vitals/database.yaml`
+
+Note: `kubectl patch` on `Pending` PVCs fails because the spec immutability rule
+(`spec is immutable except resources.requests for bound claims`) implies Pending
+PVCs are fully immutable. Strategy used was delete + recreate from updated local
+kustomize overlays:
+
 ```bash
-flux reconcile kustomization apps-production apps-staging -n flux-system
+# Delete Pending PVCs
+kubectl delete pvc audiobookshelf-data-pvc audiobookshelf-meta-data-pvc -n audiobookshelf-prod
+kubectl delete pvc jellyfin-config-pvc jellyfin-cache-pvc -n jellyfin-prod
+
+# Immediately recreate from local kustomize (with 1Gi)
+kubectl kustomize apps/production/audiobookshelf | kubectl apply -f -
+kubectl kustomize apps/production/jellyfin | kubectl apply -f -
+# Repeat for staging
 ```
 
 ---
@@ -237,6 +303,11 @@ flux reconcile kustomization apps-production apps-staging -n flux-system
 |---|---|
 | `clusters/melodic-muse/flux-system/gotk-sync.yaml` | SSH URL → HTTPS; removed `secretRef` from GitRepository |
 | `clusters/melodic-muse/repo-staging.yaml` | SSH URL → HTTPS; removed `secretRef` from GitRepository |
+| `apps/base/audiobookshelf/storage.yaml` | `data-pvc` + `meta-data-pvc`: 256Mi → 1Gi (Synology minimum) |
+| `apps/base/jellyfin/storage.yaml` | `jellyfin-cache-pvc`: 256Mi → 1Gi |
+| `apps/production/jellyfin/storage.yaml` | `jellyfin-config-pvc`: 512Mi → 1Gi; `jellyfin-cache-pvc`: 256Mi → 1Gi |
+| `apps/staging/jellyfin/storage.yaml` | `jellyfin-config-pvc`: 512Mi → 1Gi; `jellyfin-cache-pvc`: 256Mi → 1Gi |
+| `apps/production/vitals/database.yaml` | CNPG cluster storage: 512Mi → 1Gi |
 
 ### Tracked in git (same branch, lun-manager fix)
 
@@ -272,8 +343,8 @@ The Flux SSH egress block likely occurred days or weeks before this was noticed.
 
 | Priority | Item |
 |---|---|
-| **CRITICAL** | Register node IQN in Synology DSM SAN Manager → Hosts (unblocks all PVC provisioning) |
-| HIGH | Merge PR #214 to persist Flux HTTPS change before anyone reverts the live patch |
+| ~~**CRITICAL**~~ | ~~Register node IQN in Synology DSM SAN Manager → Hosts~~ — **Done** |
+| HIGH | Merge PR #214 to persist Flux HTTPS + storage size changes to master — **until merged, Flux will report PVC size drift** |
 | HIGH | Add PrometheusRule: alert when any Flux kustomization `lastAppliedRevision != lastAttemptedRevision` for >30m |
 | HIGH | Add PrometheusRule: alert when PVC `Pending` for >30m |
 | HIGH | Add PrometheusRule: alert when Flux GitRepository `lastFetchedRevision` has not changed for >2h |

@@ -12,9 +12,9 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      # Actual usage: ~227Mi; target = 20% headroom → 512Mi.
+      # Actual usage: ~227Mi; minimum LUN size on Synology iSCSI is 1Gi.
       # Requires PVC deletion to take effect (PVCs cannot shrink in-place).
-      storage: 512Mi
+      storage: 1Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -30,7 +30,7 @@ spec:
   storageClassName: synology-iscsi
   resources:
     requests:
-      # Actual usage: ~32Mi; this is a pure cache - safe to recreate.
-      # Target = 20% headroom → 256Mi (was 50Gi, massively over-provisioned).
+      # Actual usage: ~32Mi; minimum LUN size on Synology iSCSI is 1Gi.
+      # Was 50Gi (massively over-provisioned).
       # Requires PVC deletion to take effect.
-      storage: 256Mi
+      storage: 1Gi

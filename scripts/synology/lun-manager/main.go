@@ -480,33 +480,50 @@ type delResult struct {
 	Err  error
 }
 
-// deleteLUN unmaps, deletes the LUN, then deletes the Target.
+// synoiscsiwebapi is the path to the Synology iSCSI management CLI.
+// Older DSM versions used /usr/syno/bin/synoiscsitool; DSM 7.x ships
+// synoiscsiwebapi instead.
+const synoiscsiwebapi = "/usr/local/bin/synoiscsiwebapi"
+
+// deleteLUN unmaps (if mapped), deletes the LUN, then deletes the Target.
+// Steps that are not applicable (e.g. empty TID) are skipped automatically.
 // Each step opens its own session so this function is safe to call from
 // multiple goroutines on the same *ssh.Client.
 func deleteLUN(client *ssh.Client, password, name, uuid, tid string) error {
-	steps := []struct {
+	type step struct {
 		desc string
 		cmd  string
-	}{
+		skip bool // when true the step is a no-op
+	}
+
+	steps := []step{
 		{
-			"unmap LUN from target",
-			fmt.Sprintf("/usr/syno/bin/synoiscsitool --unmap-lun uuid=%s", uuid),
+			desc: "unmap LUN from target",
+			// synoiscsiwebapi lun unmap_target <lun_uuid> <target_id>
+			cmd:  fmt.Sprintf("%s lun unmap_target %s %s", synoiscsiwebapi, uuid, tid),
+			skip: tid == "", // LUN is not mapped to any target — nothing to unmap
 		},
 		{
-			"delete LUN",
-			fmt.Sprintf("/usr/syno/bin/synoiscsitool --del-lun uuid=%s", uuid),
+			desc: "delete LUN",
+			// synoiscsiwebapi lun delete <uuid>
+			cmd: fmt.Sprintf("%s lun delete %s", synoiscsiwebapi, uuid),
 		},
 		{
-			"delete target",
-			fmt.Sprintf("/usr/syno/bin/synoiscsitool --del-target tid=%s", tid),
+			desc: "delete target",
+			// synoiscsiwebapi target delete <target_id>
+			cmd:  fmt.Sprintf("%s target delete %s", synoiscsiwebapi, tid),
+			skip: tid == "", // No target was associated with this LUN
 		},
 	}
 
-	for _, step := range steps {
-		code, _, errOut, err := sudoRun(client, password, step.cmd)
+	for _, s := range steps {
+		if s.skip {
+			continue
+		}
+		code, _, errOut, err := sudoRun(client, password, s.cmd)
 		if err != nil || code != 0 {
 			return fmt.Errorf("step %q (exit %d): %w — stderr: %s",
-				step.desc, code, err, strings.TrimSpace(errOut))
+				s.desc, code, err, strings.TrimSpace(errOut))
 		}
 	}
 	return nil

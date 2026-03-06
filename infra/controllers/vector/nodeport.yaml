@@ -1,7 +1,8 @@
 # Expose Vector's TCP socket source on a fixed NodePort so that Talos
 # machine.logging.destinations can forward kernel logs from the host network.
 #
-# Talos is configured to send json_lines logs to tcp://192.168.5.1:30600.
+# Talos is configured to send json_lines logs to tcp://<node-ip>:30600
+# where <node-ip> is in the range 10.42.2.10–10.42.2.15.
 # externalTrafficPolicy: Local ensures that each Talos node's log stream is
 # received by the Vector pod running on the same node, preserving host context.
 apiVersion: v1

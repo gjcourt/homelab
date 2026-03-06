@@ -10,9 +10,9 @@ We use a single "dumb" wildcard record in the physical DNS layer (AdGuard Home) 
 
 ### The Flow
 1.  **Client** asks for `bio.stage.burntbytes.com`.
-2.  **AdGuard Home** has a static rewrite rule: `*.stage.burntbytes.com` -> `192.168.5.30` (Staging Gateway IP).
-3.  **AdGuard Home** answers `192.168.5.30`.
-4.  **Client** connects to `192.168.5.30`.
+2.  **AdGuard Home** has a static rewrite rule: `*.stage.burntbytes.com` -> `10.42.2.31` (Staging Gateway IP).
+3.  **AdGuard Home** answers `10.42.2.31`.
+4.  **Client** connects to `10.42.2.31`.
 5.  **Cilium Gateway** inspects the HTTP Host header (`bio.stage.burntbytes.com`) and routes to the correct Pod.
 
 ### Why this is better
@@ -27,8 +27,8 @@ We use a single "dumb" wildcard record in the physical DNS layer (AdGuard Home) 
 We previously attempted a complex setup (ExternalDNS writing to an in-cluster CoreDNS). This added significant "complexity tax". You should **only** re-implement this if you hit one of these specific limits:
 
 ### 1. Multiple Entry Points (Apps with dedicated IPs)
-Currently, all apps sit behind the Gateway (`192.168.5.30`).
-*   **Scenario**: You deploy a game server (Minecraft) or Database that needs its *own* LoadBalancer IP (e.g., `192.168.5.50`) because it can't use the HTTP Gateway.
+Currently, all apps sit behind the Gateway (`10.42.2.31`).
+*   **Scenario**: You deploy a game server (Minecraft) or Database that needs its *own* LoadBalancer IP (e.g., `10.42.2.50`) because it can't use the HTTP Gateway.
 *   **Failure**: The wildcard sends `minecraft.stage...` to the Gateway (`.30`), but the app is at `.50`.
 *   **Fix**: ExternalDNS detects the Service of type `LoadBalancer` and updates DNS for that specific host.
 
@@ -58,8 +58,8 @@ kubectl get svc -n default -l gateway.networking.k8s.io/gateway-name
 *Example Output:*
 ```text
 NAME                                  EXTERNAL-IP
-cilium-gateway-app-gateway-production 192.168.5.31
-cilium-gateway-app-gateway-staging    192.168.5.30
+cilium-gateway-app-gateway-production 10.42.2.30
+cilium-gateway-app-gateway-staging    10.42.2.31
 ```
 
 ### 2. Configure Rewrites
@@ -68,8 +68,8 @@ Go to **Filters → DNS Rewrites** and add:
 
 | Domain | Rewrite To (IP) | Description |
 |:---|:---|:---|
-| `*.stage.burntbytes.com` | `192.168.5.30` | Staging Gateway Wildcard |
-| `*.burntbytes.com` | `192.168.5.31` | Production Gateway Wildcard |
+| `*.stage.burntbytes.com` | `10.42.2.31` | Staging Gateway Wildcard |
+| `*.burntbytes.com` | `10.42.2.30` | Production Gateway Wildcard |
 
 > **Note:** These wildcards override public Cloudflare DNS records on your LAN, ensuring traffic stays local for speed and security.
 

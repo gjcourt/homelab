@@ -49,14 +49,14 @@ Enable Single Sign-On (SSO) across the homelab using Authelia as the OpenID Conn
     *   `OIDC_PROVIDER_NAME=Authelia`
     *   `OIDC_SIGNING_ALGORITHM=RS256`
     *   `OIDC_USER_CLAIM=email`
-*   **DNS**: `hostAliases` for `auth.stage.burntbytes.com` → `192.168.5.30` (Staging) / `.33` (Prod).
+*   **DNS**: `hostAliases` for `auth.stage.burntbytes.com` → `10.42.2.31` (Staging) / `10.42.2.30` (Prod).
 
 #### Memos (v0.26.0)
 *   **Client type**: Confidential (`token_endpoint_auth_method: client_secret_basic`).
 *   **Authelia client**: `client_id: memos`, hashed secret in config.
 *   **Redirect URI**: `https://memos.stage.burntbytes.com/auth/callback`.
 *   **Memos config**: SSO is configured through the **admin UI** (Settings → SSO).
-*   **DNS**: `hostAliases` for `auth.stage.burntbytes.com` → `192.168.5.30` (Staging) / `.33` (Prod).
+*   **DNS**: `hostAliases` for `auth.stage.burntbytes.com` → `10.42.2.31` (Staging) / `10.42.2.30` (Prod).
 *   **Secret**: `memos-sso-secret` contains the plaintext `client_secret`.
 *   **Manual setup**: After deployment, configure identity provider in Memos admin UI:
     *   Name: `Authelia`

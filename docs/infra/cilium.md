@@ -22,7 +22,7 @@ Cilium is deployed via Flux using the official Helm chart. It runs as a DaemonSe
   - `hubble.enabled: true`
 - **IP Pool**: Defined in `infra/configs/cilium/load-balancer-ip-pool.yaml`.
   - Pool Name: `home-compute-pool`
-  - Range: `10.42.2.30` - `10.42.2.254`
+  - Range: `10.42.2.40` - `10.42.2.254`
 - **L2 Announcement Policy**: Defined in `infra/configs/cilium/l2-announcement-policy.yaml`.
 
 ## 5. Usage Instructions

@@ -18,7 +18,7 @@ Mealie is deployed as a Kubernetes `Deployment` with a single replica in the `me
   - OIDC configuration is provided via the `mealie-oidc-config` ConfigMap.
 - **ConfigMaps/Secrets**:
   - `mealie-oidc-secret` (Secret): Contains the OIDC client secret for Authelia integration (SOPS encrypted).
-- **SSO Integration**: Uses `hostAliases` to resolve `auth.burntbytes.com` to the Gateway API IP (`10.42.2.30`) from within the pod, allowing it to communicate with Authelia for OIDC authentication.
+- **SSO Integration**: Uses `hostAliases` to resolve `auth.burntbytes.com` to the Gateway API IP (`10.42.2.40`) from within the pod, allowing it to communicate with Authelia for OIDC authentication.
 
 ## 5. Usage Instructions
 - Navigate to the Mealie URL.

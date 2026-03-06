@@ -15,18 +15,17 @@ prepared in advance on a feature branch.
 
 | Role | Old IP / CIDR | New IP / CIDR |
 |---|---|---|
-| Synology NAS (DSM / iSCSI / NFS) | `192.168.5.8` | `10.42.2.21` |
-| Production Gateway LoadBalancer | `192.168.5.33` | `10.42.2.30` |
-| Staging Gateway LoadBalancer | `192.168.5.30` | `10.42.2.31` |
-| Cilium LB IP pool | `192.168.5.30 – 192.168.5.255` | `10.42.2.30 – 10.42.2.254` |
+| Synology NAS (DSM / iSCSI / NFS) | `192.168.5.8` | `10.42.2.11` |
+| Production Gateway LoadBalancer | `192.168.5.33` | `10.42.2.40` |
+| Staging Gateway LoadBalancer | `192.168.5.30` | `10.42.2.41` |
+| Cilium LB IP pool | `192.168.5.30 – 192.168.5.255` | `10.42.2.40 – 10.42.2.254` |
 | Node / host trusted network | `192.168.5.0/24` | `10.42.2.0/24` |
-| Talos nodes (static, out-of-band) | `192.168.5.1–N` | `10.42.2.10 – 10.42.2.15` |
+| Talos nodes (static, out-of-band) | `192.168.5.1–N` | `10.42.2.20` |
 
-> **Note:** The production gateway assignment deliberately uses `.30` (the lowest
-> allocatable IP in the new pool) and staging uses `.31`. This is a swap relative
-> to the old network where `.30` was staging. Ensure any documentation that referred
+> **Note:** The production gateway is assigned `.40` (the lowest allocatable IP
+> in the new pool) and staging uses `.41`. Ensure any documentation that referred
 > to the old production gateway as `192.168.5.31` (some docs) or `192.168.5.33`
-> (manifests — the authoritative value) is updated to `10.42.2.30`.
+> (manifests — the authoritative value) is updated to `10.42.2.40`.
 
 ---
 
@@ -48,18 +47,18 @@ spec:
   blocks:
     - start: 192.168.5.30
       stop: 192.168.5.255
-  # - start: 10.42.2.30
+  # - start: 10.42.2.40
   #   stop: 10.42.2.255
 
 # After
 spec:
   blocks:
-    - start: 10.42.2.30
+    - start: 10.42.2.40
       stop: 10.42.2.254
 ```
 
 > After Flux reconciles this, Cilium will stop announcing the old range via ARP
-> and switch to `10.42.2.30–10.42.2.254`. Any existing `LoadBalancer` services
+> and switch to `10.42.2.40–10.42.2.254`. Any existing `LoadBalancer` services
 > will have their IPs re-allocated; update AdGuard DNS rewrites at the same time
 > (see Phase 4).
 
@@ -74,7 +73,7 @@ Three `dsm:` fields reference the NAS. Change each:
       dsm: 192.168.5.8
 
 # After
-      dsm: 10.42.2.21
+      dsm: 10.42.2.11
 ```
 
 > The CSI controller and node plugins will reconnect to the NAS at the new IP.
@@ -94,7 +93,7 @@ and update it if needed. Re-encrypt and commit.
 sops -d infra/controllers/synology-csi/secret-client-info.yaml | grep -E 'host|dsm|ip'
 ```
 
-If a bare IP appears, update it from `192.168.5.8` to `10.42.2.21`, then:
+If a bare IP appears, update it from `192.168.5.8` to `10.42.2.11`, then:
 
 ```bash
 sops -e -i infra/controllers/synology-csi/secret-client-info.yaml
@@ -116,10 +115,10 @@ must point at the **correct new gateway IP for that environment**.
 
 | Overlay | Old IP | New IP |
 |---|---|---|
-| `apps/staging/` | `192.168.5.30` | `10.42.2.31` |
-| `apps/production/` | `192.168.5.33` | `10.42.2.30` |
+| `apps/staging/` | `192.168.5.30` | `10.42.2.41` |
+| `apps/production/` | `192.168.5.33` | `10.42.2.40` |
 
-**Files to update (staging — `ip: "192.168.5.30"` → `ip: "10.42.2.31"`):**
+**Files to update (staging — `ip: "192.168.5.30"` → `ip: "10.42.2.41"`):**
 
 - [`apps/staging/audiobookshelf/deployment-patch.yaml`](../../apps/staging/audiobookshelf/deployment-patch.yaml)
 - [`apps/staging/immich/deployment-patch.yaml`](../../apps/staging/immich/deployment-patch.yaml)
@@ -127,7 +126,7 @@ must point at the **correct new gateway IP for that environment**.
 - [`apps/staging/mealie/deployment-patch.yaml`](../../apps/staging/mealie/deployment-patch.yaml)
 - [`apps/staging/memos/deployment-patch.yaml`](../../apps/staging/memos/deployment-patch.yaml)
 
-**Files to update (production — `ip: "192.168.5.33"` → `ip: "10.42.2.30"`):**
+**Files to update (production — `ip: "192.168.5.33"` → `ip: "10.42.2.40"`):**
 
 - [`apps/production/audiobookshelf/deployment-patch.yaml`](../../apps/production/audiobookshelf/deployment-patch.yaml)
 - [`apps/production/immich/deployment-patch.yaml`](../../apps/production/immich/deployment-patch.yaml)
@@ -138,7 +137,7 @@ must point at the **correct new gateway IP for that environment**.
 ### 2.2 NFS PersistentVolume Server Addresses
 
 All NFS `PersistentVolume` resources point `spec.nfs.server` at the NAS.
-Change `192.168.5.8` → `10.42.2.21` in each:
+Change `192.168.5.8` → `10.42.2.11` in each:
 
 | File | Notes |
 |---|---|
@@ -163,7 +162,7 @@ Change `192.168.5.8` → `10.42.2.21` in each:
 value: "192.168.5.8"
 
 # After
-value: "10.42.2.21"
+value: "10.42.2.11"
 ```
 
 **File:** [`apps/base/synology-iscsi-monitor/script-cm.yaml`](../../apps/base/synology-iscsi-monitor/script-cm.yaml)
@@ -173,7 +172,7 @@ value: "10.42.2.21"
 SYNOLOGY_IP = os.environ.get("SYNOLOGY_IP", "192.168.5.8")
 
 # After
-SYNOLOGY_IP = os.environ.get("SYNOLOGY_IP", "10.42.2.21")
+SYNOLOGY_IP = os.environ.get("SYNOLOGY_IP", "10.42.2.11")
 ```
 
 ### 2.4 Home Assistant Trusted Proxies
@@ -203,8 +202,8 @@ href: https://192.168.5.8:5001
 url: https://192.168.5.8:5001
 
 # After
-href: https://10.42.2.21:5001
-url: https://10.42.2.21:5001
+href: https://10.42.2.11:5001
+url: https://10.42.2.11:5001
 ```
 
 **Files:**
@@ -223,7 +222,7 @@ Update all documentation that references old IPs so that runbooks remain accurat
 | [`docs/architecture/dns-strategy.md`](../architecture/dns-strategy.md) | All `192.168.5.30/31` gateway IP references; LB pool range; table of AdGuard rewrites |
 | [`docs/infra/cilium.md`](../infra/cilium.md) | LB pool range `192.168.5.30 – 192.168.5.255` |
 | [`docs/infra/storage.md`](../infra/storage.md) | NAS IP `192.168.5.8`, DSM URL |
-| [`docs/infra/kernel-log-shipping.md`](../infra/kernel-log-shipping.md) | Node IP `192.168.5.1` (three occurrences); use `10.42.2.10` as an example node |
+| [`docs/infra/kernel-log-shipping.md`](../infra/kernel-log-shipping.md) | Node IP `192.168.5.1` (three occurrences); use `10.42.2.20` as an example node |
 | [`docs/apps/linkding.md`](../apps/linkding.md) | Gateway IP in SSO integration note (`192.168.5.33`) |
 | [`docs/apps/mealie.md`](../apps/mealie.md) | Gateway IP in SSO integration note (`192.168.5.33`) |
 | [`docs/apps/memos.md`](../apps/memos.md) | Gateway IP in SSO integration note (`192.168.5.33`) |
@@ -247,7 +246,7 @@ Update the header comment to reflect the new node IP range:
 
 # After
 # Talos is configured to send json_lines logs to tcp://<node-ip>:30600
-# where <node-ip> is in the range 10.42.2.10–10.42.2.15.
+# where <node-ip> is in the range 10.42.2.20.
 ```
 
 ---
@@ -260,23 +259,23 @@ this repository**. They must be completed at (or before) cut-over.
 ### 4.1 Synology NAS — Static IP Change
 
 In DSM → Control Panel → Network → Network Interface:
-- Change the NAS IP address from `192.168.5.8` to **`10.42.2.21`**.
+- Change the NAS IP address from `192.168.5.8` to **`10.42.2.11`**.
 - Update the gateway and DNS entries to match the new network.
-- Verify iSCSI target accessibility: `nc -zv 10.42.2.21 3260`
-- Verify DSM API reachability: `curl -k https://10.42.2.21:5001/webapi/auth.cgi`
+- Verify iSCSI target accessibility: `nc -zv 10.42.2.11 3260`
+- Verify DSM API reachability: `curl -k https://10.42.2.11:5001/webapi/auth.cgi`
 
 ### 4.2 Talos Machine Configuration — Kernel Log Shipping
 
 Each Talos node's machine config must be patched to update the log destination:
 
 ```bash
-# Per-node (replace 10.42.2.10 with the actual node IP for each node)
+# Per-node (replace 10.42.2.20 with the actual node IP for each node)
 talosctl -n <node-new-ip> patch machineconfig \
-  '[{"op":"replace","path":"/machine/logging/destinations/0/endpoint","value":"tcp://10.42.2.10:30600"}]'
+  '[{"op":"replace","path":"/machine/logging/destinations/0/endpoint","value":"tcp://10.42.2.20:30600"}]'
 ```
 
 > The NodePort `30600` is unchanged. The destination host must be a node IP
-> in `10.42.2.10–10.42.2.15` (each node should point at **its own IP** so that
+> in `10.42.2.20` (each node should point at **its own IP** so that
 > `externalTrafficPolicy: Local` routes correctly). See
 > [`docs/infra/kernel-log-shipping.md`](../infra/kernel-log-shipping.md) for full context.
 
@@ -286,8 +285,8 @@ In the AdGuard DNS rewrites configuration, update the two wildcard rules:
 
 | Domain | Old Target | New Target |
 |---|---|---|
-| `*.burntbytes.com` | `192.168.5.31` or `192.168.5.33` | `10.42.2.30` |
-| `*.stage.burntbytes.com` | `192.168.5.30` | `10.42.2.31` |
+| `*.burntbytes.com` | `192.168.5.31` or `192.168.5.33` | `10.42.2.40` |
+| `*.stage.burntbytes.com` | `192.168.5.30` | `10.42.2.41` |
 
 > These must be set **after** Cilium has assigned the new IPs to the gateway
 > services, or clients will briefly resolve to unreachable addresses.
@@ -318,7 +317,7 @@ To minimise downtime, follow this order:
 3. **Flux reconcile Phase 1** (apply the feature branch to the cluster via Flux,
    or manually `kubectl apply` the infra configs):
    - Cilium LB pool → announces new range.
-   - CSI driver → reconnects to `10.42.2.21`.
+   - CSI driver → reconnects to `10.42.2.11`.
 4. **Talos node reconfiguration** (Phase 4.2): Update log destinations per node.
 5. **AdGuard DNS rewrites** (Phase 4.3): Point wildcards at new gateway IPs.
 6. **Merge PR to `master`**: All remaining app manifest and doc changes applied.
@@ -332,7 +331,7 @@ After cut-over, confirm the following:
 
 ```bash
 # NAS reachable at new IP
-curl -k -s https://10.42.2.21:5001/webapi/auth.cgi | grep -q error_details && echo "NAS OK"
+curl -k -s https://10.42.2.11:5001/webapi/auth.cgi | grep -q error_details && echo "NAS OK"
 
 # CSI driver healthy (no ErrSync / connection errors)
 kubectl -n synology-csi logs deploy/synology-csi-controller | tail -30
@@ -367,30 +366,30 @@ kubectl -n monitoring logs ds/vector | grep "talos-logs" | tail -10
 
 | File | Change |
 |---|---|
-| `infra/configs/cilium/load-balancer-ip-pool.yaml` | Pool range → `10.42.2.30–10.42.2.254` |
-| `infra/controllers/synology-csi/values.yaml` | `dsm:` × 3 → `10.42.2.21` |
+| `infra/configs/cilium/load-balancer-ip-pool.yaml` | Pool range → `10.42.2.40–10.42.2.254` |
+| `infra/controllers/synology-csi/values.yaml` | `dsm:` × 3 → `10.42.2.11` |
 | `infra/controllers/synology-csi/secret-client-info.yaml` | Re-encrypt with updated DSM host if needed |
 | `infra/controllers/vector/nodeport.yaml` | Comment updated to node range |
-| `apps/base/jellyfin/media/nfs-media.yaml` | `server:` × 3 → `10.42.2.21` |
-| `apps/base/synology-iscsi-monitor/deployment.yaml` | `SYNOLOGY_IP` env → `10.42.2.21` |
-| `apps/base/synology-iscsi-monitor/script-cm.yaml` | Default fallback IP → `10.42.2.21` |
+| `apps/base/jellyfin/media/nfs-media.yaml` | `server:` × 3 → `10.42.2.11` |
+| `apps/base/synology-iscsi-monitor/deployment.yaml` | `SYNOLOGY_IP` env → `10.42.2.11` |
+| `apps/base/synology-iscsi-monitor/script-cm.yaml` | Default fallback IP → `10.42.2.11` |
 | `apps/base/homeassistant/configmap.yaml` | Trusted proxy CIDR → `10.42.2.0/24` |
-| `apps/production/navidrome/nfs-music.yaml` | `server:` → `10.42.2.21` |
-| `apps/production/immich/nfs-photos.yaml` | `server:` → `10.42.2.21` |
-| `apps/production/audiobookshelf/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.30` |
-| `apps/production/immich/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.30` |
-| `apps/production/linkding/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.30` |
-| `apps/production/mealie/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.30` |
-| `apps/production/memos/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.30` |
-| `apps/production/homepage/services.yaml` | DSM href/url → `10.42.2.21:5001` |
-| `apps/staging/navidrome/nfs-music.yaml` | `server:` → `10.42.2.21` |
-| `apps/staging/immich/nfs-photos.yaml` | `server:` → `10.42.2.21` |
-| `apps/staging/audiobookshelf/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.31` |
-| `apps/staging/immich/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.31` |
-| `apps/staging/linkding/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.31` |
-| `apps/staging/mealie/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.31` |
-| `apps/staging/memos/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.31` |
-| `apps/staging/homepage/services.yaml` | DSM href/url → `10.42.2.21:5001` |
+| `apps/production/navidrome/nfs-music.yaml` | `server:` → `10.42.2.11` |
+| `apps/production/immich/nfs-photos.yaml` | `server:` → `10.42.2.11` |
+| `apps/production/audiobookshelf/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.40` |
+| `apps/production/immich/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.40` |
+| `apps/production/linkding/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.40` |
+| `apps/production/mealie/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.40` |
+| `apps/production/memos/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.40` |
+| `apps/production/homepage/services.yaml` | DSM href/url → `10.42.2.11:5001` |
+| `apps/staging/navidrome/nfs-music.yaml` | `server:` → `10.42.2.11` |
+| `apps/staging/immich/nfs-photos.yaml` | `server:` → `10.42.2.11` |
+| `apps/staging/audiobookshelf/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.41` |
+| `apps/staging/immich/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.41` |
+| `apps/staging/linkding/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.41` |
+| `apps/staging/mealie/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.41` |
+| `apps/staging/memos/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.41` |
+| `apps/staging/homepage/services.yaml` | DSM href/url → `10.42.2.11:5001` |
 | `docs/architecture/dns-strategy.md` | All gateway and pool IP references |
 | `docs/infra/cilium.md` | LB pool range |
 | `docs/infra/storage.md` | NAS IP and DSM URL |

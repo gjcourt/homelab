@@ -12,7 +12,7 @@ failure modes that produce no Prometheus metrics (e.g. BTRFS corruption in state
 
 ```
 Talos node (host network)
-  └─ machine.logging.destinations: tcp://10.42.2.10:30600
+  └─ machine.logging.destinations: tcp://10.42.2.20:30600
         │   json_lines over TCP
         ▼
 Vector DaemonSet (monitoring namespace)
@@ -66,7 +66,7 @@ node cluster (`talos-519-vmy`):
 
 ```bash
 talosctl -n talos-519-vmy patch mc --patch \
-  '[{"op":"add","path":"/machine/logging","value":{"destinations":[{"endpoint":"tcp://10.42.2.10:30600","format":"json_lines"}]}}]'
+  '[{"op":"add","path":"/machine/logging","value":{"destinations":[{"endpoint":"tcp://10.42.2.20:30600","format":"json_lines"}]}}]'
 ```
 
 This does **not** require a reboot. Talos applies the logging config live.
@@ -219,7 +219,7 @@ Expected output includes `BTRFSCorruptionDetected` and `ISCSIKernelError`.
    ```
 2. Check the NodePort is reachable from the node:
    ```bash
-   talosctl -n talos-519-vmy exec -- nc -zv 10.42.2.10 30600
+   talosctl -n talos-519-vmy exec -- nc -zv 10.42.2.20 30600
    ```
 3. Check Vector pod logs for connection errors:
    ```bash

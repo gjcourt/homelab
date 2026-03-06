@@ -20,7 +20,7 @@ Linkding is deployed as a Kubernetes `Deployment` with a single replica in the `
 - **ConfigMaps/Secrets**:
   - `linkding-app-secret` (Secret): Contains the `LD_SUPERUSER_PASSWORD` (SOPS encrypted).
   - `linkding-oidc-secret` (Secret): Contains the OIDC client secret for Authelia integration (SOPS encrypted).
-- **SSO Integration**: Uses `hostAliases` to resolve `auth.burntbytes.com` to the Gateway API IP (`10.42.2.30`) from within the pod, allowing it to communicate with Authelia for OIDC authentication.
+- **SSO Integration**: Uses `hostAliases` to resolve `auth.burntbytes.com` to the Gateway API IP (`10.42.2.40`) from within the pod, allowing it to communicate with Authelia for OIDC authentication.
 
 ## 5. Usage Instructions
 - Navigate to the Linkding URL.

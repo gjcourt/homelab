@@ -19,7 +19,7 @@ data:
     import paramiko
     from prometheus_client import start_http_server, Gauge
 
-    SYNOLOGY_IP = os.environ.get("SYNOLOGY_IP", "10.42.2.21")
+    SYNOLOGY_IP = os.environ.get("SYNOLOGY_IP", "10.42.2.11")
     SYNOLOGY_USER = os.environ.get("SYNOLOGY_USER", "melodic-muse-app")
     SYNOLOGY_PASSWORD = os.environ.get("SYNOLOGY_PASSWORD", "")
     POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))

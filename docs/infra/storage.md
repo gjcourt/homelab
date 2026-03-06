@@ -1,7 +1,7 @@
 # Storage
 
 ## 1. Overview
-Storage in the homelab is provided by a Synology NAS (`10.42.2.21`). The cluster uses the Synology CSI driver to dynamically provision both iSCSI LUNs (for block storage) and NFS shares (for shared file storage).
+Storage in the homelab is provided by a Synology NAS (`10.42.2.11`). The cluster uses the Synology CSI driver to dynamically provision both iSCSI LUNs (for block storage) and NFS shares (for shared file storage).
 
 ## 2. Architecture
 The Synology CSI driver is deployed in the `synology-csi` namespace. It communicates with the Synology DSM API to create, delete, and manage storage volumes.
@@ -9,7 +9,7 @@ The Synology CSI driver is deployed in the `synology-csi` namespace. It communic
 - **NFS**: Used for ReadWriteMany (RWX) shared file storage (e.g., media libraries).
 
 ## 3. URLs
-- **Synology DSM**: https://10.42.2.21:5001
+- **Synology DSM**: https://10.42.2.11:5001
 
 ## 4. Configuration
 - **Storage Classes**:

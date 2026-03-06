@@ -11,7 +11,7 @@ spec:
       # AdGuard DNS rewrites are not visible to CoreDNS, so we add
       # a hostAlias pointing at the production gateway.
       hostAliases:
-        - ip: "10.42.2.30"
+        - ip: "10.42.2.40"
           hostnames:
             - auth.burntbytes.com
       containers:

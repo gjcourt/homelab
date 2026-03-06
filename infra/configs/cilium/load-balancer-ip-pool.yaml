@@ -4,5 +4,5 @@ metadata:
   name: home-compute-pool
 spec:
   blocks:
-    - start: 10.42.2.30
+    - start: 10.42.2.40
       stop: 10.42.2.254

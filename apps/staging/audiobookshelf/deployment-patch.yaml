@@ -11,6 +11,6 @@ spec:
       # AdGuard DNS rewrites are not visible to CoreDNS, so we add
       # a hostAlias pointing at the staging gateway.
       hostAliases:
-        - ip: "10.42.2.31"
+        - ip: "10.42.2.41"
           hostnames:
             - auth.stage.burntbytes.com

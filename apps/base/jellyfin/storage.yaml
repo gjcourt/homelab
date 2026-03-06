@@ -24,4 +24,5 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 256Mi
+      # Minimum LUN size on Synology iSCSI is 1Gi.
+      storage: 1Gi

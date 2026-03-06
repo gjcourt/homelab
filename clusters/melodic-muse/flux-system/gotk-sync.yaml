@@ -9,9 +9,8 @@ spec:
   interval: 1m0s
   ref:
     branch: master
-  secretRef:
-    name: flux-system
-  url: ssh://git@github.com/gjcourt/homelab
+  # Repo is public; use HTTPS to avoid egress port-22 restrictions in-cluster
+  url: https://github.com/gjcourt/homelab
 ---
 apiVersion: kustomize.toolkit.fluxcd.io/v1
 kind: Kustomization

@@ -5,7 +5,7 @@
 **Authors:** Copilot
 
 ## 1. Incident Summary
-The Synology NAS (`192.168.5.8`) reached its maximum iSCSI target limit (128), preventing the Kubernetes cluster from provisioning new persistent volumes. Attempts to delete old "recovery" targets via the Synology API failed with error `18990710` ("Target Busy"), even after a reboot. The system was stuck in a "Zombie" state where targets deleted from the kernel would reappear upon service restart due to a configuration desynchronization.
+The Synology NAS (`10.42.2.21`) reached its maximum iSCSI target limit (128), preventing the Kubernetes cluster from provisioning new persistent volumes. Attempts to delete old "recovery" targets via the Synology API failed with error `18990710` ("Target Busy"), even after a reboot. The system was stuck in a "Zombie" state where targets deleted from the kernel would reappear upon service restart due to a configuration desynchronization.
 
 ## 2. Root Cause
 *   **Layer Desynchronization**: The Synology management layer (User-space DB/Config) and the iSCSI Kernel Layer (ConfigFS) became out of sync.

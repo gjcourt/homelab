@@ -12,7 +12,7 @@ spec:
         spec:
           containers:
             - name: renovate
-              image: renovate/renovate@sha256:ecfd2b9b0cfe4d985ff6374ee44683a0f13c93b95fdac6175b9efa4e48ea708c
+              image: renovate/renovate@sha256:38d2e54e1dafc61c58cb231bca4cb4b0bea7bbc7236589abd56be55eeaee62aa
 
               args:
                 - gjcourt/homelab

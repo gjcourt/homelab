@@ -12,9 +12,9 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      # Actual usage: ~227Mi; minimum LUN size on Synology iSCSI is 1Gi.
-      # Requires PVC deletion to take effect (PVCs cannot shrink in-place).
-      storage: 1Gi
+      # Actual usage: ~227Mi. Jellyfin 10.11+ requires 2GiB free in /config/data;
+      # bumped from 1Gi to 5Gi to satisfy that check.
+      storage: 5Gi
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -30,7 +30,6 @@ spec:
   storageClassName: synology-iscsi
   resources:
     requests:
-      # Actual usage: ~32Mi; minimum LUN size on Synology iSCSI is 1Gi.
-      # Was 50Gi (massively over-provisioned).
-      # Requires PVC deletion to take effect.
-      storage: 1Gi
+      # Actual usage: ~32Mi. Jellyfin 10.11+ requires 2GiB free in /cache;
+      # bumped from 1Gi to 5Gi to satisfy that check.
+      storage: 5Gi

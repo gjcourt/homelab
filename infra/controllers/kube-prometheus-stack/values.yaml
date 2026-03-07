@@ -4092,8 +4092,10 @@ prometheus:
     ## reflected in the running Pods. To change the secrets mounted into the Prometheus Pods, the object must be deleted and recreated
     ## with the new list of secrets.
     ##
-    secrets:
-      - etcd-certs
+    # Talos exposes etcd metrics on port 2381 without TLS; no etcd-certs secret
+    # is needed here. Removing it prevents Prometheus from failing to start when
+    # the secret does not exist.
+    secrets: []
 
     ## ConfigMaps is a list of ConfigMaps in the same namespace as the Prometheus object, which shall be mounted into the Prometheus Pods.
     ## The ConfigMaps are mounted into /etc/prometheus/configmaps/.

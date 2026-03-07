@@ -1,7 +1,9 @@
 apiVersion: cilium.io/v2
 kind: CiliumLoadBalancerIPPool
 metadata:
-  name: home-compute-pool
+  # Named home-c-pool to match lbipam.cilium.io/ip-pool annotations across
+  # gateway and LoadBalancer service resources in this cluster.
+  name: home-c-pool
 spec:
   blocks:
     - start: 10.42.2.40

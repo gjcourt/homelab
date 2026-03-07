@@ -8,6 +8,10 @@ metadata:
     env: production
 spec:
   gatewayClassName: cilium
+  infrastructure:
+    annotations:
+      # Pin this gateway to the home-c-pool so Cilium allocates a stable LAN IP.
+      lbipam.cilium.io/ip-pool: home-c-pool
   listeners:
     # LAN HTTP listener for HTTP→HTTPS redirects
     - name: http

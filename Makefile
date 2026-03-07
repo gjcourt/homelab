@@ -128,7 +128,7 @@ immich-init-db: ## Initialize Immich DB helper. Usage: make immich-init-db ENV=s
 	@if [ -z "$(ENV)" ]; then echo "Error: ENV variable is required. usage: make immich-init-db ENV=staging|production"; exit 1; fi
 	@case "$(ENV)" in \
 		staging) NAMESPACE="immich-stage"; CLUSTER="immich-db-staging-cnpg-v1";; \
-		production) NAMESPACE="immich-prod"; CLUSTER="immich-db-prod-cnpg-v2";; \
+		production) NAMESPACE="immich-prod"; CLUSTER="immich-db-prod-cnpg-v3";; \
 		*) echo "Error: valid ENV values are 'staging' or 'production'"; exit 1;; \
 	esac; \
 	echo "Waiting for cnpg cluster $$CLUSTER in $$NAMESPACE..."; \

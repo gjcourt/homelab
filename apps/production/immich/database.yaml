@@ -1,7 +1,7 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: immich-db-prod-cnpg-v2
+  name: immich-db-prod-cnpg-v3
   namespace: immich-prod
 spec:
   description: Postgres cluster for Immich with pgvecto.rs for ML search
@@ -32,8 +32,8 @@ spec:
     - name: barman-cloud.cloudnative-pg.io
       isWALArchiver: true
       parameters:
-        barmanObjectName: immich-db-prod-cnpg-v2-backup
-        serverName: immich-db-prod-cnpg-v2
+        barmanObjectName: immich-db-prod-cnpg-v3-backup
+        serverName: immich-db-prod-cnpg-v3
   bootstrap:
     initdb:
       database: immich
@@ -52,8 +52,8 @@ spec:
       plugin:
         name: barman-cloud.cloudnative-pg.io
         parameters:
-          barmanObjectName: immich-db-prod-cnpg-v2-backup
-          serverName: immich-db-prod-cnpg-v2
+          barmanObjectName: immich-db-prod-cnpg-v3-backup
+          serverName: immich-db-prod-cnpg-v3
   resources:
     requests:
       memory: "512Mi"

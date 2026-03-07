@@ -4,11 +4,11 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: ScheduledBackup
 metadata:
-  name: immich-db-prod-cnpg-v2-backup
+  name: immich-db-prod-cnpg-v3-backup
   namespace: immich-prod
 spec:
   cluster:
-    name: immich-db-prod-cnpg-v2
+    name: immich-db-prod-cnpg-v3
   # 6-field cron: seconds minutes hours dom month dow
   schedule: "0 0 2 * * *"
   backupOwnerReference: self

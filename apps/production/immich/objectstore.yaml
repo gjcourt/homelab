@@ -4,7 +4,7 @@
 apiVersion: barmancloud.cnpg.io/v1
 kind: ObjectStore
 metadata:
-  name: immich-db-prod-cnpg-v2-backup
+  name: immich-db-prod-cnpg-v3-backup
   namespace: immich-prod
 spec:
   configuration:

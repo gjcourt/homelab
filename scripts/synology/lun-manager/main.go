@@ -1,11 +1,14 @@
-// lun-manager: audit and clean up orphaned Synology iSCSI LUNs/Targets.
+// lun-manager: audit, inspect, and clean up Synology iSCSI LUNs/Targets.
 //
 // Subcommands:
 //
-//		audit   - Compare NAS iSCSI config against Kubernetes PVs and report
-//		          bound/released/orphaned LUNs.
-//		cleanup - Delete orphaned LUNs and their targets from the NAS.
-//	            Pass --dry-run to preview without making changes.
+//	audit    - Compare NAS iSCSI config against Kubernetes PVs and report
+//	           bound/released/orphaned LUNs.
+//	inspect  - Show detailed info about a specific LUN including backing
+//	           file and btrfs health.
+//	copy-lun - Copy a LUN's backing file to the local machine via SCP.
+//	cleanup  - Delete orphaned LUNs and their targets from the NAS.
+//	           Pass --dry-run to preview without making changes.
 //
 // Required environment variables:
 //
@@ -361,6 +364,29 @@ func getK8sPVs() (map[string]PV, error) {
 }
 
 // ---------------------------------------------------------------------------
+// LUN resolution helper
+// ---------------------------------------------------------------------------
+
+// resolveLUN looks up a LUN by either its PV name (e.g. "pvc-abc123") or
+// its LUN name (e.g. "k8s-csi-pvc-abc123") and returns the matching LUN,
+// PV, Target, and whether the lookup succeeded.
+func resolveLUN(cfg *NASConfig, pvs map[string]PV, nameOrPV string) (LUN, PV, Target, bool) {
+	lunName := nameOrPV
+	if !strings.HasPrefix(nameOrPV, "k8s-csi-") {
+		lunName = "k8s-csi-" + nameOrPV
+	}
+	for _, lun := range cfg.LUNs {
+		if lun.Name == lunName {
+			pvName := pvNameFromLUN(lun.Name)
+			pv := pvs[pvName]
+			target := cfg.byLUNName[lun.Name]
+			return lun, pv, target, true
+		}
+	}
+	return LUN{}, PV{}, Target{}, false
+}
+
+// ---------------------------------------------------------------------------
 // Audit subcommand
 // ---------------------------------------------------------------------------
 
@@ -459,6 +485,201 @@ func cmdAudit() error {
 	fmt.Println(strings.Repeat("-", 100))
 	fmt.Printf("Total LUNs: %d  |  Bound: %d  |  Released: %d  |  Orphaned: %d\n",
 		len(rows), counts["Bound"], counts["Released"], counts["ORPHAN"])
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Inspect subcommand
+// ---------------------------------------------------------------------------
+
+func cmdInspect(nameOrPV string) error {
+	// Fetch K8s PVs concurrently while connecting to the NAS.
+	type pvResult struct {
+		pvs map[string]PV
+		err error
+	}
+	pvCh := make(chan pvResult, 1)
+	go func() {
+		pvs, err := getK8sPVs()
+		pvCh <- pvResult{pvs, err}
+	}()
+
+	client, password, err := newSSHClient()
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	cfg, err := loadNASConfig(client, password)
+	if err != nil {
+		return fmt.Errorf("NAS config load: %w", err)
+	}
+
+	pvRes := <-pvCh
+	if pvRes.err != nil {
+		return fmt.Errorf("Kubernetes PV fetch: %w", pvRes.err)
+	}
+
+	lun, pv, target, found := resolveLUN(cfg, pvRes.pvs, nameOrPV)
+	if !found {
+		return fmt.Errorf("LUN not found for %q", nameOrPV)
+	}
+
+	// Print LUN details.
+	fmt.Println("=== LUN ===")
+	fmt.Printf("  Name:   %s\n", lun.Name)
+	fmt.Printf("  UUID:   %s\n", lun.UUID)
+	fmt.Printf("  Size:   %.2f GiB\n", lun.SizeGiB)
+
+	// Print target details.
+	fmt.Println("\n=== Target ===")
+	if target.Name != "" {
+		fmt.Printf("  IQN:    %s\n", target.Name)
+		fmt.Printf("  TID:    %s\n", target.TID)
+	} else {
+		fmt.Println("  (not mapped to any target)")
+	}
+
+	// Print K8s PV details.
+	fmt.Println("\n=== Kubernetes PV ===")
+	pvName := pvNameFromLUN(lun.Name)
+	if pv.Name != "" {
+		fmt.Printf("  PV:     %s\n", pv.Name)
+		fmt.Printf("  Phase:  %s\n", pv.Phase)
+		if pv.Namespace != "" && pv.Claim != "" {
+			fmt.Printf("  Claim:  %s/%s\n", pv.Namespace, pv.Claim)
+		}
+	} else {
+		fmt.Printf("  PV %s not found in cluster (orphaned)\n", pvName)
+	}
+
+	// SSH to NAS and inspect backing file.
+	backingDir := fmt.Sprintf("/volume1/@iSCSI/LUN/BLUN/%s", lun.UUID)
+	backingFile := fmt.Sprintf("%s/%s_00000", backingDir, lun.Name)
+
+	fmt.Println("\n=== Backing File ===")
+	fmt.Printf("  Path:   %s\n", backingFile)
+
+	_, lsOut, _, err := sudoRun(client, password, fmt.Sprintf("ls -la %s", backingDir))
+	if err != nil {
+		fmt.Printf("  (could not list directory: %v)\n", err)
+	} else {
+		for _, line := range strings.Split(strings.TrimSpace(lsOut), "\n") {
+			fmt.Printf("  %s\n", line)
+		}
+	}
+
+	// Btrfs check via loop device.
+	fmt.Println("\n=== Btrfs Check ===")
+
+	// Set up loop device.
+	_, loopDev, loopStderr, err := sudoRun(client, password,
+		fmt.Sprintf("losetup --find --show %s", backingFile))
+	loopDev = strings.TrimSpace(loopDev)
+	if err != nil || loopDev == "" {
+		fmt.Printf("  (could not set up loop device: %v — %s)\n", err, strings.TrimSpace(loopStderr))
+		return nil
+	}
+	fmt.Printf("  Loop:   %s\n", loopDev)
+
+	// Always tear down loop device.
+	defer func() {
+		_, _, _, _ = sudoRun(client, password, fmt.Sprintf("losetup -d %s", loopDev))
+		fmt.Printf("  (loop device %s detached)\n", loopDev)
+	}()
+
+	// Run btrfs check.
+	code, checkOut, checkStderr, err := sudoRun(client, password,
+		fmt.Sprintf("btrfs check --force --readonly %s", loopDev))
+	if err != nil && code < 0 {
+		fmt.Printf("  (btrfs check failed to run: %v)\n", err)
+		return nil
+	}
+	if checkOut != "" {
+		for _, line := range strings.Split(strings.TrimSpace(checkOut), "\n") {
+			fmt.Printf("  %s\n", line)
+		}
+	}
+	if checkStderr != "" {
+		for _, line := range strings.Split(strings.TrimSpace(checkStderr), "\n") {
+			// Skip sudo password prompt echoes.
+			if strings.Contains(strings.ToLower(line), "password") {
+				continue
+			}
+			fmt.Printf("  %s\n", line)
+		}
+	}
+	if code == 0 {
+		fmt.Println("  Result: OK")
+	} else {
+		fmt.Printf("  Result: ERRORS DETECTED (exit code %d)\n", code)
+	}
+
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Copy-LUN subcommand
+// ---------------------------------------------------------------------------
+
+func cmdCopyLUN(nameOrPV, output string) error {
+	client, password, err := newSSHClient()
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	cfg, err := loadNASConfig(client, password)
+	if err != nil {
+		return fmt.Errorf("NAS config load: %w", err)
+	}
+
+	// PV info is not required for the copy; pass an empty map.
+	lun, _, _, found := resolveLUN(cfg, map[string]PV{}, nameOrPV)
+	if !found {
+		return fmt.Errorf("LUN not found for %q", nameOrPV)
+	}
+
+	backingFile := fmt.Sprintf("/volume1/@iSCSI/LUN/BLUN/%s/%s_00000", lun.UUID, lun.Name)
+
+	if output == "" {
+		output = lun.Name + ".img"
+	}
+
+	host := envOr("SYNOLOGY_HOST", "")
+	user := envOr("SYNOLOGY_USER", "admin")
+	port := envOr("SYNOLOGY_PORT", "22")
+
+	fmt.Printf("LUN:    %s\n", lun.Name)
+	fmt.Printf("UUID:   %s\n", lun.UUID)
+	fmt.Printf("Size:   %.2f GiB\n", lun.SizeGiB)
+	fmt.Printf("Source: %s:%s\n", host, backingFile)
+	fmt.Printf("Dest:   %s\n\n", output)
+
+	// Shell out to sshpass + scp to copy the backing file.
+	scpCmd := exec.Command("sshpass", "-p", password,
+		"scp",
+		"-P", port,
+		"-o", "StrictHostKeyChecking=no",
+		fmt.Sprintf("%s@%s:%s", user, host, backingFile),
+		output,
+	)
+	scpCmd.Stdout = os.Stdout
+	scpCmd.Stderr = os.Stderr
+
+	fmt.Println("Copying...")
+	if err := scpCmd.Run(); err != nil {
+		return fmt.Errorf("scp: %w", err)
+	}
+
+	// Show result file size.
+	info, err := os.Stat(output)
+	if err != nil {
+		return fmt.Errorf("stat %s: %w", output, err)
+	}
+
+	fmt.Printf("\nDone. Copied %.2f GiB to %s\n",
+		float64(info.Size())/(1024*1024*1024), output)
 	return nil
 }
 
@@ -657,13 +878,18 @@ func cmdCleanup(dryRun bool, workers int) error {
 // ---------------------------------------------------------------------------
 
 func usage() {
-	fmt.Fprintf(os.Stderr, `lun-manager -- audit and clean up orphaned Synology iSCSI LUNs
+	fmt.Fprintf(os.Stderr, `lun-manager -- audit, inspect, and clean up Synology iSCSI LUNs
 
 USAGE
   lun-manager <subcommand> [flags]
 
 SUBCOMMANDS
   audit     Compare NAS iSCSI LUNs with Kubernetes PVs and print a report.
+  inspect   Show detailed info about a LUN (backing file, btrfs health, K8s PV).
+              Accepts a PV name or LUN name as a positional argument.
+  copy-lun  Copy a LUN's backing file to the local machine via SCP.
+              Accepts a PV name or LUN name as a positional argument.
+              --output PATH  Local destination path (default: ./<lun-name>.img).
   cleanup   Delete orphaned LUNs from the NAS.
               --dry-run   Preview deletions without making any changes.
               --workers N Concurrent deletion workers (default: 1).
@@ -691,6 +917,37 @@ func main() {
 		}
 		if err := cmdAudit(); err != nil {
 			fmt.Fprintf(os.Stderr, "audit: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "inspect":
+		fs := flag.NewFlagSet("inspect", flag.ExitOnError)
+		if err := fs.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if fs.NArg() != 1 {
+			fmt.Fprintln(os.Stderr, "inspect requires exactly one argument: PV name or LUN name")
+			os.Exit(1)
+		}
+		if err := cmdInspect(fs.Arg(0)); err != nil {
+			fmt.Fprintf(os.Stderr, "inspect: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "copy-lun":
+		fs := flag.NewFlagSet("copy-lun", flag.ExitOnError)
+		output := fs.String("output", "", "Local destination path (default: ./<lun-name>.img)")
+		if err := fs.Parse(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		if fs.NArg() != 1 {
+			fmt.Fprintln(os.Stderr, "copy-lun requires exactly one argument: PV name or LUN name")
+			os.Exit(1)
+		}
+		if err := cmdCopyLUN(fs.Arg(0), *output); err != nil {
+			fmt.Fprintf(os.Stderr, "copy-lun: %v\n", err)
 			os.Exit(1)
 		}
 

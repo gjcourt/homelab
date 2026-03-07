@@ -13,10 +13,10 @@ spec:
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: immich-db-prod-cnpg-v2-superuser
+                  name: immich-db-prod-cnpg-v3-superuser
                   key: password
             - name: PGHOST
-              value: immich-db-prod-cnpg-v2-rw
+              value: immich-db-prod-cnpg-v3-rw
           command: ["/bin/sh", "-c"]
           args:
             - |

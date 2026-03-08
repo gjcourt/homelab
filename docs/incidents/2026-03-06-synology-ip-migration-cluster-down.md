@@ -101,8 +101,8 @@ updated CSI secret could not be applied from git.
 | 2026-03-06 | All 10 NFS PVs re-bound to their PVCs |
 | 2026-03-06 | `apps-production` + `apps-staging` kustomizations unblocked and reconciled |
 | 2026-03-06 | PR #214 created to persist Flux HTTPS change |
-| 2026-03-06 | `lun-manager audit`: 64 orphaned LUNs found (all `k8s-csi-pvc-*`, no matching K8s PVs) |
-| 2026-03-06 | `lun-manager cleanup`: 64 orphans deleted from NAS (64/64 OK) |
+| 2026-03-06 | `synology-tool audit`: 64 orphaned LUNs found (all `k8s-csi-pvc-*`, no matching K8s PVs) |
+| 2026-03-06 | `synology-tool cleanup-luns`: 64 orphans deleted from NAS (64/64 OK) |
 | 2026-03-06 | **Remaining blocker**: CSI `Couldn't find any host available to create Volume` — node IQN not registered in Synology DSM SAN Manager |
 
 ---

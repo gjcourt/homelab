@@ -34,8 +34,8 @@ This cluster uses a Synology NAS (10.42.2.11) as the iSCSI storage backend via t
 
 5. **Disabled targets on NAS**:
     - The Synology `synoiscsiwebapi` CLI silently sets `enabled=no` on targets during LUN mapping operations.
-    - Always run `python3 scripts/synology/enable_targets.py` after any NAS LUN operation.
-    - Audit: `python3 scripts/synology/audit_luns.py`.
+    - Always run `synology-tool enable-targets` after any NAS LUN operation.
+    - Audit: `synology-tool audit`.
 
 ## Synology NAS access
 
@@ -54,10 +54,10 @@ kubectl get pods -A --field-selector 'status.phase!=Running,status.phase!=Succee
 kubectl describe pod <pod> | grep -A5 "Events:"
 
 # 3. Audit NAS LUN/target state
-python3 scripts/synology/audit_luns.py
+synology-tool audit
 
-# 4. Check for disabled targets
-python3 scripts/synology/enable_targets.py
+# 4. Check for and fix disabled targets
+synology-tool enable-targets --dry-run
 
 # 5. Check iSCSI sessions from the node
 kubectl exec -n synology-csi <csi-node-pod> -c csi-plugin -- iscsiadm -m session

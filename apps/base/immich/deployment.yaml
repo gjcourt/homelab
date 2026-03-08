@@ -163,6 +163,9 @@ spec:
       containers:
         - name: redis
           image: redis:8-alpine
+          args:
+            - "--save"
+            - ""
           ports:
             - name: redis
               containerPort: 6379
@@ -180,3 +183,9 @@ spec:
               drop:
                 - ALL
             readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          emptyDir: {}

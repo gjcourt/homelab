@@ -1,4 +1,4 @@
-module homelab/lun-manager
+module homelab/synology-tool
 
 go 1.24.0
 

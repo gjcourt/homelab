@@ -145,11 +145,27 @@ spec:
 
 1. **Install Plugin**: Install the Barman Cloud Plugin in the `cnpg-system` namespace.
 2. **Staging Migration**:
+   - Migrate `golinks-db-staging-cnpg-v1`
    - Migrate `immich-db-staging-cnpg-v1`
    - Migrate `linkding-db-staging-cnpg-v1`
    - Migrate `memos-db-staging-cnpg-v1`
+   - Migrate `vitals-db-staging-cnpg-v1`
 3. **Production Migration**:
-   - Migrate `immich-db-prod-cnpg-v2`
+   - Migrate `golinks-db-production-cnpg-v1`
+   - Migrate `immich-db-prod-cnpg-v3`
    - Migrate `linkding-db-production-cnpg-v1`
    - Migrate `memos-db-production-cnpg-v1`
+   - Migrate `vitals-db-production-cnpg-v1`
 4. **Verification**: Monitor the new metrics (`barman_cloud_cloudnative_pg_io_*`) to ensure backups are completing successfully.
+
+## Completion Notes
+
+All 10 CNPG clusters (5 apps × staging + production) have been fully migrated to the Barman Cloud Plugin architecture:
+
+- **Plugin**: `barman-cloud.cloudnative-pg.io` installed in `cnpg-system`
+- **ObjectStores**: 10 `ObjectStore` resources created (one per cluster)
+- **Clusters**: All use `spec.plugins` with `isWALArchiver: true` (no deprecated `barmanObjectStore`)
+- **ExternalClusters**: All use `spec.externalClusters[].plugin` format
+- **ScheduledBackups**: All 10 use `method: plugin` with `pluginConfiguration`
+- **AWS Credentials**: All secrets use valid credentials (fixed in PR #230)
+- **S3 Verification**: Base backups and WAL archives confirmed in `s3://gjcourt-homelab-backup/` for all apps

@@ -62,7 +62,42 @@ spec:
               drop:
                 - ALL
 
-      # TODO upgrade this to a postgres backed DB instead of a PV
+      # Run database migrations before the app starts. If the database is
+      # unavailable or migrations fail for any reason, the init container exits
+      # non-zero and Kubernetes refuses to start the main container (fail-fast).
+      # This prevents the app from running with a missing/stale schema, which
+      # would otherwise produce 500 errors on every request.
+      initContainers:
+        - name: migrate
+          image: sissbruecker/linkding@sha256:61b2eb9eed8e5772a473fb7f1f8923e046cb8cbbeb50e88150afd5ff287d4060
+          command:
+            - python
+            - /etc/linkding/manage.py
+            - migrate
+          env:
+            - name: LD_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: linkding-db-credentials
+                  key: password
+          envFrom:
+            - configMapRef:
+                name: linkding-container-env
+            - secretRef:
+                name: linkding-app-secret
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+
       volumes:
         - name: linkding-data
           persistentVolumeClaim:

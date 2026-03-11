@@ -25,6 +25,7 @@ Operational how-to guides for day-to-day work.
 - [Staging workflow](guides/staging-workflow.md) — how PRs auto-deploy to staging via CI and Flux
 - [Synology iSCSI operations](guides/synology-iscsi-operations.md) — common storage scenarios and runbook
 - [Synology iSCSI cleanup](guides/synology-iscsi-cleanup.md) — orphan LUN/target concepts and cleanup process
+- [RPi 4 / UniFi ethernet drops](guides/rpi-unifi-ethernet-drops.md) — diagnosing and fixing bcmgenet EEE + STP TCN outages
 
 ## Apps
 

@@ -22,7 +22,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: adguard
-          image: adguard/adguardhome@sha256:4956b35b590286e5872fb4336d84a7862a2030c6efb4ca16442580c37d7ba32d
+          image: adguard/adguardhome@sha256:7fbf01d73ecb7a32d2d9e6cef8bf88e64bd787889ca80a1e8bce30cd4c084442
           envFrom:
             - configMapRef:
                 name: adguard-container-env

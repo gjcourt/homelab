@@ -85,6 +85,11 @@ spec:
                 name: linkding-container-env
             - secretRef:
                 name: linkding-app-secret
+          # The migrate command writes to the SQLite database, so the data PVC
+          # must be mounted here just as it is in the main container.
+          volumeMounts:
+            - name: linkding-data
+              mountPath: /etc/linkding/data
           resources:
             requests:
               cpu: 10m

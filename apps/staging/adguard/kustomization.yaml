@@ -38,4 +38,7 @@ patches:
       metadata:
         name: adguard
       spec:
-        replicas: 2
+        # Run a single replica in staging. HA (replicas: 2) requires adguard-sync
+        # to bootstrap a fresh second replica before its readiness probe passes,
+        # which needs manual initial setup of adguard-1. Staging does not need HA.
+        replicas: 1

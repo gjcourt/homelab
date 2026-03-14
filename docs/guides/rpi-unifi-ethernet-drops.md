@@ -3,21 +3,39 @@
 **Applies to**: Any Raspberry Pi 4 (bcmgenet NIC) connected to a UniFi managed switch  
 **Affected hosts**: `kitchen` (10.42.2.143), `snapcast-office` (10.42.2.220)  
 **Fix date**: 2026-03-10  
+**Updated**: 2026-03-13 — true root cause identified as Flex 2.5G PoE firmware bug
+
+---
+
+> **Update 2026-03-13**: After publishing this guide, STP bridge priority on the
+> Pro XG 48 PoE was set to `4096` (making it the explicit root bridge) while
+> leaving all other switches at the default `32768`. **TCNs still fired and the
+> exact same blackout behavior was observed.** Further investigation (factory
+> reset of the Flex 2.5G PoE, uplink-only test with zero devices connected)
+> revealed that the switch was **generating STP TCNs autonomously — a firmware
+> bug in Flex 2.5G PoE firmware 2.1.8**. Removing the switch from the UniFi UI
+> **immediately and completely stopped the blackouts**. The EEE fix on the RPi 4s
+> remains valid (and was a contributing factor in the initial investigation) but
+> the primary cause was the faulty switch, not EEE.
 
 ---
 
 ## Summary
 
-Raspberry Pi 4 devices connected to UniFi managed switches experience periodic
+Raspberry Pi 4 devices connected to UniFi managed switches experienced periodic
 ~40–60 second connectivity blackouts affecting **the entire subnet**, not just the
-Pi itself. The root cause is a two-part interaction:
+Pi itself.
 
-1. The RPi 4's `bcmgenet` NIC uses Energy Efficient Ethernet (EEE), which causes
-   the PHY to briefly drop link during idle periods.
-2. Each link drop sends an **STP Topology Change Notification (TCN)** from the
-   switch port. A TCN causes every switch in the spanning tree to flush its MAC
-   address table, making all devices on the subnet temporarily unreachable while
-   MAC addresses are re-learned (~15–40s).
+The investigation initially attributed the cause to a two-part interaction
+between EEE on the RPi 4 `bcmgenet` NIC and STP TCNs. **The true root cause was
+a firmware bug in the UniFi Flex 2.5G PoE switch (firmware 2.1.8): the switch
+generated STP Topology Change Notifications autonomously, even with no devices
+connected.** EEE micro-sleeps on the RPi 4 contributed to the early investigation
+but were not the underlying cause.
+
+Each TCN causes every switch in the spanning tree to flush its MAC address table,
+making all devices on the subnet temporarily unreachable while MAC addresses are
+re-learned (~15–40s).
 
 ---
 
@@ -54,6 +72,26 @@ implementation negotiates Low Power Idle (LPI) mode with the switch, briefly
 transitioning the PHY to a low-power state during idle periods. Some UniFi
 switch firmware versions interpret the LPI exit as a link-down/up event and
 generate a TCN, even though carrier has not truly changed.
+
+### Flex 2.5G PoE Firmware Bug — Autonomous TCN Generation
+
+**This was the confirmed primary root cause.** The UniFi Flex 2.5G PoE running
+firmware 2.1.8 generates STP TCNs autonomously — independent of any connected
+device behavior. This was proven by:
+
+1. Factory resetting the Flex 2.5G PoE and connecting only its uplink (no other
+   devices)
+2. Observing TCNs continue at the same ~30–60s interval with the switch otherwise
+   idle
+3. Removing the switch from the UniFi UI → **blackouts stopped immediately**
+
+Setting the STP bridge priority to `4096` on the Pro XG 48 PoE to lock it as
+root bridge had **no effect** — the TCNs still fired at the same rate and the
+same subnet-wide blackouts were observed. The firmware bug causes TCNs to be
+generated regardless of root bridge status.
+
+**Affected hardware**: UniFi Flex 2.5G PoE, firmware 2.1.8  
+**Status**: Awaiting firmware fix from Ubiquiti before re-adding to the network.
 
 ### Chain of Events
 
@@ -201,7 +239,37 @@ sed -i 's/^exit 0/ethtool --set-eee eth0 eee off\nexit 0/' /etc/rc.local
 
 ---
 
-### Part 2: UniFi Switch — Enable STP Edge (PortFast) on Pi Ports
+### Part 2 (Attempted — No Effect): Lock STP Root Bridge Priority
+
+Setting the **STP Bridge Priority** on the Pro XG 48 PoE to `4096` (the lowest,
+most-preferred value) was attempted to lock it as the permanent STP root bridge
+and prevent any other switch from accidentally winning root election.
+
+In UniFi Network: **Devices → [switch] → Settings → Services → Spanning Tree
+Priority → 4096**
+
+**Result**: TCNs continued at the same rate. The blackouts were identical.
+Root bridge priority controls *which* switch is root; it does not prevent a
+broken switch from sending TCNs. This was the observation that pointed to the
+Flex 2.5G PoE firmware bug as the real cause.
+
+---
+
+### Part 3 (True Fix): Remove the Flex 2.5G PoE Switch
+
+The Flex 2.5G PoE (firmware 2.1.8) was removed from the network via the UniFi
+UI (**Devices → Flex 2.5G PoE → Forget Device**). The switch was also physically
+disconnected.
+
+**Result**: All subnet blackouts stopped immediately and completely.
+
+The switch is awaiting a firmware fix from Ubiquiti before being reconnected. Do
+not reconnect a Flex 2.5G PoE running firmware 2.1.8 to a production network
+until the autonomous TCN issue has been addressed.
+
+---
+
+### Part 4 (Still Recommended): UniFi Switch — Enable STP Edge (PortFast) on Pi Ports
 
 STP **Edge** mode (also called PortFast) tells the switch that a port connects
 directly to an end device, never to another switch. The switch immediately

@@ -25,6 +25,7 @@ Operational how-to guides for day-to-day work.
 - [Staging workflow](guides/staging-workflow.md) — how PRs auto-deploy to staging via CI and Flux
 - [Synology iSCSI operations](guides/synology-iscsi-operations.md) — common storage scenarios and runbook
 - [Synology iSCSI cleanup](guides/synology-iscsi-cleanup.md) — orphan LUN/target concepts and cleanup process
+- [HifiBerry OS Spotify Connect setup](guides/hifiberry-os-spotify-setup.md) — fix avahi Docker bridge IP poisoning and replace vollibrespot with go-librespot
 
 ## Apps
 

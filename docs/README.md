@@ -45,6 +45,7 @@ Infrastructure component documentation.
 
 Postmortems for past outages.
 
+- [2026-03-10: Raspberry Pi STP TCN subnet blackouts](incidents/2026-03-10-rpi-stp-tcn-blackouts.md)
 - [2026-02-15: iSCSI targets disabled](incidents/2026-02-15-iscsi-targets-disabled.md)
 - [2026-02-12: iSCSI zombie targets](incidents/2026-02-12-iscsi-zombie-targets.md)
 - [2026-02-08: PV recovery](incidents/2026-02-08-pv-recovery.md)
@@ -56,3 +57,4 @@ Active plans and TODOs.
 - [Authelia SSO rollout](plans/authelia-sso-rollout.md)
 - [Authelia SMTP notifier](plans/authelia-smtp-notifier.md)
 - [AdGuard HA](plans/adguard-ha.md)
+- [Navidrome → Snapcast via Mopidy](plans/navidrome-snapcast-mopidy.md)

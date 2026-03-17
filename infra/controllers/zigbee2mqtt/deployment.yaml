@@ -36,10 +36,6 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /app/data
-            - name: usb
-              mountPath: /dev/ttyUSB0
-          securityContext:
-            privileged: true
       volumes:
         - name: config
           configMap:
@@ -47,6 +43,3 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: zigbee2mqtt-data-pvc
-        - name: usb
-          hostPath:
-            path: /dev/ttyUSB0

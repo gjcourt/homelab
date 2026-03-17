@@ -12,6 +12,10 @@ Topic-specific instructions live in `.github/instructions/`.
     - All changes **MUST** be submitted via a Pull Request.
     - **Do not** offer to commit to `main` or `master`. If the user asks, firmly refuse and create a branch instead.
     - **Pre-Commit Check**: Before running `git commit`, ALWAYS run `git branch --show-current` to ensure you are not on `main` or `master`.
+- **CRITICAL: BEFORE EVERY `git push` TO AN EXISTING BRANCH, check if the PR is already merged.**
+    - Run: `gh pr view <branch> --json state,mergedAt`
+    - If `state` is `MERGED`: **STOP**. Do NOT push. Instead: create a new branch from `master`, cherry-pick the commits, and open a new PR. This has caused lost commits multiple times (#252, #253, #254).
+    - If `state` is `OPEN`: push normally.
 - **CRITICAL: NEVER MERGE A PULL REQUEST** without the user's **express permission**.
     - Do not merge PRs automatically after creating them.
     - Do not merge PRs as part of a multi-step workflow unless the user explicitly says to merge.

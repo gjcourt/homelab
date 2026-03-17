@@ -12,7 +12,7 @@ data:
       server: mqtt://mosquitto.mosquitto
     serial:
       adapter: ember
-      port: tcp://10.42.2.145:6638
+      port: tcp://10.42.2.125:6638
     frontend:
       port: 8080
     advanced:

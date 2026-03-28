@@ -31,7 +31,7 @@ spec:
             - name: config
               mountPath: /config
       containers:
-        - image: ghcr.io/home-assistant/home-assistant@sha256:572a5d030f652e9ef6c6d4f6631169af83eb3b739c9b4b3965669f5e9d9f3858
+        - image: ghcr.io/home-assistant/home-assistant@sha256:916682086154a7390114a9788782b8efb199852d4f7d47066722c2bc5d1829e6
           name: homeassistant
           ports:
             - containerPort: 8123

@@ -21,7 +21,16 @@ spec:
       initContainers:
         - name: init-files
           image: busybox@sha256:1487d0af5f52b4ba31c7e465126ee2123fe3f2305d638e7827681e7cf6c83d5e
-          command: ['sh', '-c', 'touch /config/automations.yaml /config/scripts.yaml /config/scenes.yaml']
+          # Write an empty YAML list for each include file if it doesn't already exist
+          # or is empty (0 bytes). A bare touch creates a 0-byte file which HA refuses
+          # to parse as a list, causing it to enter recovery mode and drop trusted_proxies.
+          command:
+            - sh
+            - -c
+            - |
+              for f in /config/automations.yaml /config/scripts.yaml /config/scenes.yaml; do
+                [ ! -s "$f" ] && printf '[]' > "$f"
+              done
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

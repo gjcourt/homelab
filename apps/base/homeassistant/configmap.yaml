@@ -15,6 +15,7 @@ data:
     automation: !include automations.yaml
     script: !include scripts.yaml
     scene: !include scenes.yaml
+    binary_sensor: !include binary_sensors.yaml
 
     http:
       use_x_forwarded_for: true
@@ -22,3 +23,20 @@ data:
         - 10.244.0.0/16  # Trust Cluster Pod CIDR
         - 10.42.2.0/24 # Trust Node Network (Envoy HostNetwork)
         - 127.0.0.1
+  binary_sensors.yaml: |
+    # Workday sensor — used by automations to detect weekdays.
+    - platform: workday
+      country: US
+      province: CA
+      workdays: [mon, tue, wed, thu, fri]
+
+    # Time-of-day sensors — used by nightlight and thermostat automations.
+    - platform: tod
+      name: Night
+      after: sunset
+      before: sunrise
+
+    - platform: tod
+      name: Day
+      after: sunrise
+      before: sunset

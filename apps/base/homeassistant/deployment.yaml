@@ -62,6 +62,9 @@ spec:
             - name: config-file
               mountPath: /config/configuration.yaml
               subPath: configuration.yaml
+            - name: config-file
+              mountPath: /config/binary_sensors.yaml
+              subPath: binary_sensors.yaml
       volumes:
         - name: config
           persistentVolumeClaim:

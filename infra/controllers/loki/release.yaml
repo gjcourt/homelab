@@ -23,7 +23,7 @@ spec:
     crds: CreateReplace
     remediation:
       retries: 3
-      remediationStrategy: uninstall
+      strategy: uninstall
   driftDetection:
     mode: enabled
 

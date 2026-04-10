@@ -15,20 +15,23 @@ Flux CD (GitOps) cluster for a single-node Talos Kubernetes cluster (`melodic-mu
 
 Flux kustomizations: `infra-crds` → `infra-controllers` → `infra-configs` → `apps-production` / `apps-staging`
 
-## Before Making Changes
+## Branching and PR Workflow — ALWAYS REQUIRED
 
-**Always check if there is an open PR before starting new work.** If one exists, verify whether it has been merged before creating a new branch or adding commits. Unmerged changes on a stale branch will not be reconciled by Flux.
+**Never commit or push directly to `master`.** All changes — including single-line fixes, hotfixes, and doc edits — must go through a branch and PR, unless the user explicitly says otherwise in the current message.
+
+Before creating a branch, check for open PRs. If one exists, check whether it has been merged before adding new commits:
 
 ```bash
 gh pr list --repo gjcourt/homelab
 ```
 
-## Workflow
-
-1. Branch from `master` (not from a previous fix branch)
-2. Commit changes, push, open a PR
-3. Merge to `master` — Flux reconciles within the `interval` defined on each Kustomization (default: 10m)
-4. To force immediate reconciliation: `flux reconcile kustomization <name> -n flux-system`
+**Workflow:**
+1. `git checkout master && git pull` — start from latest master
+2. `git checkout -b <type>/<short-description>` — new branch, never reuse old fix branches
+3. Commit changes and push the branch
+4. Open a PR via `gh pr create` or the GitHub MCP tool
+5. Merge the PR — Flux reconciles within the `interval` on each Kustomization (default: 10m)
+6. To force immediate reconciliation after merge: `flux reconcile kustomization <name> -n flux-system --with-source`
 
 ## Debugging Flux
 
@@ -47,7 +50,7 @@ flux reconcile helmrelease <name> -n <namespace> --reset
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `HelmRelease status: 'Failed'` blocking kustomization | Immutable StatefulSet field in chart upgrade | Delete the StatefulSet, `flux reconcile helmrelease --reset`. Add `upgrade.remediation.remediationStrategy: uninstall` to the HelmRelease. |
+| `HelmRelease status: 'Failed'` blocking kustomization | Immutable StatefulSet field in chart upgrade | Delete the StatefulSet, `flux reconcile helmrelease --reset`. Add `upgrade.remediation.strategy: uninstall` to the HelmRelease (`strategy`, not `remediationStrategy`). |
 | `dependency 'X' is not ready` | Upstream kustomization stalled | Fix the upstream kustomization first |
 | HA enters recovery mode | 0-byte include file (automations.yaml etc.) | Init container must write `[]`, not `touch` |
 

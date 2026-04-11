@@ -30,6 +30,9 @@ spec:
           ports:
             - containerPort: 8080
               name: http
+          envFrom:
+            - configMapRef:
+                name: zigbee2mqtt-env
           env:
             - name: ZIGBEE2MQTT_DATA
               value: /app/data

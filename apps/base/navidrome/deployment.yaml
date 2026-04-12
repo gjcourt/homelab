@@ -29,7 +29,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: navidrome
-          image: ghcr.io/navidrome/navidrome:0.61.1
+          image: ghcr.io/navidrome/navidrome:0.61.2
           ports:
             - containerPort: 4533
               name: http

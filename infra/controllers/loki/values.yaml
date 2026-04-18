@@ -50,7 +50,7 @@ singleBinary:
   persistence:
     enabled: true
     storageClass: synology-iscsi
-    size: 20Gi
+    size: 40Gi
   resources:
     limits:
       memory: 2Gi

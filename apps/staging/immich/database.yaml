@@ -23,9 +23,8 @@ spec:
     enablePodMonitor: true
 
   storage:
-    # Actual usage: ~7.2Gi; target = 20% headroom → 10Gi.
-    # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
-    size: 10Gi
+    # Expanded from 10Gi to 20Gi after filling up (pgdata ~9.5Gi as of 2026-04-17).
+    size: 20Gi
 
   resources:
     requests:

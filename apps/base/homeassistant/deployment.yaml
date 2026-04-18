@@ -31,6 +31,7 @@ spec:
               for f in /config/automations.yaml /config/scripts.yaml /config/scenes.yaml; do
                 [ ! -s "$f" ] && printf '[]' > "$f"
               done
+              true
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

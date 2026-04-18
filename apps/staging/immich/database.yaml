@@ -42,13 +42,15 @@ spec:
 
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
   # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
-  # Note: uses /v2 path in S3 to avoid WAL conflicts from previous cluster system ID.
+  # Note: uses /v3 path in S3 (clean slate) — v2 WAL archiving broke ~2026-02-28 due to
+  # barman-cloud-check-wal-archive blocking on existing WAL ("Expected empty archive").
+  # serverName bumped to -v3 to ensure check-wal-archive sees a fresh path.
   plugins:
     - name: barman-cloud.cloudnative-pg.io
       isWALArchiver: true
       parameters:
         barmanObjectName: immich-db-staging-cnpg-v1-backup
-        serverName: immich-db-staging-cnpg-v1
+        serverName: immich-db-staging-cnpg-v1-v3
 
   bootstrap:
     initdb:
@@ -70,4 +72,4 @@ spec:
         name: barman-cloud.cloudnative-pg.io
         parameters:
           barmanObjectName: immich-db-staging-cnpg-v1-backup
-          serverName: immich-db-staging-cnpg-v1
+          serverName: immich-db-staging-cnpg-v1-v3

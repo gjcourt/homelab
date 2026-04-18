@@ -9,6 +9,7 @@ resources:
   - httproute.yaml
 configMapGenerator:
   - name: zigbee2mqtt-env
+    namespace: zigbee2mqtt
     literals:
       - ZIGBEE2MQTT_CONFIG_SERIAL_PORT=tcp://10.42.2.15:6638
       - ZIGBEE2MQTT_CONFIG_SERIAL_ADAPTER=ember

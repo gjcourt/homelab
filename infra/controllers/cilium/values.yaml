@@ -91,7 +91,7 @@ l2announcements:
   enabled: true
 
 # -- (string) Kubernetes service host - use "auto" for automatic lookup from the cluster-info ConfigMap
-k8sServiceHost: "localhost"
+k8sServiceHost: "10.42.2.20"
 # @schema
 # type: [string, integer]
 # @schema
@@ -121,13 +121,9 @@ gatewayAPI:
     # -- Configure whether the Envoy listeners should be exposed on the host network.
     enabled: false
 
-# NOTE - running with 1 replica instead of 2 because a 1 worker node is not able
-# to deploy 2 replicas on the same port.
-#
-# TODO(george): Delete this config once the cluster has more than 1 worker
 operator:
   # -- Number of replicas to run for the cilium-operator deployment
-  replicas: 1
+  replicas: 2
 
 hubble:
   # -- Enable Hubble (true by default).

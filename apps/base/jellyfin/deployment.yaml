@@ -14,6 +14,7 @@ spec:
   # pod stuck in ContainerCreating until the old pod fully exits.
   strategy:
     type: Recreate
+    rollingUpdate: null
   template:
     metadata:
       labels:

@@ -14,6 +14,7 @@ spec:
   # replacement is created to avoid volume attach deadlocks during rollouts.
   strategy:
     type: Recreate
+    rollingUpdate: null
   template:
     metadata:
       labels:

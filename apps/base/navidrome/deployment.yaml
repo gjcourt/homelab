@@ -13,6 +13,7 @@ spec:
   # Single-replica Deployment with PVC-backed state/media mounts.
   strategy:
     type: Recreate
+    rollingUpdate: null
   template:
     metadata:
       labels:

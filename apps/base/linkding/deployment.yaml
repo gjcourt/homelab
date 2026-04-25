@@ -13,6 +13,7 @@ spec:
   # Linkding uses a single PVC for app data; avoid RollingUpdate PVC deadlocks.
   strategy:
     type: Recreate
+    rollingUpdate: null
   template:
     metadata:
       labels:

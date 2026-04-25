@@ -13,6 +13,7 @@ spec:
   # Single-replica Deployment with an RWO data PVC.
   strategy:
     type: Recreate
+    rollingUpdate: null
   template:
     metadata:
       labels:

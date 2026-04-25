@@ -58,7 +58,7 @@ spec:
                       name: adguard-sync-credentials
                       key: ORIGIN_PASSWORD
 
-                # Replica 1 (when you scale to 2+ replicas).
+                # Replica 1 steady-state sync target.
                 - name: REPLICA1_URL
                   value: http://adguard-1.adguard-headless:80
                 - name: REPLICA1_USERNAME

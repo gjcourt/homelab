@@ -10,6 +10,9 @@ spec:
   selector:
     matchLabels:
       app: linkding
+  # Linkding uses a single PVC for app data; avoid RollingUpdate PVC deadlocks.
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:

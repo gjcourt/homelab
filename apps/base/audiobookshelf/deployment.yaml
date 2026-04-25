@@ -10,6 +10,10 @@ spec:
   selector:
     matchLabels:
       app: audiobookshelf
+  # Single-replica Deployment with RWO PVCs: force old pod deletion before the
+  # replacement is created to avoid volume attach deadlocks during rollouts.
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:

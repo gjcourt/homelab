@@ -10,6 +10,9 @@ spec:
   selector:
     matchLabels:
       app: navidrome
+  # Single-replica Deployment with PVC-backed state/media mounts.
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:

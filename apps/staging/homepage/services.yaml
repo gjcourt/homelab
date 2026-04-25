@@ -11,6 +11,14 @@
         icon: navidrome.png
         href: https://music.stage.burntbytes.com
         description: Music server and streamer
+    - Kitchen:
+        icon: mdi-speaker
+        href: http://10.42.2.38
+        description: HifiBerry OS – Kitchen
+    - Living Room:
+        icon: mdi-speaker
+        href: http://10.42.2.39
+        description: HifiBerry OS – Living Room
     - Snapcast:
         icon: mdi-speaker-multiple
         href: https://snapcast.stage.burntbytes.com
@@ -76,16 +84,6 @@
         icon: mdi-dns
         href: https://vpn.burntbytes.com
         description: DNS updater for vpn.burntbytes.com
-- Music:
-    - Kitchen:
-        icon: mdi-speaker
-        href: http://10.42.2.38
-        description: HifiBerry OS – Kitchen
-    - Living Room:
-        icon: mdi-speaker
-        href: http://10.42.2.39
-        description: HifiBerry OS – Living Room
-
 - Monitoring:
     - Cluster Resources:
         icon: prometheus.png

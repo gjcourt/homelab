@@ -10,6 +10,9 @@ spec:
   selector:
     matchLabels:
       app: mealie
+  # Single-replica Deployment with an RWO data PVC.
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:

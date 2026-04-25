@@ -10,6 +10,10 @@ spec:
   selector:
     matchLabels:
       app: authelia
+  # Single-replica Deployment with an RWO PVC: RollingUpdate can deadlock by
+  # creating the new pod before the old pod releases the volume.
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:

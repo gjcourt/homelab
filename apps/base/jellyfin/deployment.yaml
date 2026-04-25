@@ -10,6 +10,10 @@ spec:
   selector:
     matchLabels:
       app: jellyfin
+  # Jellyfin mounts several single-writer PVCs; RollingUpdate can leave the new
+  # pod stuck in ContainerCreating until the old pod fully exits.
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:

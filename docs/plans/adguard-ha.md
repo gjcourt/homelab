@@ -10,17 +10,20 @@ This repo is structured so staging uses a `-stage` suffix and production has no 
 - Staging: `adguard-stage`
 - Production: `adguard-prod` (consider renaming to `adguard` later if you want strict consistency)
 
-## Current state (already implemented)
+## Current state (April 2026)
 
-- AdGuard is a StatefulSet with per-pod PVCs (scales cleanly):
-  - apps/base/adguard/deployment.yaml
-- UI traffic is pinned to the primary pod (`adguard-0`) via a dedicated service:
-  - apps/base/adguard/service-admin.yaml
-  - Staging UI host `adguard-stage.burntbytes.com` routes to `adguard-admin`
-- DNS is exposed via a single `LoadBalancer` service (UDP/TCP 53):
-  - apps/base/adguard/service.yaml
-- PDB exists to reduce disruption risk:
-  - apps/base/adguard/pdb.yaml
+- AdGuard is a StatefulSet with per-pod PVCs:
+  - `config` PVC stores `AdGuardHome.yaml`
+  - `work` PVC stores query logs/statistics
+- UI traffic is pinned to the primary pod (`adguard-0`) via `adguard-admin`
+- DNS is exposed via a single `LoadBalancer` service (`10.42.2.43` in prod)
+- `adguard-sync` CronJob is enabled in both prod and staging and is intended to sync config from `adguard-0` to replicas
+
+## Important prerequisite discovered during HA rollout
+
+Before scaling replicas, `adguard-sync` credentials must match the live AdGuard admin user. The live username is `george` (not `admin`). If sync fails with `401 Unauthorized`, replicas will not receive the primary config.
+
+Production also needed a larger `work` volume because query logs filled the original 1Gi PVC.
 
 ## Why “one-writer UI” matters
 

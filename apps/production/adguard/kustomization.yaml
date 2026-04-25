@@ -22,3 +22,26 @@ patches:
       - op: replace
         path: /metadata/name
         value: adguard-prod
+  - target:
+      kind: StatefulSet
+      name: adguard
+    patch: |-
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: adguard
+      spec:
+        replicas: 2
+        volumeClaimTemplates:
+          - metadata:
+              name: config
+            spec:
+              resources:
+                requests:
+                  storage: 1Gi
+          - metadata:
+              name: work
+            spec:
+              resources:
+                requests:
+                  storage: 5Gi

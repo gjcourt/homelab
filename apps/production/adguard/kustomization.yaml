@@ -32,16 +32,3 @@ patches:
         name: adguard
       spec:
         replicas: 2
-        volumeClaimTemplates:
-          - metadata:
-              name: config
-            spec:
-              resources:
-                requests:
-                  storage: 1Gi
-          - metadata:
-              name: work
-            spec:
-              resources:
-                requests:
-                  storage: 5Gi

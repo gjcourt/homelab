@@ -1,0 +1,11 @@
+[Unit]
+Description=BusyBox crond
+After=network.target
+
+[Service]
+Type=forking
+ExecStart=/sbin/crond -b -S -c /var/spool/cron/crontabs
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

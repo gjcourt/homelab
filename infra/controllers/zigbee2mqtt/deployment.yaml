@@ -10,6 +10,9 @@ spec:
   selector:
     matchLabels:
       app: zigbee2mqtt
+  strategy:
+    type: Recreate
+    rollingUpdate: null
   template:
     metadata:
       labels:

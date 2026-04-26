@@ -10,6 +10,9 @@ spec:
   selector:
     matchLabels:
       app: mosquitto
+  strategy:
+    type: Recreate
+    rollingUpdate: null
   template:
     metadata:
       labels:

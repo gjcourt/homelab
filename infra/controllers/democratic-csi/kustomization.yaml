@@ -6,6 +6,7 @@ resources:
   - release.yaml
   - repository.yaml
   - secret-driver-config.yaml
+  - truenas-version-mock.yaml
 
 configMapGenerator:
   - name: democratic-csi-helm-values

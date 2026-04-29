@@ -17,6 +17,19 @@ spec:
   storage:
     size: 5Gi
     storageClass: truenas-iscsi-ssd
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: overture-db-production-cnpg-v1-backup
+        serverName: overture-db-production-cnpg-v1
+  externalClusters:
+    - name: overture-db-backup
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: overture-db-production-cnpg-v1-backup
+          serverName: overture-db-production-cnpg-v1
   bootstrap:
     initdb:
       database: app

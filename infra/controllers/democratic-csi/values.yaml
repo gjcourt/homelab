@@ -1,0 +1,43 @@
+csiDriver:
+  name: "org.democratic-csi.truenas-iscsi"
+
+driver:
+  existingConfigSecret: democratic-csi-driver-config
+  existingConfigSecretKey: driver-config-file.yaml
+
+storageClasses:
+  - name: truenas-iscsi
+    defaultClass: false
+    reclaimPolicy: Retain
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: ext4
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
+  - name: truenas-iscsi-ephemeral
+    defaultClass: false
+    reclaimPolicy: Delete
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: ext4
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
+volumeSnapshotClasses:
+  - name: truenas-iscsi-snapshot
+    driver: org.democratic-csi.truenas-iscsi
+    deletionPolicy: Delete
+    parameters: {}

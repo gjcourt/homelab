@@ -1,0 +1,79 @@
+# democratic-csi TrueNAS SCALE iSCSI driver
+# Target: 10.42.2.10 (SSD-only NAS)
+#
+# Before this HelmRelease can reconcile successfully:
+#   1. Create the API key in TrueNAS UI → Settings → API Keys
+#   2. Note the ZFS pool name (e.g. "ssd") and create a dataset for iSCSI volumes
+#      (e.g. ssd/k8s/iscsi/vols and ssd/k8s/iscsi/snaps)
+#   3. Ensure iSCSI service is running in TrueNAS and note the portal group ID
+#   4. Replace TODO values below and SOPS-encrypt this file:
+#      sops --encrypt --encrypted-regex '^(driver)$' values.yaml > values.yaml.enc
+#      (or store the API key in a separate SOPS secret and inject via secretRef)
+
+csiDriver:
+  name: "org.democratic-csi.freenas-api-iscsi"
+
+storageClasses:
+  - name: truenas-iscsi-ssd
+    defaultClass: false
+    reclaimPolicy: Delete
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: ext4
+
+volumeSnapshotClasses: []
+
+controller:
+  driver:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+node:
+  driver:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
+driver:
+  config:
+    driver: freenas-api-iscsi
+    httpConnection:
+      protocol: http
+      host: 10.42.2.10
+      port: 80
+      # TODO: Replace with actual TrueNAS API key
+      apiKey: "REPLACE_WITH_TRUENAS_API_KEY"
+    zfs:
+      # TODO: Adjust pool/dataset paths to match your TrueNAS layout
+      datasetParentName: ssd/k8s/iscsi/vols
+      detachedSnapshotsDatasetParentName: ssd/k8s/iscsi/snaps
+      datasetEnableQuotas: true
+      datasetEnableReservation: false
+      datasetPermissionsMode: "0777"
+      datasetPermissionsUser: 0
+      datasetPermissionsGroup: 0
+    iscsi:
+      # TODO: Verify portal IP and portal/initiator group IDs in TrueNAS
+      targetPortal: 10.42.2.10:3260
+      namePrefix: csi-
+      nameSuffix: "-ssd"
+      targetGroups:
+        - targetGroupPortalGroup: 1
+          targetGroupInitiatorGroup: 1
+          targetGroupAuthType: None
+      extentInsecureTpc: true
+      extentXenCompat: false
+      extentDisablePhysicalBlocksize: true
+      extentBlocksize: 512
+      extentRpm: SSD
+      extentAvailThreshold: 0

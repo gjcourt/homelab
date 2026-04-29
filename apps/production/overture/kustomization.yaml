@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: overture-prod
+resources:
+  - ../../base/overture/
+  - configmap.yaml
+  - database.yaml
+  - httproute.yaml
+  - secret-db-credentials.yaml
+
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Namespace
+      name: overture
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: overture-prod

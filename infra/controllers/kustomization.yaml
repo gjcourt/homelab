@@ -5,6 +5,7 @@ resources:
   - cert-manager
   - cilium
   - cnpg
+  - democratic-csi
   - kube-prometheus-stack
   - loki
   - mosquitto

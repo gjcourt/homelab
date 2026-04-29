@@ -28,5 +28,11 @@ data:
         originRequest:
           originServerName: links.burntbytes.com
 
+      # Overture (acmeUSD scaffold)
+      - hostname: overture.burntbytes.com
+        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+        originRequest:
+          originServerName: overture.burntbytes.com
+
       # Catch-all returns 404
       - service: http_status:404

@@ -6,7 +6,8 @@ resources:
   - release.yaml
   - repository.yaml
   - secret-driver-config.yaml
-  - truenas-version-mock.yaml
+  - secret-truenas-api-key.yaml
+  - truenas-api-proxy.yaml
 
 configMapGenerator:
   - name: democratic-csi-helm-values

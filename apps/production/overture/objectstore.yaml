@@ -1,0 +1,20 @@
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: overture-db-production-cnpg-v1-backup
+  namespace: overture-prod
+spec:
+  configuration:
+    destinationPath: s3://gjcourt-homelab-backup/production/overture
+    s3Credentials:
+      accessKeyId:
+        name: overture-aws-creds-secret
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: overture-aws-creds-secret
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: 30d

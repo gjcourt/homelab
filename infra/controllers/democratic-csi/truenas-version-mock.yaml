@@ -1,0 +1,64 @@
+---
+# TrueNAS SCALE 26.x removed the /api/v2.0/ REST API (WebSocket-only).
+# democratic-csi's controller Probe calls /api/v2.0/system/version/ to check health.
+# This mock serves that single endpoint so the health check passes; all actual
+# ZFS/iSCSI operations continue over SSH.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: truenas-version-mock-conf
+  namespace: democratic-csi
+data:
+  default.conf: |
+    server {
+      listen 80;
+      location /api/v2.0/system/version/ {
+        default_type application/json;
+        return 200 '"TrueNAS-SCALE-26.0.0-BETA.1"';
+      }
+      location /api/v1.0/system/version/ {
+        default_type application/json;
+        return 200 '{"fullversion":"TrueNAS-SCALE-26.0.0-BETA.1","name":"TrueNAS","version":"26.0.0"}';
+      }
+      location / { return 404; }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: truenas-version-mock
+  namespace: democratic-csi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: truenas-version-mock
+  template:
+    metadata:
+      labels:
+        app: truenas-version-mock
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:alpine
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: conf
+              mountPath: /etc/nginx/conf.d
+      volumes:
+        - name: conf
+          configMap:
+            name: truenas-version-mock-conf
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: truenas-version-mock
+  namespace: democratic-csi
+spec:
+  selector:
+    app: truenas-version-mock
+  ports:
+    - port: 80
+      targetPort: 80

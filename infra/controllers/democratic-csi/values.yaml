@@ -1,0 +1,71 @@
+csiDriver:
+  name: "org.democratic-csi.truenas-iscsi"
+
+driver:
+  config:
+    driver: truenas-iscsi
+  existingConfigSecret: democratic-csi-driver-config
+  existingConfigSecretKey: driver-config-file.yaml
+
+storageClasses:
+  - name: truenas-iscsi
+    defaultClass: false
+    reclaimPolicy: Retain
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: ext4
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
+  - name: truenas-iscsi-ssd
+    defaultClass: false
+    reclaimPolicy: Retain
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: ext4
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
+  - name: truenas-iscsi-ephemeral
+    defaultClass: false
+    reclaimPolicy: Delete
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: ext4
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
+# Talos: /etc/iscsi is a read-only tmpfs mount — DirectoryOrCreate skips the strict type check
+node:
+  driver:
+    iscsiDirHostPathType: DirectoryOrCreate
+    extraEnv:
+      - name: ISCSIADM_HOST_STRATEGY
+        value: nsenter
+      - name: ISCSIADM_HOST_PATH
+        value: /usr/local/sbin/iscsiadm
+
+volumeSnapshotClasses:
+  - name: truenas-iscsi-snapshot
+    driver: org.democratic-csi.truenas-iscsi
+    deletionPolicy: Delete
+    parameters:
+      description: "Kubernetes CSI"

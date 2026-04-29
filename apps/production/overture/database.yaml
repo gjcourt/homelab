@@ -1,0 +1,38 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: overture-db-production-cnpg-v1
+  namespace: overture-prod
+spec:
+  description: Postgres cluster for the overture application (production)
+  imageName: ghcr.io/cloudnative-pg/postgresql:17.5
+  instances: 3
+  inheritedMetadata:
+    labels:
+      app: overture-database
+      env: production
+      policy-type: "database"
+  monitoring:
+    enablePodMonitor: true
+  storage:
+    size: 5Gi
+    storageClass: truenas-iscsi-ssd
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: overture-db-production-cnpg-v1-backup
+        serverName: overture-db-production-cnpg-v1
+  externalClusters:
+    - name: overture-db-backup
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: overture-db-production-cnpg-v1-backup
+          serverName: overture-db-production-cnpg-v1
+  bootstrap:
+    initdb:
+      database: app
+      owner: app
+      secret:
+        name: overture-db-credentials

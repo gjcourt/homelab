@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - barman-cloud
   - cert-manager
+  - democratic-csi
   - cilium
   - cnpg
   - kube-prometheus-stack

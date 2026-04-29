@@ -17,6 +17,7 @@ resources:
   - mealie
   - memos
   - navidrome
+  - overture
   - snapcast
   - synology-iscsi-monitor
   - vitals

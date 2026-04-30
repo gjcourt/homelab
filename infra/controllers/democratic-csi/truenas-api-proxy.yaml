@@ -247,7 +247,7 @@ spec:
     spec:
       containers:
         - name: proxy
-          image: python:3.13-slim
+          image: python:3.14-slim
           command: ["/bin/sh", "-c"]
           args:
             - |

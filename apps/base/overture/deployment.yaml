@@ -70,3 +70,38 @@ spec:
               drop:
                 - ALL
             readOnlyRootFilesystem: true
+        - name: tempo-bridge
+          image: ghcr.io/gjcourt/overture-bridge:latest
+          ports:
+            - containerPort: 9877
+          env:
+            - name: TEMPO_ISSUER_PRIVATE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: overture-secrets
+                  key: TEMPO_ISSUER_PRIVATE_KEY
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9877
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9877
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false

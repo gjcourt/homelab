@@ -16,6 +16,14 @@ spec:
 
               args:
                 - gjcourt/homelab
+                - gjcourt/llmux
+                - gjcourt/tempo-interview
+                - gjcourt/drift
+                - gjcourt/Pingo
+                - gjcourt/golinks
+                - gjcourt/vitals
+                - gjcourt/soundbyte
+                - gjcourt/python-nginx-signing
 
               envFrom:
                 - configMapRef:

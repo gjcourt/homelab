@@ -26,7 +26,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: overture
-          image: ghcr.io/gjcourt/overture:2026-04-30-35
+          image: ghcr.io/gjcourt/overture:2026-04-30-36
           ports:
             - containerPort: 8080
           env:
@@ -71,7 +71,7 @@ spec:
                 - ALL
             readOnlyRootFilesystem: true
         - name: tempo-bridge
-          image: ghcr.io/gjcourt/overture-bridge:2026-04-30-35
+          image: ghcr.io/gjcourt/overture-bridge:2026-04-30-36
           ports:
             - containerPort: 9877
           env:

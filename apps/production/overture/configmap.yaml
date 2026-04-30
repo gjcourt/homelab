@@ -10,4 +10,4 @@ data:
   APP_PORT: "8080"
   DB_HOST: overture-db-production-cnpg-v1-rw.overture-prod.svc.cluster.local
   TEMPO_MODE: stub
-  TEMPO_BROWSER_SDK_URL: "https://esm.sh/@tempo-xyz/accounts"
+  TEMPO_BROWSER_SDK_URL: "https://esm.sh/accounts"

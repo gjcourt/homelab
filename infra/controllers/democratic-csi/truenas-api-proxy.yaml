@@ -1,0 +1,286 @@
+---
+# Translates democratic-csi REST v2.0 API calls → TrueNAS 26.x WebSocket JSON-RPC.
+# TrueNAS 26.x removed the REST API; all operations now go over WebSocket.
+# Must use wss:// — TrueNAS 26.x revokes API keys used over unencrypted ws://.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: truenas-api-proxy-script
+  namespace: democratic-csi
+data:
+  proxy.py: |
+    #!/usr/bin/env python3
+    """
+    REST v2.0 → TrueNAS 26.x WebSocket JSON-RPC proxy for democratic-csi.
+
+    Maps:
+      GET    /api/v2.0/{res}          → {res}.query([])   (or .config for singletons)
+      GET    /api/v2.0/{res}/id/{id}  → {res}.get_instance(id)
+      POST   /api/v2.0/{res}          → {res}.create(body)
+      PUT    /api/v2.0/{res}/id/{id}  → {res}.update(id, body)
+      DELETE /api/v2.0/{res}/id/{id}  → {res}.delete(id)
+      PUT    /api/v2.0/service/reload  → service.control("RELOAD", body["service"])
+      GET    /api/v2.0/services        → service.query([])
+
+    TrueNAS 26.x singletons (no .query, use .config instead):
+      iscsi.global → iscsi.global.config
+    """
+    import os, re, json, threading, time, logging, queue
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    from urllib.parse import urlparse
+    import websocket
+
+    TRUENAS_WS = os.environ["TRUENAS_WS_URL"]   # e.g. wss://10.42.2.10/api/current
+    TRUENAS_KEY = os.environ["TRUENAS_API_KEY"]
+    PORT = int(os.environ.get("PORT", "80"))
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    log = logging.getLogger("proxy")
+
+    # Resources that are singletons in TrueNAS 26.x: use .config instead of .query
+    SINGLETON_RESOURCES = {"iscsi.global"}
+
+    # ------------------------------------------------------------------
+    # WebSocket JSON-RPC client (websocket-client package)
+    # Serialises calls with _call_lock so only one RPC is in-flight at a
+    # time, keeping _pending dict access race-free.
+    # ------------------------------------------------------------------
+    _call_lock = threading.Lock()
+    _ws = None
+    _pending = {}
+    _msg_id = 0
+
+    def _next_id():
+        global _msg_id
+        _msg_id += 1
+        return str(_msg_id)
+
+    def _on_message(ws, msg):
+        try:
+            data = json.loads(msg)
+            mid = data.get("id")
+            if mid in _pending:
+                _pending[mid].put(data)
+        except Exception as e:
+            log.error("message parse error: %s", e)
+
+    def _on_error(ws, err):
+        log.error("ws error: %s", err)
+
+    def _on_close(ws, *_):
+        global _ws
+        log.warning("ws closed, will reconnect on next call")
+        _ws = None
+
+    def _connect_locked():
+        """Open WebSocket and authenticate. Must be called with _call_lock held."""
+        global _ws
+        log.info("connecting to %s", TRUENAS_WS)
+        ws = websocket.WebSocketApp(
+            TRUENAS_WS,
+            on_message=_on_message,
+            on_error=_on_error,
+            on_close=_on_close,
+        )
+        t = threading.Thread(target=lambda: ws.run_forever(sslopt={"cert_reqs": 0}), daemon=True)
+        t.start()
+        for _ in range(100):
+            if ws.sock and ws.sock.connected:
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("WebSocket connection timeout after 10s")
+
+        mid = _next_id()
+        q = queue.Queue()
+        _pending[mid] = q
+        ws.send(json.dumps({
+            "jsonrpc": "2.0",
+            "id": mid,
+            "method": "auth.login_with_api_key",
+            "params": [TRUENAS_KEY],
+        }))
+        resp = q.get(timeout=10)
+        del _pending[mid]
+        if "error" in resp:
+            raise RuntimeError(f"auth error: {resp['error']}")
+        if not resp.get("result"):
+            raise RuntimeError(f"auth rejected (key may be revoked or wrong): {resp}")
+        log.info("authenticated OK")
+        _ws = ws
+        return ws
+
+    def ws_call(method, *params):
+        """Call a TrueNAS WebSocket JSON-RPC method, reconnecting if needed."""
+        with _call_lock:
+            global _ws
+            if _ws is None or not (_ws.sock and _ws.sock.connected):
+                _connect_locked()
+            mid = _next_id()
+            q = queue.Queue()
+            _pending[mid] = q
+            _ws.send(json.dumps({
+                "jsonrpc": "2.0",
+                "id": mid,
+                "method": method,
+                "params": list(params),
+            }))
+            resp = q.get(timeout=60)
+            del _pending[mid]
+            if "error" in resp:
+                err = resp["error"]
+                raise RuntimeError(err.get("message", str(err)) if isinstance(err, dict) else str(err))
+            return resp.get("result")
+
+    # ------------------------------------------------------------------
+    # Path → method mapping
+    # ------------------------------------------------------------------
+    ID_RE = re.compile(r"/id/(\d+)$")
+
+    def path_to_method(path):
+        """Return (method_base, resource_id) from URL path."""
+        path = re.sub(r"^/api/v2\.0/", "", path).rstrip("/")
+        m = ID_RE.search(path)
+        rid = int(m.group(1)) if m else None
+        if m:
+            path = path[:m.start()]
+        method = path.replace("/", ".").replace("-", "_")
+        return method, rid
+
+    # ------------------------------------------------------------------
+    # HTTP handler
+    # ------------------------------------------------------------------
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, fmt, *args):
+            log.info(fmt, *args)
+
+        def send_json(self, code, data):
+            body = json.dumps(data).encode()
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def read_body(self):
+            length = int(self.headers.get("Content-Length", 0))
+            return json.loads(self.rfile.read(length)) if length else {}
+
+        def do_GET(self):
+            p = urlparse(self.path).path
+            if p.rstrip("/") in ("/api/v2.0/system/version", "/api/v1.0/system/version"):
+                self.send_json(200, "TrueNAS-SCALE-26.0.0-BETA.1")
+                return
+            method, rid = path_to_method(p)
+            try:
+                if p.rstrip("/") == "/api/v2.0/services":
+                    result = ws_call("service.query", [])
+                elif rid is not None:
+                    result = ws_call(f"{method}.get_instance", rid)
+                elif method in SINGLETON_RESOURCES:
+                    # Singletons use .config, not .query
+                    result = ws_call(f"{method}.config")
+                else:
+                    result = ws_call(f"{method}.query", [])
+                self.send_json(200, result)
+            except Exception as e:
+                log.error("GET %s failed: %s", p, e)
+                self.send_json(500, {"error": str(e)})
+
+        def do_POST(self):
+            p = urlparse(self.path).path
+            method, _ = path_to_method(p)
+            body = self.read_body()
+            try:
+                result = ws_call(f"{method}.create", body)
+                self.send_json(200, result)
+            except Exception as e:
+                log.error("POST %s failed: %s", p, e)
+                self.send_json(500, {"error": str(e)})
+
+        def do_PUT(self):
+            p = urlparse(self.path).path
+            method, rid = path_to_method(p)
+            body = self.read_body()
+            try:
+                if p.rstrip("/") == "/api/v2.0/service/reload":
+                    # TrueNAS 26.x: service.reload → service.control("RELOAD", name)
+                    svc = body.get("service") if isinstance(body, dict) else body
+                    result = ws_call("service.control", "RELOAD", str(svc))
+                elif rid is not None:
+                    result = ws_call(f"{method}.update", rid, body)
+                else:
+                    result = ws_call(f"{method}.update", body)
+                self.send_json(200, result)
+            except Exception as e:
+                log.error("PUT %s failed: %s", p, e)
+                self.send_json(500, {"error": str(e)})
+
+        def do_DELETE(self):
+            p = urlparse(self.path).path
+            method, rid = path_to_method(p)
+            try:
+                result = ws_call(f"{method}.delete", rid)
+                self.send_json(200, result)
+            except Exception as e:
+                log.error("DELETE %s failed: %s", p, e)
+                self.send_json(500, {"error": str(e)})
+
+    if __name__ == "__main__":
+        log.info("TrueNAS REST→WebSocket proxy listening on :%d", PORT)
+        HTTPServer(("", PORT), Handler).serve_forever()
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: truenas-api-proxy
+  namespace: democratic-csi
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: truenas-api-proxy
+  template:
+    metadata:
+      labels:
+        app: truenas-api-proxy
+    spec:
+      containers:
+        - name: proxy
+          image: python:3.13-slim
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              pip install websocket-client --quiet
+              python /scripts/proxy.py
+          env:
+            - name: TRUENAS_WS_URL
+              value: "wss://10.42.2.10/api/current"
+            - name: TRUENAS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: truenas-api-key
+                  key: api-key
+            - name: PORT
+              value: "80"
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: truenas-api-proxy-script
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: truenas-api-proxy
+  namespace: democratic-csi
+spec:
+  selector:
+    app: truenas-api-proxy
+  ports:
+    - port: 80
+      targetPort: 80

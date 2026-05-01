@@ -40,3 +40,4 @@ Use `YYYY-MM-DD` format. Update this field whenever the document is meaningfully
 | [documentation-rewrite-plan.md](documentation-rewrite-plan.md) | `in-progress` | Rewrite all app and infra documentation |
 | [george.md](george.md) | `active` | Personal TODO backlog |
 | [linkding-db-restore-plan.md](linkding-db-restore-plan.md) | `planned` | Live DR test: destroy and restore Linkding staging DB |
+| [signal-cli-k8s-bridge.md](2026-05-01-signal-cli-k8s-bridge.md) | `planned` | Deploy signal-cli + SSE bridge on k8s, no hermes source changes |

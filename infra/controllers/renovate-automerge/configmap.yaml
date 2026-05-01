@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renovate-automerge-env
+  namespace: renovate
+data:
+  GITHUB_REPO: gjcourt/homelab
+  EMAIL_TO: gjcourt@gmail.com
+  SMTP_HOST: smtp.gmail.com
+  SMTP_PORT: "587"

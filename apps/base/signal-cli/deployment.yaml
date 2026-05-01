@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: signal-cli
+  namespace: signal-cli
+  labels:
+    app: signal-cli
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: signal-cli
+  template:
+    metadata:
+      labels:
+        app: signal-cli
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: signal-cli
+          image: ghcr.io/asamk/signal-cli:latest
+          command:
+            - signal-cli
+            - daemon
+            - --tcp
+            - 0.0.0.0:7583
+            - --receive-mode
+            - on-connection
+            - --ignore-stories
+          env:
+            - name: SIGNAL_CLI_CONFIG_DIR
+              value: /var/lib/signal-cli
+          ports:
+            - name: json-rpc
+              containerPort: 7583
+              protocol: TCP
+          readinessProbe:
+            tcpSocket:
+              port: json-rpc
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 10
+          volumeMounts:
+            - name: signal-cli-config
+              mountPath: /var/lib/signal-cli
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: signal-cli-config
+          persistentVolumeClaim:
+            claimName: signal-cli-config

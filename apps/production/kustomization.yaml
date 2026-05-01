@@ -18,6 +18,7 @@ resources:
   - memos
   - navidrome
   - overture
+  - signal-cli
   - snapcast
   - synology-iscsi-monitor
   - vitals

@@ -22,7 +22,7 @@ spec:
         - name: signal-cli
           image: ghcr.io/asamk/signal-cli:latest
           command:
-            - signal-cli
+            - /opt/signal-cli/bin/signal-cli
             - daemon
             - --tcp
             - 0.0.0.0:7583

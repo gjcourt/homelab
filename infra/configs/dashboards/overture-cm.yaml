@@ -62,6 +62,181 @@ data:
           "id": 8, "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
           "type": "timeseries", "title": "Bridge Call Latency p99 (seconds)",
           "targets": [{ "expr": "histogram_quantile(0.99, sum by (operation, le) (rate(acme_bridge_call_duration_seconds_bucket[2m])))", "legendFormat": "{{operation}}" }]
+        },
+
+        {
+          "id": 100, "gridPos": { "x": 0, "y": 20, "w": 24, "h": 1 },
+          "type": "row", "title": "Reconciliation — Ledger Invariants", "collapsed": false
+        },
+        {
+          "id": 101, "gridPos": { "x": 0, "y": 21, "w": 6, "h": 4 },
+          "type": "stat", "title": "Global Drift (cents)",
+          "description": "SUM of all ledger postings. MUST be 0. Any non-zero value means money was created or destroyed outside the normal path.",
+          "targets": [{ "expr": "acme_reconciliation_global_drift_cents" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } }
+        },
+        {
+          "id": 102, "gridPos": { "x": 6, "y": 21, "w": 6, "h": 4 },
+          "type": "stat", "title": "Wallet Drift (count)",
+          "description": "Wallets where the wallet_balances projection has drifted from the ledger_postings source of truth. MUST be 0.",
+          "targets": [{ "expr": "acme_reconciliation_wallet_drift_count" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } }
+        },
+        {
+          "id": 103, "gridPos": { "x": 12, "y": 21, "w": 6, "h": 4 },
+          "type": "stat", "title": "Platform Drift (cents)",
+          "description": "Conservation invariant: SUM(wallet_balances) == net(issuance) - net(burned) - net(clearing). MUST be 0.",
+          "targets": [{ "expr": "acme_reconciliation_platform_drift_cents" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } }
+        },
+        {
+          "id": 104, "gridPos": { "x": 18, "y": 21, "w": 6, "h": 4 },
+          "type": "stat", "title": "Last Check Age (sec)",
+          "description": "Seconds since the reconciliation worker last completed all three checks. Detects a silently-stalled worker (drift gauges would otherwise stick at last-known-good).",
+          "targets": [{ "expr": "time() - acme_reconciliation_last_check_unix_seconds" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 60, "color": "yellow" }, { "value": 120, "color": "red" }] } }
+        },
+
+        {
+          "id": 200, "gridPos": { "x": 0, "y": 25, "w": 24, "h": 1 },
+          "type": "row", "title": "Compliance Outbox — Regulatory Reporting Pipeline", "collapsed": false
+        },
+        {
+          "id": 201, "gridPos": { "x": 0, "y": 26, "w": 6, "h": 4 },
+          "type": "stat", "title": "Pending Events",
+          "description": "Outbox rows where reported_at IS NULL. The headline outbox-health metric.",
+          "targets": [{ "expr": "acme_compliance_events_pending" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 100, "color": "yellow" }, { "value": 1000, "color": "red" }] } }
+        },
+        {
+          "id": 202, "gridPos": { "x": 6, "y": 26, "w": 6, "h": 4 },
+          "type": "stat", "title": "Oldest Pending (sec)",
+          "description": "Age of the oldest unreported event. BSA filing-window deadlines apply — alert hard above 5 min.",
+          "targets": [{ "expr": "acme_compliance_events_oldest_pending_seconds" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 300, "color": "yellow" }, { "value": 3600, "color": "red" }] } }
+        },
+        {
+          "id": 203, "gridPos": { "x": 12, "y": 26, "w": 6, "h": 4 },
+          "type": "stat", "title": "Dead-letter Events",
+          "description": "Events marked next_retry_at='2099-…' after a permanent dispatch error. MUST be 0 — at-least-once delivery has broken if this is non-zero.",
+          "targets": [{ "expr": "sum(acme_compliance_dispatch_dead_letter_total)" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } }
+        },
+        {
+          "id": 204, "gridPos": { "x": 18, "y": 26, "w": 6, "h": 4 },
+          "type": "stat", "title": "Dispatch p99 (sec)",
+          "description": "Upstream regulator API latency p99 over the last 5 minutes.",
+          "targets": [{ "expr": "histogram_quantile(0.99, sum by (le) (rate(acme_compliance_dispatch_duration_seconds_bucket[5m])))" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+        },
+        {
+          "id": 205, "gridPos": { "x": 0, "y": 30, "w": 12, "h": 8 },
+          "type": "timeseries", "title": "Dispatch Outcomes per Second",
+          "description": "Sustained transient_error or any permanent_error indicates an outage upstream.",
+          "targets": [{ "expr": "sum by (outcome) (rate(acme_compliance_dispatch_attempts_total[2m]))", "legendFormat": "{{outcome}}" }]
+        },
+        {
+          "id": 206, "gridPos": { "x": 12, "y": 30, "w": 12, "h": 8 },
+          "type": "timeseries", "title": "Compliance Events Generated per Minute",
+          "description": "Should match ledger transaction rate 1:1. Divergence indicates the in-transaction outbox INSERT is misbehaving.",
+          "targets": [{ "expr": "sum by (event_type) (rate(acme_compliance_events_total[1m])) * 60", "legendFormat": "{{event_type}}" }]
+        },
+
+        {
+          "id": 300, "gridPos": { "x": 0, "y": 38, "w": 24, "h": 1 },
+          "type": "row", "title": "Sanctions Screening — Pre-commit OFAC Block", "collapsed": false
+        },
+        {
+          "id": 301, "gridPos": { "x": 0, "y": 39, "w": 6, "h": 4 },
+          "type": "stat", "title": "List Age (hours)",
+          "description": "Wall-clock age of the loaded OFAC SDN list. Treasury publishes daily; a 24+ hour gap is a regulatory exposure window.",
+          "targets": [{ "expr": "max(acme_sanctions_list_age_seconds) / 3600" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 18, "color": "yellow" }, { "value": 24, "color": "red" }] } }
+        },
+        {
+          "id": 302, "gridPos": { "x": 6, "y": 39, "w": 6, "h": 4 },
+          "type": "stat", "title": "List Entries",
+          "description": "Count of SDN entries in the in-memory list. Sanity check: sudden drop from ~10K to near-zero indicates a parse failure on the daily feed.",
+          "targets": [{ "expr": "max(acme_sanctions_list_entries)" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "red" }, { "value": 1000, "color": "yellow" }, { "value": 5000, "color": "green" }] } }
+        },
+        {
+          "id": 303, "gridPos": { "x": 12, "y": 39, "w": 6, "h": 4 },
+          "type": "stat", "title": "Blocks (last 1h)",
+          "description": "True-positive sanctions blocks. Rare; each one needs compliance-team triage.",
+          "targets": [{ "expr": "increase(acme_sanctions_blocks_total[1h])" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "orange" }] } }
+        },
+        {
+          "id": 304, "gridPos": { "x": 18, "y": 39, "w": 6, "h": 4 },
+          "type": "stat", "title": "Screen p99 (ms)",
+          "description": "p99 latency in milliseconds. Must stay sub-50ms — this fires on every transfer before the risk check.",
+          "targets": [{ "expr": "histogram_quantile(0.99, sum by (le) (rate(acme_sanctions_screen_duration_seconds_bucket[5m]))) * 1000" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 25, "color": "yellow" }, { "value": 50, "color": "red" }] } }
+        },
+        {
+          "id": 305, "gridPos": { "x": 0, "y": 43, "w": 24, "h": 6 },
+          "type": "timeseries", "title": "Sanctions Screen Outcomes per Second",
+          "targets": [{ "expr": "sum by (outcome) (rate(acme_sanctions_screen_total[2m]))", "legendFormat": "{{outcome}}" }]
+        },
+
+        {
+          "id": 400, "gridPos": { "x": 0, "y": 49, "w": 24, "h": 1 },
+          "type": "row", "title": "Admin Access & Audit Log Health", "collapsed": false
+        },
+        {
+          "id": 401, "gridPos": { "x": 0, "y": 50, "w": 6, "h": 4 },
+          "type": "stat", "title": "Audit Write Failures",
+          "description": "Audit log INSERTs that errored. Void Log() contract makes this counter the only signal of an audit-pipeline outage. MUST be 0.",
+          "targets": [{ "expr": "sum(acme_audit_write_failures_total)" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 1, "color": "red" }] } }
+        },
+        {
+          "id": 402, "gridPos": { "x": 6, "y": 50, "w": 6, "h": 4 },
+          "type": "stat", "title": "Audit Log Lag (sec)",
+          "description": "Seconds since the most recent audit row. If admin endpoints are getting traffic and this climbs above 5 min, the middleware is bypassed (smoke detector).",
+          "targets": [{ "expr": "acme_audit_log_lag_seconds" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 300, "color": "red" }] } }
+        },
+        {
+          "id": 403, "gridPos": { "x": 12, "y": 50, "w": 6, "h": 4 },
+          "type": "stat", "title": "Rate-limit Drops (5m)",
+          "description": "Unauthenticated admin requests dropped by the rate limiter. Sustained non-zero values indicate scanning or credential-stuffing.",
+          "targets": [{ "expr": "sum(increase(acme_admin_rate_limit_drops_total[5m]))" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value",
+            "thresholds": { "mode": "absolute", "steps": [{ "value": null, "color": "green" }, { "value": 10, "color": "yellow" }, { "value": 100, "color": "red" }] } }
+        },
+        {
+          "id": 404, "gridPos": { "x": 18, "y": 50, "w": 6, "h": 4 },
+          "type": "stat", "title": "Admin p99 (ms)",
+          "description": "Privileged-endpoint latency. Operators trust the admin surface only when it's responsive under pressure.",
+          "targets": [{ "expr": "histogram_quantile(0.99, sum by (le) (rate(acme_admin_request_duration_seconds_bucket[5m]))) * 1000" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+        },
+        {
+          "id": 405, "gridPos": { "x": 0, "y": 54, "w": 12, "h": 6 },
+          "type": "timeseries", "title": "Admin Auth Attempts per Second",
+          "description": "Spikes in 'denied' or 'forbidden' are the first signal of credential-stuffing or privilege-escalation attempts.",
+          "targets": [{ "expr": "sum by (outcome) (rate(acme_admin_auth_attempts_total[2m]))", "legendFormat": "{{outcome}}" }]
+        },
+        {
+          "id": 406, "gridPos": { "x": 12, "y": 54, "w": 12, "h": 6 },
+          "type": "timeseries", "title": "Audit Writes per Second by Action",
+          "description": "Should match the 'ok' line of Admin Auth Attempts 1:1. Divergence indicates a handler emitting an audit entry without going through middleware (or vice versa).",
+          "targets": [{ "expr": "sum by (action) (rate(acme_audit_writes_total[2m]))", "legendFormat": "{{action}}" }]
         }
       ]
     }

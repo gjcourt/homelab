@@ -16,5 +16,6 @@ resources:
   - mealie
   - memos
   - navidrome
+  - signal-cli
   - snapcast
   - vitals

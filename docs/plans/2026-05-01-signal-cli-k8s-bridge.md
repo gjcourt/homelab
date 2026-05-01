@@ -109,6 +109,75 @@ The bridge polls signal-cli's `receive` method on a configurable interval (defau
 
 Deduplication is handled by the Hermes adapter (sliding window of message timestamps), not the bridge.
 
+### Prometheus Metrics
+
+The bridge exposes a `/metrics` endpoint (content-type `text/plain; version=0.0.4`) compatible with Prometheus. This is the primary observability surface — it lets you track message flow, bridge health, and signal-cli connectivity over time.
+
+**Endpoints:**
+- `GET /metrics` — Prometheus scrape endpoint
+- `GET /health` — Health check (HTTP 200/503)
+
+**Metrics exported:**
+
+| Metric | Type | Labels | Description |
+|:-------|:-----|:-------|:------------|
+| `signal_bridge_polls_total` | Counter | `status="ok"\|"error"` | Total number of polls sent to signal-cli |
+| `signal_bridge_messages_total` | Counter | (none) | Total SSE message events sent to all clients |
+| `signal_bridge_sse_connections` | Gauge | (none) | Current number of active SSE client connections |
+| `signal_bridge_sse_connections_total` | Counter | (none) | Total SSE connection openings (reconnects included) |
+| `signal_bridge_poll_duration_seconds` | Histogram | (none) | Time to complete one poll roundtrip to signal-cli |
+| `signal_bridge_poll_messages_total` | Histogram | (none) | Number of messages returned per poll |
+| `signal_bridge_last_poll_age_seconds` | Gauge | (none) | Seconds since the last successful poll (monotonic increase = stale) |
+| `signal_bridge_last_message_age_seconds` | Gauge | (none) | Seconds since the last message event was emitted to SSE clients |
+| `signal_bridge_rpc_requests_total` | Counter | `method="send"\|"getInfo"\|...` | Total JSON-RPC requests relayed to signal-cli |
+| `signal_bridge_rpc_duration_seconds` | Histogram | `method="send"\|...` | Time to complete each JSON-RPC request |
+| `signal_bridge_tcp_errors_total` | Counter | `error_type="dial"\|"timeout"\|"reset"` | TCP connection errors to signal-cli |
+
+**PromQL examples:**
+
+```yaml
+# Messages per minute
+rate(signal_bridge_messages_total[5m]) * 60
+
+# Average poll latency
+histogram_quantile(0.95, rate(signal_bridge_poll_duration_seconds_bucket[5m]))
+
+# Stale bridge (no poll in 30s)
+signal_bridge_last_poll_age_seconds > 30
+
+# SSE connection count (0 = all clients disconnected)
+signal_bridge_sse_connections
+
+# RPC errors
+rate(signal_bridge_rpc_requests_total{status="error"}[5m])
+```
+
+**ServiceMonitor (Prometheus Operator):**
+
+```yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: signal-cli-bridge
+  namespace: signal-cli
+spec:
+  selector:
+    matchLabels:
+      app: signal-cli-bridge
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 5s
+```
+
+**Grafana dashboard (planned):**
+- SSE connection count over time
+- Messages per minute (with alerts on unusual drops)
+- Poll latency histogram (p50/p95/p99)
+- Last poll age (alert if > 30s)
+- RPC request rate and errors by method
+
 ## Components Required
 
 ### 1. signal-cli Deployment
@@ -168,9 +237,12 @@ ENTRYPOINT ["/signal-bridge"]
 
 Create `images/signal-bridge/` with:
 - `Dockerfile` (multi-arch, scratch base)
-- `main.go` — HTTP server with SSE, JSON-RPC relay, and health endpoints
-- `go.mod` — minimal dependencies (`net/http`, `encoding/json`, `net`)
+- `main.go` — HTTP server with SSE, JSON-RPC relay, health, and `/metrics` endpoints
+- `go.mod` — dependencies: `net/http`, `encoding/json`, `net`, `github.com/prometheus/client_golang/prometheus`, `github.com/prometheus/client_golang/prometheus/promhttp`
 - `config.go` — environment variable configuration
+- `metrics.go` — Prometheus metric definitions and registration
+- `signal_rpc.go` — JSON-RPC over TCP client for signal-cli
+- `sse_handler.go` — SSE streaming handler with fan-out to multiple clients
 
 ### Phase 2: Update k8s manifests in PR #350
 
@@ -213,14 +285,18 @@ Update Hermes configuration:
 
 ## Checklist
 
-- [ ] Build SSE bridge (`images/signal-bridge/`)
+- [ ] Build SSE bridge with `/metrics` endpoint (`images/signal-bridge/`)
 - [ ] Push `gjcourt/signal-bridge:latest` (multi-arch)
+- [ ] Add `ServiceMonitor` for Prometheus scraping
 - [ ] Update `deployment.yaml` — add bridge as sidecar container
-- [ ] Update `service.yaml` — expose bridge port 8080
+- [ ] Update `service.yaml` — expose bridge ports 8080 (http)
 - [ ] Remove raw signal-cli service (port 7583 not needed externally)
 - [ ] Revert Hermes `signal.py` to original SSE adapter
 - [ ] Configure Hermes `SIGNAL_HTTP_URL` → k8s service
-- [ ] Deploy to staging and verify
+- [ ] Deploy to staging and verify metrics in Prometheus
+- [ ] Deploy to staging and verify SSE stream
+- [ ] Test inbound message delivery
+- [ ] Test outbound message sending
 - [ ] Promote to production
 - [ ] Retire TrueNAS signal container
 - [ ] Update `docs/apps/signal-cli.md` with new architecture

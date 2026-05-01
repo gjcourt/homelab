@@ -35,10 +35,13 @@ gh api /users/gjcourt/packages/container/overture/versions --jq '.[0].metadata.c
 
 ## Workflow
 
+**You must use a branch and PR for every change — never commit directly to `master`.**
+
 1. Branch from `master` (not from a previous fix branch)
-2. Commit changes, push, open a PR
-3. Merge to `master` — Flux reconciles within the `interval` defined on each Kustomization (default: 10m)
-4. To force immediate reconciliation: `flux reconcile kustomization <name> -n flux-system`
+2. Commit changes to the branch and push
+3. Open a PR; do not merge without explicit user approval
+4. After merge, Flux reconciles within the `interval` defined on each Kustomization (default: 10m)
+5. To force immediate reconciliation: `flux reconcile kustomization <name> -n flux-system`
 
 ## Debugging Flux
 

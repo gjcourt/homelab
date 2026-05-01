@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: overture-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  overture.json: |
+    {
+      "title": "Overture (AcmeUSD)",
+      "uid": "overture-acmeusd",
+      "schemaVersion": 38,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1, "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+          "type": "stat", "title": "Request Rate (req/s)",
+          "targets": [{ "expr": "sum(rate(acme_http_requests_total[2m]))", "legendFormat": "req/s" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" }
+        },
+        {
+          "id": 2, "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+          "type": "stat", "title": "Error Rate (5xx)",
+          "targets": [{ "expr": "sum(rate(acme_http_requests_total{status_class=\"5xx\"}[2m]))", "legendFormat": "5xx/s" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background",
+            "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 0.01, "color": "red" }] } }
+        },
+        {
+          "id": 3, "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+          "type": "stat", "title": "Onramps Minted (total)",
+          "targets": [{ "expr": "sum(acme_onramp_operations_total{step=\"minted\"})", "legendFormat": "minted" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+        },
+        {
+          "id": 4, "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+          "type": "stat", "title": "Transfers (total)",
+          "targets": [{ "expr": "sum(acme_transfer_operations_total{outcome=\"ok\"})", "legendFormat": "ok" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+        },
+        {
+          "id": 5, "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+          "type": "timeseries", "title": "HTTP Request Rate by Status Class",
+          "targets": [{ "expr": "sum by (status_class) (rate(acme_http_requests_total[2m]))", "legendFormat": "{{status_class}}" }]
+        },
+        {
+          "id": 6, "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+          "type": "timeseries", "title": "HTTP p99 Latency by Path",
+          "targets": [{ "expr": "histogram_quantile(0.99, sum by (path, le) (rate(acme_http_request_duration_seconds_bucket[2m])))", "legendFormat": "{{path}}" }]
+        },
+        {
+          "id": 7, "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+          "type": "timeseries", "title": "Business Operations per Minute",
+          "targets": [
+            { "expr": "sum(rate(acme_onramp_operations_total[1m])) * 60", "legendFormat": "onramps" },
+            { "expr": "sum(rate(acme_transfer_operations_total{outcome=\"ok\"}[1m])) * 60", "legendFormat": "transfers" },
+            { "expr": "sum(rate(acme_offramp_operations_total{outcome=\"ok\"}[1m])) * 60", "legendFormat": "offramps" }
+          ]
+        },
+        {
+          "id": 8, "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+          "type": "timeseries", "title": "Bridge Call Latency p99 (seconds)",
+          "targets": [{ "expr": "histogram_quantile(0.99, sum by (operation, le) (rate(acme_bridge_call_duration_seconds_bucket[2m])))", "legendFormat": "{{operation}}" }]
+        }
+      ]
+    }

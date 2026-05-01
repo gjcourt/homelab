@@ -4,3 +4,4 @@ resources:
   - application-health-cm.yaml
   - cluster-overview-cm.yaml
   - node-details-cm.yaml
+  - overture-cm.yaml

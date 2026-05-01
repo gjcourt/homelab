@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: signal-cli
+  name: signal-cli-bridge
   namespace: signal-cli
   labels:
     app: signal-cli
@@ -10,7 +10,7 @@ spec:
   selector:
     app: signal-cli
   ports:
-    - name: json-rpc
-      port: 7583
-      targetPort: 7583
+    - name: http
+      port: 8080
+      targetPort: 8080
       protocol: TCP

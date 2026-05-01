@@ -29,7 +29,7 @@ spec:
               mountPath: /app/data
       containers:
         - name: zigbee2mqtt
-          image: koenkk/zigbee2mqtt@sha256:2a21bbf7a664a149024bbe1f776e3151f28ed9db15948270dcbffb89544a41f0
+          image: koenkk/zigbee2mqtt@sha256:e9279e580bb25c512cf6e54c36e215a5cbd2881d1f201cf2a8213a97b14be3d2
           ports:
             - containerPort: 8080
               name: http

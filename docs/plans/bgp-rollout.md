@@ -16,14 +16,24 @@ This plan is structured around four explicit constraints:
 3. **Per-phase rollback** — each phase has its own rollback procedure. There is no "big-bang revert" expectation.
 4. **Operator awareness** — every phase ends at a GO/NO-GO checkpoint. The next phase does not start until the operator explicitly approves.
 
-## Single-node reality
+## Topology
 
-The cluster has one Talos node today. BGP does **not** improve high availability in this state — only L2 leader election goes away. The wins are:
+The cluster is 6 nodes, all on the `10.42.2.0/24` LAN segment:
 
-- **Operational**: the gateway gets a routing table entry, not a learned ARP. `show ip route bgp` becomes a real diagnostic surface.
-- **Multi-node-readiness**: when a second node joins, the UCGF can ECMP-load-balance across nodes for free (no leader election, no failover delay). L2 cannot do this without external orchestration.
+| Node | Role | IP |
+|:-----|:-----|:---|
+| `talos-ykb-uir` | control-plane | `10.42.2.20` |
+| `talos-2mz-rfj` | control-plane | `10.42.2.21` |
+| `talos-v2l-hng` | control-plane | `10.42.2.22` |
+| `talos-lmh-kyf` | worker | `10.42.2.23` |
+| `talos-18u-ski` | worker | `10.42.2.24` |
+| `talos-kot-7x7` | worker | `10.42.2.25` |
 
-Frame the migration as paying down operational debt and unlocking growth, not as an HA upgrade.
+**Only the 3 worker nodes will peer with BGP.** Control-plane nodes carry the standard `node.kubernetes.io/exclude-from-external-load-balancers` label, so Cilium would skip them for service IP advertisement anyway. Establishing BGP sessions from idle CP nodes adds noise without benefit. The `nodeSelector` in `CiliumBGPClusterConfig` excludes them via the role label.
+
+End state: **3 BGP peers on the UCGF, 3 ECMP next-hops per LB IP.** Any single-worker BGP failure leaves traffic served by the other two — this migration produces real HA, not just operational hygiene.
+
+Future workers join automatically because the UCGF uses a `bgp listen range` rather than explicit per-node neighbors; no gateway change needed when the cluster grows.
 
 ## Current State
 
@@ -32,7 +42,8 @@ Frame the migration as paying down operational debt and unlocking growth, not as
 | Cilium version | 1.19.1 |
 | IP advertisement | L2 announcements (`CiliumL2AnnouncementPolicy`) |
 | LoadBalancer IP pool | `10.42.2.40` – `10.42.2.254` (`home-c-pool`) |
-| K8s node | `talos-ykb-uir` at `10.42.2.20` (single node) |
+| K8s nodes | 6 total: 3 CP (`.20`/`.21`/`.22`) + 3 worker (`.23`/`.24`/`.25`) |
+| BGP peers (planned) | 3 — one per worker node |
 | Router | UniFi Cloud Gateway Fiber at `10.42.2.1` |
 | Cilium BGP CRDs | Installed (storage version `v2`, `v2alpha1` still served) |
 | Cilium `bgpControlPlane` | `false` (default, not overridden) |
@@ -114,12 +125,19 @@ kubectl get crd | grep ciliumbgp
   - `ciliumbgppeerconfigs.cilium.io`
 - [ ] `kubectl get crd ciliumbgpclusterconfigs.cilium.io -o yaml | grep -A2 "name: v2"` shows `served: true` and `storage: true`.
 
-### 0.3 Baseline LoadBalancer IPs
+### 0.3 Baseline snapshots
 
-Capture today's LB IP map for the Phase 3 verification matrix:
+Capture both the LB IP map and the cluster topology for the Phase 3 verification matrix:
 
 ```bash
+# LoadBalancer IPs
 kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.metadata.namespace}{"/"}{.metadata.name}{": "}{.status.loadBalancer.ingress[*].ip}{"\n"}{end}' | sort
+
+# Node topology (which workers must peer)
+kubectl get nodes -o wide
+
+# Confirm CP nodes are excluded from LB advertisement
+kubectl get nodes -l node.kubernetes.io/exclude-from-external-load-balancers -o name
 ```
 
 Paste the output into the **Baseline appendix** at the end of this doc.
@@ -156,14 +174,20 @@ router bgp 65100
   bgp router-id 10.42.2.1
   no bgp ebgp-requires-policy
 
-  ! Peer with the Kubernetes node
-  neighbor 10.42.2.20 remote-as 65010
-  neighbor 10.42.2.20 description talos-ykb-uir
+  ! Dynamic peering — accept BGP from any LAN node asserting AS 65010.
+  ! Workers initiate the session; new nodes join automatically.
+  bgp listen range 10.42.2.0/24 peer-group K8S-NODES
+
+  neighbor K8S-NODES peer-group
+  neighbor K8S-NODES remote-as 65010
+  neighbor K8S-NODES description melodic-muse-worker
 
   address-family ipv4 unicast
-    neighbor 10.42.2.20 activate
-    neighbor 10.42.2.20 route-map K8S-LB-IN in
-    neighbor 10.42.2.20 route-map DENY-ALL out
+    neighbor K8S-NODES activate
+    neighbor K8S-NODES route-map K8S-LB-IN in
+    neighbor K8S-NODES route-map DENY-ALL out
+    ! ECMP across worker peers
+    maximum-paths 8
   exit-address-family
 
 ! Inbound: only accept /32s from the LB pool range
@@ -182,6 +206,8 @@ write memory
 **Why these choices:**
 - **AS 65100 ↔ 65010** — both in private 2-byte range (64512–65534).
 - **`no bgp ebgp-requires-policy`** — required on FRR 8+; without it, routes are silently dropped before route-map evaluation.
+- **`bgp listen range` + peer-group** — accepts incoming BGP from any node on the LAN segment that asserts AS 65010. Cleaner than 3 explicit `neighbor` entries; survives cluster growth automatically.
+- **`maximum-paths 8`** — installs all worker next-hops in the routing table for ECMP. Without this, FRR keeps only one path per prefix; you'd see BGP "best path" but no actual load balancing.
 - **`K8S-LB-IN` prefix-list** — restricts inbound to the LB pool range. A misconfigured cluster cannot push arbitrary routes (e.g. a default route) to the gateway.
 - **`DENY-ALL` outbound** — gateway must never advertise its own routes to the cluster; Cilium would install them.
 
@@ -198,13 +224,15 @@ scp root@10.42.2.1:/root/frr-bgp-baseline.conf ~/src/homelab/docs/infra/ucgf-bgp
 
 This file is checked into the repo as the canonical reference. Diff it against the live config any time you suspect drift (e.g., after a firmware upgrade).
 
-### 1.3 Verify (peer is `Active`, not `Established`)
+### 1.3 Verify (no peers yet)
 
 ```bash
 vtysh -c "show bgp summary"
 ```
 
-Expected: `10.42.2.20` appears as `Active` — the cluster side is not yet configured. **Established at this stage means somebody else is peering. Investigate.**
+Expected: BGP instance is up but **no neighbors are listed yet** — the listen-range only learns peers as they connect. The cluster side is not configured, so nothing has connected. After Phase 2b, this output will list 3 dynamic peers (`*10.42.2.23`, `*10.42.2.24`, `*10.42.2.25` — leading `*` denotes a dynamically-learned peer).
+
+**If a peer is already Established, somebody else on the LAN is asserting AS 65010 — investigate before proceeding.**
 
 ### 1.4 Persistence note
 
@@ -236,7 +264,9 @@ The gateway returns to pre-Phase-1 state. No effect on cluster traffic (nothing 
 
 Both protocols coexist after this phase. **Zero disruption expected** — L2 continues advertising while BGP comes up.
 
-### 2.1 Helm values
+The phase is split into **2a (canary on one worker)** and **2b (expand to all workers)**. The canary catches a broken cluster-wide BGP config before it lands on all 3 workers. The shared YAML (`CiliumBGPPeerConfig`, `CiliumBGPAdvertisement`) is created in 2a and reused unchanged in 2b.
+
+### 2a.1 Helm values
 
 Edit [infra/controllers/cilium/values.yaml](../../infra/controllers/cilium/values.yaml) — add (do not remove `l2announcements`):
 
@@ -245,7 +275,21 @@ bgpControlPlane:
   enabled: true
 ```
 
-### 2.2 BGP peer configuration
+This is cluster-wide; it enables the BGP control plane on every Cilium agent. Whether a node *peers* is determined by `CiliumBGPClusterConfig` selector below.
+
+### 2a.2 Pick a canary worker
+
+Use `talos-lmh-kyf` (`10.42.2.23`) as the canary. Pick a node not currently scheduling the production gateway pods if possible; check with `kubectl get pods -A -o wide | grep gateway`.
+
+### 2a.3 Label the canary
+
+```bash
+kubectl label node talos-lmh-kyf bgp-canary=true
+```
+
+> This label is transient. It does not need to survive a node reboot — Phase 2b promotes to a role-based selector that matches all workers automatically. The canary label becomes irrelevant after 2b and is removed in 2b.4.
+
+### 2a.4 BGP peer configuration
 
 Create `infra/configs/cilium/bgp-peer-config.yaml`:
 
@@ -269,7 +313,7 @@ spec:
     restartTimeSeconds: 120
 ```
 
-### 2.3 BGP advertisement
+### 2a.5 BGP advertisement
 
 Create `infra/configs/cilium/bgp-advertisement.yaml`:
 
@@ -291,9 +335,9 @@ spec:
         matchLabels: {}
 ```
 
-### 2.4 BGP cluster configuration
+### 2a.6 BGP cluster configuration (canary selector)
 
-Create `infra/configs/cilium/bgp-cluster-config.yaml`:
+Create `infra/configs/cilium/bgp-cluster-config.yaml` with the canary-only selector:
 
 ```yaml
 apiVersion: cilium.io/v2
@@ -301,9 +345,10 @@ kind: CiliumBGPClusterConfig
 metadata:
   name: homelab-bgp
 spec:
+  # Phase 2a: canary only. Phase 2b changes this to role-based exclusion.
   nodeSelector:
     matchLabels:
-      kubernetes.io/os: linux
+      bgp-canary: "true"
   bgpInstances:
     - name: homelab
       localASN: 65010
@@ -317,7 +362,7 @@ spec:
             kind: CiliumBGPPeerConfig
 ```
 
-### 2.5 Wire into kustomization
+### 2a.7 Wire into kustomization
 
 Edit [infra/configs/cilium/kustomization.yaml](../../infra/configs/cilium/kustomization.yaml):
 
@@ -332,64 +377,163 @@ resources:
   - load-balancer-ip-pool.yaml
 ```
 
-### 2.6 Commit, push, reconcile
+### 2a.8 Commit, push, reconcile
 
 ```bash
 git add infra/configs/cilium/ infra/controllers/cilium/values.yaml
-git commit -m "feat(cilium): enable BGP control plane alongside L2 announcements"
+git commit -m "feat(cilium): enable BGP control plane (canary on one worker)"
 git push
 flux reconcile kustomization infra-controllers -n flux-system --with-source
 flux reconcile kustomization infra-configs -n flux-system --with-source
 ```
 
-Wait for `cilium` DaemonSet rollout to complete (`bgpControlPlane: true` requires an agent restart).
+Wait for the `cilium` DaemonSet rollout to complete (`bgpControlPlane: true` triggers an agent restart on every node).
 
-### 2.7 Verify on cluster
+### 2a.9 Verify (one peer only)
+
+From the cluster:
 
 ```bash
-kubectl exec -n kube-system ds/cilium -- cilium-dbg bgp peers
+# Canary worker should report Established
+kubectl exec -n kube-system "$(kubectl get pod -n kube-system -l k8s-app=cilium --field-selector spec.nodeName=talos-lmh-kyf -o jsonpath='{.items[0].metadata.name}')" \
+  -- cilium-dbg bgp peers
+
+# Other workers should report no BGP instance configured
+for node in talos-18u-ski talos-kot-7x7; do
+  echo "=== $node ==="
+  kubectl exec -n kube-system "$(kubectl get pod -n kube-system -l k8s-app=cilium --field-selector spec.nodeName=$node -o jsonpath='{.items[0].metadata.name}')" \
+    -- cilium-dbg bgp peers
+done
 ```
 
-Expected: peer `10.42.2.1` in `Established` state, `Uptime` increasing.
-
-### 2.8 Verify on UCGF
+From the UCGF:
 
 ```bash
-ssh root@10.42.2.1 'vtysh -c "show bgp ipv4 unicast"'
+ssh root@10.42.2.1 'vtysh -c "show bgp summary"'
+# Expected: 1 dynamic peer (*10.42.2.23) Established
+
 ssh root@10.42.2.1 'vtysh -c "show ip route bgp"'
+# Expected: every baseline /32 with single next-hop 10.42.2.23
 ```
 
-Expected: every allocated LoadBalancer IP (from baseline) appears as a `/32` route with next-hop `10.42.2.20`.
+### 2a.10 Soak — 1 hour minimum
 
-### Phase 2 GO criteria
-- `cilium-dbg bgp peers` Established.
-- All baseline /32s present in `show ip route bgp` on the gateway.
-- `kubectl get ciliuml2announcementpolicy` still shows the L2 policy (we did not touch L2).
-- LAN client smoke test (any HTTPS endpoint, any DNS query) still works.
+Watch:
+- `cilium-dbg bgp peers` on the canary stays Established with monotonically increasing Uptime.
+- No correlated log errors on the canary's Cilium agent.
+- LAN client smoke test (`curl https://home.burntbytes.com`, `dig @10.42.2.43 …`) succeeds.
 
-### Phase 2 rollback
+### Phase 2a GO criteria
+- Canary peer Established for ≥1 hour without flap.
+- Other 5 nodes show no BGP activity.
+- L2 still active (`kubectl get ciliuml2announcementpolicy` returns 1 resource).
+
+### Phase 2a rollback
+
+Fast option: remove the canary label.
+```bash
+kubectl label node talos-lmh-kyf bgp-canary-
+```
+The canary's session drops within seconds; L2 carries traffic.
+
+Full option: revert the commit and push.
+```bash
+git revert HEAD
+git push
+flux reconcile kustomization infra-configs -n flux-system --with-source
+flux reconcile kustomization infra-controllers -n flux-system --with-source
+```
+
+---
+
+### 2b.1 Promote selector to all workers
+
+Edit `infra/configs/cilium/bgp-cluster-config.yaml` — replace the canary selector with role-based exclusion:
+
+```yaml
+spec:
+  # Phase 2b: every node EXCEPT control-plane nodes peers.
+  # Workers establish BGP; CP nodes are excluded (they wouldn't advertise
+  # anyway because of node.kubernetes.io/exclude-from-external-load-balancers).
+  nodeSelector:
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
+```
+
+### 2b.2 Commit, push, reconcile
 
 ```bash
-# 1. Delete the BGP CRD instances
-kubectl delete -f infra/configs/cilium/bgp-cluster-config.yaml
-kubectl delete -f infra/configs/cilium/bgp-advertisement.yaml
-kubectl delete -f infra/configs/cilium/bgp-peer-config.yaml
-
-# 2. Revert the git changes
-git revert <commit-sha>
+git add infra/configs/cilium/bgp-cluster-config.yaml
+git commit -m "feat(cilium): promote BGP from canary to all workers"
 git push
-
-# 3. Disable BGP in helm (sets bgpControlPlane.enabled: false)
-#    Cilium agent restarts; L2 was never disabled, so traffic continues.
+flux reconcile kustomization infra-configs -n flux-system --with-source
 ```
 
-L2 was never touched. Traffic is uninterrupted throughout this rollback.
+The `CiliumBGPClusterConfig` change is hot-applied; no Cilium agent restart needed. The non-canary workers will initiate BGP within ~30s.
+
+### 2b.3 Verify (3 worker peers, ECMP)
+
+From the cluster:
+
+```bash
+# All 3 workers Established
+for node in talos-lmh-kyf talos-18u-ski talos-kot-7x7; do
+  echo "=== $node ==="
+  kubectl exec -n kube-system "$(kubectl get pod -n kube-system -l k8s-app=cilium --field-selector spec.nodeName=$node -o jsonpath='{.items[0].metadata.name}')" \
+    -- cilium-dbg bgp peers
+done
+
+# CP nodes still report no BGP
+for node in talos-ykb-uir talos-2mz-rfj talos-v2l-hng; do
+  echo "=== $node ==="
+  kubectl exec -n kube-system "$(kubectl get pod -n kube-system -l k8s-app=cilium --field-selector spec.nodeName=$node -o jsonpath='{.items[0].metadata.name}')" \
+    -- cilium-dbg bgp peers
+done
+```
+
+From the UCGF:
+
+```bash
+ssh root@10.42.2.1 'vtysh -c "show bgp summary"'
+# Expected: 3 dynamic peers Established (*10.42.2.23, .24, .25)
+
+ssh root@10.42.2.1 'vtysh -c "show ip route bgp"'
+# Expected: each baseline /32 shows 3 next-hops (one per worker), e.g.:
+#   B>* 10.42.2.40/32 [20/0] via 10.42.2.23, eth0, weight 1
+#                       via 10.42.2.24, eth0, weight 1
+#                       via 10.42.2.25, eth0, weight 1
+```
+
+### 2b.4 Remove canary label (cleanup)
+
+```bash
+kubectl label node talos-lmh-kyf bgp-canary-
+```
+
+The canary worker keeps peering — it now matches the role-based selector instead.
+
+### Phase 2b GO criteria
+- 3 BGP peers Established on UCGF.
+- ECMP visible: `show ip route bgp` shows 3 next-hops per LB IP.
+- All baseline LB IPs reachable from a LAN client.
+- L2 still active (we did not touch L2).
+
+### Phase 2b rollback
+
+Three choices, in order of escalation:
+
+1. **Roll back to canary** — `git revert HEAD` (the 2b.1 commit). The selector returns to `bgp-canary: "true"`; only the canary peer remains. Re-add the canary label if it was removed in 2b.4.
+2. **Roll back to no-BGP** — Phase 2a rollback applied on top.
+3. L2 was never touched throughout. Traffic is uninterrupted in all rollback paths.
 
 ---
 
 ## Phase 3 — Soak
 
 **Minimum 4 hours. Recommended 24 hours.** Both L2 and BGP advertise the same /32s during this window. The goal is to catch flaps, leaks, or other instability before relying on BGP exclusively.
+
+Soak runs against the **full multi-node fleet** — all 3 worker peers must remain Established. Single-peer flaps are tolerable (other 2 workers still serve traffic) but unexpected; investigate before proceeding.
 
 ### 3.1 What to watch
 
@@ -405,7 +549,8 @@ L2 was never touched. Traffic is uninterrupted throughout this rollback.
 
 ### 3.2 GO criteria for Phase 4a
 
-- BGP `Established` continuously for the soak window (no flap events).
+- All 3 worker BGP sessions `Established` continuously for the soak window (no flap events).
+- `show ip route bgp` on the UCGF shows **3 next-hops per LB IP** for the entire window (ECMP holds).
 - Zero increase in 5xx or DNS-resolution-failure rate compared to baseline.
 - All baseline LB IPs still routable via BGP (verify by re-running the kubectl jsonpath query — IPs should match).
 
@@ -462,8 +607,15 @@ flux reconcile kustomization infra-configs -n flux-system --with-source
 kubectl get ciliuml2announcementpolicy
 # Expected: No resources found
 
-kubectl exec -n kube-system ds/cilium -- cilium-dbg bgp peers
-# Expected: Established, unchanged Uptime (Cilium agent does not restart)
+# All 3 worker peers still Established with unchanged Uptime
+for node in talos-lmh-kyf talos-18u-ski talos-kot-7x7; do
+  echo "=== $node ==="
+  kubectl exec -n kube-system "$(kubectl get pod -n kube-system -l k8s-app=cilium --field-selector spec.nodeName=$node -o jsonpath='{.items[0].metadata.name}')" \
+    -- cilium-dbg bgp peers
+done
+
+ssh root@10.42.2.1 'vtysh -c "show ip route bgp"'
+# Expected: still 3 next-hops per LB IP. ECMP holds — L2 removal did not perturb BGP routes.
 ```
 
 ### 4a.4 Force ARP refresh and test from LAN
@@ -588,18 +740,28 @@ Update the frontmatter `status: planned` → `status: completed` and add a closi
 
 Run before any phase, then again after each cutover.
 
-| Test | Pre-cutover | Post-Phase 2 | Post-Phase 4a | Post-Phase 4b |
-|:-----|:-----------:|:------------:|:-------------:|:-------------:|
-| `dig @10.42.2.43 example.com +short` | ✓ | ✓ | ✓ | ✓ |
-| `curl -sk https://home.burntbytes.com` | ✓ | ✓ | ✓ | ✓ |
-| `curl -sk https://grafana.burntbytes.com` | ✓ | ✓ | ✓ | ✓ |
-| LAN client `arp -d <ip>; curl …` | ✓ (re-ARPs) | ✓ | ✓ (BGP route) | ✓ (BGP route) |
-| `vtysh -c "show ip route bgp"` shows /32s | empty | populated | populated | populated |
-| `kubectl get ciliuml2announcementpolicy` | 1 | 1 | 0 | 0 |
-| `cilium-dbg bgp peers` Established | n/a | yes | yes | yes |
-| Helm value `l2announcements.enabled` | true | true | true | false |
+| Test | Pre-cutover | Post-Phase 2a | Post-Phase 2b | Post-Phase 4a | Post-Phase 4b |
+|:-----|:-----------:|:-------------:|:-------------:|:-------------:|:-------------:|
+| `dig @10.42.2.43 example.com +short` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `curl -sk https://home.burntbytes.com` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `curl -sk https://grafana.burntbytes.com` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| LAN client `arp -d <ip>; curl …` | ✓ (re-ARPs) | ✓ | ✓ | ✓ (BGP route) | ✓ (BGP route) |
+| `vtysh -c "show bgp summary"` peer count | 0 | 1 | 3 | 3 | 3 |
+| `vtysh -c "show ip route bgp"` next-hops per LB IP | n/a | 1 | **3 (ECMP)** | 3 | 3 |
+| `cilium-dbg bgp peers` Established (per worker) | n/a | canary only | all 3 workers | all 3 workers | all 3 workers |
+| `cilium-dbg bgp peers` on CP nodes | n/a | none | none | none | none |
+| `kubectl get ciliuml2announcementpolicy` | 1 | 1 | 1 | 0 | 0 |
+| Helm value `l2announcements.enabled` | true | true | true | true | false |
 
-Any "no" in a column where "yes" is expected → STOP and rollback the most recent phase.
+**Resilience tests** (run after Phase 4a):
+
+| Test | Procedure | Expected |
+|:-----|:----------|:---------|
+| Single-worker drain | `kubectl drain talos-lmh-kyf --ignore-daemonsets --delete-emptydir-data` | UCGF removes that next-hop in ≤90s; LB IPs continue serving via the other 2 workers; `curl` smoke test still 200. Uncordon to restore. |
+| Cilium agent rolling restart | `kubectl rollout restart ds/cilium -n kube-system` | Per-pod BGP sessions reset one-by-one; graceful-restart keeps routes installed for 120s; LAN-side smoke test never fails. |
+| Single-worker BGP flap simulation | On worker, `iptables -I INPUT -p tcp --dport 179 -j DROP` for 30s, then revert | UCGF marks peer Idle within hold-time, removes that next-hop; ECMP drops to 2; traffic uninterrupted. After revert, peer re-Established. |
+
+Any "no" where "yes" is expected → STOP and roll back the most recent phase.
 
 ---
 
@@ -614,21 +776,21 @@ Private 2-byte AS range: 64512–65534. 4-byte: 4200000000–4294967294.
 
 ---
 
-## Multi-node considerations (future)
+## Future cluster growth
 
-When a second Talos node joins:
+The `bgp listen range 10.42.2.0/24` on the UCGF and the `node-role.kubernetes.io/control-plane: DoesNotExist` selector in `CiliumBGPClusterConfig` together make new workers self-service:
 
-- The `nodeSelector` (`kubernetes.io/os: linux`) on `CiliumBGPClusterConfig` matches all nodes — each gets a BGP session with the UCGF automatically.
-- The UCGF learns multiple next-hops for each LB IP and ECMP-load-balances across nodes. No gateway config changes.
-- L2 leader-election failures stop being a relevant failure mode (they already don't apply post-this-migration, but conceptually noted).
+- A new worker node joins the cluster on `10.42.2.x` → matches the role-based selector → Cilium initiates BGP → UCGF accepts via the listen range → ECMP path-count grows by one. No homelab repo change needed.
+- A new control-plane node joins → matched by the role exclusion → no BGP session, as desired.
 
-If you want explicit control over which nodes peer, add a `bgp-policy: active` node label and switch `nodeSelector` to `matchLabels: {bgp-policy: active}`. Apply the label via Talos machine config so it survives node restarts:
+If a future requirement demands BGP from CP nodes (e.g., advertising pod CIDRs from CP), revisit the selector and reason about whether the `exclude-from-external-load-balancers` label still does the right thing for service IPs.
 
-```yaml
-machine:
-  nodeLabels:
-    bgp-policy: active
-```
+## Out of scope
+
+- **`k8sServiceHost: "10.42.2.20"` SPOF.** [`infra/controllers/cilium/values.yaml`](../../infra/controllers/cilium/values.yaml) hardcodes Cilium's API-server endpoint to one CP node IP. With 3 CP nodes, this is a SPOF for Cilium → kube-apiserver. **Not part of this migration.** File a follow-up issue; consider switching to `k8sServiceHost: "auto"` or a CP VIP.
+- **`externalTrafficPolicy: Local`.** All LB services use `Cluster`. Switching to `Local` preserves source IP and avoids the second hop, but reduces ECMP path count to "nodes hosting the backing pod." Separate decision; not part of BGP migration.
+- **BGP authentication (MD5 / TCP-AO).** Skipped — the cluster and gateway share a private LAN segment with no untrusted peers. Add later if multiple BGP speakers are introduced.
+- **Pod CIDR / Egress Gateway via BGP.** Out of scope; this migration only changes how LB IPs are advertised.
 
 ---
 

@@ -1,0 +1,17 @@
+services:
+  nvtop:
+    image: onmoon/nvtop
+    container_name: nvtop
+    stdin_open: true
+    tty: true
+    pid: host
+    privileged: true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities:
+                - gpu
+                - utility
+              count: all
+              driver: nvidia

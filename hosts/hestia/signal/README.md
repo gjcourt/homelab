@@ -19,11 +19,11 @@ The YAML in this file is the source of truth. To apply a change:
 
 Never edit the compose in the SCALE UI without updating git — that creates drift.
 
-## Bearer token
+## Auth and allowlist
 
-Set `HERMES_AUTH_TOKEN` in the SCALE UI env-var section as a **masked input** — do not commit a real value to git.
+**Bearer token** (`HERMES_AUTH_TOKEN`): set as a masked env var in SCALE UI — do not commit a real value to git. To rotate: **Edit App** → update `HERMES_AUTH_TOKEN` → **Save**.
 
-To rotate: **Edit App** → update `HERMES_AUTH_TOKEN` → **Save**. Supply the new token to the Hermes operator out-of-band.
+**Account allowlist** (`HERMES_ALLOWED_ACCOUNTS`): comma-separated E.164 numbers the bridge will poll and accept connections for. This is also the list that drives per-account SSE polling — every number listed gets polled on every tick. Bridge-side enforcement is sufficient for personal use; Hermes has its own `SIGNAL_ALLOW_ALL_USERS` env but you don't need to set it — the bridge gates access before Hermes sees anything.
 
 ## Drift check
 
@@ -62,6 +62,7 @@ No code changes required — the bridge polls all accounts listed in that env va
 
 - `hosts/hestia/signal/docker-compose.yml` is in git with correct image tags.
 - GHA workflow has published `ghcr.io/gjcourt/signal-bridge:<tag>`.
+- `ghcr.io/gjcourt/signal-bridge` package visibility is set to **Public** in GitHub → Packages settings (so hestia can pull without `docker login`).
 - Bearer token is ready to set in SCALE UI.
 
 ### Steps
@@ -135,7 +136,16 @@ curl -fsS -X POST http://10.42.2.10:8080/api/v1/rpc \
 
 **10. Decommission**
 
-SCALE UI → `signal-cli-rest-api` → **Delete**. Keep the ZFS snapshot for 90 days.
+Once step 9 passes, delete immediately — don't defer:
+
+```bash
+# Optional: also delete the copied data from the old App's mount (we have it at /mnt/tank/apps/signal/data)
+# sudo rm -rf /mnt/.ix-apps/app_mounts/signal-cli-rest-api/
+```
+
+SCALE UI → `signal-cli-rest-api` → **Delete**.
+
+The ZFS snapshot from step 1 is your safety net if anything resurfaces; delete it after 2 weeks once you're confident.
 
 ### Rollback (before step 10)
 

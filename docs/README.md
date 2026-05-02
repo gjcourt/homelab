@@ -1,60 +1,60 @@
-# Documentation
+# Homelab Documentation
 
-Index of docs in this repo, organized by category.
+GitOps repo for a single-node Talos Kubernetes cluster (`melodic-muse`). Documentation is organized into a fixed six-folder taxonomy plus historical topic folders that pre-date the canonical layout.
 
-## Start here
+## Canonical taxonomy (six folders)
 
-- [Repository README](../README.md) — repo structure and quick start
-- [Apps overview](../apps/README.md) — auto-generated list of deployed apps
-- [Infra overview](../infra/README.md) — cluster-level controllers and configs
+- [`architecture/`](architecture/README.md) — how the cluster is built today.
+- [`design/`](design/README.md) — proposals, RFCs, in-flight or recently shipped designs.
+- [`operations/`](operations/README.md) — runbooks, smoke tests, debugging procedures.
+- [`plans/`](plans/README.md) — phased migrations, rollout sequencing, frontmatter convention is documented in the folder README.
+- [`reference/`](reference/README.md) — component reference, configuration tables.
+- [`research/`](research/README.md) — spikes, investigations.
 
-## Architecture
+## Historical topic folders (migration in progress)
 
-Design decisions and system context.
+These predate the canonical taxonomy and remain in place while content is migrated per `docs/plans/documentation-rewrite-plan.md`:
+
+- [`apps/`](apps/) — per-app runbooks (target: `operations/apps/` or `operations/<app>/`).
+- [`guides/`](guides/) — operational how-to guides (target: `operations/`).
+- [`incidents/`](incidents/) — incident reports (target: `operations/incidents/`).
+- [`infra/`](infra/) — infrastructure component reference (target: `reference/`).
+
+When you write new content, prefer the canonical folder. When you touch existing content materially, move it to the canonical folder in the same PR.
+
+## Quick links
+
+### Architecture
 
 - [Overlays and structure](architecture/overlays-and-structure.md) — base vs staging vs production
 - [DNS strategy](architecture/dns-strategy.md) — split-horizon DNS with wildcard records
-- [Gateway Authentication](architecture/gateway-auth.md) — Global Forward Auth and Envoy filters
+- [Gateway authentication](architecture/gateway-auth.md) — Global Forward Auth and Envoy filters
 
-## Guides
+### Operations
 
-Operational how-to guides for day-to-day work.
+- [Adding a new app](operations/2026-05-02-adding-an-app.md)
+- [Flux debugging — common patterns](operations/2026-05-02-flux-debugging.md)
+- [CNPG backup and disaster recovery](operations/2026-05-02-cnpg-backup-recovery.md)
+- Existing how-to guides: [Making changes](guides/making-changes.md), [Flux and deployments](guides/flux-and-deployments.md), [Staging workflow](guides/staging-workflow.md), [Synology iSCSI operations](guides/synology-iscsi-operations.md)
 
-- [Making changes](guides/making-changes.md) — workflow, secrets, rollback
-- [Flux and deployments](guides/flux-and-deployments.md) — how Flux applies changes, reconcile and debug commands
-- [Staging workflow](guides/staging-workflow.md) — how PRs auto-deploy to staging via CI and Flux
-- [Synology iSCSI operations](guides/synology-iscsi-operations.md) — common storage scenarios and runbook
-- [Synology iSCSI cleanup](guides/synology-iscsi-cleanup.md) — orphan LUN/target concepts and cleanup process
-- [HifiBerry OS Spotify Connect setup](guides/hifiberry-os-spotify-setup.md) — fix avahi Docker bridge IP poisoning and replace vollibrespot with go-librespot
+### Per-app runbooks
 
-## Apps
+See [`apps/`](apps/) — Adguard, Audiobookshelf, Authelia, Excalidraw, Golinks, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Pingo, Snapcast, Vitals.
 
-Per-app usage, configuration, and operation docs.
+### Infrastructure component reference
 
-- [Authelia (SSO / OIDC)](apps/authelia.md)
-- [Navidrome (music server)](apps/navidrome.md)
-- [Snapcast (multi-room audio)](apps/snapcast.md)
+See [`infra/`](infra/) — cert-manager, Cilium, Flux, kernel log shipping, monitoring, Pingo, storage.
 
-## Infra
+### Active plans
 
-Infrastructure component documentation.
+See [`plans/README.md`](plans/README.md) for the full plan catalog and the frontmatter convention.
 
-- [Pingo (DNS updater)](infra/pingo.md)
+### Past incidents
 
-## Incidents
+See [`incidents/`](incidents/) for postmortems.
 
-Postmortems for past outages.
+## Conventions
 
-- [2026-03-10: Raspberry Pi STP TCN subnet blackouts](incidents/2026-03-10-rpi-stp-tcn-blackouts.md)
-- [2026-02-15: iSCSI targets disabled](incidents/2026-02-15-iscsi-targets-disabled.md)
-- [2026-02-12: iSCSI zombie targets](incidents/2026-02-12-iscsi-zombie-targets.md)
-- [2026-02-08: PV recovery](incidents/2026-02-08-pv-recovery.md)
-
-## Plans
-
-Active plans and TODOs.
-
-- [Authelia SSO rollout](plans/authelia-sso-rollout.md)
-- [Authelia SMTP notifier](plans/authelia-smtp-notifier.md)
-- [AdGuard HA](plans/adguard-ha.md)
-- [Navidrome → Snapcast via Mopidy](plans/navidrome-snapcast-mopidy.md)
+- Filenames in canonical folders use `<yyyy-mm-dd>-<topic>.md`.
+- Frontmatter (`title`, `status`, `created`, `updated`, `updated_by`, `tags`) on new docs in canonical folders. Existing docs in topical folders may be backfilled per the rewrite plan.
+- See `AGENTS.md` for the full repo convention.

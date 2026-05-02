@@ -12,7 +12,6 @@ spec:
       app: zigbee2mqtt
   strategy:
     type: Recreate
-    rollingUpdate: null
   template:
     metadata:
       labels:

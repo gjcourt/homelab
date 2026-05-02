@@ -1,0 +1,55 @@
+services:
+  vllm:
+    command:
+      - '-c'
+      - >-
+        echo "=== START $(date) ===" >> /root/.cache/huggingface/vllm.log 2>&1;
+        exec vllm serve Qwen/Qwen3.5-27B-GPTQ-Int4 --served-model-name
+        qwen3.5-27b --host 0.0.0.0 --port 8000 --quantization gptq
+        --dtype float16 --gpu-memory-utilization 0.75 --max-model-len 16384
+        --enable-chunked-prefill --max-num-seqs 4 --enforce-eager --enable-auto-tool-choice
+        --tool-call-parser hermes --trust-remote-code >>
+        /root/.cache/huggingface/vllm.log 2>&1
+    container_name: vllm
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities:
+                - gpu
+                - utility
+              count: all
+              driver: nvidia
+    entrypoint:
+      - /bin/bash
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ""  # set in SCALE UI env-var section (masked); do not commit a real token here
+      NCCL_P2P_DISABLE: '1'
+      OMP_NUM_THREADS: '8'
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      TOKENIZERS_PARALLELISM: 'false'
+    healthcheck:
+      interval: 30s
+      retries: 5
+      start_period: 600s
+      test:
+        - CMD
+        - curl
+        - '-f'
+        - http://localhost:8000/health
+      timeout: 10s
+    image: vllm/vllm-openai:latest
+    ipc: host
+    ports:
+      - '8000:8000'
+    restart: unless-stopped
+    shm_size: 16gb
+    ulimits:
+      memlock:
+        hard: -1
+        soft: -1
+      stack:
+        hard: 67108864
+        soft: 67108864
+    volumes:
+      - /mnt/main/ai/models:/root/.cache/huggingface

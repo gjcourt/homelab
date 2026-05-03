@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-05-02
+last_modified: 2026-05-03
 ---
 
 # Hermes-bot — always-on Signal agent on melodic-muse
@@ -22,12 +22,14 @@ The hermes-bot D2 PR (below) is where we flip `2026-05-02-signal-cli-hermes-roll
 ## Decisions
 
 - **Single replica**, `Recreate` strategy — sessions don't cluster, only one process should be writing checkpoints.
-- **PVC at `/home/hermes/.hermes/`** — sessions, checkpoints, memory; 5 GiB iSCSI per repo convention. Checkpoint retention tuned down (`max_snapshots: 10`, `auto_prune: true`) to keep the PVC reasonable.
+- **PVC at `/opt/data`** — the upstream image's `HERMES_HOME`. Holds sessions, checkpoints, memory; 5 GiB iSCSI per repo convention. Checkpoint retention tuned down (`max_snapshots: 10`, `auto_prune: true`) to keep the PVC reasonable.
+- **Pod security context** — upstream image runs as UID 10000 (the `hermes` user). Set `securityContext.fsGroup: 10000` on the Pod so the iSCSI-mounted PVC is writable by the non-root process.
+- **Container command** — `hermes gateway run` (the long-running Signal/platform listener). Earlier plan revisions hinted at `hermes signal --account ...`; that subcommand does not exist in upstream. Configuration goes through env vars and the mounted `config.yaml`, not CLI flags.
 - **Inference**: `http://10.42.2.10:8000/v1` — llama.cpp directly. No llmux hop; llama.cpp's `hermes` chat template emits clean tool calls. (Local laptop hermes can drop llmux for the same reason; that's a config change, not infra.)
-- **Signal**: `http://signal-cli-bridge.signal-cli.svc.cluster.local:8080` — in-cluster ClusterIP from `apps/base/signal-cli/service.yaml`. Bearer token (`HERMES_AUTH_TOKEN`) in a SOPS-encrypted Secret.
+- **Signal**: `http://signal-cli-bridge.signal-cli.svc.cluster.local:8080` — in-cluster ClusterIP from `apps/base/signal-cli/service.yaml`. **Auth boundary lives at the network layer** (in-cluster ClusterIP, no public ingress on signal-bridge), not in HTTP. The upstream Hermes Signal adapter does not currently send `Authorization: Bearer …` to the bridge, so `HERMES_AUTH_TOKEN` is not enforced on the bot path. The bridge keeps the env var for any future upstream patch and for non-Hermes callers; documented as an open question below.
 - **No HTTP ingress** — Signal-only bot. No HTTPRoute, no Gateway entry.
 - **Namespace**: `hermes` (production), `hermes-stage` (staging) per repo convention.
-- **Container image**: pip-install `hermes-agent` from PyPI in a Python base, published as `ghcr.io/gjcourt/hermes-bot:YYYY-MM-DD[-N]` via a GHA workflow mirroring `build-signal-bridge.yml`. **If NousResearch publishes an official image**, use it directly and skip the build PR.
+- **Container image**: upstream `nousresearch/hermes-agent` (pinned to a `v2026.X.Y` dated tag + sha256 digest in D2). Image is multi-arch (`linux/amd64`, `linux/arm64`), Debian 13.4 base, Python 3.13 via `uv`, `tini` init, runs as UID 10000. See [`images/hermes-bot/README.md`](../../images/hermes-bot/README.md) for the runtime contract.
 - **Toolsets** — bot agent runs with the Signal platform toolset (`hermes-signal`) plus a conservative agent toolset (`web` + `file` for read-only browsing; **no `terminal`** in v1 to limit blast radius). Operator can opt in to terminal access later by editing the ConfigMap.
 
 ## Architecture
@@ -48,22 +50,20 @@ All traffic stays on the LAN. Bot state lives on iSCSI PVC; nothing in-pod is du
 
 Each row is one execution PR after this plan merges.
 
-### D1 — `images/hermes-bot/` (skip if upstream image exists)
+### D1 — `images/hermes-bot/README.md` ✅ (#386)
 
-- `Dockerfile` — Python base, `pip install hermes-agent`, entrypoint runs `hermes signal --account +16179397251` (or whatever the upstream signal-mode invocation is).
-- `README.md` — purpose, env vars, how to run locally.
-- `.github/workflows/build-hermes-bot.yml` — multi-arch build to `ghcr.io/gjcourt/hermes-bot:YYYY-MM-DD[-N]` on push to `master` touching `images/hermes-bot/`. Mirror `.github/workflows/build-signal-bridge.yml`.
+NousResearch publishes the official image at `nousresearch/hermes-agent` on Docker Hub (multi-arch, dated tags `v2026.X.Y`, plus `latest`). The skip condition triggered: D1 collapsed to a documentation-only PR (#386) that records the upstream image, runtime contract, env vars, and Signal-mode requirements that D2 needs.
 
-**Skip condition**: if `nousresearch/hermes-agent` (or similar) is published, point straight at it in D2.
+No Dockerfile, no build workflow. D2 references the upstream image directly with a digest pin.
 
 ### D2 — `apps/base/hermes/` + cleanup
 
 New k8s base app:
 
 - `namespace.yaml` — `hermes` namespace, `http-ingress: "false"` label.
-- `deployment.yaml` — 1 replica, `Recreate`, image from D1 (or upstream), env from ConfigMap + Secret, PVC mount at `/home/hermes/.hermes/`, readiness probe checking the hermes process is up (no HTTP probe; bot has no listener).
+- `deployment.yaml` — 1 replica, `Recreate`, image `nousresearch/hermes-agent:vX.Y.Z@sha256:...` (digest-pinned), command `["hermes", "gateway", "run"]`, env from ConfigMap + Secret, PVC mount at `/opt/data`, `securityContext.fsGroup: 10000`, readiness probe checking the hermes process is up (no HTTP probe; bot has no listener).
 - `pvc.yaml` — 5 GiB iSCSI, RWO.
-- `configmap.yaml` — hermes config sans secrets: model selection, signal endpoint URL, toolset list, checkpoint tuning.
+- `configmap.yaml` — hermes config sans secrets (model selection, signal endpoint URL, toolset list, checkpoint tuning) **and** the platform/Signal env vars: `SIGNAL_HTTP_URL`, `SIGNAL_ACCOUNT`, `SIGNAL_HOME_CHANNEL`, `SIGNAL_GROUP_ALLOWED_USERS`, `SIGNAL_IGNORE_STORIES`. Mount strategy: env vars from ConfigMap; full `config.yaml` mounted as a file at `/opt/data/config.yaml` if richer config is needed.
 - `kustomization.yaml`.
 
 Same PR cleanup:
@@ -73,7 +73,7 @@ Same PR cleanup:
 ### D3 — `apps/staging/hermes/`
 
 - Overlay with `hermes-stage` namespace.
-- SOPS-encrypted Secret: `HERMES_AUTH_TOKEN` (signal-bridge bearer), any LLM provider keys if used.
+- SOPS-encrypted Secret: any LLM provider API keys if used. (`HERMES_AUTH_TOKEN` is no longer enforced on the bot path — see Decisions; the variable can still be set on the bridge side if we add a non-Hermes consumer later.)
 - Env-specific tweaks: lower checkpoint retention, possibly debug logging.
 - Wire into `apps/staging/kustomization.yaml`.
 
@@ -92,8 +92,8 @@ Wire into `apps/production/kustomization.yaml`.
 
 ## Bootstrap order
 
-1. Merge **this plan PR** (`docs/plan-hermes-bot-k8s`).
-2. Merge **D1** (image build infra). First successful GHA build appears in `ghcr.io/gjcourt/hermes-bot`. Skip if upstream image is used.
+1. ~~Merge **this plan PR**.~~ Merged.
+2. ~~Merge **D1**.~~ Done — upstream image confirmed in #386 (docs-only).
 3. Merge **D2 + D3 together**. Staging overlay deploys via Flux. Verify in `kubectl logs -n hermes-stage deploy/hermes`.
 4. **Soak ≥48h** in staging. Send DMs to the bot's Signal number; observe behavior; check PVC growth.
 5. Merge **D4** (production overlay).
@@ -134,7 +134,7 @@ Sketch:
 - DM the staging bot's number from a phone → reply received.
 - `kill` the laptop hermes process → bot continues to respond. Confirms laptop independence.
 - First-token latency < 5s for short prompts; total round-trip < 30s for typical request.
-- `kubectl exec -n hermes-stage deploy/hermes -- df -h /home/hermes/.hermes/` — PVC < 50% full after 48h.
+- `kubectl exec -n hermes-stage deploy/hermes -- df -h /opt/data` — PVC < 50% full after 48h.
 
 ### Production (after D4)
 
@@ -155,7 +155,9 @@ Sketch:
 
 ## Open questions for execution phase
 
-- **Upstream container?** — does NousResearch publish a `hermes-agent` image? If yes, use it; D1 collapses to just a Dockerfile-free pull. If no, build from PyPI.
+- **Image pin for D2** — which `nousresearch/hermes-agent` tag? Pick the latest `v2026.X.Y` at the time D2 ships, resolve to a `sha256:` digest, and pin both. Bumping later = a small PR that updates the digest in `apps/base/hermes/deployment.yaml`.
+- **Auth boundary on signal-bridge** — Hermes' upstream Signal adapter does not send `Authorization: Bearer`. Options: (a) accept network-layer isolation (in-cluster ClusterIP only, no ingress) as the boundary — current decision; (b) submit an upstream patch to add bearer-token support; (c) drop the bearer requirement on signal-bridge and rely on `HERMES_ALLOWED_ACCOUNTS` for tenant filtering. Current decision is (a) — revisit if a non-Hermes signal-bridge caller appears.
+- **Config injection — env vars vs file mount** — env vars from ConfigMap is simpler and matches the upstream env-driven flow. A full `config.yaml` mounted at `/opt/data/config.yaml` is needed if we want the rich personality/toolset/auxiliary config from `~/.hermes/config.yaml`. Decide before D2 — likely "env vars only for v1, add file mount if we hit a config the env doesn't expose."
 - **Toolset opt-ins** — the bot ships with `web` + `file` (read-only) by default. Does the operator want `terminal` enabled from day 1, or is that earned after a soak period? Decision before D2.
 - **Checkpoint retention tuning** — `max_snapshots: 10` is a guess. Revisit once we see real PVC usage in staging.
 - **Personality default** — does the bot inherit the operator's `display.personality: kawaii`, or pick something else? Decision before D2; cosmetic, not load-bearing.
@@ -164,5 +166,6 @@ Sketch:
 ## Cross-references
 
 - Companion plan: [`2026-05-02-hestia-gha-runner.md`](2026-05-02-hestia-gha-runner.md). The GHA runner deploys hestia Custom Apps; hermes-bot is k8s-native and Flux-managed, so it does *not* depend on that work. Mentioned for context.
+- D1 image documentation: [`images/hermes-bot/README.md`](../../images/hermes-bot/README.md) (#386).
 - Superseded by this plan's D2: [`2026-05-02-signal-cli-hermes-rollout.md`](2026-05-02-signal-cli-hermes-rollout.md) D2 (TrueNAS Custom App for signal stack).
 - Referenced infra: [`apps/base/signal-cli/`](../../apps/base/signal-cli/), [`hosts/hestia/llms/docker-compose-llama.yml`](../../hosts/hestia/llms/docker-compose-llama.yml).

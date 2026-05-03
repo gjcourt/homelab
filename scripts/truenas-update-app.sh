@@ -38,10 +38,14 @@ if [ -z "${TRUENAS_API_KEY:-}" ]; then
   exit 78
 fi
 
-# Install websockets if missing. ubuntu-noble's python3 doesn't include it.
+# Install websockets and pyyaml if missing. ubuntu-noble's python3 doesn't include them.
 if ! python3 -c "import websockets" 2>/dev/null; then
   echo "+ pip install --quiet --user websockets" >&2
   python3 -m pip install --quiet --user --break-system-packages websockets >&2
+fi
+if ! python3 -c "import yaml" 2>/dev/null; then
+  echo "+ pip install --quiet --user pyyaml" >&2
+  python3 -m pip install --quiet --user --break-system-packages pyyaml >&2
 fi
 
 export APP_NAME COMPOSE_FILE DRY_RUN

@@ -20,7 +20,16 @@ spec:
     spec:
       serviceAccountName: mealie
       automountServiceAccountToken: false
+      # App runs as the upstream `abc` user (UID/GID 911) per the Mealie
+      # Dockerfile (https://github.com/mealie-recipes/mealie/blob/v3.16.0/docker/Dockerfile).
+      # When the entrypoint sees it is already running as 911 it skips the
+      # root-only chown branch and execs straight into the app, so a hard
+      # securityContext here is safe.
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 911
+        runAsGroup: 911
+        fsGroup: 911
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -35,10 +44,22 @@ spec:
             limits:
               cpu: 1000m
               memory: 1Gi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: mealie-data
               mountPath: /app/data
+            # Mealie / FastAPI writes upload temp files and Python tempfiles
+            # under /tmp; required when readOnlyRootFilesystem is enabled.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: mealie-data
           persistentVolumeClaim:
             claimName: mealie-data-pvc
+        - name: tmp
+          emptyDir: {}

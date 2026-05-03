@@ -17,6 +17,10 @@ spec:
       interval: 12h
   # CRDs are pre-installed by infra/crds/cilium (infra-crds Kustomization) and
   # managed by the Cilium operator at runtime; no Helm CRD ownership needed.
+  upgrade:
+    remediation:
+      retries: 3
+      strategy: rollback
   driftDetection:
     mode: enabled
 

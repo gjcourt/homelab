@@ -33,6 +33,14 @@ spec:
               value: gethomepage.dev # required, may need port. See gethomepage.dev/installation/#homepage_allowed_hosts
           ports:
             - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
           resources:
             requests:
               cpu: 5m

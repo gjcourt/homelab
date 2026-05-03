@@ -61,6 +61,18 @@ spec:
           securityContext:
             privileged: true # Required for GPU access
 
+          # Readiness only — Jellyfin's startup time is highly variable on
+          # first-run library scans; a startupProbe + tight livenessProbe is
+          # tracked separately (#22, deferred).
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+
           # Resource limits - generous for transcoding bursts
           resources:
             requests:

@@ -38,6 +38,14 @@ spec:
           name: mealie
           ports:
             - containerPort: 9000
+          readinessProbe:
+            httpGet:
+              path: /api/app/about
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
           resources:
             requests:
               cpu: 10m

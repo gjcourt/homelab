@@ -26,6 +26,14 @@ spec:
           image: excalidraw/excalidraw@sha256:20ffa04668e19616bb0c1b3632849e5cd96e0bc7a1336b73d9d072667f2c2854
           ports:
             - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
           resources:
             requests:
               cpu: 5m

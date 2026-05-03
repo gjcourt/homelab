@@ -66,6 +66,18 @@ spec:
               path: /
             initialDelaySeconds: 10
             periodSeconds: 5
+          # AdGuard's filter/rules processing can pause the HTTP listener for
+          # several seconds during scheduled rule reloads. Use a TCP probe on
+          # the admin port (HTTP probe could trigger a redirect/302 that we
+          # don't want flapping liveness on) with extra-tolerant thresholds
+          # (failureThreshold: 6 over periodSeconds: 30 = 3 min before kill).
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
               cpu: 20m

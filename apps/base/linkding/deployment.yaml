@@ -55,6 +55,15 @@ spec:
             - name: linkding-data
               mountPath: /etc/linkding/data
 
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
           resources:
             requests:
               cpu: 10m

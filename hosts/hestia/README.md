@@ -16,8 +16,6 @@ The compose YAML in each subdirectory is the canonical source; paste into SCALE 
 | Service | Directory | Port | Notes |
 |---------|-----------|------|-------|
 | signal | `signal/` | 8080 | signal-cli daemon + signal-bridge SSE relay |
-| llms | `llms/` | varies | llama.cpp / vLLM inference (GPU box) |
-| monitoring | `monitoring/` | varies | nvtop and GPU metrics |
 
 ## ZFS datasets
 

@@ -1,1 +1,6 @@
 # Helm values
+
+# Cluster-critical: the CNPG operator runs the database control plane for
+# every CNPG cluster. Evicting it during a pinch can stall all postgres
+# instances during the next reconcile.
+priorityClassName: system-cluster-critical

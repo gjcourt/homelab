@@ -7,6 +7,7 @@ metadata:
     app: synology-iscsi-exporter
 spec:
   replicas: 1
+  revisionHistoryLimit: 5
   selector:
     matchLabels:
       app: synology-iscsi-exporter

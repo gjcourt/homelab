@@ -5,6 +5,7 @@ resources:
   - deployment.yaml
   - job-db-init.yaml
   - namespace.yaml
+  - pdb.yaml
   - service.yaml
   - serviceaccount.yaml
   - storage.yaml

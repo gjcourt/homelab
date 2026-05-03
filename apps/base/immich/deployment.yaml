@@ -9,6 +9,7 @@ metadata:
     component: server
 spec:
   replicas: 1
+  revisionHistoryLimit: 5
   selector:
     matchLabels:
       app: immich
@@ -76,6 +77,7 @@ metadata:
     component: machine-learning
 spec:
   replicas: 1
+  revisionHistoryLimit: 5
   selector:
     matchLabels:
       app: immich
@@ -148,6 +150,7 @@ metadata:
     component: redis
 spec:
   replicas: 1
+  revisionHistoryLimit: 5
   selector:
     matchLabels:
       app: immich

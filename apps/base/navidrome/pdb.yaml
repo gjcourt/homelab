@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: navidrome
+  namespace: navidrome
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: navidrome

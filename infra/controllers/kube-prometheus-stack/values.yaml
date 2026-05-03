@@ -1156,7 +1156,7 @@ alertmanager:
 
     ## Priority class assigned to the Pods
     ##
-    priorityClassName: ""
+    priorityClassName: system-cluster-critical
 
     ## AdditionalPeers allows injecting a set of additional Alertmanagers to peer with to form a highly available cluster.
     ##
@@ -3120,7 +3120,7 @@ prometheusOperator:
     unhealthyPodEvictionPolicy: AlwaysAllow
 
   ## Assign a PriorityClassName to pods if set
-  # priorityClassName: ""
+  priorityClassName: system-cluster-critical
 
   ## Define Log Format
   # Use logfmt (default) or json logging
@@ -4489,7 +4489,7 @@ prometheus:
 
     ## Priority class assigned to the Pods
     ##
-    priorityClassName: ""
+    priorityClassName: system-cluster-critical
 
     ## Thanos configuration allows configuring various aspects of a Prometheus server in a Thanos environment.
     ## This section is experimental, it may change significantly without deprecation notice in any release.

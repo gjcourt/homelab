@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: jellyfin
+  namespace: jellyfin
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: jellyfin

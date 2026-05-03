@@ -169,12 +169,13 @@ async def main() -> None:
 
         # Apply.
         # app.update(id, config) — the second positional arg maps to the
-        # `config` parameter of the middleware method, NOT wrapped in "values".
+        # `config` parameter.  custom_compose_config must be a dict with a
+        # 'compose' key containing the YAML string (TrueNAS SCALE validation).
         log(f"calling app.update for '{APP_NAME}'")
         update = await call(
             ws,
             "app.update",
-            [APP_NAME, {"custom_compose_config": new_yaml}],
+            [APP_NAME, {"custom_compose_config": {"compose": new_yaml}}],
             msg_id=3,
         )
         if "error" in update and update["error"]:

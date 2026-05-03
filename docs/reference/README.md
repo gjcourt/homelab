@@ -12,8 +12,8 @@ Information you look things up in — component reference, network specs, config
 - Architecture overview — `architecture/`.
 - Spike output — `research/`.
 
-**Naming convention:** `<yyyy-mm-dd>-<topic>.md`.
+**Naming convention:** `<yyyy-mm-dd>-<topic>.md` for new content.
+
+Component reference docs migrated from `docs/infra/` on 2026-05-02 keep their original component-name filenames as a grandfathered exception (e.g. `cilium.md`, `cert-manager.md`, `flux.md`, `storage.md`, `monitoring.md`, `kernel-log-shipping.md`, `pingo.md`).
 
 **Allowed `status:` values:** `Stable`, `Superseded`.
-
-Historical note: `docs/infra/` predates this folder and contains component reference for Cilium, cert-manager, Flux, monitoring, storage, etc. Per-doc migration is tracked in `docs/plans/2026-02-21-documentation-rewrite-plan.md`.

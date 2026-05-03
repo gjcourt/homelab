@@ -435,7 +435,7 @@ root bridge identity.
 
 ## Related
 
-- [Guide: Raspberry Pi 4 Ethernet Drops on UniFi Switches](../guides/rpi-unifi-ethernet-drops.md) — step-by-step
+- [Guide: Raspberry Pi 4 Ethernet Drops on UniFi Switches](../rpi-unifi-ethernet-drops.md) — step-by-step
   diagnosis and EEE fix instructions
-- [Guide: HifiBerry OS Spotify Connect Setup](../guides/hifiberry-os-spotify-setup.md) — avahi/mDNS fix applied
+- [Guide: HifiBerry OS Spotify Connect Setup](../hifiberry-os-spotify-setup.md) — avahi/mDNS fix applied
   during same session

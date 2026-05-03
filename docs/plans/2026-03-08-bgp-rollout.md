@@ -53,11 +53,11 @@ Future workers join automatically because the UCGF uses a `bgp listen range` rat
 
 | File | Purpose |
 |:-----|:--------|
-| [infra/controllers/cilium/values.yaml](../../infra/controllers/cilium/values.yaml) | Helm values — `l2announcements.enabled: true` |
-| [infra/configs/cilium/l2-announcement-policy.yaml](../../infra/configs/cilium/l2-announcement-policy.yaml) | `CiliumL2AnnouncementPolicy` resource |
-| [infra/configs/cilium/load-balancer-ip-pool.yaml](../../infra/configs/cilium/load-balancer-ip-pool.yaml) | `CiliumLoadBalancerIPPool` (kept as-is) |
-| [infra/configs/cilium/kustomization.yaml](../../infra/configs/cilium/kustomization.yaml) | Adds new BGP resources, removes L2 in 4a |
-| [docs/infra/ucgf-bgp-frr.conf](../infra/ucgf-bgp-frr.conf) | Snapshot of UCGF FRR running config (filled in during Phase 1) |
+| [infra/controllers/cilium/values.yaml](../../reference/controllers/cilium/values.yaml) | Helm values — `l2announcements.enabled: true` |
+| [infra/configs/cilium/l2-announcement-policy.yaml](../../reference/configs/cilium/l2-announcement-policy.yaml) | `CiliumL2AnnouncementPolicy` resource |
+| [infra/configs/cilium/load-balancer-ip-pool.yaml](../../reference/configs/cilium/load-balancer-ip-pool.yaml) | `CiliumLoadBalancerIPPool` (kept as-is) |
+| [infra/configs/cilium/kustomization.yaml](../../reference/configs/cilium/kustomization.yaml) | Adds new BGP resources, removes L2 in 4a |
+| [docs/reference/ucgf-bgp-frr.conf](../reference/ucgf-bgp-frr.conf) | Snapshot of UCGF FRR running config (filled in during Phase 1) |
 
 ---
 
@@ -219,7 +219,7 @@ vtysh -c "show running-config" > /root/frr-bgp-baseline.conf
 
 From a workstation:
 ```bash
-scp root@10.42.2.1:/root/frr-bgp-baseline.conf ~/src/homelab/docs/infra/ucgf-bgp-frr.conf
+scp root@10.42.2.1:/root/frr-bgp-baseline.conf ~/src/homelab/docs/reference/ucgf-bgp-frr.conf
 ```
 
 This file is checked into the repo as the canonical reference. Diff it against the live config any time you suspect drift (e.g., after a firmware upgrade).
@@ -236,7 +236,7 @@ Expected: BGP instance is up but **no neighbors are listed yet** — the listen-
 
 ### 1.4 Persistence note
 
-`write memory` persists across reboots. **Firmware upgrades may wipe `/etc/frr/frr.conf`.** After every UCGF firmware upgrade, re-apply this config from `docs/infra/ucgf-bgp-frr.conf`.
+`write memory` persists across reboots. **Firmware upgrades may wipe `/etc/frr/frr.conf`.** After every UCGF firmware upgrade, re-apply this config from `docs/reference/ucgf-bgp-frr.conf`.
 
 ### Phase 1 GO criteria
 - `show bgp summary` lists the peer as `Active`.
@@ -268,7 +268,7 @@ The phase is split into **2a (canary on one worker)** and **2b (expand to all wo
 
 ### 2a.1 Helm values
 
-Edit [infra/controllers/cilium/values.yaml](../../infra/controllers/cilium/values.yaml) — add (do not remove `l2announcements`):
+Edit [infra/controllers/cilium/values.yaml](../../reference/controllers/cilium/values.yaml) — add (do not remove `l2announcements`):
 
 ```yaml
 bgpControlPlane:
@@ -364,7 +364,7 @@ spec:
 
 ### 2a.7 Wire into kustomization
 
-Edit [infra/configs/cilium/kustomization.yaml](../../infra/configs/cilium/kustomization.yaml):
+Edit [infra/configs/cilium/kustomization.yaml](../../reference/configs/cilium/kustomization.yaml):
 
 ```yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
@@ -655,7 +655,7 @@ Run after **24 hours** of clean operation post-4a. No traffic effect — `l2anno
 
 ### 4b.1 Update Helm values
 
-Edit [infra/controllers/cilium/values.yaml](../../infra/controllers/cilium/values.yaml):
+Edit [infra/controllers/cilium/values.yaml](../../reference/controllers/cilium/values.yaml):
 
 ```yaml
 l2announcements:
@@ -728,7 +728,7 @@ groups:
 
 ### 5.2 Update infra docs
 
-Edit [docs/infra/cilium.md](../infra/cilium.md) — replace any "L2 announcements" wording with "BGP peering with the UCGF (AS 65010 ↔ 65100)". Reference `docs/infra/ucgf-bgp-frr.conf`.
+Edit [docs/reference/cilium.md](../reference/cilium.md) — replace any "L2 announcements" wording with "BGP peering with the UCGF (AS 65010 ↔ 65100)". Reference `docs/reference/ucgf-bgp-frr.conf`.
 
 ### 5.3 Mark this plan completed
 
@@ -787,7 +787,7 @@ If a future requirement demands BGP from CP nodes (e.g., advertising pod CIDRs f
 
 ## Out of scope
 
-- **`k8sServiceHost: "10.42.2.20"` SPOF.** [`infra/controllers/cilium/values.yaml`](../../infra/controllers/cilium/values.yaml) hardcodes Cilium's API-server endpoint to one CP node IP. With 3 CP nodes, this is a SPOF for Cilium → kube-apiserver. **Not part of this migration.** File a follow-up issue; consider switching to `k8sServiceHost: "auto"` or a CP VIP.
+- **`k8sServiceHost: "10.42.2.20"` SPOF.** [`infra/controllers/cilium/values.yaml`](../../reference/controllers/cilium/values.yaml) hardcodes Cilium's API-server endpoint to one CP node IP. With 3 CP nodes, this is a SPOF for Cilium → kube-apiserver. **Not part of this migration.** File a follow-up issue; consider switching to `k8sServiceHost: "auto"` or a CP VIP.
 - **`externalTrafficPolicy: Local`.** All LB services use `Cluster`. Switching to `Local` preserves source IP and avoids the second hop, but reduces ECMP path count to "nodes hosting the backing pod." Separate decision; not part of BGP migration.
 - **BGP authentication (MD5 / TCP-AO).** Skipped — the cluster and gateway share a private LAN segment with no untrusted peers. Add later if multiple BGP speakers are introduced.
 - **Pod CIDR / Egress Gateway via BGP.** Out of scope; this migration only changes how LB IPs are advertised.

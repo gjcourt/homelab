@@ -162,7 +162,7 @@ This failure accumulated silently over 12 days. The cluster had no alerting that
 ## References
 
 - [PR #197 — fix(immich): increase machine-learning liveness probe thresholds for ROCm](https://github.com/gjcourt/homelab/pull/197)
-- [docs/guides/synology-iscsi-operations.md](../guides/synology-iscsi-operations.md)
-- [docs/incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md](2026-02-27-homeassistant-staging-iscsi-io-error.md)
-- [docs/incidents/2026-02-20-immich-staging-wal-archive-failure.md](2026-02-20-immich-staging-wal-archive-failure.md)
+- [docs/operations/synology-iscsi-operations.md](../synology-iscsi-operations.md)
+- [docs/operations/incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md](2026-02-27-homeassistant-staging-iscsi-io-error.md)
+- [docs/operations/incidents/2026-02-20-immich-staging-wal-archive-failure.md](2026-02-20-immich-staging-wal-archive-failure.md)
 - CloudNative-PG docs: [Replica recovery](https://cloudnative-pg.io/documentation/current/replica_cluster/)

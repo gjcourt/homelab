@@ -27,10 +27,10 @@ The repository follows a **dry (Don't Repeat Yourself)** structure using Kustomi
 
 | Task | Guide |
 |------|-------|
-| **Submit a Change** | [Workflow & PRs](docs/guides/making-changes.md) |
+| **Submit a Change** | [Workflow & PRs](docs/operations/making-changes.md) |
 | **Add a New App**   | [App Structure](docs/architecture/overlays-and-structure.md) |
-| **Debug Deployment**| [Flux & Debugging](docs/guides/flux-and-deployments.md) |
-| **Storage Issues**  | [Synology iSCSI Ops](docs/guides/synology-iscsi-operations.md) |
+| **Debug Deployment**| [Flux & Debugging](docs/operations/flux-and-deployments.md) |
+| **Storage Issues**  | [Synology iSCSI Ops](docs/operations/synology-iscsi-operations.md) |
 | **Update Apps List**| `scripts/update-apps-readme.sh` |
 
 ### Quick Commands

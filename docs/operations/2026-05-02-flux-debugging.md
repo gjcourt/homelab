@@ -61,7 +61,7 @@ git log --oneline origin/master..origin/staging
 gh workflow run staging-deploy.yaml
 ```
 
-See `../guides/staging-workflow.md` for the full workflow detail (until that guide is migrated into `operations/`).
+See [`staging-workflow.md`](staging-workflow.md) for the full workflow detail.
 
 ## Rollback
 

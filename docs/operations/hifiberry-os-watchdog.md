@@ -3,7 +3,7 @@
 Documents the watchdog installed on `kitchen` (10.42.2.38) and `living-room`
 (10.42.2.39) to automatically recover the beocreate2 web UI when it gets stuck.
 
-**Incident context:** [2026-04-25 HifiBerry UI TCP socket exhaustion](../incidents/2026-04-25-hifiberry-ui-tcp-socket-exhaustion.md)
+**Incident context:** [2026-04-25 HifiBerry UI TCP socket exhaustion](incidents/2026-04-25-hifiberry-ui-tcp-socket-exhaustion.md)
 
 ---
 

@@ -54,7 +54,7 @@ A separate btrfs I/O fault caused the memos production CNPG primary pod's PV to 
 pq: could not open file "base/16385/16479": Read-only file system
 ```
 
-This is the same class of failure documented in previous incidents. See [2026-02-08-pv-recovery.md](2026-02-08-pv-recovery.md) and [synology-iscsi-operations.md](../guides/synology-iscsi-operations.md).
+This is the same class of failure documented in previous incidents. See [2026-02-08-pv-recovery.md](2026-02-08-pv-recovery.md) and [synology-iscsi-operations.md](../synology-iscsi-operations.md).
 
 ---
 
@@ -121,4 +121,4 @@ kubectl get pods -n memos-prod
 - [Authelia OIDC clients — token_endpoint_auth_method](https://www.authelia.com/configuration/identity-providers/openid-connect/clients/)
 - [mozilla-django-oidc](https://github.com/mozilla/mozilla-django-oidc)
 - PR #190 (partial fix for memos)
-- [synology-iscsi-operations.md](../guides/synology-iscsi-operations.md)
+- [synology-iscsi-operations.md](../synology-iscsi-operations.md)

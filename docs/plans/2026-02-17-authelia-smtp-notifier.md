@@ -1,11 +1,11 @@
 ---
-status: planned
-last_modified: 2026-02-27
+status: in-progress
+last_modified: 2026-05-03
 ---
 
 # Plan: Authelia SMTP notifier
 
-## Status: Not started
+## Status: Config landed; awaiting SMTP password in SOPS secret
 
 ## Problem
 

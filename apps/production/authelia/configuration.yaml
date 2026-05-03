@@ -36,8 +36,12 @@ storage:
     path: /config/db.sqlite3
 
 notifier:
-  filesystem:
-    filename: /config/notification.txt
+  smtp:
+    address: submissions://smtp.gmail.com:465
+    username: gjcourt@gmail.com
+    sender: "Authelia <gjcourt@gmail.com>"
+    subject: "[Authelia] {title}"
+    disable_require_tls: false
 
 telemetry:
   metrics:

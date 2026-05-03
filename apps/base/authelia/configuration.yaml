@@ -11,6 +11,7 @@ log:
 # - AUTHELIA_SESSION_SECRET
 # - AUTHELIA_STORAGE_ENCRYPTION_KEY
 # - AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET
+# - AUTHELIA_NOTIFIER_SMTP_PASSWORD
 
 authentication_backend:
   file:
@@ -43,8 +44,16 @@ storage:
     path: /config/db.sqlite3
 
 notifier:
-  filesystem:
-    filename: /config/notification.txt
+  # SMTP via Gmail submission port 465 (implicit TLS).
+  # Password is injected from the authelia-secrets Secret as
+  # AUTHELIA_NOTIFIER_SMTP_PASSWORD (a Google app-password — generate one at
+  # https://myaccount.google.com/apppasswords).
+  smtp:
+    address: submissions://smtp.gmail.com:465
+    username: gjcourt@gmail.com
+    sender: "Authelia <gjcourt@gmail.com>"
+    subject: "[Authelia] {title}"
+    disable_require_tls: false
 
 identity_providers:
   oidc:

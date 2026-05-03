@@ -5,8 +5,8 @@ Memos is an open-source, self-hosted memo hub with knowledge management and soci
 
 ## 2. Architecture
 Memos is deployed as a Kubernetes `Deployment` with a single replica in the `memos-prod` (and `memos-stage`) namespace.
-- **Database**: Uses a CloudNativePG (CNPG) PostgreSQL cluster (`memos-db-production-cnpg-v1`) for data storage.
-- **Storage**: The application itself is stateless, relying entirely on the PostgreSQL database.
+- **Database**: Uses a CloudNativePG (CNPG) PostgreSQL cluster (`memos-db-production-cnpg-v1`) with 3 instances for structured data (memo content, tags, user accounts, OIDC state). Enabled via `MEMOS_DRIVER: postgres`.
+- **Storage**: A 1Gi PersistentVolumeClaim (`memos-data-pvc`) is mounted at `/var/opt/memos` for file attachments and uploaded resources. Memos writes blobs to the local filesystem regardless of the database driver, so the PVC is required even with PostgreSQL.
 - **Networking**: Exposed via Cilium Gateway API (`HTTPRoute`).
 
 ## 3. URLs
@@ -47,11 +47,12 @@ To verify Memos is working:
 
 ## 8. Disaster Recovery
 - **Backup Strategy**:
-  - The PostgreSQL database is backed up to S3 (MinIO/AWS) using CNPG's Barman integration (Note: currently pending S3 credentials configuration).
+  - The PostgreSQL database is backed up continuously to `s3://gjcourt-homelab-backup/production/memos` via the Barman Cloud Plugin (WAL archiving + daily base backups, gzip-compressed, 30-day retention).
+  - The `memos-data-pvc` is backed up via Synology Snapshot Replication.
 - **Restore Procedure**:
-  1. Uncomment the `recovery` section in the `database.yaml` CNPG `Cluster` definition.
+  1. Uncomment the `recovery` section in `apps/production/memos/database.yaml`.
   2. Comment out the `initdb` section.
-  3. Apply the changes to bootstrap a new cluster from the backup.
+  3. Apply the changes; CNPG will bootstrap a new cluster from the S3 backup via PITR.
 
 ## 9. Troubleshooting
 - **Database Connection Errors**:

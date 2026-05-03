@@ -1,6 +1,6 @@
 ---
-status: in-progress
-last_modified: 2026-02-28
+status: complete
+last_modified: 2026-05-03
 ---
 
 # Application Health Dashboards Plan
@@ -46,40 +46,15 @@ Instead of maintaining individual dashboards for each application, we will deplo
 - [x] Remove legacy individual dashboards from `apps/base`.
 
 ### Phase 2: Enhanced Metrics
-- [ ] Integrate Cilium/Envoy metrics for Request/Error/Latency rows.
+- [ ] Integrate Cilium/Hubble metrics for Request/Error/Latency rows — deferred; requires Hubble flow metrics to be exposed per-namespace, separate initiative.
 - [x] Add basic storage (PVC) usage metrics.
 
 ### Phase 3: Alerting
 - [x] Define universal alerts for High CPU, OOM Kills, and CrashLoopBackOff.
 
-### Phase 2: Core Application Dashboards
+### Per-App Dashboards — Superseded
 
-Create dashboards for the most critical applications:
-
-*   [ ] **Authelia**: Monitor authentication requests, failures, and SSO performance.
-*   [ ] **AdGuard Home**: Monitor DNS query volume, blocked requests, and upstream latency.
-*   [ ] **Homepage**: Monitor page load times and widget API request success rates.
-
-### Phase 3: Media & Data Application Dashboards
-
-Create dashboards for resource-intensive applications:
-
-*   [ ] **Immich**: Monitor machine learning job queues, transcoding performance, and database vector search latency.
-*   [ ] **Jellyfin**: Monitor active streams, transcoding CPU/GPU usage, and library scan progress.
-*   [ ] **Navidrome**: Monitor active streams and library scan progress.
-*   [ ] **Audiobookshelf**: Monitor active streams and library scan progress.
-*   [ ] **Snapcast**: Monitor active clients, stream latency, and buffer underruns.
-
-### Phase 4: Utility Application Dashboards
-
-Create dashboards for the remaining applications:
-
-*   [ ] **Memos**: Monitor API request rates and database performance.
-*   [ ] **Linkding**: Monitor API request rates and database performance.
-*   [ ] **Mealie**: Monitor API request rates and database performance.
-*   [ ] **GoLinks**: Monitor redirect latency and database performance.
-*   [ ] **Excalidraw**: Monitor active sessions and WebSocket connections.
-*   [ ] **Vitals**: Monitor API request rates and database performance.
+Individual per-app dashboards (originally planned for Authelia, AdGuard, Immich, Jellyfin, etc.) are superseded by the generic Application Health dashboard, which covers CPU, memory, network I/O, and PVC usage for any namespace/pod via template variables. Per-app dashboards provide diminishing returns without app-specific instrumentation (e.g., custom metrics from Authelia or Immich) that is not yet in place.
 
 ## Implementation Details
 

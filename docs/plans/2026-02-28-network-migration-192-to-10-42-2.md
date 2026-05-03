@@ -37,7 +37,7 @@ reach the NAS.
 
 ### 1.1 Cilium LoadBalancer IP Pool
 
-**File:** [`infra/configs/cilium/load-balancer-ip-pool.yaml`](../../infra/configs/cilium/load-balancer-ip-pool.yaml)
+**File:** [`infra/configs/cilium/load-balancer-ip-pool.yaml`](../../reference/configs/cilium/load-balancer-ip-pool.yaml)
 
 The file already contains the new range commented out. Replace the active block:
 
@@ -64,7 +64,7 @@ spec:
 
 ### 1.2 Synology CSI Driver Values
 
-**File:** [`infra/controllers/synology-csi/values.yaml`](../../infra/controllers/synology-csi/values.yaml)
+**File:** [`infra/controllers/synology-csi/values.yaml`](../../reference/controllers/synology-csi/values.yaml)
 
 Three `dsm:` fields reference the NAS. Change each:
 
@@ -82,7 +82,7 @@ Three `dsm:` fields reference the NAS. Change each:
 
 ### 1.3 Synology CSI Secret (`client-info.yaml`)
 
-**File:** [`infra/controllers/synology-csi/secret-client-info.yaml`](../../infra/controllers/synology-csi/secret-client-info.yaml)
+**File:** [`infra/controllers/synology-csi/secret-client-info.yaml`](../../reference/controllers/synology-csi/secret-client-info.yaml)
 
 The secret is SOPS-encrypted. Decrypt, verify whether the DSM URL inside
 `client-info.yml` embeds a host IP (common in the Synology CSI YAML format),
@@ -120,19 +120,19 @@ must point at the **correct new gateway IP for that environment**.
 
 **Files to update (staging — `ip: "192.168.5.30"` → `ip: "10.42.2.41"`):**
 
-- [`apps/staging/audiobookshelf/deployment-patch.yaml`](../../apps/staging/audiobookshelf/deployment-patch.yaml)
-- [`apps/staging/immich/deployment-patch.yaml`](../../apps/staging/immich/deployment-patch.yaml)
-- [`apps/staging/linkding/deployment-patch.yaml`](../../apps/staging/linkding/deployment-patch.yaml)
-- [`apps/staging/mealie/deployment-patch.yaml`](../../apps/staging/mealie/deployment-patch.yaml)
-- [`apps/staging/memos/deployment-patch.yaml`](../../apps/staging/memos/deployment-patch.yaml)
+- [`apps/staging/audiobookshelf/deployment-patch.yaml`](../../operations/apps/staging/audiobookshelf/deployment-patch.yaml)
+- [`apps/staging/immich/deployment-patch.yaml`](../../operations/apps/staging/immich/deployment-patch.yaml)
+- [`apps/staging/linkding/deployment-patch.yaml`](../../operations/apps/staging/linkding/deployment-patch.yaml)
+- [`apps/staging/mealie/deployment-patch.yaml`](../../operations/apps/staging/mealie/deployment-patch.yaml)
+- [`apps/staging/memos/deployment-patch.yaml`](../../operations/apps/staging/memos/deployment-patch.yaml)
 
 **Files to update (production — `ip: "192.168.5.33"` → `ip: "10.42.2.40"`):**
 
-- [`apps/production/audiobookshelf/deployment-patch.yaml`](../../apps/production/audiobookshelf/deployment-patch.yaml)
-- [`apps/production/immich/deployment-patch.yaml`](../../apps/production/immich/deployment-patch.yaml)
-- [`apps/production/linkding/deployment-patch.yaml`](../../apps/production/linkding/deployment-patch.yaml)
-- [`apps/production/mealie/deployment-patch.yaml`](../../apps/production/mealie/deployment-patch.yaml)
-- [`apps/production/memos/deployment-patch.yaml`](../../apps/production/memos/deployment-patch.yaml)
+- [`apps/production/audiobookshelf/deployment-patch.yaml`](../../operations/apps/production/audiobookshelf/deployment-patch.yaml)
+- [`apps/production/immich/deployment-patch.yaml`](../../operations/apps/production/immich/deployment-patch.yaml)
+- [`apps/production/linkding/deployment-patch.yaml`](../../operations/apps/production/linkding/deployment-patch.yaml)
+- [`apps/production/mealie/deployment-patch.yaml`](../../operations/apps/production/mealie/deployment-patch.yaml)
+- [`apps/production/memos/deployment-patch.yaml`](../../operations/apps/production/memos/deployment-patch.yaml)
 
 ### 2.2 NFS PersistentVolume Server Addresses
 
@@ -141,11 +141,11 @@ Change `192.168.5.8` → `10.42.2.11` in each:
 
 | File | Notes |
 |---|---|
-| [`apps/base/jellyfin/media/nfs-media.yaml`](../../apps/base/jellyfin/media/nfs-media.yaml) | Three separate PV definitions |
-| [`apps/production/navidrome/nfs-music.yaml`](../../apps/production/navidrome/nfs-music.yaml) | Production music share |
-| [`apps/staging/navidrome/nfs-music.yaml`](../../apps/staging/navidrome/nfs-music.yaml) | Staging music share |
-| [`apps/production/immich/nfs-photos.yaml`](../../apps/production/immich/nfs-photos.yaml) | Production photos share |
-| [`apps/staging/immich/nfs-photos.yaml`](../../apps/staging/immich/nfs-photos.yaml) | Staging photos share |
+| [`apps/base/jellyfin/media/nfs-media.yaml`](../../operations/apps/base/jellyfin/media/nfs-media.yaml) | Three separate PV definitions |
+| [`apps/production/navidrome/nfs-music.yaml`](../../operations/apps/production/navidrome/nfs-music.yaml) | Production music share |
+| [`apps/staging/navidrome/nfs-music.yaml`](../../operations/apps/staging/navidrome/nfs-music.yaml) | Staging music share |
+| [`apps/production/immich/nfs-photos.yaml`](../../operations/apps/production/immich/nfs-photos.yaml) | Production photos share |
+| [`apps/staging/immich/nfs-photos.yaml`](../../operations/apps/staging/immich/nfs-photos.yaml) | Staging photos share |
 
 > Changing the `server` field on an existing `PersistentVolume` requires
 > **deleting and recreating the PV** if the volume is in `Released` or
@@ -155,7 +155,7 @@ Change `192.168.5.8` → `10.42.2.11` in each:
 
 ### 2.3 Synology iSCSI Monitor
 
-**File:** [`apps/base/synology-iscsi-monitor/deployment.yaml`](../../apps/base/synology-iscsi-monitor/deployment.yaml)
+**File:** [`apps/base/synology-iscsi-monitor/deployment.yaml`](../../operations/apps/base/synology-iscsi-monitor/deployment.yaml)
 
 ```yaml
 # Before
@@ -165,7 +165,7 @@ value: "192.168.5.8"
 value: "10.42.2.11"
 ```
 
-**File:** [`apps/base/synology-iscsi-monitor/script-cm.yaml`](../../apps/base/synology-iscsi-monitor/script-cm.yaml)
+**File:** [`apps/base/synology-iscsi-monitor/script-cm.yaml`](../../operations/apps/base/synology-iscsi-monitor/script-cm.yaml)
 
 ```python
 # Before (default fallback)
@@ -177,7 +177,7 @@ SYNOLOGY_IP = os.environ.get("SYNOLOGY_IP", "10.42.2.11")
 
 ### 2.4 Home Assistant Trusted Proxies
 
-**File:** [`apps/base/homeassistant/configmap.yaml`](../../apps/base/homeassistant/configmap.yaml)
+**File:** [`apps/base/homeassistant/configmap.yaml`](../../operations/apps/base/homeassistant/configmap.yaml)
 
 Home Assistant trusts Envoy traffic arriving from the host network CIDR:
 
@@ -208,8 +208,8 @@ url: https://10.42.2.11:5001
 
 **Files:**
 
-- [`apps/staging/homepage/services.yaml`](../../apps/staging/homepage/services.yaml)
-- [`apps/production/homepage/services.yaml`](../../apps/production/homepage/services.yaml)
+- [`apps/staging/homepage/services.yaml`](../../operations/apps/staging/homepage/services.yaml)
+- [`apps/production/homepage/services.yaml`](../../operations/apps/production/homepage/services.yaml)
 
 ---
 
@@ -220,23 +220,23 @@ Update all documentation that references old IPs so that runbooks remain accurat
 | File | What to update |
 |---|---|
 | [`docs/architecture/dns-strategy.md`](../architecture/dns-strategy.md) | All `192.168.5.30/31` gateway IP references; LB pool range; table of AdGuard rewrites |
-| [`docs/infra/cilium.md`](../infra/cilium.md) | LB pool range `192.168.5.30 – 192.168.5.255` |
-| [`docs/infra/storage.md`](../infra/storage.md) | NAS IP `192.168.5.8`, DSM URL |
-| [`docs/infra/kernel-log-shipping.md`](../infra/kernel-log-shipping.md) | Node IP `192.168.5.1` (three occurrences); use `10.42.2.20` as an example node |
-| [`docs/apps/linkding.md`](../apps/linkding.md) | Gateway IP in SSO integration note (`192.168.5.33`) |
-| [`docs/apps/mealie.md`](../apps/mealie.md) | Gateway IP in SSO integration note (`192.168.5.33`) |
-| [`docs/apps/memos.md`](../apps/memos.md) | Gateway IP in SSO integration note (`192.168.5.33`) |
-| [`docs/guides/synology-iscsi-operations.md`](../guides/synology-iscsi-operations.md) | NAS IP `192.168.5.8` (diagram + export line) |
+| [`docs/reference/cilium.md`](../reference/cilium.md) | LB pool range `192.168.5.30 – 192.168.5.255` |
+| [`docs/reference/storage.md`](../reference/storage.md) | NAS IP `192.168.5.8`, DSM URL |
+| [`docs/reference/kernel-log-shipping.md`](../reference/kernel-log-shipping.md) | Node IP `192.168.5.1` (three occurrences); use `10.42.2.20` as an example node |
+| [`docs/operations/apps/linkding.md`](../operations/apps/linkding.md) | Gateway IP in SSO integration note (`192.168.5.33`) |
+| [`docs/operations/apps/mealie.md`](../operations/apps/mealie.md) | Gateway IP in SSO integration note (`192.168.5.33`) |
+| [`docs/operations/apps/memos.md`](../operations/apps/memos.md) | Gateway IP in SSO integration note (`192.168.5.33`) |
+| [`docs/operations/synology-iscsi-operations.md`](../operations/synology-iscsi-operations.md) | NAS IP `192.168.5.8` (diagram + export line) |
 | [`docs/plans/authelia-sso-rollout.md`](authelia-sso-rollout.md) | Staging `192.168.5.30` and prod `192.168.5.33` references |
 | [`scripts/synology/README.md`](../../scripts/synology/README.md) | `SYNOLOGY_HOST` example value |
 | [`.github/instructions/synology.instructions.md`](../../.github/instructions/synology.instructions.md) | NAS IP (`192.168.5.8`) and DSM URL in both locations |
 
-> `docs/incidents/` files are **historical records and should NOT be edited**;
+> `docs/operations/incidents/` files are **historical records and should NOT be edited**;
 > they accurately describe the environment at the time of the incident.
 
 ### 3.1 vector nodeport comment
 
-**File:** [`infra/controllers/vector/nodeport.yaml`](../../infra/controllers/vector/nodeport.yaml)
+**File:** [`infra/controllers/vector/nodeport.yaml`](../../reference/controllers/vector/nodeport.yaml)
 
 Update the header comment to reflect the new node IP range:
 
@@ -277,7 +277,7 @@ talosctl -n <node-new-ip> patch machineconfig \
 > The NodePort `30600` is unchanged. The destination host must be a node IP
 > in `10.42.2.20` (each node should point at **its own IP** so that
 > `externalTrafficPolicy: Local` routes correctly). See
-> [`docs/infra/kernel-log-shipping.md`](../infra/kernel-log-shipping.md) for full context.
+> [`docs/reference/kernel-log-shipping.md`](../reference/kernel-log-shipping.md) for full context.
 
 ### 4.3 AdGuard Home — DNS Rewrites
 
@@ -391,13 +391,13 @@ kubectl -n monitoring logs ds/vector | grep "talos-logs" | tail -10
 | `apps/staging/memos/deployment-patch.yaml` | `hostAliases ip:` → `10.42.2.41` |
 | `apps/staging/homepage/services.yaml` | DSM href/url → `10.42.2.11:5001` |
 | `docs/architecture/dns-strategy.md` | All gateway and pool IP references |
-| `docs/infra/cilium.md` | LB pool range |
-| `docs/infra/storage.md` | NAS IP and DSM URL |
-| `docs/infra/kernel-log-shipping.md` | Node IP example (`192.168.5.1` × 3) |
-| `docs/apps/linkding.md` | Gateway IP in SSO note |
-| `docs/apps/mealie.md` | Gateway IP in SSO note |
-| `docs/apps/memos.md` | Gateway IP in SSO note |
-| `docs/guides/synology-iscsi-operations.md` | NAS IP in diagram and export |
+| `docs/reference/cilium.md` | LB pool range |
+| `docs/reference/storage.md` | NAS IP and DSM URL |
+| `docs/reference/kernel-log-shipping.md` | Node IP example (`192.168.5.1` × 3) |
+| `docs/operations/apps/linkding.md` | Gateway IP in SSO note |
+| `docs/operations/apps/mealie.md` | Gateway IP in SSO note |
+| `docs/operations/apps/memos.md` | Gateway IP in SSO note |
+| `docs/operations/synology-iscsi-operations.md` | NAS IP in diagram and export |
 | `docs/plans/authelia-sso-rollout.md` | Staging/prod gateway IPs |
 | `scripts/synology/README.md` | `SYNOLOGY_HOST` example |
 | `.github/instructions/synology.instructions.md` | NAS IP and DSM URL |

@@ -10,11 +10,14 @@ Runbooks, smoke tests, and on-call procedures.
 **Do not put here:**
 - Component reference (Cilium config schema, cert-manager issuer recipes) — `reference/`.
 - Architecture overview — `architecture/`.
-- Per-app feature docs — `apps/` (until that folder migrates here).
 
-**Naming convention:** `<yyyy-mm-dd>-<topic>.md`.
+**Subfolders:**
+- [`apps/`](apps/) — per-app runbooks, one file per app (e.g. `apps/adguard.md`).
+- [`incidents/`](incidents/) — incident postmortems, named `<yyyy-mm-dd>-<topic>.md`.
+
+**Naming convention:** `<yyyy-mm-dd>-<topic>.md` for new top-level operations docs.
 Examples: `2026-05-02-flux-debugging.md`, `2026-05-02-adding-an-app.md`, `2026-05-02-cnpg-backup-recovery.md`.
 
-**Allowed `status:` values:** `Stable`, `Superseded`.
+How-to guides migrated from `docs/guides/` on 2026-05-02 keep their original names as a grandfathered exception (e.g. `synology-iscsi-operations.md`, `staging-workflow.md`).
 
-Historical note: `docs/apps/`, `docs/guides/`, and `docs/incidents/` predate this folder; per-doc migration is tracked in `docs/plans/2026-02-21-documentation-rewrite-plan.md`. Cross-link rather than duplicate.
+**Allowed `status:` values:** `Stable`, `Superseded`.

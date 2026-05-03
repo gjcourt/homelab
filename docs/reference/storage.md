@@ -70,5 +70,5 @@ kubectl get pvc example-pvc
 - **PVC stuck in Pending**:
   - Check the CSI controller logs for API errors (e.g., invalid credentials, target limits reached).
   - Verify the Synology NAS is reachable from the cluster.
-- **iSCSI Zombie Targets**: The Synology NAS has a hard limit of 128 iSCSI targets. If this limit is reached, new PVCs cannot be provisioned. See `docs/guides/synology-iscsi-operations.md` for cleanup procedures.
+- **iSCSI Zombie Targets**: The Synology NAS has a hard limit of 128 iSCSI targets. If this limit is reached, new PVCs cannot be provisioned. See `docs/operations/synology-iscsi-operations.md` for cleanup procedures.
 - **Volume Attachment Issues**: If a pod is stuck terminating and the volume cannot be detached, you may need to force delete the pod or manually disconnect the iSCSI session on the node.

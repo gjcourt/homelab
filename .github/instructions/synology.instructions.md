@@ -68,6 +68,6 @@ kubectl get pv | grep Released
 
 ## Documentation references
 
-- Operations runbook: `docs/guides/synology-iscsi-operations.md`
-- Cleanup concepts: `docs/guides/synology-iscsi-cleanup.md`
-- Incident postmortems: `docs/incidents/`
+- Operations runbook: `docs/operations/synology-iscsi-operations.md`
+- Cleanup concepts: `docs/operations/synology-iscsi-cleanup.md`
+- Incident postmortems: `docs/operations/incidents/`

@@ -45,6 +45,8 @@ Sorted by filing date (newest first).
 
 | File | Status | Description |
 | :--- | :--- | :--- |
+| [2026-05-02-hestia-gha-runner.md](2026-05-02-hestia-gha-runner.md) | `planned` | Self-hosted GHA runner on hestia for auto-deploy of Custom App compose changes |
+| [2026-05-02-hermes-bot-k8s.md](2026-05-02-hermes-bot-k8s.md) | `planned` | Hermes agent (Signal mode) deployed to melodic-muse so the bot is laptop-independent |
 | [2026-05-02-signal-cli-hermes-rollout.md](2026-05-02-signal-cli-hermes-rollout.md) | `planned` | Signal-cli + signal-bridge stack to feed the Hermes agent |
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | `planned` | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | `planned` | Navidrome → Mopidy → Snapcast → HifiBerry whole-house audio |

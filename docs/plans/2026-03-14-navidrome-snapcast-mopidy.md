@@ -392,7 +392,7 @@ Connect to Snapcast LB IP on port 6600.
 - [ ] Validate: `kubectl kustomize apps/staging/snapcast`
 - [ ] Deploy to staging and test with ncmpcpp
 - [ ] Verify audio on one HifiBerry before promoting to production
-- [ ] Update `docs/apps/snapcast.md` to document the new stream
+- [ ] Update `docs/operations/apps/snapcast.md` to document the new stream
 
 ---
 

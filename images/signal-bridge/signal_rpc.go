@@ -124,6 +124,7 @@ func (s *SignalRPC) receive(account string) ([]map[string]interface{}, error) {
 
 	params := map[string]interface{}{
 		"maxMessages": 50,
+		"timeout":     1,
 	}
 	if account != "" {
 		params["account"] = account

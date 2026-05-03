@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mopidy-config
+  namespace: snapcast
+  labels:
+    app: snapcast
+data:
+  # Mounted at /etc/mopidy/mopidy.conf in the mopidy sidecar. The sidecar's
+  # entrypoint runs `envsubst` to expand the ${NAVIDROME_*} env vars from the
+  # navidrome-credentials Secret before invoking mopidy.
+  mopidy.conf: |
+    [core]
+    data_dir = /mopidy-state
+    cache_dir = /tmp/mopidy-cache
+
+    [logging]
+    verbosity = 0
+
+    [mpd]
+    enabled = true
+    # Listen on all interfaces inside the pod; the snapcast Service exposes
+    # port 6600 to LAN clients (Symfonium, MALP, ncmpcpp, etc.).
+    hostname = ::
+    port = 6600
+
+    [subidy]
+    url = ${NAVIDROME_URL}
+    username = ${NAVIDROME_USER}
+    password = ${NAVIDROME_PASSWORD}
+    # Navidrome implements OpenSubsonic — the 1.16.1 API surface is what
+    # mopidy-subidy targets.
+    api_version = 1.16.1
+
+    [file]
+    enabled = false
+
+    [local]
+    enabled = false
+
+    [audio]
+    # Pipe raw PCM into the shared FIFO that snapserver reads. The full
+    # GStreamer pipeline is required so the bytes on the wire are raw S16LE
+    # at 44.1kHz/stereo — `filesink` alone would emit a container format that
+    # snapserver cannot parse.
+    output = audioresample ! audioconvert ! audio/x-raw,rate=44100,channels=2,format=S16LE ! filesink location=/audio/navidrome.fifo

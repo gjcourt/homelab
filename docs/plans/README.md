@@ -49,7 +49,7 @@ Sorted by filing date (newest first).
 | [2026-05-02-hermes-bot-k8s.md](2026-05-02-hermes-bot-k8s.md) | `in-progress` | Hermes agent (Signal mode) deployed to melodic-muse so the bot is laptop-independent |
 | [2026-05-02-signal-cli-hermes-rollout.md](2026-05-02-signal-cli-hermes-rollout.md) | `superseded` | Signal-cli + signal-bridge stack to feed the Hermes agent (replaced by hermes-bot-k8s.md) |
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | `complete` | IaC hardening — close the 22 findings from the 2026-05-02 critique |
-| [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | `planned` | Navidrome → Mopidy → Snapcast → HifiBerry whole-house audio |
+| [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | `in-progress` | Navidrome → Mopidy → Snapcast → HifiBerry whole-house audio |
 | [2026-03-08-drawer-inserts.md](2026-03-08-drawer-inserts.md) | `planned` | Cardboard drawer insert design (75×32×12 cm) |
 | [2026-03-08-bgp-rollout.md](2026-03-08-bgp-rollout.md) | `planned` | Move LoadBalancer IP advertisement from L2 to BGP with the UCGF |
 | [2026-03-08-adguard-dns-rollout.md](2026-03-08-adguard-dns-rollout.md) | `in-progress` | Roll AdGuard Home as the homelab DNS resolver |

@@ -88,6 +88,33 @@ spec:
             - name: audio-pipes
               mountPath: /audio
 
+        - name: init-navidrome-fifo
+          # busybox 1.37
+          image: busybox@sha256:1487d0af5f52b4ba31c7e465126ee2123fe3f2305d638e7827681e7cf6c83d5e
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              rm -f /audio/navidrome.fifo
+              mkfifo /audio/navidrome.fifo
+              chmod 666 /audio/navidrome.fifo
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: audio-pipes
+              mountPath: /audio
+
       containers:
         - name: snapserver
           image: gjcourt/snapcast:0.34.0-snapweb0.9.3
@@ -179,6 +206,70 @@ spec:
               cpu: 1000m
               memory: 512Mi
 
+        - name: mopidy
+          # gjcourt/mopidy:3.4.2-1 — first-party image built from images/mopidy/
+          # (Phase 1 of docs/plans/2026-03-14-navidrome-snapcast-mopidy.md). After
+          # the first build, this should be digest-pinned per AGENTS.md image
+          # discipline; tag-only is acceptable while bootstrapping the image.
+          image: gjcourt/mopidy:3.4.2-1
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: NAVIDROME_URL
+              valueFrom:
+                secretKeyRef:
+                  name: navidrome-credentials
+                  key: NAVIDROME_URL
+            - name: NAVIDROME_USER
+              valueFrom:
+                secretKeyRef:
+                  name: navidrome-credentials
+                  key: NAVIDROME_USER
+            - name: NAVIDROME_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: navidrome-credentials
+                  key: NAVIDROME_PASSWORD
+            - name: HOME
+              value: /mopidy-state
+          ports:
+            - name: mpd
+              containerPort: 6600
+          command:
+            - sh
+            - -c
+            - |
+              # Substitute env vars into the templated config before starting.
+              # gettext-base provides envsubst in the python:slim base image.
+              envsubst < /etc/mopidy/mopidy.conf > /tmp/mopidy.conf
+              exec mopidy --config /tmp/mopidy.conf
+          readinessProbe:
+            tcpSocket:
+              port: mpd
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          volumeMounts:
+            - name: mopidy-config
+              mountPath: /etc/mopidy/mopidy.conf
+              subPath: mopidy.conf
+              readOnly: true
+            - name: mopidy-state
+              mountPath: /mopidy-state
+            - name: audio-pipes
+              mountPath: /audio
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
       volumes:
         - name: snapserver-config
           configMap:
@@ -193,3 +284,9 @@ spec:
         - name: go-librespot-config
           configMap:
             name: go-librespot-config
+        - name: mopidy-config
+          configMap:
+            name: mopidy-config
+        - name: mopidy-state
+          persistentVolumeClaim:
+            claimName: snapcast-mopidy-state

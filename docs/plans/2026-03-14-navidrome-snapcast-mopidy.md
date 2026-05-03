@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-03-14
+last_modified: 2026-05-03
 ---
 
 # Navidrome → Mopidy → Snapcast → HifiBerry Integration Plan
@@ -412,3 +412,20 @@ Connect to Snapcast LB IP on port 6600.
   ```
 - If the Navidrome URL changes or credentials rotate, only the SOPS secret needs updating
   — no manifest changes required.
+
+---
+
+## Survey 2026-05-03
+
+**Current state:** Not started. Navidrome and Snapcast both run in production (`apps/base/navidrome/`, `apps/base/snapcast/`), but Mopidy is entirely absent — `grep -r mopidy apps/` returns nothing, no init container for the FIFO, no sidecar, no config map, no PVC. All 8 implementation checklist items in the plan are outstanding.
+
+**Outstanding next steps (per the plan):**
+
+1. Build and push `gjcourt/mopidy:3.4.2-1` multi-arch image (Phase 1).
+2. SOPS-encrypt `apps/base/snapcast/secret-navidrome-credentials.yaml`.
+3. Add the `init-navidrome-fifo` initContainer to `apps/base/snapcast/deployment.yaml`.
+4. Add the Mopidy sidecar container with all env vars + volume mounts.
+5. Add the Navidrome stream source to the snapcast ConfigMap.
+6. Add `snapcast-mopidy-state` PVC (1Gi, synology-iscsi) to `apps/base/snapcast/storage.yaml`.
+7. Expose MPD port 6600 in `apps/base/snapcast/service.yaml`.
+8. Validate with `kustomize build apps/staging/snapcast`, deploy, smoke-test with an MPD client (e.g., `ncmpcpp -h 10.42.2.X -p 6600`).

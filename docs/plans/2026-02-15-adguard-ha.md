@@ -64,3 +64,16 @@ dig @10.42.2.45 +short example.com
 ```
 
 Full failover drill is in the operations runbook (see Remaining Work item 2).
+
+---
+
+## Survey 2026-05-03
+
+**Current state:** HA primitives are deployed in production — 2 StatefulSet replicas on distinct workers, the config-sync CronJob ran at 06:00 UTC on 2026-05-03, and both DNS LoadBalancers (`10.42.2.43` primary + `10.42.2.45` secondary) are operational. The failover validation runbook lives at [`docs/operations/2026-05-03-adguard-failover-validation.md`](../operations/2026-05-03-adguard-failover-validation.md). The remaining checklist items in the plan are operator-side actions, not IaC.
+
+**Outstanding next steps (operator):**
+
+1. Confirm UniFi DHCP scope option 6 advertises both `10.42.2.43` and `10.42.2.45` to LAN clients.
+2. Run the failover validation drill end-to-end (drain a node, watch the secondary LB take traffic, restore).
+3. Resize the `work-adguard-1` PVC from 1Gi → 5Gi (PVC patch + rollout restart) — current sizing is pinch-point under filter-list growth.
+4. Decide whether the deferred NetworkPolicy hardening (PRs #412 / #413) lands as v1 follow-up or punts to v2.

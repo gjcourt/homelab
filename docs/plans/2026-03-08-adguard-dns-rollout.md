@@ -1,6 +1,6 @@
 ---
-status: planned
-last_modified: 2026-03-07
+status: in-progress
+last_modified: 2026-05-03
 ---
 
 # AdGuard DNS Rollout Plan
@@ -375,3 +375,16 @@ Once you have more nodes, consider the plan in [2026-02-15-adguard-ha.md](2026-0
 2. Allocate a second LB IP for the second pod
 3. Configure UniFi DHCP with both IPs as DNS 1 and DNS 2
 4. Remove `1.1.1.2` as fallback (AdGuard handles its own HA)
+
+---
+
+## Survey 2026-05-03
+
+**Current state:** Most of the rollout is done in advance of this plan being formally tracked. Both AdGuard pods are `Ready`, sync credentials are in place, and DNS LoadBalancer IPs (`10.42.2.43`, `10.42.2.45`) are advertised. The only remaining open question is whether UniFi DHCP option 6 has been switched to point LAN clients at the new resolvers.
+
+**Outstanding next steps:**
+
+1. Verify UniFi DHCP scope option 6 advertises `10.42.2.43` (and ideally `10.42.2.45` as secondary) — operator router-config check.
+2. From a LAN client, confirm `dig @10.42.2.43 example.com` and `dig @10.42.2.43 homepage.burntbytes.com` resolve correctly.
+3. If DNS is healthy from clients, mark Phase 5 done and proceed to Phase 6 (filter lists + monitoring tuning).
+4. If not, walk Phases 1–4 fresh against the current state of the cluster.

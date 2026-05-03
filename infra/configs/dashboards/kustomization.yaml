@@ -3,5 +3,8 @@ kind: Kustomization
 resources:
   - application-health-cm.yaml
   - cluster-overview-cm.yaml
+  - control-plane-cm.yaml
+  - networking-gateway-cm.yaml
   - node-details-cm.yaml
   - overture-cm.yaml
+  - storage-csi-cm.yaml

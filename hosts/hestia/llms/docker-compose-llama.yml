@@ -18,7 +18,7 @@ services:
       --n-gpu-layers 99
       --parallel 1
       --cont-batching
-      --threads 8
+      --threads 9
       --temp 0.6
       --top-k 20
       --top-p 0.95

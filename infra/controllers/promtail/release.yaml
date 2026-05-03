@@ -16,6 +16,11 @@ spec:
         namespace: monitoring
       interval: 12h
 
+  upgrade:
+    remediation:
+      retries: 3
+      strategy: rollback
+
   driftDetection:
     mode: enabled
 

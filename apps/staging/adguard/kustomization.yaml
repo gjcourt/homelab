@@ -29,6 +29,14 @@ patches:
       - op: replace
         path: /metadata/name
         value: adguard-stage
+      # Opt staging into the cluster-wide default-deny scaffolding from
+      # infra/configs/network-policies/. With this label set, the
+      # CiliumClusterwideNetworkPolicy `default-deny` blocks all traffic
+      # to pods in this namespace except what the per-app
+      # CiliumNetworkPolicy (apps/base/adguard/networkpolicy.yaml) allows.
+      - op: add
+        path: /metadata/labels/network-policies
+        value: enforced
   - target:
       kind: StatefulSet
       name: adguard

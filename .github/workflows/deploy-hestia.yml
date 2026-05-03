@@ -29,7 +29,7 @@ on:
         default: all
         options:
           - all
-          - llama
+          - llama-cpp
       dry_run:
         description: 'Connect, query, and diff without calling app.update'
         required: false
@@ -47,8 +47,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: llama
-            file: hosts/hestia/llms/docker-compose-llama.yml
+          - name: llama-cpp
+            file: hosts/hestia/llms/docker-compose-llama-cpp.yml
     steps:
       - name: Checkout
         uses: actions/checkout@v4

@@ -4,3 +4,8 @@ metadata:
   name: excalidraw
   labels:
     http-ingress: "true"
+    # Opt this namespace into the cluster-wide default-deny scaffolding in
+    # infra/configs/network-policies/. The default-deny CCNP only matches
+    # pods whose namespace carries this label, and a per-app
+    # CiliumNetworkPolicy (networkpolicy.yaml) ships the allow rules.
+    network-policies: enforced

@@ -38,10 +38,14 @@ if [ -z "${TRUENAS_API_KEY:-}" ]; then
   exit 78
 fi
 
-# Install websockets if missing. ubuntu-noble's python3 doesn't include it.
+# Install websockets and pyyaml if missing. ubuntu-noble's python3 doesn't include them.
 if ! python3 -c "import websockets" 2>/dev/null; then
   echo "+ pip install --quiet --user websockets" >&2
   python3 -m pip install --quiet --user --break-system-packages websockets >&2
+fi
+if ! python3 -c "import yaml" 2>/dev/null; then
+  echo "+ pip install --quiet --user pyyaml" >&2
+  python3 -m pip install --quiet --user --break-system-packages pyyaml >&2
 fi
 
 export APP_NAME COMPOSE_FILE DRY_RUN
@@ -55,6 +59,7 @@ import ssl
 import sys
 
 import websockets
+import yaml
 
 
 APP_NAME = os.environ["APP_NAME"]
@@ -143,8 +148,9 @@ async def main() -> None:
         # Compose YAML field name varies across TrueNAS versions. Try the
         # common shapes and report what we find for the operator's benefit.
         current_yaml = (
-            app.get("custom_compose_config_string")
-            or app.get("custom_compose_config")
+            app.get("custom_compose_config")
+            or app.get("custom_compose_config_string")
+            or (app.get("config") or {}).get("custom_compose_config")
             or (app.get("config") or {}).get("custom_compose_config_string")
             or ""
         )
@@ -167,11 +173,14 @@ async def main() -> None:
             return
 
         # Apply.
+        # TrueNAS app.update expects custom_compose_config as a parsed dict
+        # (not a YAML string).  Pydantic validation rejects raw strings.
+        compose_dict = yaml.safe_load(new_yaml)
         log(f"calling app.update for '{APP_NAME}'")
         update = await call(
             ws,
             "app.update",
-            [APP_NAME, {"values": {"custom_compose_config_string": new_yaml}}],
+            [APP_NAME, {"custom_compose_config": compose_dict}],
             msg_id=3,
         )
         if "error" in update and update["error"]:

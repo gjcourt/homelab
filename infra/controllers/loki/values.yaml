@@ -1,5 +1,10 @@
 deploymentMode: SingleBinary
 
+# Cluster-critical: Loki holds the cluster log archive; eviction during a
+# pinch loses ingestion until reschedule.
+global:
+  priorityClassName: system-cluster-critical
+
 loki:
   auth_enabled: false
   limits_config:

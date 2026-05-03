@@ -2,6 +2,9 @@
 debug:
   enabled: true
 
+# Cluster-critical: Cilium agent is the network — eviction means everything dies.
+priorityClassName: system-node-critical
+
 ipam:
   # -- Configure IP Address Management mode.
   # ref: https://docs.cilium.io/en/stable/network/concepts/ipam/
@@ -124,6 +127,8 @@ gatewayAPI:
 operator:
   # -- Number of replicas to run for the cilium-operator deployment
   replicas: 2
+  # Cluster-critical: the operator manages identities and IP pools.
+  priorityClassName: system-node-critical
 
 hubble:
   # -- Enable Hubble (true by default).

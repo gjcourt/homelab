@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: immich
+  namespace: immich
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: immich

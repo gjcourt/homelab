@@ -50,10 +50,16 @@ spec:
           resources:
             requests:
               cpu: 50m
-              memory: 128Mi
+              memory: 512Mi
             limits:
               cpu: 500m
-              memory: 512Mi
+              # signal-cli is a JVM app and OOMs the container on the
+              # 512Mi limit during sustained operation (observed 42 restarts
+              # over 6h with `java.lang.OutOfMemoryError: Java heap space`).
+              # 1.5Gi gives the JVM headroom for the heap + metaspace +
+              # native code with a single linked account; bump again if a
+              # second account is added.
+              memory: 1536Mi
         - name: signal-bridge
           image: ghcr.io/gjcourt/signal-bridge:2026-05-03
           env:

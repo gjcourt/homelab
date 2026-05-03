@@ -1,3 +1,12 @@
+---
+title: CNPG backup and disaster recovery
+status: Stable
+created: 2026-05-02
+updated: 2026-05-02
+updated_by: gjcourt
+tags: [operations, cnpg, postgres, backup, recovery]
+---
+
 # CNPG Backup & Disaster Recovery Guide
 
 > **Last tested:** 2026-04-18 — full wipe + S3 restore of `immich-stage` in ~5 minutes  

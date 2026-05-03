@@ -1,173 +1,104 @@
-> Claude Code users: this file is also referenced from [CLAUDE.md](./CLAUDE.md).
+# AGENTS.md
 
-# Homelab GitOps Guidelines
+> GitOps repo for a single-node Talos Kubernetes cluster (`melodic-muse`) running self-hosted apps via Flux CD. — https://github.com/gjcourt/homelab
 
-## Source of truth
+## Commands
 
-| Topic | Location |
-|---|---|
-| App base manifests | `apps/base/<app>/` |
-| Staging overlays | `apps/staging/<app>/` |
-| Production overlays | `apps/production/<app>/` |
-| Cluster Flux entrypoints | `clusters/melodic-muse/` |
-| Infra operators (HelmReleases) | `infra/controllers/` |
-| Infra config (networking, storage) | `infra/configs/` |
-| App runbooks | `docs/apps/` |
-| Architecture decisions | `docs/architecture/` |
-| Incident reports | `docs/incidents/` |
-| Operational guides | `docs/guides/` |
-| Active plans | `docs/plans/` |
+| Command | Use |
+|---------|-----|
+| `kustomize build apps/staging/<overlay>` | Validate a staging overlay |
+| `kustomize build apps/production/<overlay>` | Validate a production overlay |
+| `kustomize build infra/controllers` | Validate infra controllers |
+| `flux get kustomizations -A` | Top-level Kustomization health |
+| `flux reconcile kustomization apps-production -n flux-system` | Force production reconcile after merge |
+| `flux reconcile source git flux-system-staging` | Force staging git source refresh |
+| `kubectl describe helmrelease <name> -n <namespace>` | Inspect a HelmRelease failure |
+| `gh workflow run staging-deploy.yaml` | Force a staging branch rebuild |
+| `sops -e -i <file>` / `sops -d <file>` | Encrypt / inspect secrets |
+
+Pre-PR: `kustomize build` for every affected overlay must pass.
 
 ## Architecture
 
-Flux CD (GitOps) cluster for a single-node Talos Kubernetes cluster (`melodic-muse`). All cluster state is driven from Git — changes take effect when merged to `master` and reconciled by Flux.
+Flux CD (GitOps) cluster — all cluster state is driven from Git; changes take effect when merged to `master` and reconciled by Flux on each Kustomization's `interval` (default 10m).
 
-Directory layout:
-- `apps/base/` — base Kustomize resources for each app (env-agnostic)
-- `apps/staging/` / `apps/production/` — environment overlays (namespace, resource patches, env-specific config)
-- `infra/controllers/` — HelmReleases and supporting config (monitoring, CNI, CSI, etc.)
-- `infra/configs/` — cluster configuration that controllers depend on (IP pools, cert issuers, etc.)
-- `clusters/melodic-muse/` — Flux Kustomization entrypoints
+- `apps/base/<app>/` — base Kustomize resources (env-agnostic).
+- `apps/staging/<app>/`, `apps/production/<app>/` — environment overlays.
+- `infra/controllers/` — HelmReleases (monitoring, CNI, CSI, etc.).
+- `infra/configs/` — cluster configuration controllers depend on (IP pools, cert issuers).
+- `clusters/melodic-muse/` — Flux Kustomization entrypoints.
 
-Flux reconciliation order: `infra-crds` → `infra-controllers` → `infra-configs` → `apps-production` / `apps-staging`
+Reconciliation order: `infra-crds` → `infra-controllers` → `infra-configs` → `apps-production` / `apps-staging`.
 
-## Non-negotiables
+See `docs/architecture/` for component-level architecture (DNS strategy, gateway auth, overlays-and-structure).
 
-- **Never commit directly to `master` or `staging`** — all changes go through a branch and PR
-- **Never push to `staging` manually** — the `staging` branch is rebuilt from scratch by CI on every trigger; a manual push will be overwritten and may break in-flight deployments
-- **Never commit plaintext secrets** — all secrets must be encrypted with SOPS before committing; use `sops -e -i <file>` in place
-- **Never bypass the staging environment for production changes** — open a PR, let CI merge it to staging, validate, then merge to `master`
+## Conventions
 
-## Branch and PR workflow
+- **Branch + PR for every change** — never commit directly to `master` or `staging`.
+- **Image tags are strictly increasing** — never roll back to an earlier tag without explicit intent. CI tags as `YYYY-MM-DD` (first build of day) then `YYYY-MM-DD-N`.
+- **Namespace convention**: production uses the plain name (`overture`); staging uses a `-stage` suffix (`overture-stage`).
+- **Secrets are SOPS-encrypted** before commit (key ref: `.sops.yaml`); never commit plaintext.
+- **Adding a new app**: see `docs/operations/2026-05-02-adding-an-app.md`.
+- **Conventional Commits** for every commit (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, `ci:`, `deploy:`).
+- **Branch names** follow `<type>/<description>`.
 
-**You must use a branch and PR for every change — never commit directly to `master`.**
+## Invariants
 
-1. Check for open PRs first — unmerged changes on a stale branch will not be reconciled
+- Never commit directly to `master` — Flux deploys from `master`, all changes go through PR.
+- Never push to `staging` manually — CI rebuilds it from `master + open PRs` on every trigger; manual pushes are overwritten.
+- Never commit plaintext secrets — encrypt with SOPS first.
+- Never bypass staging for production changes — open a PR, let CI merge to staging, validate, then merge to `master`.
+- Image tags must be strictly greater than the currently deployed tag.
 
-   ```bash
-   gh pr list --repo gjcourt/homelab
-   ```
+## What NOT to Do
 
-2. Branch from `master` (not from another feature or fix branch)
+- Do not branch from another feature/fix branch — always branch from `master`.
+- Do not skip `kustomize build` validation before pushing.
+- Do not roll back an image tag silently — explicit rollback PRs only.
+- Do not put plaintext secrets anywhere in the tree, even in dev/test overlays.
+- Do not edit the staging branch directly; CI owns it.
 
-3. Validate locally before pushing:
+## Domain
 
-   ```bash
-   kustomize build apps/staging          # or a specific overlay
-   kustomize build infra/controllers
-   ```
+Single-node Talos Kubernetes cluster running ~14 self-hosted apps (Audiobookshelf, Authelia, Excalidraw, Golinks, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Pingo, Snapcast, Vitals + Adguard / Vitals etc.) plus infrastructure (Cilium, cert-manager, CNPG, monitoring, Authelia SSO). GitOps via Flux CD with an automatic preview environment (`staging` branch) rebuilt by CI from `master + open PRs`.
 
-4. Commit, push, and open a PR against `master`
+## Cross-service dependencies
 
-5. Once CI passes, the staging workflow automatically merges the PR into the `staging` branch and Flux deploys it to staging namespaces — validate your change there
+| Service | Purpose |
+|---|---|
+| Talos Linux | Single-node Kubernetes substrate |
+| Flux CD | GitOps reconciliation |
+| Cilium + Gateway API | CNI + ingress |
+| cert-manager | TLS certificate issuance |
+| CNPG (Cloudnative-PG) | PostgreSQL operator |
+| Authelia | SSO / OAuth2 / OIDC |
+| Synology iSCSI | Block storage backing PVCs |
+| GitHub Actions | CI for kustomize build + staging branch rebuild |
+| ghcr.io | Container image registry (`gjcourt/<app>`) |
 
-6. Get explicit approval, then merge to `master` — Flux reconciles production within the `interval` on each Kustomization (default: 10m)
+## Quality gate before push
 
-7. To force immediate reconciliation after merge:
+1. `kustomize build` passes for every affected overlay
+2. `git diff HEAD | grep -i "password\|secret\|key"` returns no plaintext
+3. Image tags are strictly increasing (never silently rolled back)
+4. New apps wired into the right `apps/{staging,production}/kustomization.yaml`
+5. Namespace follows the convention (production unsuffixed, staging `-stage`)
+6. New CNPG clusters: iSCSI PVC provisioned and StorageClass correct
+7. Docs updated if the change affects a runbook or architecture doc
 
-   ```bash
-   flux reconcile kustomization apps-production -n flux-system
-   ```
+## Documentation
 
-## PR checklist
+`docs/` taxonomy: `architecture/` · `design/` · `operations/` · `plans/` · `reference/` · `research/`. Each folder's `README.md` describes scope. Index: `docs/README.md`.
 
-Before opening a PR:
+This repo also has historical topic folders (`docs/apps/`, `docs/guides/`, `docs/incidents/`, `docs/infra/`) that pre-date the canonical taxonomy. The active in-progress migration is tracked in `docs/plans/documentation-rewrite-plan.md`. Do not split content across both schemes for the same topic.
 
-- [ ] `kustomize build` passes for all affected overlays
-- [ ] No plaintext secrets committed (`git diff HEAD | grep -i "password\|secret\|key"`)
-- [ ] Image tags are strictly increasing (never rolling back without explicit intent)
-- [ ] New apps are added to the correct env `kustomization.yaml` entrypoints
-- [ ] Namespace follows the convention: unsuffixed for production, `-stage` suffix for staging
-- [ ] If adding a new CNPG cluster: iSCSI PVC provisioned and StorageClass correct
-- [ ] Docs updated if the change affects a runbook or architecture doc
+## Observability
 
-## Staging environment
+- `flux get kustomizations -A` — top-level Kustomization health.
+- `kubectl describe helmrelease <name> -n <namespace>` — HelmRelease failures.
+- `flux reconcile helmrelease <name> -n <namespace> --reset` — force reconcile after a stalled HelmRelease.
+- `kubectl -n <ns> get events --sort-by=.lastTimestamp | tail -n 50` — recent events.
+- Common Flux failure patterns and recovery: `docs/operations/2026-05-02-flux-debugging.md`.
+- Per-app observability dashboards: see each `docs/apps/<app>.md` runbook.
 
-Staging is an automatic preview environment. CI rebuilds the `staging` branch from `master` + all open PRs with passing checks on every trigger (PR events, check completions, cron every 5 min).
-
-```
-Feature branch → PR → CI passes → auto-merged into staging → Flux deploys to staging namespaces
-                                   PR merged to master → Flux deploys to production
-```
-
-Key commands:
-
-```bash
-# See what PRs are currently merged into staging
-git log --oneline origin/master..origin/staging
-
-# Force a staging rebuild
-gh workflow run staging-deploy.yaml
-
-# Staging reconciliation
-flux reconcile source git flux-system-staging
-flux reconcile kustomization apps-staging -n flux-system
-```
-
-See [docs/guides/staging-workflow.md](docs/guides/staging-workflow.md) for full details.
-
-## Image versioning
-
-CI tags images as `YYYY-MM-DD` for the first build of the day, then `YYYY-MM-DD-N` (N=1,2,…) for subsequent builds. **Every push to `main` in the app repo triggers a build**, so tag numbers are not sequential relative to deploys — docs-only commits consume slots too.
-
-When bumping an image tag in `deployment.yaml`, the new tag must be strictly greater than the currently deployed one. Never roll back to an earlier tag without an explicit rollback intent. To look up the latest published tag:
-
-```bash
-gh api /users/gjcourt/packages/container/overture/versions --jq '.[0].metadata.container.tags[]'
-```
-
-## Adding a new app
-
-1. Create `apps/base/<app>/kustomization.yaml` and base manifests
-2. Create overlays under `apps/staging/<app>/` and/or `apps/production/<app>/`
-3. Add the app to `apps/staging/kustomization.yaml` and/or `apps/production/kustomization.yaml`
-4. Update the apps list: `./scripts/update-apps-readme.sh`
-5. Namespace convention: production uses plain name, staging uses `-stage` suffix
-
-## Rollback
-
-Revert the commit on a branch, open a PR, and merge. Do not force-push to `master`.
-
-```bash
-git revert <commit>
-git push origin <branch>
-gh pr create ...
-```
-
-## Debugging Flux
-
-```bash
-# Top-level kustomization health
-flux get kustomizations -A
-
-# HelmRelease failures
-kubectl describe helmrelease <name> -n <namespace>
-
-# Force reconcile after a stalled HelmRelease
-flux reconcile helmrelease <name> -n <namespace> --reset
-
-# Recent events in a namespace
-kubectl -n <ns> get events --sort-by=.lastTimestamp | tail -n 50
-```
-
-### Common failure patterns
-
-| Symptom | Cause | Fix |
-|---|---|---|
-| `HelmRelease status: 'Failed'` blocking kustomization | Immutable StatefulSet field in chart upgrade | Delete the StatefulSet, `flux reconcile helmrelease --reset`. Add `upgrade.remediation.remediationStrategy: uninstall` to the HelmRelease. |
-| `dependency 'X' is not ready` | Upstream kustomization stalled | Fix the upstream kustomization first |
-| HA enters recovery mode | 0-byte include file (automations.yaml etc.) | Init container must write `[]`, not `touch` |
-| PR not appearing in staging | CI checks pending or failing | Fix CI failures; staging rebuilds automatically |
-| Staging has stale code | Staging workflow run failed | `gh workflow run staging-deploy.yaml` |
-
-## Secrets
-
-SOPS + age encryption. Key ref: `.sops.yaml`. Encrypt secrets before committing — never commit plaintext secrets.
-
-```bash
-# Encrypt in place
-sops -e -i <secret-file.yaml>
-
-# Decrypt to inspect (do not commit the decrypted form)
-sops -d <secret-file.yaml>
-```
+When you learn a new convention or invariant in this repo, update this file.

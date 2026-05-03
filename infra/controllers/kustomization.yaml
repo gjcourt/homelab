@@ -12,6 +12,7 @@ resources:
   # - pingo
   - promtail
   - renovate
+  - renovate-automerge
   - snapshot
   - synology-csi
   - vector

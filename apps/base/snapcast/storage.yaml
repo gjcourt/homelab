@@ -11,3 +11,19 @@ spec:
   resources:
     requests:
       storage: 1Gi
+---
+# Mopidy sidecar state: Subsonic library cache (mopidy-subidy) and Mopidy
+# bookkeeping. ~10–50 MB in practice; 1Gi gives plenty of headroom.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: snapcast-mopidy-state
+  namespace: snapcast
+  labels:
+    app: snapcast
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

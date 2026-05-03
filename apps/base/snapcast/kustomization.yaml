@@ -3,8 +3,13 @@ kind: Kustomization
 resources:
   - configmap.yaml
   - configmap-go-librespot.yaml
+  - configmap-mopidy.yaml
   - deployment.yaml
   - namespace.yaml
+  # secret-navidrome-credentials.yaml is created from the .yaml.example template
+  # and SOPS-encrypted by the operator before this PR can land. See PR body and
+  # docs/plans/2026-03-14-navidrome-snapcast-mopidy.md.
+  - secret-navidrome-credentials.yaml
   - service.yaml
   - serviceaccount.yaml
   - storage.yaml

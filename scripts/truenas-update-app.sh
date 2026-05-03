@@ -143,8 +143,9 @@ async def main() -> None:
         # Compose YAML field name varies across TrueNAS versions. Try the
         # common shapes and report what we find for the operator's benefit.
         current_yaml = (
-            app.get("custom_compose_config_string")
-            or app.get("custom_compose_config")
+            app.get("custom_compose_config")
+            or app.get("custom_compose_config_string")
+            or (app.get("config") or {}).get("custom_compose_config")
             or (app.get("config") or {}).get("custom_compose_config_string")
             or ""
         )
@@ -171,7 +172,7 @@ async def main() -> None:
         update = await call(
             ws,
             "app.update",
-            [APP_NAME, {"values": {"custom_compose_config_string": new_yaml}}],
+            [APP_NAME, {"values": {"custom_compose_config": new_yaml}}],
             msg_id=3,
         )
         if "error" in update and update["error"]:

@@ -18,6 +18,7 @@ The compose YAML in each subdirectory is the canonical source; paste into SCALE 
 | signal | `signal/` | 8080 | signal-cli daemon + signal-bridge SSE relay |
 | llms | `llms/` | varies | llama.cpp / vLLM inference (GPU box) |
 | monitoring | `monitoring/` | varies | nvtop and GPU metrics |
+| gha-runner | `actions-runner/` | — | Self-hosted GitHub Actions runner; auto-deploys other hestia apps |
 
 ## ZFS datasets
 
@@ -26,6 +27,7 @@ Operator-owned datasets (survive App deletion):
 | Dataset | Mount | Used by |
 |---------|-------|---------|
 | `tank/apps/signal` | `/mnt/tank/apps/signal` | signal-cli identity data |
+| `main/apps/actions-runner` | `/mnt/main/apps/actions-runner` | runner registration + workspace |
 
 ## Common operations
 

@@ -8,6 +8,13 @@ resources:
   - service.yaml
   - serviceaccount.yaml
   - servicemonitor.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: synology-iscsi-monitor
+      app.kubernetes.io/component: monitor
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux
 
 configMapGenerator:
   - name: synology-iscsi-dashboard

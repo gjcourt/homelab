@@ -6,3 +6,10 @@ resources:
   - networkpolicy.yaml
   - service.yaml
   - serviceaccount.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: excalidraw
+      app.kubernetes.io/component: web
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux

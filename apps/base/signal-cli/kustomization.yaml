@@ -7,3 +7,10 @@ resources:
   - serviceaccount.yaml
   - servicemonitor.yaml
   - storage.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: signal-cli
+      app.kubernetes.io/component: messaging
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux

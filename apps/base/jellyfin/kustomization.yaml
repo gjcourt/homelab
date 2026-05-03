@@ -9,3 +9,10 @@ resources:
   - serviceaccount.yaml
   - storage.yaml
   - media/nfs-media.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: jellyfin
+      app.kubernetes.io/component: web
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux

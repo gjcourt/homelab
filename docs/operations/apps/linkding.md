@@ -43,12 +43,12 @@ To verify Linkding is working:
 
 ## 8. Disaster Recovery
 - **Backup Strategy**:
-  - The PostgreSQL database is backed up to S3 (MinIO/AWS) using CNPG's Barman integration (Note: currently pending S3 credentials configuration).
-  - The `linkding-data-pvc` is backed up via Synology Snapshot Replication.
+  - The PostgreSQL database is backed up continuously to `s3://gjcourt-homelab-backup/production/linkding` via the Barman Cloud Plugin (WAL archiving + daily base backups, gzip-compressed, 30-day retention).
+  - The `linkding-data-pvc` (favicons, local data) is backed up via Synology Snapshot Replication.
 - **Restore Procedure**:
-  1. Uncomment the `recovery` section in the `database.yaml` CNPG `Cluster` definition.
+  1. Uncomment the `recovery` section in `apps/production/linkding/database.yaml`.
   2. Comment out the `initdb` section.
-  3. Apply the changes to bootstrap a new cluster from the backup.
+  3. Apply the changes; CNPG will bootstrap a new cluster from the S3 backup via PITR.
   4. Restore the `linkding-data-pvc` LUN via Synology DSM if necessary.
 
 ## 9. Troubleshooting

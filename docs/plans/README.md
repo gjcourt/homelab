@@ -55,7 +55,7 @@ Sorted by filing date (newest first).
 | [2026-03-08-adguard-dns-rollout.md](2026-03-08-adguard-dns-rollout.md) | `planned` | Roll AdGuard Home as the homelab DNS resolver |
 | [2026-02-28-network-migration-192-to-10-42-2.md](2026-02-28-network-migration-192-to-10-42-2.md) | `complete` | Migrate the LAN from 192.168.5.0/24 to 10.42.2.0/24 |
 | [2026-02-21-linkding-db-restore-plan.md](2026-02-21-linkding-db-restore-plan.md) | `planned` | Live DR test: destroy and restore Linkding staging DB |
-| [2026-02-21-documentation-rewrite-plan.md](2026-02-21-documentation-rewrite-plan.md) | `in-progress` | Rewrite all app and infra documentation |
+| [2026-02-21-documentation-rewrite-plan.md](2026-02-21-documentation-rewrite-plan.md) | `complete` | Rewrite all app and infra documentation |
 | [2026-02-21-cnpg-backup-upgrade.md](2026-02-21-cnpg-backup-upgrade.md) | `complete` | Migrate CNPG backups to Barman Cloud Plugin |
 | [2026-02-21-cluster-health-dashboards-plan.md](2026-02-21-cluster-health-dashboards-plan.md) | `in-progress` | Grafana cluster health dashboard suite |
 | [2026-02-21-app-health-dashboards-plan.md](2026-02-21-app-health-dashboards-plan.md) | `in-progress` | Grafana application health dashboards |

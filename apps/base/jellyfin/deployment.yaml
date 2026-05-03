@@ -19,6 +19,8 @@ spec:
       labels:
         app: jellyfin
     spec:
+      serviceAccountName: jellyfin
+      automountServiceAccountToken: false
       securityContext:
         seccompProfile:
           type: RuntimeDefault

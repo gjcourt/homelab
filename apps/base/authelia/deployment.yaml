@@ -19,6 +19,8 @@ spec:
       labels:
         app: authelia
     spec:
+      serviceAccountName: authelia
+      automountServiceAccountToken: false
       enableServiceLinks: false
       securityContext:
         runAsNonRoot: true

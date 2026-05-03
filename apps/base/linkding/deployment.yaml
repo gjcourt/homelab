@@ -18,6 +18,8 @@ spec:
       labels:
         app: linkding
     spec:
+      serviceAccountName: linkding
+      automountServiceAccountToken: false
       # App runs as www-data user, limits the scope of pods to the same user.
       securityContext:
         runAsNonRoot: true

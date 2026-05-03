@@ -6,3 +6,4 @@ resources:
   - secret-ghcr.yaml
   - service.yaml
   - service-monitor.yaml
+  - serviceaccount.yaml

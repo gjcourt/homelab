@@ -18,6 +18,8 @@ spec:
       labels:
         app: memos
     spec:
+      serviceAccountName: memos
+      automountServiceAccountToken: false
       # App runs as the upstream `nonroot` user (UID/GID 10001) per the Memos
       # Dockerfile (https://github.com/usememos/memos/blob/main/scripts/Dockerfile).
       # The entrypoint chown's /var/opt/memos only when started as root; running

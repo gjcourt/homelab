@@ -17,6 +17,7 @@ spec:
       labels:
         app: signal-cli
     spec:
+      serviceAccountName: signal-cli
       automountServiceAccountToken: false
       containers:
         - name: signal-cli

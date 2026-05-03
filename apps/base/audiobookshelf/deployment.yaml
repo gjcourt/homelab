@@ -19,6 +19,8 @@ spec:
       labels:
         app: audiobookshelf
     spec:
+      serviceAccountName: audiobookshelf
+      automountServiceAccountToken: false
       # The upstream advplyr/audiobookshelf image has no USER directive (runs
       # as root by default); we pin it to a non-root UID 1000 here. CONFIG_PATH
       # and METADATA_PATH are overridden via configmap to point at PVC mounts

@@ -18,6 +18,8 @@ spec:
       labels:
         app: mealie
     spec:
+      serviceAccountName: mealie
+      automountServiceAccountToken: false
       # App runs as the upstream `abc` user (UID/GID 911) per the Mealie
       # Dockerfile (https://github.com/mealie-recipes/mealie/blob/v3.16.0/docker/Dockerfile).
       # When the entrypoint sees it is already running as 911 it skips the

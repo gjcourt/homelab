@@ -18,6 +18,8 @@ spec:
       labels:
         app: navidrome
     spec:
+      serviceAccountName: navidrome
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         # UID 1028 is the owner of /volume1/family/audio/music on the Synology NAS

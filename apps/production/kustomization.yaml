@@ -8,6 +8,7 @@ resources:
   - cloudflare-tunnel
   - excalidraw
   - golinks
+  - hermes
   - homeassistant
   - homepage
   - immich

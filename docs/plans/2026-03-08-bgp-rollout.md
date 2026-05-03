@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-05-02
+last_modified: 2026-05-03
 ---
 
 # BGP Rollout Plan — UniFi Cloud Gateway Fiber + Cilium
@@ -809,3 +809,18 @@ snapcast-stage/snapcast: 10.42.2.41
 ```
 
 Replace with the live output captured at Phase 0.3 time. Anyone reading this plan a year from now needs to know what was advertised at cutover.
+
+---
+
+## Survey 2026-05-03
+
+**Current state:** Not started. `infra/controllers/cilium/default-values.yaml` still has `bgpControlPlane.enabled: false` and `l2announcements.enabled: false` (L2 is the active mode via `l2announcements.enabled: true` override in `values.yaml`, presumably). No `CiliumBGP*` CRs exist anywhere in `infra/configs/`. Phase 0 (pre-flight) has not been entered.
+
+**Outstanding next steps:**
+
+1. Phase 0: pre-flight (UCGF FRR capability check, Cilium BGP CRD presence, baseline LB IP snapshot, schedule a maintenance window).
+2. Phase 1: configure BGP on the UCGF (vtysh, snapshot FRR config before/after).
+3. Phase 2a: enable the BGP control plane in Cilium, canary on a single worker.
+4. Phase 2b: promote to all workers once the canary soaks ≥1h cleanly.
+5. Phase 3: full multi-worker soak (≥4h, ideally 24h).
+6. Phase 4: cutover — delete the L2 announcement policy first, disable L2 in Helm values 24h later.

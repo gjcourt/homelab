@@ -1,6 +1,6 @@
 ---
-status: planned
-last_modified: 2026-05-02
+status: in-progress
+last_modified: 2026-05-03
 ---
 
 # Hestia self-hosted GHA runner — auto-deploy Custom App compose changes
@@ -187,3 +187,18 @@ Out of scope for this plan, but the path is:
 
 - Companion plan: [`2026-05-02-hermes-bot-k8s.md`](2026-05-02-hermes-bot-k8s.md). Hermes-bot is k8s-native and Flux-managed, so it does *not* depend on this runner. Mentioned for context only.
 - Operator manual paste fallback: [`hosts/hestia/README.md`](../../hosts/hestia/README.md).
+
+---
+
+## Survey 2026-05-03
+
+**Current state:** D1 (runner compose at `hosts/hestia/actions-runner/docker-compose.yml`) and D2 (`.github/workflows/deploy-hestia.yml` with the `hosts/hestia/**/docker-compose*.yml` path filter) are both in master. D3 (the TrueNAS app-update script at `scripts/truenas-update-app.sh`) is also in master per recent commits. The IaC is in place; what's missing is the operator-side bootstrap (chicken-and-egg: runner has to be created manually before it can self-deploy).
+
+**Outstanding next steps:**
+
+1. Operator: paste `hosts/hestia/actions-runner/docker-compose.yml` into the TrueNAS SCALE Custom App UI (one-time bootstrap).
+2. Set the masked env vars on the runner Custom App: `ACCESS_TOKEN` (GitHub PAT) and `TRUENAS_API_KEY`.
+3. Confirm the runner is online — repo Settings → Actions → Runners shows `hestia` as Idle.
+4. Smoke-test: make a no-op edit to a watched compose file (e.g., a comment in `hosts/hestia/llms/docker-compose-llama-cpp.yml`), push to master, watch the workflow run, confirm the corresponding TrueNAS app restarts.
+5. Update `hosts/hestia/README.md` to document the automated flow + the manual fallback procedure.
+6. Flip plan to `complete` once a full automated bump succeeds end-to-end.

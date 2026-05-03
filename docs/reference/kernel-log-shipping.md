@@ -149,7 +149,7 @@ session reconnect. The filesystem remains mounted **read-write** in error state
 `EA` — `NodeFilesystemReadOnly` does **not** fire for this failure mode.
 
 **Response**: identify the affected device via `talosctl dmesg`, map it to a
-PVC, and recycle the pod + PVC. See [2026-02-27 incident](../incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md) for an example.
+PVC, and recycle the pod + PVC. See [2026-02-27 incident](../operations/incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md) for an example.
 
 ### ISCSIKernelError (warning)
 

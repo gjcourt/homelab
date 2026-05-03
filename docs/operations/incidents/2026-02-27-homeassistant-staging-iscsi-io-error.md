@@ -90,7 +90,7 @@ kubectl get pods -n homeassistant-stage
 
 ## References
 
-- [synology-iscsi-operations.md](../guides/synology-iscsi-operations.md)
-- [synology-iscsi-cleanup.md](../guides/synology-iscsi-cleanup.md)
+- [synology-iscsi-operations.md](../synology-iscsi-operations.md)
+- [synology-iscsi-cleanup.md](../synology-iscsi-cleanup.md)
 - [2026-02-08-pv-recovery.md](2026-02-08-pv-recovery.md)
 - [2026-02-15-iscsi-targets-disabled.md](2026-02-15-iscsi-targets-disabled.md)

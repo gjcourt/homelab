@@ -90,7 +90,7 @@ Single-node Talos Kubernetes cluster running ~14 self-hosted apps (Audiobookshel
 
 `docs/` taxonomy: `architecture/` · `design/` · `operations/` · `plans/` · `reference/` · `research/`. Each folder's `README.md` describes scope. Index: `docs/README.md`.
 
-This repo also has historical topic folders (`docs/apps/`, `docs/guides/`, `docs/incidents/`, `docs/infra/`) that pre-date the canonical taxonomy. The active in-progress migration is tracked in `docs/plans/2026-02-21-documentation-rewrite-plan.md`. Do not split content across both schemes for the same topic.
+Per-app runbooks live under `docs/operations/apps/<app>.md`. Incident postmortems live under `docs/operations/incidents/<yyyy-mm-dd>-<topic>.md`. Per-doc content rewrites are tracked in `docs/plans/2026-02-21-documentation-rewrite-plan.md`.
 
 ## Observability
 
@@ -99,6 +99,6 @@ This repo also has historical topic folders (`docs/apps/`, `docs/guides/`, `docs
 - `flux reconcile helmrelease <name> -n <namespace> --reset` — force reconcile after a stalled HelmRelease.
 - `kubectl -n <ns> get events --sort-by=.lastTimestamp | tail -n 50` — recent events.
 - Common Flux failure patterns and recovery: `docs/operations/2026-05-02-flux-debugging.md`.
-- Per-app observability dashboards: see each `docs/apps/<app>.md` runbook.
+- Per-app observability dashboards: see each `docs/operations/apps/<app>.md` runbook.
 
 When you learn a new convention or invariant in this repo, update this file.

@@ -281,15 +281,15 @@ The Flux SSH egress block likely occurred days or weeks before this was noticed.
 | MEDIUM | Re-trigger failed HelmReleases once CSI provisioning is restored: `barman-cloud`, `cnpg`, `cilium`, `cert-manager`, `kube-prometheus-stack`, `loki`, `synology-csi`, `vector` |
 | MEDIUM | Add a periodic `lun-manager audit` job (CronJob or manual runbook step) after any NAS maintenance |
 | LOW | Investigate why node IQN was not pre-registered in DSM — was this lost during NAS migration/reconfiguration? |
-| LOW | Document NAS IP change procedure: update CSI secret, NFS PVs, DSM host registration — as a runbook in `docs/guides/` |
+| LOW | Document NAS IP change procedure: update CSI secret, NFS PVs, DSM host registration — as a runbook in `docs/operations/` |
 
 ---
 
 ## References
 
 - [PR #214 — fix(flux): switch GitRepositories from SSH to HTTPS](https://github.com/gjcourt/homelab/pull/214)
-- [infra/controllers/synology-csi/secret-client-info.yaml](../../infra/controllers/synology-csi/secret-client-info.yaml)
+- [infra/controllers/synology-csi/secret-client-info.yaml](../../../reference/controllers/synology-csi/secret-client-info.yaml)
 - [scripts/synology/lun-manager/main.go](../../scripts/synology/lun-manager/main.go)
-- [docs/incidents/2026-02-15-iscsi-targets-disabled.md](2026-02-15-iscsi-targets-disabled.md)
-- [docs/incidents/2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md](2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md)
-- [docs/guides/synology-iscsi-operations.md](../guides/synology-iscsi-operations.md)
+- [docs/operations/incidents/2026-02-15-iscsi-targets-disabled.md](2026-02-15-iscsi-targets-disabled.md)
+- [docs/operations/incidents/2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md](2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md)
+- [docs/operations/synology-iscsi-operations.md](../synology-iscsi-operations.md)

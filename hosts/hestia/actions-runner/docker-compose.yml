@@ -1,0 +1,35 @@
+services:
+  runner:
+    image: myoung34/github-runner@sha256:420562d49d14c7ea25cbb320b4d582d7f05ecf57ffd010cc9f2d746e33abcb9b
+    container_name: gha-runner
+    restart: unless-stopped
+    environment:
+      REPO_URL: https://github.com/gjcourt/homelab
+      RUNNER_NAME: hestia
+      RUNNER_SCOPE: repo
+      LABELS: hestia,truenas
+      RUNNER_WORKDIR: /tmp/runner-work
+      EPHEMERAL: "false"
+      DISABLE_AUTO_UPDATE: "true"
+      # ACCESS_TOKEN: a long-lived PAT (classic) or GitHub App installation
+      # token with `actions:write` + `metadata:read` on this repo. The runner
+      # entrypoint exchanges it for a registration token at startup so the
+      # operator never has to refresh the 1-hour expiring token by hand.
+      # Do NOT commit a value here; set in SCALE UI as a masked env var.
+      ACCESS_TOKEN: ""
+      # TRUENAS_API_KEY: API key created in SCALE UI → Settings → API Keys.
+      # Used by the workflow's `truenas-update-app.sh` (D3) to call the
+      # WebSocket API and update Custom App compose configs.
+      # Do NOT commit a value here; set in SCALE UI as a masked env var.
+      TRUENAS_API_KEY: ""
+    volumes:
+      - /mnt/main/apps/actions-runner/work:/tmp/runner-work
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f Runner.Listener > /dev/null || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

@@ -370,7 +370,7 @@ Clients automatically fail over to DNS 2 (`1.1.1.2`) — this is the whole point
 
 ## Future: HA DNS (Two LB IPs)
 
-Once you have more nodes, consider the plan in [adguard-ha.md](adguard-ha.md):
+Once you have more nodes, consider the plan in [2026-02-15-adguard-ha.md](2026-02-15-adguard-ha.md):
 1. Scale StatefulSet to 2 replicas
 2. Allocate a second LB IP for the second pod
 3. Configure UniFi DHCP with both IPs as DNS 1 and DNS 2

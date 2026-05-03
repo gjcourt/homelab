@@ -54,7 +54,7 @@ To verify Immich is working:
   - **Photos**: The NFS share (`/mnt/photos`) is backed up natively on the Synology NAS using Hyper Backup.
   - **Uploads/Thumbnails**: The iSCSI volume is backed up via Synology Snapshot Replication.
 - **Restore Procedure**:
-  1. Restore the Postgres database using the CNPG recovery instructions (see `docs/plans/cnpg-backup-upgrade.md`).
+  1. Restore the Postgres database using the CNPG recovery instructions (see `docs/plans/2026-02-21-cnpg-backup-upgrade.md`).
   2. Ensure the NFS share is intact.
   3. Re-deploy the Immich manifests.
 

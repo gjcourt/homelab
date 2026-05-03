@@ -16,4 +16,4 @@ Information you look things up in — component reference, network specs, config
 
 **Allowed `status:` values:** `Stable`, `Superseded`.
 
-Historical note: `docs/infra/` predates this folder and contains component reference for Cilium, cert-manager, Flux, monitoring, storage, etc. Per-doc migration is tracked in `docs/plans/documentation-rewrite-plan.md`.
+Historical note: `docs/infra/` predates this folder and contains component reference for Cilium, cert-manager, Flux, monitoring, storage, etc. Per-doc migration is tracked in `docs/plans/2026-02-21-documentation-rewrite-plan.md`.

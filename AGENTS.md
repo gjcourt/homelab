@@ -90,7 +90,7 @@ Single-node Talos Kubernetes cluster running ~14 self-hosted apps (Audiobookshel
 
 `docs/` taxonomy: `architecture/` · `design/` · `operations/` · `plans/` · `reference/` · `research/`. Each folder's `README.md` describes scope. Index: `docs/README.md`.
 
-This repo also has historical topic folders (`docs/apps/`, `docs/guides/`, `docs/incidents/`, `docs/infra/`) that pre-date the canonical taxonomy. The active in-progress migration is tracked in `docs/plans/documentation-rewrite-plan.md`. Do not split content across both schemes for the same topic.
+This repo also has historical topic folders (`docs/apps/`, `docs/guides/`, `docs/incidents/`, `docs/infra/`) that pre-date the canonical taxonomy. The active in-progress migration is tracked in `docs/plans/2026-02-21-documentation-rewrite-plan.md`. Do not split content across both schemes for the same topic.
 
 ## Observability
 

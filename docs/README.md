@@ -13,7 +13,7 @@ GitOps repo for a single-node Talos Kubernetes cluster (`melodic-muse`). Documen
 
 ## Historical topic folders (migration in progress)
 
-These predate the canonical taxonomy and remain in place while content is migrated per `docs/plans/documentation-rewrite-plan.md`:
+These predate the canonical taxonomy and remain in place while content is migrated per `docs/plans/2026-02-21-documentation-rewrite-plan.md`:
 
 - [`apps/`](apps/) — per-app runbooks (target: `operations/apps/` or `operations/<app>/`).
 - [`guides/`](guides/) — operational how-to guides (target: `operations/`).

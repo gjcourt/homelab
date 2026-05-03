@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: signal-cli
 resources:
   - ../../base/signal-cli/
+  - secret-bridge-auth.yaml
 
 labels:
   - pairs:

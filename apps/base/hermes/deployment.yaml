@@ -29,7 +29,11 @@ spec:
           # nousresearch/hermes-agent:v2026.4.30 (linux/amd64)
           image: nousresearch/hermes-agent@sha256:b28c9b33ef5df8b9c6ba008124756d09f285082cb6f069e3ad7c59f967dfc58c
           imagePullPolicy: IfNotPresent
-          command: ["hermes", "gateway", "run"]
+          # Use `args` (not `command`) so the upstream entrypoint chain
+          # (tini → uv venv → `hermes`) stays intact. Setting `command`
+          # replaces ENTRYPOINT, which strips the venv from PATH and the
+          # `hermes` binary becomes unfindable.
+          args: ["gateway", "run"]
           envFrom:
             - configMapRef:
                 name: hermes-config

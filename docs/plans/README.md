@@ -57,8 +57,8 @@ Sorted by filing date (newest first).
 | [2026-02-21-linkding-db-restore-plan.md](2026-02-21-linkding-db-restore-plan.md) | `planned` | Live DR test: destroy and restore Linkding staging DB |
 | [2026-02-21-documentation-rewrite-plan.md](2026-02-21-documentation-rewrite-plan.md) | `complete` | Rewrite all app and infra documentation |
 | [2026-02-21-cnpg-backup-upgrade.md](2026-02-21-cnpg-backup-upgrade.md) | `complete` | Migrate CNPG backups to Barman Cloud Plugin |
-| [2026-02-21-cluster-health-dashboards-plan.md](2026-02-21-cluster-health-dashboards-plan.md) | `in-progress` | Grafana cluster health dashboard suite |
-| [2026-02-21-app-health-dashboards-plan.md](2026-02-21-app-health-dashboards-plan.md) | `in-progress` | Grafana application health dashboards |
+| [2026-02-21-cluster-health-dashboards-plan.md](2026-02-21-cluster-health-dashboards-plan.md) | `complete` | Grafana cluster health dashboard suite |
+| [2026-02-21-app-health-dashboards-plan.md](2026-02-21-app-health-dashboards-plan.md) | `complete` | Grafana application health dashboards |
 | [2026-02-17-authelia-smtp-notifier.md](2026-02-17-authelia-smtp-notifier.md) | `planned` | Replace filesystem notifier with real SMTP |
 | [2026-02-15-adguard-ha.md](2026-02-15-adguard-ha.md) | `planned` | AdGuard Home high-availability with config sync |
 | [2026-02-11-authelia-sso-rollout.md](2026-02-11-authelia-sso-rollout.md) | `complete` | SSO rollout across all homelab apps |

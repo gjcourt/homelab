@@ -1,6 +1,6 @@
 ---
-status: in-progress
-last_modified: 2026-02-28
+status: complete
+last_modified: 2026-05-03
 ---
 
 # Cluster Health Dashboards Plan
@@ -116,6 +116,6 @@ This dashboard monitors the health of the Kubernetes control plane components.
 
 - [x] **Cluster Overview dashboard** (`infra/configs/dashboards/cluster-overview-cm.yaml`): Deployed via Flux. Includes node/pod status stat panels, cluster CPU/memory %, active alert count, top namespaces by CPU/memory (time series), and top 10 pods by CPU/memory (tables).
 - [x] **Node Details dashboard** (`infra/configs/dashboards/node-details-cm.yaml`): Deployed via Flux. Node selector variable (`instance`), CPU %, memory %, load averages, uptime, total memory stat panels, CPU-by-mode stacked time series, memory breakdown time series, disk I/O, and network I/O panels.
-- [ ] Storage & CSI Dashboard
-- [ ] Networking & Gateway Dashboard
-- [ ] Control Plane Dashboard
+- [x] **Storage & CSI dashboard** (`infra/configs/dashboards/storage-csi-cm.yaml`): PVC summary stats (bound count, >80% full, total provisioned/used), PVC usage % time series per PVC, node filesystem used % time series.
+- [x] **Networking & Gateway dashboard** (`infra/configs/dashboards/networking-gateway-cm.yaml`): Cilium endpoint/IPAM/policy stats, packet drop rate by reason, forwarded packet rate, cert-manager certificate expiry bar gauge.
+- [x] **Control Plane dashboard** (`infra/configs/dashboards/control-plane-cm.yaml`): API server request rate by verb, error rate by code, P99 latency; etcd DB size, leader changes, WAL sync P99, proposals rate; scheduler P99 latency, controller manager work queue depth.

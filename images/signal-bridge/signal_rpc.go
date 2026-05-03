@@ -184,24 +184,19 @@ func (s *SignalRPC) send(params map[string]interface{}) (json.RawMessage, error)
 }
 
 func (s *SignalRPC) readResponse() (*rpcResponse, error) {
-	var rawLine []byte
-	for {
-		line, err := s.reader.ReadBytes('\n')
-		if err != nil {
-			if err == io.EOF {
-				if len(rawLine) == 0 {
-					return nil, fmt.Errorf("connection closed")
-				}
-				break
-			}
-			s.metrics.RecordTCPError("read")
-			return nil, fmt.Errorf("read: %w", err)
+	// signal-cli sends one newline-terminated JSON object per response;
+	// the connection stays open, so we must not loop until EOF.
+	line, err := s.reader.ReadBytes('\n')
+	if err != nil {
+		if err == io.EOF {
+			return nil, fmt.Errorf("connection closed")
 		}
-		rawLine = append(rawLine, line...)
+		s.metrics.RecordTCPError("read")
+		return nil, fmt.Errorf("read: %w", err)
 	}
 
 	var resp rpcResponse
-	if err := json.Unmarshal(rawLine, &resp); err != nil {
+	if err := json.Unmarshal(line, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 

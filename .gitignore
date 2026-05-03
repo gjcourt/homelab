@@ -6,3 +6,6 @@ default-values.yaml
 
 # Personal notes
 docs/plans/george.md
+
+# Per-session git worktrees (out-of-band scratch space; not tracked content)
+.worktrees/

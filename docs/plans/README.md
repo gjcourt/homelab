@@ -40,4 +40,5 @@ Use `YYYY-MM-DD` format. Update this field whenever the document is meaningfully
 | [documentation-rewrite-plan.md](documentation-rewrite-plan.md) | `in-progress` | Rewrite all app and infra documentation |
 | [george.md](george.md) | `active` | Personal TODO backlog |
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | `planned` | IaC hardening — close the 22 findings from the 2026-05-02 critique |
+| [2026-05-02-hestia-gha-runner.md](2026-05-02-hestia-gha-runner.md) | `planned` | Self-hosted GHA runner on hestia for auto-deploy of Custom App compose changes |
 | [linkding-db-restore-plan.md](linkding-db-restore-plan.md) | `planned` | Live DR test: destroy and restore Linkding staging DB |

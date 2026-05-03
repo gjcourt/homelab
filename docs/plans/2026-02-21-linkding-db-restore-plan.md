@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-02-27
+last_modified: 2026-05-03
 ---
 
 # Linkding Staging DB Restore Test Plan
@@ -129,3 +129,16 @@ After a successful test, revert the configuration to its normal state.
 
 - **No Base Backup Found**: If the recovery fails because no base backup is found, ensure that a base backup was actually taken. You may need to trigger a manual backup before starting the test.
 - **WAL Archive Errors**: If the recovery fails while applying WAL files, check the logs of the primary pod for specific errors related to downloading or applying WALs.
+
+---
+
+## Survey 2026-05-03
+
+**Current state:** IaC prerequisites are in place. `apps/staging/linkding/database.yaml` has the Barman Cloud Plugin reference and the `externalClusters` block needed for restore. `apps/staging/linkding/objectstore.yaml` defines the S3 destination at `s3://gjcourt-homelab-backup/staging/linkding/v1`. `scheduledbackup.yaml` exists. No drill has been run yet — this is purely an operator-execution exercise.
+
+**Outstanding next steps (operator):**
+
+1. Pre-flight: confirm a base backup exists in S3 — either `kubectl cnpg status -n linkding-stage linkding-db-staging-cnpg-v1` or by inspecting the bucket directly (`aws s3 ls s3://gjcourt-homelab-backup/staging/linkding/v1/base/`).
+2. Walk the plan's Phase 1–6 sequentially: create a test bookmark, suspend Flux, delete cluster + PVCs, edit `database.yaml` to switch `bootstrap.initdb` → `bootstrap.recovery`, apply, monitor restoration, verify the test bookmark survives, revert config, resume Flux.
+3. Capture findings in a postmortem under `docs/operations/incidents/` (or a "drill" subdirectory) — even a successful drill is worth recording.
+4. Flip this plan to `complete` once the drill has run end-to-end and the staging app comes back to a known-good state.

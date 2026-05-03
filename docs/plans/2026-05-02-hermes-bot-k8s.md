@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 last_modified: 2026-05-03
 ---
 
@@ -169,3 +169,18 @@ Sketch:
 - D1 image documentation: [`images/hermes-bot/README.md`](../../images/hermes-bot/README.md) (#386).
 - Superseded by this plan's D2: [`2026-05-02-signal-cli-hermes-rollout.md`](2026-05-02-signal-cli-hermes-rollout.md) D2 (TrueNAS Custom App for signal stack).
 - Referenced infra: [`apps/base/signal-cli/`](../../apps/base/signal-cli/), [`hosts/hestia/llms/docker-compose-llama.yml`](../../hosts/hestia/llms/docker-compose-llama.yml).
+
+---
+
+## Survey 2026-05-03
+
+**Current state:** D1 (upstream image docs in `images/hermes-bot/README.md`) and D2 (k8s base + staging overlay) are merged. `apps/base/hermes/` exists with deployment, configmap, namespace, storage, kustomization, plus a serviceaccount.yaml from PR 1.3 parity work and a pod security baseline from PR #404. Production overlay (`apps/production/hermes/`) and staging overlay (`apps/staging/hermes/`) are wired into `apps/{staging,production}/kustomization.yaml`. Outstanding work is verification + ops docs, not IaC.
+
+**Outstanding next steps:**
+
+1. Verify staging deployment is live: `kubectl logs -n hermes-stage deploy/hermes` should show successful SSE registration with signal-bridge.
+2. Soak ≥48h: monitor for OOM, CrashLoopBackOff, restart count; DM the bot from a phone and confirm round-trip response.
+3. Check PVC utilization: `kubectl exec -n hermes-stage deploy/hermes -- df -h /opt/data` should remain <50% after 48h.
+4. Promote to production if not already (verify `apps/production/hermes/` is reconciling cleanly).
+5. Write the runbook: `docs/operations/apps/hermes.md` (config, troubleshooting, model switching, Signal account management).
+6. Flip plan to `complete` once staging soak + production verification + runbook all land.

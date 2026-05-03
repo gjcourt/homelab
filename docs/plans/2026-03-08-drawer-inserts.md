@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-03-08
+last_modified: 2026-05-03
 ---
 
 # Drawer Insert Design — 75 × 32 × 12 cm
@@ -196,3 +196,17 @@ Full-depth, narrower than bottom insert. Slides left-to-right inside the bottom 
     │                                                          │
     └──────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Survey 2026-05-03
+
+**Current state:** No repo artefacts (no BOM, no photos, no tracked progress). This is a physical/cardboard project — the plan is the artefact. Nothing blocking, nothing in flight.
+
+**Outstanding next steps (as per the plan):**
+
+1. Gather materials (double-wall corrugated cardboard, box cutter, metal ruler, glue gun).
+2. Build the bottom insert (74 × 31 × 5 cm walls).
+3. Build the top insert (three compartments + flex zone).
+4. Add felt pads to sliding surfaces.
+5. Test fit and adjust.

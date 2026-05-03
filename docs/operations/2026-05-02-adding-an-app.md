@@ -36,4 +36,4 @@ gh api /users/gjcourt/packages/container/<app>/versions --jq '.[0].metadata.cont
 
 ## Per-app runbook
 
-After the app is deployed, add an entry under `docs/apps/<app>.md` with the standard runbook structure (overview, architecture, URLs, configuration, usage, monitoring, disaster recovery, troubleshooting). The template is documented in `docs/plans/documentation-rewrite-plan.md`.
+After the app is deployed, add an entry under `docs/apps/<app>.md` with the standard runbook structure (overview, architecture, URLs, configuration, usage, monitoring, disaster recovery, troubleshooting). The template is documented in `docs/plans/2026-02-21-documentation-rewrite-plan.md`.

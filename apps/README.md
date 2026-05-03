@@ -1,7 +1,7 @@
 # Homelab self-hosted applications
 
 ## Notes
-- AdGuard HA rollout plan: [docs/plans/adguard-ha.md](../docs/plans/adguard-ha.md)
+- AdGuard HA rollout plan: [docs/plans/2026-02-15-adguard-ha.md](../docs/plans/2026-02-15-adguard-ha.md)
 
 ## Current applications
 <!-- apps:list:start -->

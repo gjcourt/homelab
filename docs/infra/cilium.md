@@ -1,6 +1,6 @@
 # Cilium
 
-> **Migration in flight (2026-05-02):** LoadBalancer IP advertisement is moving from L2 Announcements to BGP peering with the UCGF. See [`docs/plans/bgp-rollout.md`](../plans/bgp-rollout.md). Update this doc when the migration completes.
+> **Migration in flight (2026-05-02):** LoadBalancer IP advertisement is moving from L2 Announcements to BGP peering with the UCGF. See [`docs/plans/2026-03-08-bgp-rollout.md`](../plans/2026-03-08-bgp-rollout.md). Update this doc when the migration completes.
 
 ## 1. Overview
 Cilium is the Container Network Interface (CNI) used in the homelab cluster. It provides high-performance networking, security, and observability using eBPF. It also serves as the LoadBalancer IPAM provider (replacing MetalLB) and the Gateway API controller.

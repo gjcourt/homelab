@@ -1,3 +1,8 @@
+---
+status: planned
+last_modified: 2026-03-08
+---
+
 # Drawer Insert Design — 75 × 32 × 12 cm
 
 Cardboard inserts for a 75 × 32 × 12 cm (W × D × H) drawer.

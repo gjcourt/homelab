@@ -17,4 +17,4 @@ Examples: `2026-05-02-flux-debugging.md`, `2026-05-02-adding-an-app.md`, `2026-0
 
 **Allowed `status:` values:** `Stable`, `Superseded`.
 
-Historical note: `docs/apps/`, `docs/guides/`, and `docs/incidents/` predate this folder; per-doc migration is tracked in `docs/plans/documentation-rewrite-plan.md`. Cross-link rather than duplicate.
+Historical note: `docs/apps/`, `docs/guides/`, and `docs/incidents/` predate this folder; per-doc migration is tracked in `docs/plans/2026-02-21-documentation-rewrite-plan.md`. Cross-link rather than duplicate.

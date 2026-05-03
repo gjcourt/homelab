@@ -48,6 +48,15 @@ spec:
               rm -f /tmp/snapfifo
               mkfifo /tmp/snapfifo
               chmod 666 /tmp/snapfifo
+          # Tiny budget so the pod stays Burstable. Closes the init-container
+          # portion of finding #7 (docs/plans/2026-05-02-critique-remediation.md).
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
           volumeMounts:
             - name: snapcast-tmp
               mountPath: /tmp
@@ -68,6 +77,13 @@ spec:
               rm -f /audio/spotify.fifo
               mkfifo /audio/spotify.fifo
               chmod 666 /audio/spotify.fifo
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
           volumeMounts:
             - name: audio-pipes
               mountPath: /audio

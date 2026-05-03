@@ -44,6 +44,16 @@ spec:
             capabilities:
               drop:
                 - ALL
+          # Tiny budget so the pod stays Burstable alongside the main
+          # container. Closes the init-container portion of finding #7
+          # (docs/plans/2026-05-02-critique-remediation.md).
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
           volumeMounts:
             - name: config
               mountPath: /config

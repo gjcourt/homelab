@@ -5,8 +5,8 @@ Memos is an open-source, self-hosted memo hub with knowledge management and soci
 
 ## 2. Architecture
 Memos is deployed as a Kubernetes `Deployment` with a single replica in the `memos-prod` (and `memos-stage`) namespace.
-- **Database**: Uses a CloudNativePG (CNPG) PostgreSQL cluster (`memos-db-production-cnpg-v1`) with 3 instances for data storage.
-- **Storage**: A 1Gi PersistentVolumeClaim (`memos-data-pvc`) is mounted at `/var/opt/memos` for local file storage (attachments, exports).
+- **Database**: Uses a CloudNativePG (CNPG) PostgreSQL cluster (`memos-db-production-cnpg-v1`) with 3 instances for structured data (memo content, tags, user accounts, OIDC state). Enabled via `MEMOS_DRIVER: postgres`.
+- **Storage**: A 1Gi PersistentVolumeClaim (`memos-data-pvc`) is mounted at `/var/opt/memos` for file attachments and uploaded resources. Memos writes blobs to the local filesystem regardless of the database driver, so the PVC is required even with PostgreSQL.
 - **Networking**: Exposed via Cilium Gateway API (`HTTPRoute`).
 
 ## 3. URLs

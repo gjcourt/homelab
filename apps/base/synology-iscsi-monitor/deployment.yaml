@@ -7,6 +7,7 @@ metadata:
     app: synology-iscsi-exporter
 spec:
   replicas: 1
+  revisionHistoryLimit: 5
   selector:
     matchLabels:
       app: synology-iscsi-exporter
@@ -47,6 +48,16 @@ spec:
           ports:
             - containerPort: 8000
               name: metrics
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            # The exporter installs paramiko/prometheus_client via pip on
+            # startup before listening, so allow a generous initial delay.
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
           resources:
             requests:
               cpu: 10m

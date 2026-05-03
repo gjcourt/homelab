@@ -7,6 +7,7 @@ metadata:
     app: linkding
 spec:
   replicas: 1
+  revisionHistoryLimit: 5
   selector:
     matchLabels:
       app: linkding
@@ -53,6 +54,15 @@ spec:
           volumeMounts:
             - name: linkding-data
               mountPath: /etc/linkding/data
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
 
           resources:
             requests:

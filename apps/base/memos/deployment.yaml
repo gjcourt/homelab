@@ -7,6 +7,7 @@ metadata:
     app: memos
 spec:
   replicas: 1
+  revisionHistoryLimit: 5
   selector:
     matchLabels:
       app: memos
@@ -52,6 +53,15 @@ spec:
             # readOnlyRootFilesystem is enabled.
             - name: tmp
               mountPath: /tmp
+
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 5230
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
 
           resources:
             requests:

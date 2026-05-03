@@ -20,6 +20,9 @@ spec:
     crds: Create
   upgrade:
     crds: CreateReplace
+    remediation:
+      retries: 3
+      strategy: rollback
 
   driftDetection:
     mode: enabled

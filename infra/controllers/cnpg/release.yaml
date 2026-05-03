@@ -20,6 +20,12 @@ spec:
     crds: Create
   upgrade:
     crds: CreateReplace
+    # uninstall (not rollback): the CNPG operator manages Cluster CRs that
+    # back PostgreSQL with StatefulSets; rollback on stuck StatefulSets is a
+    # known Flux failure mode. Uninstall + reinstall is safer for the operator.
+    remediation:
+      retries: 3
+      strategy: uninstall
 
   driftDetection:
     mode: enabled

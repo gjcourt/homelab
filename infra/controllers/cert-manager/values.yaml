@@ -3,6 +3,11 @@ crds:
   # as part of the Helm installation.
   enabled: true
 
+# Cluster-critical: cert-manager issues TLS for every Gateway listener and
+# webhook in the cluster.
+global:
+  priorityClassName: system-cluster-critical
+
 config:
   apiVersion: controller.config.cert-manager.io/v1alpha1
   kind: ControllerConfiguration

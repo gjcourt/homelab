@@ -7,6 +7,7 @@ metadata:
     app: hermes
 spec:
   replicas: 1
+  revisionHistoryLimit: 5
   strategy:
     type: Recreate
   selector:
@@ -17,13 +18,17 @@ spec:
       labels:
         app: hermes
     spec:
+      serviceAccountName: hermes
       automountServiceAccountToken: false
       securityContext:
         # Upstream image runs as the `hermes` user, UID 10000. fsGroup ensures
         # the iSCSI-mounted PVC is writable by that user without an init chown.
+        runAsNonRoot: true
         runAsUser: 10000
         runAsGroup: 10000
         fsGroup: 10000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: hermes
           # nousresearch/hermes-agent:v2026.4.30 (linux/amd64)
@@ -37,6 +42,11 @@ spec:
           envFrom:
             - configMapRef:
                 name: hermes-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: data
               mountPath: /opt/data

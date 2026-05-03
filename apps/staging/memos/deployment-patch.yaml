@@ -31,6 +31,12 @@ spec:
                 secretKeyRef:
                   name: memos-db-credentials
                   key: password
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
             - name: dsn-volume
               mountPath: /dsn

@@ -19,12 +19,15 @@ spec:
       labels:
         app: audiobookshelf
     spec:
-      # App runs as node user, limits the scope of pods to the same user.
+      # The upstream advplyr/audiobookshelf image has no USER directive (runs
+      # as root by default); we pin it to a non-root UID 1000 here. CONFIG_PATH
+      # and METADATA_PATH are overridden via configmap to point at PVC mounts
+      # owned by this UID via fsGroup.
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000 # node user ID
-        runAsGroup: 1000 # node group ID
-        fsGroup: 1000 # node group ID
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
 
@@ -45,6 +48,7 @@ spec:
               memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -53,6 +57,11 @@ spec:
               mountPath: /usr/share/audiobookshelf/config
             - name: audiobookshelf-meta-data
               mountPath: /usr/share/audiobookshelf/metadata
+            # ffmpeg / Node write temp output (transcodes, intermediate
+            # thumbnails) under /tmp; required when readOnlyRootFilesystem is
+            # enabled.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: audiobookshelf-data
           persistentVolumeClaim:
@@ -60,6 +69,5 @@ spec:
         - name: audiobookshelf-meta-data
           persistentVolumeClaim:
             claimName: audiobookshelf-meta-data-pvc
-
-
-
+        - name: tmp
+          emptyDir: {}

@@ -18,7 +18,17 @@ spec:
       labels:
         app: memos
     spec:
+      # App runs as the upstream `nonroot` user (UID/GID 10001) per the Memos
+      # Dockerfile (https://github.com/usememos/memos/blob/main/scripts/Dockerfile).
+      # The entrypoint chown's /var/opt/memos only when started as root; running
+      # as 10001 directly skips that branch and execs the binary, so the
+      # readOnlyRootFilesystem container securityContext is safe. fsGroup is
+      # set to 10001 so the data PVC is group-owned by the app's group.
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
 
@@ -35,6 +45,11 @@ spec:
           volumeMounts:
             - name: memos-data
               mountPath: /var/opt/memos
+            # Go binary + entrypoint shell script need a writable /tmp
+            # (tempfile uploads, intermediate files); required when
+            # readOnlyRootFilesystem is enabled.
+            - name: tmp
+              mountPath: /tmp
 
           resources:
             requests:
@@ -44,7 +59,16 @@ spec:
               cpu: 500m
               memory: 256Mi
 
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
       volumes:
         - name: memos-data
           persistentVolumeClaim:
             claimName: memos-data-pvc
+        - name: tmp
+          emptyDir: {}

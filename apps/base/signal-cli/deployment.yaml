@@ -20,7 +20,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: signal-cli
-          image: ghcr.io/asamk/signal-cli:latest
+          image: ghcr.io/asamk/signal-cli@sha256:23a808b97eaa65e15f09809e5644aedf33e838db833552dfe825ca52dcd0940e
           command:
             - /opt/signal-cli/bin/signal-cli
             - daemon
@@ -54,7 +54,7 @@ spec:
               cpu: 500m
               memory: 512Mi
         - name: signal-bridge
-          image: gjcourt/signal-bridge:latest
+          image: ghcr.io/gjcourt/signal-bridge:2026-05-02
           env:
             - name: SIGNAL_CLI_HOST
               value: "127.0.0.1"
@@ -68,6 +68,16 @@ spec:
               value: "0.0.0.0"
             - name: LISTEN_PORT
               value: "8080"
+            - name: HERMES_ALLOWED_ACCOUNTS
+              value: "+16179397251"
+            - name: HERMES_ALLOW_ALL_USERS
+              value: "false"
+            - name: HERMES_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: signal-bridge-auth
+                  key: token
+                  optional: true
           ports:
             - name: http
               containerPort: 8080

@@ -32,7 +32,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: authelia
-          image: authelia/authelia:4.39.19
+          # authelia 4.39.19
+          image: authelia/authelia@sha256:0c824dcab1ae97c56bf673c5e77fe8cc6bcd400564555140cc8002a12c6b6463
           args:
             - --config
             - /config/configuration.yaml

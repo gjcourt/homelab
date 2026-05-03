@@ -1,0 +1,50 @@
+---
+# Cluster-wide default-deny scaffolding for Cilium NetworkPolicies.
+#
+# IMPORTANT: This policy is INTENTIONALLY INERT today. It only applies to
+# namespaces that carry the label `network-policies: enforced`. No real
+# namespace should have that label set until each app it covers ships its
+# own per-app `CiliumNetworkPolicy` allow rules. Adding the label without
+# the per-app allow rules will black-hole traffic for that namespace.
+#
+# Rollout (per the critique remediation plan, Phase 1 / PR 1.1):
+#   1. Land per-app NetworkPolicies (this PR ships excalidraw as the canary).
+#   2. Add `network-policies: enforced` to one namespace at a time.
+#   3. Watch `hubble observe --verdict DROPPED -n <ns>` for at least 24h.
+#   4. Once every app namespace is opted in and stable, this scaffold can be
+#      replaced (or extended) with a true cluster-wide default-deny.
+#
+# Why a CCNP rather than a per-namespace `CiliumNetworkPolicy`:
+#   - One source of truth for the deny baseline.
+#   - The `endpointSelector` matchExpressions gate confines its effect to
+#     namespaces that explicitly opt in via the label.
+#
+# The kube-system + flux-system carve-outs are documented here so future
+# allow rules don't accidentally re-deny them when this becomes enforcing.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: default-deny
+  labels:
+    app.kubernetes.io/name: default-deny
+    app.kubernetes.io/part-of: network-policies
+    app.kubernetes.io/managed-by: flux
+spec:
+  description: >-
+    Default-deny baseline. Inert until a namespace is labelled
+    `network-policies: enforced`. See infra/configs/network-policies/README.md.
+  endpointSelector:
+    matchExpressions:
+      # Pods only match this policy if their namespace is opted in.
+      # `k8s:io.kubernetes.pod.namespace` is Cilium's reserved label for the
+      # pod's namespace; we additionally gate on the namespace label
+      # `network-policies` being `enforced` so the policy is opt-in.
+      - key: k8s:io.cilium.k8s.namespace.labels.network-policies
+        operator: In
+        values:
+          - enforced
+  # Empty ingress + egress slices = deny-all once the selector matches.
+  # Each opted-in namespace must ship its own per-app `CiliumNetworkPolicy`
+  # to allow the traffic it actually needs (DNS, gateway ingress, etc.).
+  ingress: []
+  egress: []

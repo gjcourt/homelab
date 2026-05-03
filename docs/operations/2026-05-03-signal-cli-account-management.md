@@ -43,42 +43,81 @@ The phone whose number you're linking does **not** lose anything — it stays pr
 
 ### 1. Generate the link URI
 
+> **Don't use `signal-cli link` as a separate process** while the daemon is running. The two processes compete for the same Signal WebSocket and the link drops with `Connection closed!` (exit code 3) after the URI is generated, leaving the URI dead before anyone can scan. Each failed attempt also burns a Signal-side rate-limit budget — after ~3-5 failures Signal will block further link attempts for 1–24 hours.
+>
+> **Use the daemon's existing JSON-RPC interface instead.** This piggybacks on the connection the daemon already holds, so there's no conflict and no per-attempt server-side artifact:
+
 ```bash
-kubectl exec -it -n signal-cli deploy/signal-cli -c signal-cli -- \
-  signal-cli --config /var/lib/signal-cli link --name "homelab-bot"
+kubectl exec -n signal-cli deploy/signal-cli -c signal-cli -- bash -c '
+exec 3<>/dev/tcp/127.0.0.1/7583
+printf "%s\n" "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"startLink\",\"params\":{\"deviceName\":\"homelab-bot\"}}" >&3
+timeout 15 head -1 <&3
+exec 3>&-
+'
 ```
 
-This blocks and prints a `tsdevice:/?uuid=...&pub_key=...` URI. Copy it (you'll need to render it as a QR code).
+The daemon responds with one JSON line:
+
+```json
+{"jsonrpc":"2.0","result":{"deviceLinkUri":"sgnl://linkdevice?uuid=...&pub_key=..."},"id":1}
+```
+
+The daemon holds the link open server-side until it's scanned (typically 5+ min) or the daemon restarts. No further client-side action is needed for the link to complete — the daemon will receive the scan asynchronously and the new account appears in `listAccounts`.
 
 ### 2. Render as QR
 
-On your workstation:
+On your workstation. UTF-8 block QR usually scans cleaner than ANSI256 from a phone camera:
 
 ```bash
-echo 'tsdevice:/?uuid=...&pub_key=...' | qrencode -t ANSI256
+qrencode -t UTF8 -m 2 'sgnl://linkdevice?uuid=...&pub_key=...'
+```
+
+If the terminal QR doesn't scan reliably (font hinting, brightness), save as a high-resolution PNG and `open` it:
+
+```bash
+qrencode -t PNG -s 12 -m 4 -o /tmp/signal-link.png 'sgnl://linkdevice?uuid=...'
+open /tmp/signal-link.png
 ```
 
 (`brew install qrencode` on macOS, `apt install qrencode` on Linux.)
-
-The QR appears in your terminal.
 
 ### 3. Scan from the phone
 
 On the phone whose number you're linking:
 
 - Open Signal → Settings → **Linked devices** → **Link new device** → scan the QR with the phone's camera.
-- Confirm the device name `homelab-bot` when prompted.
+- Confirm the device name when prompted.
 
-The `signal-cli link` command in step 1 should return within ~10 seconds with a success message (the new account's number).
+The daemon completes the link asynchronously; nothing on the kubectl side blocks. Watch for the new account to appear (next step).
 
 ### 4. Verify
 
+Use the daemon JSON-RPC again to list accounts (no separate process needed):
+
 ```bash
-kubectl exec -n signal-cli deploy/signal-cli -c signal-cli -- \
-  signal-cli --config /var/lib/signal-cli listAccounts
+kubectl exec -n signal-cli deploy/signal-cli -c signal-cli -- bash -c '
+exec 3<>/dev/tcp/127.0.0.1/7583
+printf "%s\n" "{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"listAccounts\"}" >&3
+timeout 3 cat <&3
+exec 3>&-
+'
 ```
 
-The new number should appear. Restart the deployment so the daemon reloads its account list cleanly:
+To poll until the new account shows up (replace `1` with the expected pre-link count):
+
+```bash
+while true; do
+  N=$(kubectl exec -n signal-cli deploy/signal-cli -c signal-cli -- bash -c '
+exec 3<>/dev/tcp/127.0.0.1/7583
+printf "%s\n" "{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"listAccounts\"}" >&3
+timeout 3 cat <&3' 2>/dev/null | grep -oE '\+[0-9]+' | wc -l | tr -d ' ')
+  echo "$(date) accounts: $N"
+  [ "$N" -ge 2 ] && break
+  sleep 8
+done
+```
+
+Once the new account appears, restart the deployment so the daemon reloads its account list cleanly:
 
 ```bash
 kubectl rollout restart deploy signal-cli -n signal-cli
@@ -189,7 +228,9 @@ The data dir under `/var/lib/signal-cli/data/+1.../` stays on the PVC unless you
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `link` hangs forever | QR was never scanned, or scanned by wrong phone (not the primary device for the target number) | Cancel and retry. Make sure you're scanning from the phone that *is* the primary on the target number. |
+| `signal-cli link` exits with `Link request error: Connection closed!` (exit code 3) | A separate `signal-cli` process is fighting the daemon for the Signal WebSocket | Don't use `signal-cli link`; use the daemon's `startLink` JSON-RPC method (Flow A step 1). |
+| Daemon `startLink` returns a URI but scan never completes | Most likely: too many recent failed link attempts, Signal-side rate limit | Wait 1-24 hours, then retry once with the JSON-RPC path. Any single attempt that ends in success doesn't count toward the limit. |
+| Phone says "invalid response" or "QR code not recognized" | Scanning a stale QR (URI from a previous attempt that already errored out, or one that's been server-side invalidated) | Generate a fresh URI via JSON-RPC. The previous one is dead. |
 | `register` returns `CAPTCHA_REQUIRED` | Captcha token expired (they're short-lived, ~10 min) | Generate a fresh one and retry. |
 | `verify` returns `INVALID_CODE` | SMS didn't arrive, or used the wrong code | Re-`register` with a fresh captcha; the previous registration was abandoned. |
 | signal-bridge logs `accounts=[+1XXX]` (only one) after linking | Bridge cached the account list at startup | `kubectl rollout restart deploy signal-cli -n signal-cli` |

@@ -6,3 +6,4 @@ resources:
   - cilium
   - dashboards
   - gateway
+  - network-policies

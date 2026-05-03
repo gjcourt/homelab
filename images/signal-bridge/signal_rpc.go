@@ -147,25 +147,11 @@ func (s *SignalRPC) receive(account string) ([]map[string]interface{}, error) {
 	return messages, nil
 }
 
-func (s *SignalRPC) getInfo() (map[string]interface{}, error) {
+func (s *SignalRPC) listAccounts() error {
 	start := time.Now()
-
-	result, err := s.call("getInfo", nil)
-	elapsed := time.Since(start)
-
-	if err != nil {
-		s.metrics.RecordRPC("getInfo", elapsed)
-		return nil, err
-	}
-
-	var info map[string]interface{}
-	if err := json.Unmarshal(result, &info); err != nil {
-		s.metrics.RecordRPC("getInfo", elapsed)
-		return nil, fmt.Errorf("unmarshal getInfo result: %w", err)
-	}
-
-	s.metrics.RecordRPC("getInfo", elapsed)
-	return info, nil
+	_, err := s.call("listAccounts", nil)
+	s.metrics.RecordRPC("listAccounts", time.Since(start))
+	return err
 }
 
 func (s *SignalRPC) send(params map[string]interface{}) (json.RawMessage, error) {

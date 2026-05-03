@@ -6,4 +6,5 @@ resources:
   - job-db-init.yaml
   - namespace.yaml
   - service.yaml
+  - serviceaccount.yaml
   - storage.yaml

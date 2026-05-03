@@ -6,6 +6,7 @@ resources:
   - prometheus-rule.yaml
   - script-cm.yaml
   - service.yaml
+  - serviceaccount.yaml
   - servicemonitor.yaml
 
 configMapGenerator:

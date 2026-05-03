@@ -18,6 +18,8 @@ spec:
       labels:
         app: memos
     spec:
+      serviceAccountName: memos
+      automountServiceAccountToken: false
       securityContext:
         seccompProfile:
           type: RuntimeDefault

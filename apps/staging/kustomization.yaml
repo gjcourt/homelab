@@ -8,6 +8,7 @@ resources:
   - excalidraw
   - golinks
   - hermes
+  - hermes-callee
   - homeassistant
   - homepage
   - immich

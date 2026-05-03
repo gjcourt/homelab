@@ -1,7 +1,7 @@
 services:
-  llama-qwen36-35b:
-    image: ghcr.io/ggml-org/llama.cpp:server-cuda
-    container_name: llama-qwen36-35b
+  llama:
+    image: ghcr.io/ggml-org/llama.cpp@sha256:a8c56356fbfde209910b8098d0a060f4b84997f23b65491df3f2b61fae91dd7b
+    container_name: llama
     restart: unless-stopped
     volumes:
       - /mnt/main/ai/models/gguf:/models
@@ -9,7 +9,7 @@ services:
       - "8000:8080"
     command: >
       -m /models/Qwen3.6-35B-A3B-UD-IQ4_NL.gguf
-      --alias "Qwen3.6-35B-A3B"
+      --alias Qwen3.6-35B-A3B
       --host 0.0.0.0
       --port 8080
       --ctx-size 409600

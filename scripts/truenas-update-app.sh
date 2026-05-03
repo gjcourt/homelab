@@ -168,11 +168,13 @@ async def main() -> None:
             return
 
         # Apply.
+        # app.update(id, config) — the second positional arg maps to the
+        # `config` parameter of the middleware method, NOT wrapped in "values".
         log(f"calling app.update for '{APP_NAME}'")
         update = await call(
             ws,
             "app.update",
-            [APP_NAME, {"values": {"custom_compose_config": new_yaml}}],
+            [APP_NAME, {"custom_compose_config": new_yaml}],
             msg_id=3,
         )
         if "error" in update and update["error"]:

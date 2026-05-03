@@ -34,7 +34,8 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        - image: ghcr.io/mealie-recipes/mealie:v3.16.0
+        # mealie v3.16.0
+        - image: ghcr.io/mealie-recipes/mealie@sha256:74496aed2c5055e3b7b6c4e1bb9b4f16b1f566601582b258a10bae851f19ac24
           name: mealie
           ports:
             - containerPort: 9000

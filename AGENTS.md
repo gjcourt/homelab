@@ -36,7 +36,7 @@ See `docs/architecture/` for component-level architecture (DNS strategy, gateway
 
 - **Branch + PR for every change** — never commit directly to `master` or `staging`.
 - **Image tags are strictly increasing** — never roll back to an earlier tag without explicit intent. CI tags as `YYYY-MM-DD` (first build of day) then `YYYY-MM-DD-N`.
-- **Namespace convention**: production uses the plain name (`overture`); staging uses a `-stage` suffix (`overture-stage`).
+- **Namespace convention**: production uses a `-prod` suffix (`golinks-prod`); staging uses a `-stage` suffix (`golinks-stage`). The base manifest declares the plain name (`golinks`) and each overlay patches `metadata.name`. Apps without a staging variant (`mosquitto`, `cloudflare-tunnel`, `synology-iscsi-monitor`, etc.) use the plain name.
 - **Secrets are SOPS-encrypted** before commit (key ref: `.sops.yaml`); never commit plaintext.
 - **Adding a new app**: see `docs/operations/2026-05-02-adding-an-app.md`.
 - **Conventional Commits** for every commit (`feat:`, `fix:`, `chore:`, `refactor:`, `docs:`, `test:`, `ci:`, `deploy:`).

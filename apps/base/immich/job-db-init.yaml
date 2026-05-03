@@ -11,6 +11,8 @@ spec:
     metadata:
       name: immich-db-init
     spec:
+      serviceAccountName: immich
+      automountServiceAccountToken: false
       containers:
         - name: db-init
           image: postgres:18-alpine

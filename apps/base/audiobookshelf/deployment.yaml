@@ -19,6 +19,8 @@ spec:
       labels:
         app: audiobookshelf
     spec:
+      serviceAccountName: audiobookshelf
+      automountServiceAccountToken: false
       # App runs as node user, limits the scope of pods to the same user.
       securityContext:
         runAsNonRoot: true

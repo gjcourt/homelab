@@ -4,5 +4,6 @@ resources:
   - deployment.yaml
   - namespace.yaml
   - service.yaml
+  - serviceaccount.yaml
   - servicemonitor.yaml
   - storage.yaml

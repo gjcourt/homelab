@@ -21,6 +21,8 @@ spec:
         app: immich
         component: server
     spec:
+      serviceAccountName: immich
+      automountServiceAccountToken: false
       securityContext:
         seccompProfile:
           type: RuntimeDefault
@@ -86,6 +88,8 @@ spec:
         app: immich
         component: machine-learning
     spec:
+      serviceAccountName: immich
+      automountServiceAccountToken: false
       securityContext:
         seccompProfile:
           type: RuntimeDefault
@@ -154,6 +158,8 @@ spec:
         app: immich
         component: redis
     spec:
+      serviceAccountName: immich
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 999

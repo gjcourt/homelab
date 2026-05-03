@@ -16,6 +16,8 @@ spec:
       labels:
         app.kubernetes.io/name: adguard
     spec:
+      serviceAccountName: adguard
+      automountServiceAccountToken: false
       terminationGracePeriodSeconds: 30
       securityContext:
         seccompProfile:

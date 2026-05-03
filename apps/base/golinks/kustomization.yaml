@@ -7,3 +7,10 @@ resources:
   - secret-ghcr.yaml
   - service.yaml
   - serviceaccount.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: golinks
+      app.kubernetes.io/component: web
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux

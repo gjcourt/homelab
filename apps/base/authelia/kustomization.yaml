@@ -7,6 +7,13 @@ resources:
   - serviceaccount.yaml
   - servicemonitor.yaml
   - storage.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: authelia
+      app.kubernetes.io/component: web
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux
 configMapGenerator:
   - name: authelia-config
     namespace: authelia

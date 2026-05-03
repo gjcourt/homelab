@@ -9,3 +9,10 @@ resources:
   - service-admin.yaml
   - service-headless.yaml
   - serviceaccount.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: adguard
+      app.kubernetes.io/component: web
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux

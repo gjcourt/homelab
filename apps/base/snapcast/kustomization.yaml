@@ -8,3 +8,10 @@ resources:
   - service.yaml
   - serviceaccount.yaml
   - storage.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: snapcast
+      app.kubernetes.io/component: audio
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux

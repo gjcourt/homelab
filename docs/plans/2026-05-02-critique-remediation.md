@@ -1,6 +1,6 @@
 ---
-status: planned
-last_modified: 2026-05-02
+status: in-progress
+last_modified: 2026-05-03
 ---
 
 # Critique Remediation Plan — IaC hardening for melodic-muse

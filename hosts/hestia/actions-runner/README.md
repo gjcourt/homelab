@@ -14,7 +14,12 @@ Self-hosted GHA runner that lives on hestia and applies hestia Custom App compos
 
 The runner is the *only* hestia Custom App that gets pasted into SCALE UI by hand. From its first successful registration onward, every other `hosts/hestia/**` change is applied by the workflow it executes.
 
-1. **Create a GitHub PAT** with `repo` scope (classic PAT) or a GitHub App installation token with `actions:write` + `metadata:read` on `gjcourt/homelab`. Long-lived; the runner mints its own short-lived registration token at startup.
+1. **Create a GitHub PAT** with permissions for runner registration. Long-lived; the runner mints its own short-lived registration token at startup. **Self-hosted runner registration requires repo-admin permission** — `Contents: read/write` is *not* enough. Pick one:
+   - **Classic PAT** (simplest): `repo` scope (full).
+   - **Fine-grained PAT** (preferred): scoped to `gjcourt/homelab` only, with permissions `Administration: Read and write` and `Metadata: Read-only`.
+   - **GitHub App installation token**: `Administration: write` and `Metadata: read` on the repo.
+
+   If `docker logs` shows `curl: (22) The requested URL returned error: 403` on first start, the token lacks `Administration` (or `repo` for classic). Fix the scopes and update the env var.
 2. **Create a TrueNAS API key** — SCALE UI → Settings → API Keys → Add → name it `gha-runner`, copy the value (shown once).
 3. **Pre-create the persistence dataset on hestia**:
    ```bash

@@ -61,4 +61,4 @@ Sorted by filing date (newest first).
 | [2026-02-21-app-health-dashboards-plan.md](2026-02-21-app-health-dashboards-plan.md) | `in-progress` | Grafana application health dashboards |
 | [2026-02-17-authelia-smtp-notifier.md](2026-02-17-authelia-smtp-notifier.md) | `planned` | Replace filesystem notifier with real SMTP |
 | [2026-02-15-adguard-ha.md](2026-02-15-adguard-ha.md) | `planned` | AdGuard Home high-availability with config sync |
-| [2026-02-11-authelia-sso-rollout.md](2026-02-11-authelia-sso-rollout.md) | `in-progress` | SSO rollout across all homelab apps |
+| [2026-02-11-authelia-sso-rollout.md](2026-02-11-authelia-sso-rollout.md) | `complete` | SSO rollout across all homelab apps |

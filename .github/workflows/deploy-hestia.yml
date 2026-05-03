@@ -1,0 +1,85 @@
+name: Deploy hestia Custom Apps
+
+# Push-based auto-deploy of TrueNAS Custom App compose files.
+#
+# When `hosts/hestia/<app>/docker-compose*.yml` changes on master, the matching
+# matrix entry runs on the self-hosted runner on hestia and applies the new
+# compose to the TrueNAS Apps subsystem via the WebSocket API.
+#
+# Adding a new app: add a matrix entry and ensure `<app-name>` matches the
+# Custom App name in SCALE UI exactly.
+#
+# Excluded: actions-runner itself (chicken-and-egg — the runner can't reliably
+# deploy a compose change that recreates its own container). Runner upgrades
+# stay manual.
+#
+# See: docs/plans/2026-05-02-hestia-gha-runner.md
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'hosts/hestia/**/docker-compose*.yml'
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Which app to redeploy (matches matrix entry name)'
+        required: false
+        type: choice
+        default: all
+        options:
+          - all
+          - llama
+      dry_run:
+        description: 'Connect, query, and diff without calling app.update'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-hestia
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: [self-hosted, hestia]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: llama
+            file: hosts/hestia/llms/docker-compose-llama.yml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Skip if workflow_dispatch targeted a different app
+        if: |
+          github.event_name == 'workflow_dispatch' &&
+          inputs.app != 'all' &&
+          inputs.app != matrix.name
+        run: |
+          echo "Skipping ${{ matrix.name }} (workflow_dispatch targeted ${{ inputs.app }})"
+          exit 0
+
+      - name: Apply ${{ matrix.name }}
+        # TRUENAS_API_KEY is inherited from the runner container's process env
+        # (set in hosts/hestia/actions-runner/docker-compose.yml). bash sees it
+        # automatically; no explicit `env:` mapping needed.
+        run: |
+          set -euo pipefail
+          DRY_RUN_FLAG=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          ./scripts/truenas-update-app.sh "${{ matrix.name }}" "${{ matrix.file }}" $DRY_RUN_FLAG
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### ${{ matrix.name }}"
+            echo ""
+            echo "- File: \`${{ matrix.file }}\`"
+            echo "- Result: \`${{ job.status }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

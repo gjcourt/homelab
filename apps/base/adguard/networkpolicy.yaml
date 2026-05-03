@@ -1,0 +1,149 @@
+---
+# Per-app CiliumNetworkPolicy for AdGuard Home — implements Step 4
+# (NetworkPolicy hardening) of docs/plans/2026-02-15-adguard-ha.md.
+#
+# This file is a no-op until the namespace gets labelled
+# `network-policies: enforced` (see infra/configs/network-policies/).
+# Land this file first; flip the label per-overlay (staging → production)
+# in follow-up PRs once the rules have been validated.
+#
+# Two policies live here:
+#   - adguard          → applies to the AdGuard StatefulSet pods
+#   - adguard-sync     → applies to the adguardhome-sync CronJob pods
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: adguard
+  namespace: adguard
+  labels:
+    app.kubernetes.io/name: adguard
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: |
+    AdGuard Home server: DNS open to LAN, admin UI gated to Gateway and
+    the in-namespace sync job, egress to kube-dns + upstream resolvers
+    + HTTPS for filter-list updates.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: adguard
+  ingress:
+    # DNS queries from LAN clients (anything outside the cluster).
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # DNS queries from inside the cluster (in case a Pod sets the AdGuard
+    # LB IP as its resolver). Cilium tags in-cluster traffic with the
+    # source pod's identity, not `world`.
+    - fromEntities:
+        - cluster
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Admin UI from the Gateway namespace (`default` — Cilium Gateway API).
+    # Matches the HTTPRoute that exposes adguard-admin externally.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: default
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            - port: "8443"
+              protocol: TCP
+            - port: "3000"
+              protocol: TCP
+    # Sync CronJob (same namespace) — reads from primary on 8080, writes
+    # to replica via headless on 80.
+    - fromEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: adguardhome-sync
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+    # Kubelet probes (readiness/liveness). Cilium tags node-local traffic
+    # with the kube-system namespace identity.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+  egress:
+    # kube-dns / CoreDNS for in-cluster Service resolution.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Upstream resolvers for AdGuard's recursive lookups (53, DoH/443, DoT/853).
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+            - port: "853"
+              protocol: TCP
+            - port: "80"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: adguard-sync
+  namespace: adguard
+  labels:
+    app.kubernetes.io/name: adguardhome-sync
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: |
+    Config-sync CronJob: egress only to AdGuard pods (admin port + replica
+    HTTP) and kube-dns. No external egress.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: adguardhome-sync
+  egress:
+    # Reach AdGuard primary (8080) and replicas (80) inside the same namespace.
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: adguard
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "8080"
+              protocol: TCP
+    # kube-dns for Service-name resolution (adguard-admin, adguard-headless).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

@@ -4,6 +4,7 @@ resources:
   - cronjob-sync.yaml
   - deployment.yaml
   - namespace.yaml
+  - networkpolicy.yaml
   - pdb.yaml
   - service.yaml
   - service-admin.yaml

@@ -71,7 +71,7 @@ spec:
             - name: HERMES_ALLOWED_ACCOUNTS
               value: "+16179397251"
             - name: HERMES_ALLOW_ALL_USERS
-              value: "false"
+              value: "true"
             - name: HERMES_AUTH_TOKEN
               value: ""
           ports:

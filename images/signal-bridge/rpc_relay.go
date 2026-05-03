@@ -9,14 +9,14 @@ type jsonRPCRequest struct {
 	JSONRPC string                 `json:"jsonrpc"`
 	Method  string                 `json:"method"`
 	Params  map[string]interface{} `json:"params,omitempty"`
-	ID      *int                   `json:"id,omitempty"`
+	ID      interface{}            `json:"id,omitempty"`
 }
 
 type jsonRPCResponse struct {
 	JSONRPC string      `json:"jsonrpc"`
 	Result  interface{} `json:"result,omitempty"`
 	Error   interface{} `json:"error,omitempty"`
-	ID      *int        `json:"id,omitempty"`
+	ID      interface{} `json:"id,omitempty"`
 }
 
 func relayRPC(w http.ResponseWriter, r *http.Request, rpc *SignalRPC, cfg Config) {

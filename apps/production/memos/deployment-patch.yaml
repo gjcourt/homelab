@@ -36,6 +36,15 @@ spec:
             capabilities:
               drop:
                 - ALL
+          # Small but non-zero so the pod stays Burstable (not BestEffort)
+          # alongside the main container's requests/limits. Plan PR 2.1.
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
           volumeMounts:
             - name: dsn-volume
               mountPath: /dsn

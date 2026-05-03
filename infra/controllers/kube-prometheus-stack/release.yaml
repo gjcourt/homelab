@@ -24,6 +24,12 @@ spec:
   upgrade:
     timeout: 60m
     crds: CreateReplace
+    # uninstall (not rollback): the chart creates StatefulSets for Prometheus
+    # and Alertmanager; rollback on stuck StatefulSets is a known Flux failure
+    # mode. Uninstall + reinstall is safer for this stack.
+    remediation:
+      retries: 3
+      strategy: uninstall
 
   driftDetection:
     mode: enabled

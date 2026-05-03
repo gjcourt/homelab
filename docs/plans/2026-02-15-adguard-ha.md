@@ -1,87 +1,66 @@
 ---
-status: planned
-last_modified: 2026-02-27
+status: in-progress
+last_modified: 2026-05-03
 ---
 
-# TODO: AdGuard Home HA (DNS + UI-driven config)
+# AdGuard Home — high availability
 
-This repo is structured so staging uses a `-stage` suffix and production has no suffix (desired end-state). Today, AdGuard overlays are:
+Make the homelab DNS resolver tolerant to a single-node loss without breaking client lookups.
 
-- Staging: `adguard-stage`
-- Production: `adguard-prod` (consider renaming to `adguard` later if you want strict consistency)
+## Current state (2026-05-03)
 
-## Current state (April 2026)
+The HA primitives are deployed in production. Two AdGuard pods are scheduled on different nodes, a CronJob keeps their config in sync, and a second LoadBalancer DNS IP is allocated for client failover.
 
-- AdGuard is a StatefulSet with per-pod PVCs:
-  - `config` PVC stores `AdGuardHome.yaml`
-  - `work` PVC stores query logs/statistics
-- UI traffic is pinned to the primary pod (`adguard-0`) via `adguard-admin`
-- DNS is exposed via a single `LoadBalancer` service (`10.42.2.43` in prod)
-- `adguard-sync` CronJob is enabled in both prod and staging and is intended to sync config from `adguard-0` to replicas
+| Piece | State | Notes |
+|-------|-------|-------|
+| `apps/base/adguard/` StatefulSet, replicas | base=1, prod-overlay patches to 2 ✓ | per-pod PVCs (`config-adguard-0/1`, `work-adguard-0/1`) |
+| Pod spread | `podAntiAffinity (preferred)` + `topologySpreadConstraints (ScheduleAnyway)` ✓ | both running on distinct workers (`talos-2mz-rfj`, `talos-kot-7x7`) |
+| `adguard-sync` CronJob | enabled in base, schedule `0 */6 * * *` ✓ | last run 2026-05-03 06:00 UTC, status `Sync done` |
+| Sync credentials | `adguard-sync-credentials` Secret in prod overlay ✓ | username `george`, not `admin` (gotcha caught earlier) |
+| Primary DNS LB IP | `10.42.2.43` ✓ | `service/adguard` |
+| Secondary DNS LB IP | `10.42.2.45` ✓ | `service/adguard-dns-secondary` (added 2026-05-02) |
+| UI is one-writer | `service/adguard-admin` (ClusterIP, pinned to `adguard-0`) ✓ | sync job reads from this; replicas never receive direct writes |
 
-## Important prerequisite discovered during HA rollout
+Functionally, DNS will survive losing either AdGuard pod or the node it's on as long as both LB IPs are wired into UniFi DHCP scope options.
 
-Before scaling replicas, `adguard-sync` credentials must match the live AdGuard admin user. The live username is `george` (not `admin`). If sync fails with `401 Unauthorized`, replicas will not receive the primary config.
+## Remaining work
 
-Production also needed a larger `work` volume because query logs filled the original 1Gi PVC.
+| # | Item | Priority | Notes |
+|---|------|----------|-------|
+| 1 | **Verify UniFi hands out both DNS servers** | high | Operator-side router config. UniFi DHCP scope option 6 should list `10.42.2.43, 10.42.2.45`. Check at UniFi → Networks → LAN → DHCP → Network options. |
+| 2 | **Failover validation runbook** | high | Document a repeatable drill: drain `talos-X`, confirm DNS still resolves through `dig @10.42.2.45 example.com`, restore. See [`docs/operations/2026-05-03-adguard-failover-validation.md`](../operations/2026-05-03-adguard-failover-validation.md) (added in the same PR as this refresh). |
+| 3 | **Resize `work-adguard-1` from 1Gi → 5Gi** | medium | Mismatch with `work-adguard-0` (5Gi). Query log history on replica is capped early. StatefulSet `volumeClaimTemplate` is immutable, so this is a manual `kubectl patch pvc` + `kubectl rollout restart` cycle (Synology iSCSI supports volume expansion). |
+| 4 | **NetworkPolicy hardening** | medium | Restrict ingress to `adguard-admin` to the sync job + Gateway pods only. Restrict ingress to `adguard-headless` (replica admin port 80) to the sync job only. Add `network-policies: enforced` label on `adguard-prod` so the cluster-wide default-deny applies. |
+| 5 | **Cilium BGP advertisement of LB IPs** | low | Tracked in [`2026-03-08-bgp-rollout.md`](2026-03-08-bgp-rollout.md). Until BGP is in place, both DNS IPs are advertised via L2 announcements which is fine for the LAN but limits failover to nodes in the same broadcast domain. |
+| 6 | **Consider strict naming consistency** | defer | Earlier draft said "rename `adguard-prod` → `adguard` later if you want strict consistency." That suggestion contradicts the cluster's actual `<app>-prod` convention (see `AGENTS.md`). Keep `adguard-prod`. |
 
-## Why “one-writer UI” matters
+## Why "one-writer UI" matters
 
-AdGuard Home has no built-in multi-master config reconciliation.
-The safe pattern is:
+AdGuard Home has no built-in multi-master config reconciliation. The pattern is:
 
-- Only one UI endpoint (primary) is reachable for humans
-- A sync job copies config from primary to replicas
+- Only one UI endpoint (the primary, `adguard-0` via `adguard-admin` Service) is reachable for humans.
+- The `adguard-sync` CronJob (`ghcr.io/bakito/adguardhome-sync`) copies config from primary to replicas every 6 hours.
+- DHCP sync is intentionally disabled (`FEATURES_DHCP_*=false`) — UniFi handles DHCP.
 
-## Next steps when you have 6 nodes + more IPs (UniFi)
+Editing config on a replica directly will be silently overwritten on the next sync cycle. Always edit through `adguard-admin`.
 
-### 1) Scale AdGuard safely (single DNS IP)
+## Validation
 
-- Edit replicas in your overlay (staging first):
-  - apps/staging/adguard/… (StatefulSet `spec.replicas`)
-- Set `replicas: 2` (or `3`) and ensure pods land on different nodes:
-  - Add `topologySpreadConstraints` or pod anti-affinity in the StatefulSet
-  - Goal: `adguard-0`, `adguard-1`, … run on different nodes
-- Confirm DNS continues working during a node reboot:
-  - `kubectl -n adguard-stage get endpoints adguard` should show multiple endpoints
+When you resume after a change, the smoke check:
 
-### 2) Enable configuration sync (CronJob)
+```bash
+# Both pods Ready?
+kubectl -n adguard-prod get statefulset,pods -o wide
 
-A disabled-by-default CronJob manifest exists here:
+# Both LBs have endpoints?
+kubectl -n adguard-prod get svc,endpoints | grep -E 'adguard\b|dns-secondary'
 
-- apps/base/adguard/cronjob-sync.yaml
+# Sync ran cleanly recently?
+kubectl -n adguard-prod logs -l job-name=$(kubectl -n adguard-prod get jobs -o name | tail -1 | cut -d/ -f2) --tail=20
 
-To enable it later:
+# DNS resolves through both LBs?
+dig @10.42.2.43 +short example.com
+dig @10.42.2.45 +short example.com
+```
 
-- Add the CronJob file to the overlay `resources:` (staging first)
-- Create a secret named `adguard-sync-credentials` in the AdGuard namespace with keys:
-  - `ORIGIN_USERNAME`, `ORIGIN_PASSWORD`
-  - `REPLICA1_USERNAME`, `REPLICA1_PASSWORD`
-
-Notes:
-- The CronJob uses `ORIGIN_URL=http://adguard-admin:8080` so it always reads from the primary.
-- DHCP sync is disabled by default (`FEATURES_DHCP_* = false`).
-
-### 3) Move from single DNS IP → two DNS IPs (best client failover)
-
-When you can allocate more LB IPs:
-
-- Expand your Cilium LB IP pool (or add a second pool) so you have at least two addresses
-- Deploy a second AdGuard service/IP (or a second AdGuard instance if you want strict isolation)
-- Configure UniFi DHCP to hand out BOTH DNS servers (primary + secondary)
-
-### 4) Hardening checklist
-
-- Confirm health checks:
-  - readiness probe OK (the Service should stop sending traffic to unhealthy pods)
-- Add resource requests/limits if needed
-- Consider NetworkPolicies:
-  - Only allow sync job to reach replica admin endpoints
-  - Only allow the UI route to reach `adguard-admin`
-
-## Quick validation commands (when you resume)
-
-- `kubectl -n adguard-stage get statefulset,svc,pdb`
-- `kubectl -n adguard-stage get pods -o wide`
-- `kubectl -n adguard-stage get endpoints adguard`
-- `kubectl -n adguard-stage describe httproute adguard-https`
+Full failover drill is in the operations runbook (see Remaining Work item 2).

@@ -7,6 +7,7 @@ resources:
   - httproute.yaml
   - secret-adguard-container-env.yaml
   - secret-sync.yaml
+  - service-dns-secondary.yaml
 
 labels:
   - pairs:

@@ -30,8 +30,7 @@ func (h *healthHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check signal-cli connectivity
-	_, err := h.rpc.getInfo()
-	if err != nil {
+	if err := h.rpc.listAccounts(); err != nil {
 		resp.Status = "degraded"
 		resp.Signal = "error"
 		resp.Details["signal_error"] = err.Error()

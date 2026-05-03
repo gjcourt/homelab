@@ -29,7 +29,7 @@ spec:
             - --tcp
             - 0.0.0.0:7583
             - --receive-mode
-            - on-connection
+            - manual
             - --ignore-stories
           ports:
             - name: json-rpc
@@ -53,7 +53,7 @@ spec:
               cpu: 500m
               memory: 512Mi
         - name: signal-bridge
-          image: ghcr.io/gjcourt/signal-bridge:2026-05-02-2
+          image: ghcr.io/gjcourt/signal-bridge:2026-05-02-3
           env:
             - name: SIGNAL_CLI_HOST
               value: "127.0.0.1"

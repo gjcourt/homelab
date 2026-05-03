@@ -53,6 +53,15 @@ spec:
             - name: tmp
               mountPath: /tmp
 
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 5230
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
           resources:
             requests:
               cpu: 10m

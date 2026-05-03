@@ -1,9 +1,11 @@
 ---
-status: planned
-last_modified: 2026-05-02
+status: superseded
+last_modified: 2026-05-03
 ---
 
 # Signal-cli + Hermes Rollout — TrueNAS Custom App
+
+> **Superseded by [`2026-05-02-hermes-bot-k8s.md`](2026-05-02-hermes-bot-k8s.md).** The signal-cli + signal-bridge stack went k8s-native (`apps/base/signal-cli/`) instead of TrueNAS Custom App. D1 (productionize signal-bridge) and D3 (repo restructure under `hosts/`) from this plan landed; D2 (TrueNAS Custom App for the stack) was replaced by the in-cluster Deployment. The hermes-agent rollout is now tracked in the hermes-bot plan and the in-cluster signal-cli is the operative path. Kept here for historical reference.
 
 Stand up a Signal stack on TrueNAS (`truenas_admin@10.42.2.10`) that gives the [Hermes](https://hermes-agent.nousresearch.com/docs/user-guide/messaging/signal) agent platform the SSE + JSON-RPC integration it expects. Replace the existing REST-only `signal-cli-rest-api` deployment, keeping the same Signal account `+16179397251` (no re-linking required).
 

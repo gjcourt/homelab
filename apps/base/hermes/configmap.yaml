@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hermes-config
+  namespace: hermes
+  labels:
+    app: hermes
+data:
+  # Signal platform — read by gateway/platforms/signal.py
+  SIGNAL_HTTP_URL: "http://signal-cli-bridge.signal-cli.svc.cluster.local:8080"
+  SIGNAL_ACCOUNT: "+16179397251"
+  SIGNAL_HOME_CHANNEL: "+16179397251"
+  SIGNAL_HOME_CHANNEL_NAME: "Home"
+  SIGNAL_IGNORE_STORIES: "true"
+  # Empty group allowlist = ignore group messages; bot only acts on direct DMs.
+  SIGNAL_GROUP_ALLOWED_USERS: ""
+  # Auto-approve unseen shell hooks — there is no operator at the keyboard.
+  HERMES_ACCEPT_HOOKS: "1"
+  PYTHONUNBUFFERED: "1"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hermes-config-yaml
+  namespace: hermes
+  labels:
+    app: hermes
+data:
+  # Mounted at /opt/data/config.yaml inside the container. The upstream image
+  # seeds /opt/data/config.yaml from cli-config.yaml.example on first boot if
+  # the file is absent; mounting our own ConfigMap key here ensures a fixed
+  # configuration regardless of PVC state.
+  #
+  # No secrets in this file. LLM provider API keys, if needed later, go in a
+  # SOPS-encrypted Secret consumed via env (e.g. OPENAI_API_KEY).
+  config.yaml: |
+    model:
+      default: Qwen3.6-35B-A3B
+      provider: custom
+      base_url: http://10.42.2.10:8000/v1
+    providers: {}
+    fallback_providers: []
+    toolsets:
+      - hermes-signal
+      - file
+      - web
+    agent:
+      max_turns: 90
+      gateway_timeout: 1800
+      restart_drain_timeout: 60
+      api_max_retries: 3
+      tool_use_enforcement: auto
+      reasoning_effort: medium
+      verbose: false
+    checkpoints:
+      enabled: true
+      max_snapshots: 10
+      auto_prune: true
+      retention_days: 7
+      delete_orphans: true
+      min_interval_hours: 24
+    prompt_caching:
+      cache_ttl: 5m
+    display:
+      personality: helpful
+      streaming: true
+    code_execution:
+      mode: project
+      max_tool_calls: 50
+      timeout: 300
+    logging:
+      level: INFO
+      max_size_mb: 5
+      backup_count: 3

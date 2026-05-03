@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hermes
+  namespace: hermes
+  labels:
+    app: hermes
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: hermes
+  template:
+    metadata:
+      labels:
+        app: hermes
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # Upstream image runs as the `hermes` user, UID 10000. fsGroup ensures
+        # the iSCSI-mounted PVC is writable by that user without an init chown.
+        runAsUser: 10000
+        runAsGroup: 10000
+        fsGroup: 10000
+      containers:
+        - name: hermes
+          # nousresearch/hermes-agent:v2026.4.30 (linux/amd64)
+          image: nousresearch/hermes-agent@sha256:b28c9b33ef5df8b9c6ba008124756d09f285082cb6f069e3ad7c59f967dfc58c
+          imagePullPolicy: IfNotPresent
+          command: ["hermes", "gateway", "run"]
+          envFrom:
+            - configMapRef:
+                name: hermes-config
+          volumeMounts:
+            - name: data
+              mountPath: /opt/data
+            - name: config
+              mountPath: /opt/data/config.yaml
+              subPath: config.yaml
+              readOnly: true
+          # No HTTP listener; readiness/liveness use the hermes process check.
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pgrep -f 'hermes gateway' > /dev/null"
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "pgrep -f 'hermes gateway' > /dev/null"
+            initialDelaySeconds: 120
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: hermes-data
+        - name: config
+          configMap:
+            name: hermes-config-yaml
+            items:
+              - key: config.yaml
+                path: config.yaml

@@ -230,12 +230,112 @@ The data dir under `/var/lib/signal-cli/data/+1.../` stays on the PVC unless you
 |---|---|---|
 | `signal-cli link` exits with `Link request error: Connection closed!` (exit code 3) | A separate `signal-cli` process is fighting the daemon for the Signal WebSocket | Don't use `signal-cli link`; use the daemon's `startLink` JSON-RPC method (Flow A step 1). |
 | Daemon `startLink` returns a URI but scan never completes | Most likely: too many recent failed link attempts, Signal-side rate limit | Wait 1-24 hours, then retry once with the JSON-RPC path. Any single attempt that ends in success doesn't count toward the limit. |
+| Daemon `startLink` returned a URI, phone *did* successfully scan ("Associated with: …" on phone, or `signal-link-helper` Pod is in `Succeeded` state), but `listAccounts` keeps showing the old list — even after `kubectl rollout restart` | The daemon's `startLink` JSON-RPC path doesn't always finalize provisioning end-to-end. The phone exchanges the initial scan, but signal-cli doesn't always receive the follow-up provisioning message. | Use the **scale-down helper-pod fallback** (see "Last-resort link path" below) — it always works because there's no daemon competing for the Signal WebSocket. |
 | Phone says "invalid response" or "QR code not recognized" | Scanning a stale QR (URI from a previous attempt that already errored out, or one that's been server-side invalidated) | Generate a fresh URI via JSON-RPC. The previous one is dead. |
 | `register` returns `CAPTCHA_REQUIRED` | Captcha token expired (they're short-lived, ~10 min) | Generate a fresh one and retry. |
 | `verify` returns `INVALID_CODE` | SMS didn't arrive, or used the wrong code | Re-`register` with a fresh captcha; the previous registration was abandoned. |
 | signal-bridge logs `accounts=[+1XXX]` (only one) after linking | Bridge cached the account list at startup | `kubectl rollout restart deploy signal-cli -n signal-cli` |
 | hermes-bot still doesn't see new sender's messages | `SIGNAL_ALLOWED_USERS` doesn't include the new sender | Add to `apps/base/hermes/configmap.yaml` and roll out |
 | `Failed to read local accounts list` (CrashLoop) | PVC is empty (no accounts ever linked, e.g., `signal-cli-stage`) | Run Flow A or B against that environment |
+
+## Last-resort link path — scale-down + helper pod
+
+Use this when:
+- Flow A's JSON-RPC `startLink` keeps returning URIs but the link never finalizes in `listAccounts` (we hit this on 2026-05-03 — the phone showed "finishing linking on other device" repeatedly but the daemon never persisted the new account).
+- You've already burned several `startLink` attempts and don't want to keep adding rate-limit pressure.
+
+The mechanism: temporarily scale signal-cli to zero so its daemon releases the Signal WebSocket and the PVC lock, then run a one-shot Pod that mounts the same PVC and runs `signal-cli link` as the *only* signal-cli process. With nothing competing for the WebSocket, the link's full lifecycle (URI generation → scan → provisioning exchange → account persisted) completes cleanly.
+
+Cost: signal-cli (and therefore hermes-bot's Signal connection) is offline for ~1-3 minutes while you're doing this.
+
+```bash
+# 1. Scale daemon to 0 (releases the PVC and the Signal WebSocket)
+kubectl scale deploy signal-cli -n signal-cli --replicas=0
+kubectl wait --for=delete pod -n signal-cli -l app=signal-cli --timeout=90s
+
+# 2. Apply this helper Pod manifest (writes link command output to its log,
+#    exits Succeeded once the link completes):
+cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: Pod
+metadata:
+  name: signal-link-helper
+  namespace: signal-cli
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    - name: signal-cli
+      image: ghcr.io/asamk/signal-cli@sha256:<same-digest-as-the-deployment>
+      command:
+        - /opt/signal-cli/bin/signal-cli
+        - --config
+        - /var/lib/signal-cli
+        - link
+        - --name
+        - <descriptive-device-name>
+      volumeMounts:
+        - name: signal-cli-config
+          mountPath: /var/lib/signal-cli
+  volumes:
+    - name: signal-cli-config
+      persistentVolumeClaim:
+        claimName: signal-cli-config
+EOF
+
+# 3. Get the URI and render a QR (use the same UTF-8 / PNG approach as Flow A)
+kubectl logs -n signal-cli signal-link-helper | head -1
+qrencode -t UTF8 -m 2 'sgnl://linkdevice?...'
+
+# 4. Have the phone scan. The Pod's container will exit when the link completes.
+kubectl wait --for=condition=Ready=false pod/signal-link-helper -n signal-cli --timeout=10m
+kubectl logs -n signal-cli signal-link-helper | tail -3
+# Look for: "Associated with: +1XXXXXXXXXX"
+
+# 5. Cleanup the helper Pod and scale daemon back up
+kubectl delete pod signal-link-helper -n signal-cli
+kubectl scale deploy signal-cli -n signal-cli --replicas=1
+kubectl wait --for=condition=Ready pod -l app=signal-cli -n signal-cli --timeout=120s
+
+# 6. Verify accounts.json now has the new entry
+kubectl exec -n signal-cli deploy/signal-cli -c signal-cli -- \
+  cat /var/lib/signal-cli/data/accounts.json
+```
+
+The image digest in step 2 must match `apps/base/signal-cli/deployment.yaml`'s pinned image — read it with `kubectl get deploy signal-cli -n signal-cli -o jsonpath='{.spec.template.spec.containers[0].image}'`.
+
+After scaling back up, hermes-bot may take a couple minutes to re-establish its SSE subscription. Watch `kubectl logs -n hermes-prod deploy/hermes` for the `Signal: SSE idle` warnings to clear.
+
+## Receive-mode quirk
+
+Production signal-cli daemon is started with `--receive-mode=manual` (see `apps/base/signal-cli/deployment.yaml`). In manual mode, signal-cli does **not** auto-subscribe to Signal's incoming queue — signal-bridge has to actively pull messages on a schedule. The bridge is configured to do this; if hermes-bot reports `Signal: SSE idle for 120s`, the cause is *either* signal-bridge not polling correctly *or* signal-cli's WebSocket to Signal servers being broken on a specific account.
+
+Quick diagnostic:
+
+```bash
+# Daemon healthy?
+kubectl exec -n signal-cli deploy/signal-cli -c signal-cli -- bash -c '
+exec 3<>/dev/tcp/127.0.0.1/7583
+printf "%s\n" "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"version\"}" >&3
+timeout 3 head -1 <&3' | head -1
+# Expect: {"jsonrpc":"2.0","result":{"version":"0.14.x"},"id":1}
+
+# Manually pull messages for the bot's account (5s timeout):
+kubectl exec -n signal-cli deploy/signal-cli -c signal-cli -- bash -c '
+exec 3<>/dev/tcp/127.0.0.1/7583
+printf "%s\n" "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"receive\",\"params\":{\"account\":\"+16179397251\",\"timeout\":5}}" >&3
+timeout 8 cat <&3' | head -5
+# If empty: signal-cli isn't queueing messages — check WebSocket health
+# If you see envelopes: signal-cli is fine, signal-bridge is the issue
+```
+
+If signal-cli was just relinked or had its accounts file modified, **restart the daemon** to force a fresh WebSocket subscription for all accounts:
+
+```bash
+kubectl rollout restart deploy/signal-cli -n signal-cli
+```
+
+After a relink, Signal sometimes takes 1-5 minutes to start delivering messages to the new linked-device set. Don't keep linking and unlinking during that window — wait at least 5 minutes for delivery to settle.
 
 ## Cross-references
 

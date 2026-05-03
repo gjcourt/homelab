@@ -72,11 +72,7 @@ spec:
             - name: HERMES_ALLOW_ALL_USERS
               value: "false"
             - name: HERMES_AUTH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: signal-bridge-auth
-                  key: token
-                  optional: true
+              value: ""
           ports:
             - name: http
               containerPort: 8080

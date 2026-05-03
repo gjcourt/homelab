@@ -12,6 +12,10 @@ data:
   SIGNAL_HOME_CHANNEL: "+16179397251"
   SIGNAL_HOME_CHANNEL_NAME: "Home"
   SIGNAL_IGNORE_STORIES: "true"
+  # Allowlist by sender E.164. Only these numbers can DM the bot; all others
+  # are denied. Includes the operator's own number (note-to-self path) and
+  # family members who should be able to talk to the bot.
+  SIGNAL_ALLOWED_USERS: "+16179397251,+14153089014"
   # Empty group allowlist = ignore group messages; bot only acts on direct DMs.
   SIGNAL_GROUP_ALLOWED_USERS: ""
   # Auto-approve unseen shell hooks — there is no operator at the keyboard.

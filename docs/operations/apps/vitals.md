@@ -44,11 +44,11 @@ To verify Vitals is working:
 
 ## 8. Disaster Recovery
 - **Backup Strategy**:
-  - The PostgreSQL database is backed up to S3 (MinIO/AWS) using CNPG's Barman integration (Note: currently pending S3 credentials configuration).
+  - The PostgreSQL database is backed up continuously to `s3://gjcourt-homelab-backup/production/vitals` via the Barman Cloud Plugin (WAL archiving + daily base backups, gzip-compressed, 30-day retention).
 - **Restore Procedure**:
-  1. Uncomment the `recovery` section in the `database.yaml` CNPG `Cluster` definition.
+  1. Uncomment the `recovery` section in `apps/production/vitals/database.yaml`.
   2. Comment out the `initdb` section.
-  3. Apply the changes to bootstrap a new cluster from the backup.
+  3. Apply the changes; CNPG will bootstrap a new cluster from the S3 backup via PITR.
 
 ## 9. Troubleshooting
 - **Database Connection Errors**:

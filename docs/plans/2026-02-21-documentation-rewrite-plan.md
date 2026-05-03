@@ -1,6 +1,6 @@
 ---
-status: in-progress
-last_modified: 2026-02-27
+status: complete
+last_modified: 2026-05-02
 ---
 
 # Documentation Rewrite Plan
@@ -69,12 +69,12 @@ Rewrite documentation for media and data-heavy applications:
 
 Rewrite documentation for utility applications:
 
-*   [ ] `docs/operations/apps/memos.md`: Database backups and SSO integration.
-*   [ ] `docs/operations/apps/linkding.md`: Database backups and SSO integration.
-*   [ ] `docs/operations/apps/mealie.md`: Database backups and SSO integration.
-*   [ ] `docs/operations/apps/golinks.md`: Database backups and SSO integration.
-*   [ ] `docs/operations/apps/excalidraw.md`: Usage and configuration.
-*   [ ] `docs/operations/apps/vitals.md`: Database backups and SSO integration.
+*   [x] `docs/operations/apps/memos.md`: Database backups and SSO integration.
+*   [x] `docs/operations/apps/linkding.md`: Database backups and SSO integration.
+*   [x] `docs/operations/apps/mealie.md`: Database backups and SSO integration.
+*   [x] `docs/operations/apps/golinks.md`: Database backups and SSO integration.
+*   [x] `docs/operations/apps/excalidraw.md`: Usage and configuration.
+*   [x] `docs/operations/apps/vitals.md`: Database backups and SSO integration.
 
 ## Review and Maintenance
 

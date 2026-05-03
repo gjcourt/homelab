@@ -55,6 +55,7 @@ import ssl
 import sys
 
 import websockets
+import yaml
 
 
 APP_NAME = os.environ["APP_NAME"]
@@ -168,14 +169,14 @@ async def main() -> None:
             return
 
         # Apply.
-        # app.update(id, config) — the second positional arg maps to the
-        # `config` parameter.  custom_compose_config must be a dict with a
-        # 'compose' key containing the YAML string (TrueNAS SCALE validation).
+        # TrueNAS app.update expects custom_compose_config as a parsed dict
+        # (not a YAML string).  Pydantic validation rejects raw strings.
+        compose_dict = yaml.safe_load(new_yaml)
         log(f"calling app.update for '{APP_NAME}'")
         update = await call(
             ws,
             "app.update",
-            [APP_NAME, {"custom_compose_config": {"compose": new_yaml}}],
+            [APP_NAME, {"custom_compose_config": compose_dict}],
             msg_id=3,
         )
         if "error" in update and update["error"]:

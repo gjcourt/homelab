@@ -1,6 +1,6 @@
 services:
   llama:
-    image: ghcr.io/ggml-org/llama.cpp@sha256:a8c56356fbfde209910b8098d0a060f4b84997f23b65491df3f2b61fae91dd7b
+    image: ghcr.io/gjcourt/llama-cpp-bench:2026-05-04
     container_name: llama
     restart: unless-stopped
     volumes:

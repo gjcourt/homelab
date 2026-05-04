@@ -1,0 +1,63 @@
+name: Build llama-cpp-bench
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'images/llama-cpp-bench/**'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: gjcourt/llama-cpp-bench
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate date tag
+        id: tag
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+          ATTEMPT="${{ github.run_attempt }}"
+          if [ "$ATTEMPT" = "1" ]; then
+            echo "tag=$DATE" >> $GITHUB_OUTPUT
+          else
+            echo "tag=$DATE-$ATTEMPT" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: images/llama-cpp-bench
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "### llama-cpp-bench published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Update \`hosts/hestia/llms/docker-compose-llama-cpp.yml\` to reference \`llama-cpp-bench\` image with the \`llama-bench\` command, then paste into SCALE UI." >> $GITHUB_STEP_SUMMARY

@@ -54,9 +54,10 @@ System packages (Debian bookworm):
 
 ## Image build
 
-Images are published to `docker.io/gjcourt/mopidy` by the GHA workflow
+Images are published to `ghcr.io/gjcourt/mopidy` by the GHA workflow
 `.github/workflows/build-mopidy.yml` on every push to `master` that touches
-`images/mopidy/**`, plus `workflow_dispatch` for manual runs.
+`images/mopidy/**`, plus `workflow_dispatch` for manual runs. Authentication
+uses the auto-provisioned `GITHUB_TOKEN` — no operator-set secrets required.
 
 Tag format: `YYYY-MM-DD` (first build of the day) or `YYYY-MM-DD-N` (reruns of
 the same workflow). Multi-arch: `linux/amd64` and `linux/arm64`. The `latest`

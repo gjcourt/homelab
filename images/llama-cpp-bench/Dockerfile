@@ -15,9 +15,11 @@ FROM ${BASE_IMAGE} AS ggml-base
 # Build stage: use the base image itself (has CUDA runtime) to build llama-bench
 FROM ${BASE_IMAGE} AS build
 
-# Install build dependencies (git, cmake, build-essential)
+# Install build dependencies and CUDA toolkit
+# The base image has CUDA 12.8 runtime; we need the toolkit (nvcc) for compilation
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git cmake && \
+    build-essential git cmake \
+    cuda-toolkit-12-8 && \
     rm -rf /var/lib/apt/lists/*
 
 # Clone the exact commit used by the base image
@@ -27,11 +29,11 @@ RUN git clone https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp && \
     cd /tmp/llama.cpp && \
     git checkout "${LLAMA_CPP_REF}"
 
-# Build llama-bench with CMake (CPU-only to avoid CUDA toolkit dependency)
+# Build llama-bench with CUDA support using CMake
 WORKDIR /tmp/llama.cpp
 RUN mkdir -p build && \
     cd build && \
-    cmake .. -DGGML_CUDA=OFF -DLLAMA_BENCH=ON && \
+    cmake .. -DGGML_CUDA=ON -DLLAMA_BENCH=ON -DCMAKE_CUDA_ARCHITECTURES=89 && \
     cmake --build . --target llama-bench -j$(nproc)
 
 # Final stage: start from the base image and add llama-bench

@@ -13,11 +13,13 @@ spec:
     matchLabels:
       app: openwebui
   ingress:
-    # Cilium Envoy (gateway) runs hostNetwork in kube-system, so its connections
-    # arrive with host entity identity — must use fromEntities: host, not fromEndpoints.
-    # Kubelet probes are auto-exempted by Cilium and don't need an explicit rule.
+    # Cilium Envoy (gateway) is a hostNetwork DaemonSet. On a multi-node cluster
+    # with VXLAN tunneling, the Envoy pod and the app pod may be on different nodes.
+    # Same-node connections arrive as host; cross-node connections arrive as
+    # remote-node. Both are required. Kubelet probes are auto-exempted by Cilium.
     - fromEntities:
         - host
+        - remote-node
       toPorts:
         - ports:
             - port: "8080"

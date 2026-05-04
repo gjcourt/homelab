@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> GitOps repo for a single-node Talos Kubernetes cluster (`melodic-muse`) running self-hosted apps via Flux CD. — https://github.com/gjcourt/homelab
+> GitOps repo for a 6-node Talos Kubernetes cluster (`melodic-muse`) running self-hosted apps via Flux CD. — https://github.com/gjcourt/homelab
 
 ## Commands
 
@@ -60,13 +60,13 @@ See `docs/architecture/` for component-level architecture (DNS strategy, gateway
 
 ## Domain
 
-Single-node Talos Kubernetes cluster running ~14 self-hosted apps (Audiobookshelf, Authelia, Excalidraw, Golinks, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Pingo, Snapcast, Vitals + Adguard / Vitals etc.) plus infrastructure (Cilium, cert-manager, CNPG, monitoring, Authelia SSO). GitOps via Flux CD with an automatic preview environment (`staging` branch) rebuilt by CI from `master + open PRs`.
+6-node Talos Kubernetes cluster (3 control-plane + 3 workers, Talos v1.12.4, Kubernetes v1.35.0) running ~14 self-hosted apps (Audiobookshelf, Authelia, Excalidraw, Golinks, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Pingo, Snapcast, Vitals + Adguard / Vitals etc.) plus infrastructure (Cilium 1.19 VXLAN, cert-manager, CNPG, monitoring, Authelia SSO). GitOps via Flux CD with an automatic preview environment (`staging` branch) rebuilt by CI from `master + open PRs`.
 
 ## Cross-service dependencies
 
 | Service | Purpose |
 |---|---|
-| Talos Linux | Single-node Kubernetes substrate |
+| Talos Linux | 6-node Kubernetes substrate (3 control-plane, 3 workers) |
 | Flux CD | GitOps reconciliation |
 | Cilium + Gateway API | CNI + ingress |
 | cert-manager | TLS certificate issuance |

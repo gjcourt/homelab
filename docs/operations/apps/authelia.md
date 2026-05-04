@@ -30,15 +30,8 @@ To add a new application to Authelia:
 ## 5. Usage Instructions
 Users navigate to an application (e.g., Mealie) and click "Login with Authelia". They are redirected to the Authelia portal, authenticate, and are redirected back to the application.
 
-### Retrieving 2FA/Verification Codes (Development Mode)
-Currently, Authelia is configured to use a filesystem notifier instead of SMTP. To retrieve a one-time code (e.g., for device registration):
-```bash
-# Production
-kubectl exec -n authelia-prod deploy/authelia -- cat /config/notification.txt
-
-# Staging
-kubectl exec -n authelia-stage deploy/authelia -- cat /config/notification.txt
-```
+### Email notifications
+Authelia sends 2FA enrollment, password reset, and security notifications via SMTP (Gmail submission port 465). The credential is provided through the `authelia-secrets` Secret as `AUTHELIA_NOTIFIER_SMTP_PASSWORD` — a Google app password. Generate one at https://myaccount.google.com/apppasswords and update the secret with `sops apps/{staging,production}/authelia/secret-authelia.yaml` if rotation is needed.
 
 ## 6. Testing
 To verify Authelia is working:

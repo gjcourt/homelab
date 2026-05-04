@@ -17,6 +17,11 @@ data:
     # Sample format matches Snapcast's librespot/go-librespot expectations (44.1kHz).
     source = pipe:///audio/spotify.fifo?name=spotify&sampleformat=44100:16:2&codec=flac&mode=read
 
+    # Navidrome (via mopidy + mopidy-subidy sidecar). Mopidy writes raw PCM at
+    # 44.1kHz / S16LE / stereo to this FIFO; snapserver reads it as a stream
+    # and clients can subscribe via the Snapweb UI or Snapcast clients.
+    source = pipe:///audio/navidrome.fifo?name=navidrome&sampleformat=44100:16:2&codec=flac&mode=read
+
     [http]
     # Serve Snapweb (built-in UI) via the snapserver http port (1780)
     doc_root = /usr/share/snapserver/snapweb/

@@ -1,0 +1,65 @@
+# hestia — TrueNAS GPU server (10.42.2.10)
+# TrueNAS web UI runs HTTPS on 443 with a self-signed cert. We proxy to 443
+# and rely on the BackendTLSPolicy below to skip upstream cert verification.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: hestia
+  namespace: external-services
+spec:
+  type: ClusterIP
+  ports:
+    - name: https
+      port: 443
+      protocol: TCP
+      targetPort: 443
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: hestia
+  namespace: external-services
+subsets:
+  - addresses:
+      - ip: 10.42.2.10
+    ports:
+      - name: https
+        port: 443
+        protocol: TCP
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: hestia-http
+  namespace: external-services
+spec:
+  hostnames:
+    - hestia.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: hestia-https
+  namespace: external-services
+spec:
+  hostnames:
+    - hestia.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: hestia
+          port: 443

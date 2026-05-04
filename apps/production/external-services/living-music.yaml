@@ -1,0 +1,63 @@
+# living-music — HifiBerry (10.42.2.39)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: living-music
+  namespace: external-services
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      protocol: TCP
+      targetPort: 80
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: living-music
+  namespace: external-services
+subsets:
+  - addresses:
+      - ip: 10.42.2.39
+    ports:
+      - name: http
+        port: 80
+        protocol: TCP
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: living-music-http
+  namespace: external-services
+spec:
+  hostnames:
+    - living-music.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: living-music-https
+  namespace: external-services
+spec:
+  hostnames:
+    - living-music.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: living-music
+          port: 80

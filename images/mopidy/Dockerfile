@@ -29,7 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip install --no-cache-dir \
         mopidy==3.4.2 \
         mopidy-mpd==3.3.0 \
-        mopidy-subidy==0.9.1 \
+        mopidy-subidy==1.1.0 \
         mopidy-local==3.2.1
 
 # Match the snapcast pod's `runAsUser: 1000` / `fsGroup: 1000`. The sidecar

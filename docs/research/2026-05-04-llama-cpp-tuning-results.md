@@ -126,3 +126,63 @@ No anomalies. All 5 runs per workload clean.
 - **Delta vs baseline: +2,072 MiB net** — still 1,733 MiB under the 22 GiB target
 
 **Verdict:** **keep** — 256K context achieved at 20.3 GiB VRAM with zero TPS regression (176.3 / 174.1 / 172.6 vs baseline 176.2 / 174.4 / 172.9). Phase 1 anomaly did not recur. 1.7 GiB headroom remains for Phase 2 (flash-attn).
+
+---
+
+## Phase 2 — `--flash-attn on` (additive on 256K config)
+
+**Hypothesis:** Flash Attention on Ada (sm89) should give a modest decode TPS improvement by replacing the standard O(n²) attention kernel with a fused O(n) implementation. Effect expected to be additive on top of Phase 1b.
+
+**Variant flags vs Phase 1b:**
+
+```diff
++  --flash-attn on
+```
+
+**flash-attn confirmed in logs:** `llama_context: flash_attn = enabled`
+
+**llama-bench:** skipped — GPU-mode llama-bench not yet available in image.
+
+**Curl harness (mean ± stddev across 5 runs after warmup):**
+
+```
+short    run 1/5: ttft=0.155s tokens=50 decode=165.2 t/s total=0.46s  ← warmup (discarded)
+short    run 2/5: ttft=0.089s tokens=50 decode=177.0 t/s total=0.37s
+short    run 3/5: ttft=0.076s tokens=50 decode=176.4 t/s total=0.36s
+short    run 4/5: ttft=0.181s tokens=50 decode=288.2 t/s total=0.35s  ← ANOMALY (see below)
+short    run 5/5: ttft=0.076s tokens=50 decode=175.9 t/s total=0.36s
+medium   run 1/5: ttft=0.109s tokens=500 decode=174.4 t/s total=2.98s  ← warmup (discarded)
+medium   run 2/5: ttft=0.084s tokens=500 decode=174.3 t/s total=2.95s
+medium   run 3/5: ttft=0.047s tokens=500 decode=174.1 t/s total=2.92s
+medium   run 4/5: ttft=0.063s tokens=500 decode=173.8 t/s total=2.94s
+medium   run 5/5: ttft=0.064s tokens=500 decode=174.1 t/s total=2.94s
+long     run 1/5: ttft=0.511s tokens=1000 decode=175.8 t/s total=6.20s  ← warmup (discarded)
+long     run 2/5: ttft=0.073s tokens=1000 decode=172.9 t/s total=5.86s
+long     run 3/5: ttft=0.077s tokens=1000 decode=172.9 t/s total=5.86s
+long     run 4/5: ttft=0.075s tokens=1000 decode=172.9 t/s total=5.86s
+long     run 5/5: ttft=0.080s tokens=1000 decode=173.0 t/s total=5.86s
+```
+
+| Workload | TTFT (s) | Decode TPS | Total (s) | Notes |
+|---|---|---|---|---|
+| short (clean, runs 2,3,5) | 0.080 ± 0.008 | 176.4 ± 0.6 | 0.36 ± 0.01 | run 4 excluded |
+| medium | 0.064 ± 0.015 | 174.1 ± 0.2 | 2.94 ± 0.01 | |
+| long | 0.076 ± 0.003 | 172.9 ± 0.0 | 5.86 ± 0.00 | |
+
+**Short run 4 anomaly:** ttft=0.181s but total=0.35s → decode window of only 0.169s → 296 t/s implied. Physically improbable for this model; likely a timing artifact where the model reused KV cache state or the thinking phase completed abnormally fast. Excluded from clean stats.
+
+**VRAM peak:**
+
+- After model load (pre-run): 20,773 MiB
+- Steady-state after run: 20,795 MiB
+- **Delta vs Phase 1b: 0 MiB** — flash-attn is a compute optimization with no persistent memory cost
+
+**Comparison vs Phase 1b baseline (256K ctx, no flash-attn):**
+
+| Workload | Phase 1b TPS | Phase 2 TPS | Delta |
+|---|---|---|---|
+| short | 176.3 ± 0.2 | 176.4 ± 0.6 | +0.1 (noise) |
+| medium | 174.1 ± 0.2 | 174.1 ± 0.2 | 0.0 |
+| long | 172.6 ± 0.2 | 172.9 ± 0.0 | +0.3 (noise) |
+
+**Verdict:** **keep** — No measurable TPS gain at tested context lengths (50–4000 token prompts), but no regression either and VRAM unchanged. Flash-attn's benefit is in the attention computation, which scales quadratically with sequence length — the tested workloads are short relative to the 256K window. Expected to show real benefit when hermes uses long coding contexts near the 256K limit. Zero cost to keep.

@@ -226,3 +226,79 @@ prefill_32k run 3/3: ttft=9.543s prefill=5825 t/s prompt=55582 tokens=50 decode=
 **Analysis:** Zero measurable prefill benefit even at 55K tokens. Root cause: Qwen3.6-35B-A3B is a Mixture of Experts (MoE) model with only 3.6B active parameters per token. Active compute is dominated by the expert FFN layers, not attention. Flash-attn only accelerates the attention kernel — for this model, attention is a small fraction of total prefill compute regardless of context length. Qwen3 also uses Grouped Query Attention (GQA), which already reduces attention memory bandwidth pressure, further shrinking flash-attn's opportunity window.
 
 **Verdict:** **keep** — Confirmed zero benefit at 55K tokens on this MoE+GQA architecture. Flash-attn has no VRAM or regression cost so it stays enabled. Any real benefit would require a dense (non-MoE) model at much longer contexts.
+
+---
+
+## Phase 3 — `--threads 8 → 12` (sweep: 8, 12, 16)
+
+**Hypothesis:** With all 99 layers GPU-offloaded, CPU threads only handle tokenization, sampling, and HTTP I/O. Increasing threads from 8 may reduce TTFT by parallelising the prompt tokenization and initial dispatch. Effect on decode TPS is expected to be zero (GPU-bound).
+
+**Variant flags vs Phase 2:**
+
+```diff
+-  --threads 8
++  --threads 12
+```
+
+**llama-bench:** skipped.
+
+**Curl harness — full sweep (mean ± stddev, 5 runs, first discarded as warmup):**
+
+threads=8 (Phase 2 baseline):
+```
+short    run 2-5: ttft=0.080 ± 0.008s  decode=176.4 ± 0.6 t/s
+medium   run 2-5: ttft=0.064 ± 0.015s  decode=174.1 ± 0.2 t/s
+long     run 2-5: ttft=0.076 ± 0.003s  decode=172.9 ± 0.0 t/s
+```
+
+threads=12:
+```
+short    run 1/5: ttft=0.128s prefill=180 t/s prompt=23 tokens=50 decode=170.4 t/s total=0.42s  ← warmup
+short    run 2/5: ttft=0.070s prefill=331 t/s prompt=23 tokens=50 decode=176.1 t/s total=0.35s
+short    run 3/5: ttft=0.057s prefill=407 t/s prompt=23 tokens=50 decode=176.2 t/s total=0.34s
+short    run 4/5: ttft=0.057s prefill=405 t/s prompt=23 tokens=50 decode=176.3 t/s total=0.34s
+short    run 5/5: ttft=0.065s prefill=353 t/s prompt=23 tokens=50 decode=176.4 t/s total=0.35s
+medium   run 1/5: ttft=0.096s prefill=1307 t/s prompt=125 tokens=500 decode=174.4 t/s total=2.96s  ← warmup
+medium   run 2/5: ttft=0.076s prefill=1640 t/s prompt=125 tokens=500 decode=174.4 t/s total=2.94s
+medium   run 3/5: ttft=0.054s prefill=2314 t/s prompt=125 tokens=500 decode=174.5 t/s total=2.92s
+medium   run 4/5: ttft=0.045s prefill=2768 t/s prompt=125 tokens=500 decode=174.3 t/s total=2.91s
+medium   run 5/5: ttft=0.054s prefill=2311 t/s prompt=125 tokens=500 decode=174.1 t/s total=2.93s
+long     run 1/5: ttft=0.383s prefill=6389 t/s prompt=2444 tokens=1000 decode=173.1 t/s total=6.16s  ← warmup
+long     run 2/5: ttft=0.064s prefill=38315 t/s prompt=2444 tokens=1000 decode=172.9 t/s total=5.85s
+long     run 3/5: ttft=0.067s prefill=36241 t/s prompt=2444 tokens=1000 decode=173.0 t/s total=5.85s
+long     run 4/5: ttft=0.064s prefill=38287 t/s prompt=2444 tokens=1000 decode=173.0 t/s total=5.84s
+long     run 5/5: ttft=0.064s prefill=38446 t/s prompt=2444 tokens=1000 decode=173.0 t/s total=5.84s
+```
+
+threads=16:
+```
+short    run 1/5: ttft=0.129s prefill=178 t/s prompt=23 tokens=50 decode=172.1 t/s total=0.42s  ← warmup
+short    run 2/5: ttft=0.083s prefill=277 t/s prompt=23 tokens=50 decode=175.8 t/s total=0.37s
+short    run 3/5: ttft=0.065s prefill=353 t/s prompt=23 tokens=50 decode=176.0 t/s total=0.35s
+short    run 4/5: ttft=0.065s prefill=353 t/s prompt=23 tokens=50 decode=176.0 t/s total=0.35s
+short    run 5/5: ttft=0.058s prefill=398 t/s prompt=23 tokens=50 decode=175.9 t/s total=0.34s
+medium   run 1/5: ttft=0.088s prefill=1418 t/s prompt=125 tokens=500 decode=174.4 t/s total=2.96s  ← warmup
+medium   run 2/5: ttft=0.077s prefill=1616 t/s prompt=125 tokens=500 decode=174.4 t/s total=2.94s
+medium   run 3/5: ttft=0.054s prefill=2295 t/s prompt=125 tokens=500 decode=174.5 t/s total=2.92s
+medium   run 4/5: ttft=0.054s prefill=2298 t/s prompt=125 tokens=500 decode=174.4 t/s total=2.92s
+medium   run 5/5: ttft=0.054s prefill=2311 t/s prompt=125 tokens=500 decode=174.3 t/s total=2.92s
+long     run 1/5: ttft=0.406s prefill=6016 t/s prompt=2444 tokens=1000 decode=172.9 t/s total=6.19s  ← warmup
+long     run 2/5: ttft=0.064s prefill=38298 t/s prompt=2444 tokens=1000 decode=173.0 t/s total=5.85s
+long     run 3/5: ttft=0.069s prefill=35449 t/s prompt=2444 tokens=1000 decode=172.9 t/s total=5.85s
+long     run 4/5: ttft=0.064s prefill=38261 t/s prompt=2444 tokens=1000 decode=173.0 t/s total=5.85s
+long     run 5/5: ttft=0.064s prefill=38410 t/s prompt=2444 tokens=1000 decode=173.0 t/s total=5.85s
+```
+
+**Summary:**
+
+| Workload | threads=8 TTFT | threads=12 TTFT | threads=16 TTFT | decode TPS (all) |
+|---|---|---|---|---|
+| short | 0.080 ± 0.008s | **0.062 ± 0.006s** | 0.068 ± 0.011s | 176 (flat) |
+| medium | 0.064 ± 0.015s | **0.057 ± 0.013s** | 0.060 ± 0.012s | 174 (flat) |
+| long | 0.076 ± 0.003s | **0.065 ± 0.002s** | 0.065 ± 0.003s | 173 (flat) |
+
+**VRAM peak:** unchanged (threads is a CPU-only setting).
+
+**Analysis:** Decode TPS is flat across all three thread counts — this model is 100% GPU-offloaded so CPU threads don't touch the hot path. TTFT improves 10–22% from 8→12, primarily because more threads reduce tokenisation and dispatch latency. 8→16 does not improve further over 8→12; scheduling overhead erases the marginal gain on the short workload and ties on medium/long.
+
+**Verdict:** **keep (threads=12)** — modest but consistent TTFT improvement across all workloads with no decode regression. threads=16 shows no additional benefit and slight short-prompt regression; sweet spot is 12 on this 64-core host.

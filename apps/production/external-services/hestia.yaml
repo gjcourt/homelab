@@ -68,7 +68,7 @@ spec:
 ---
 # BackendTLSPolicy: gateway uses TLS to reach hestia:443 and validates the
 # cert against system (Let's Encrypt) CAs.
-apiVersion: gateway.networking.k8s.io/v1alpha3
+apiVersion: gateway.networking.k8s.io/v1
 kind: BackendTLSPolicy
 metadata:
   name: hestia-tls

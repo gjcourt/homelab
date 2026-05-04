@@ -5,7 +5,7 @@
 # pipeline writes raw S16LE PCM into a shared FIFO that snapserver reads as the
 # `navidrome` source. See docs/plans/2026-03-14-navidrome-snapcast-mopidy.md.
 
-FROM python:3.12-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 # Runtime deps:
 #   - gstreamer1.0-plugins-{base,good} + tools — the audio pipeline (audioresample,

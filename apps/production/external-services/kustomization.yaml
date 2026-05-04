@@ -9,3 +9,4 @@ resources:
   - alcatraz.yaml
   - hestia.yaml
   - kitchen-music.yaml
+  - living-music.yaml

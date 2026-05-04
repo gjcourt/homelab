@@ -12,13 +12,17 @@ services:
       --alias Qwen3.6-35B-A3B
       --host 0.0.0.0
       --port 8080
-      --ctx-size 409600
-      --cache-type-k q8_0
-      --cache-type-v q8_0
+      --ctx-size 32768
+      --flash-attn on
+      --cache-type-k f16
+      --cache-type-v f16
       --n-gpu-layers 99
-      --parallel 1
+      --parallel 4
       --cont-batching
-      --threads 8
+      --threads 16
+      --threads-batch 16
+      --batch-size 512
+      --ubatch-size 512
       --temp 0.6
       --top-k 20
       --top-p 0.95

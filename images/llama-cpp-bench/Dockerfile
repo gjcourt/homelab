@@ -12,7 +12,7 @@
 ARG BASE_IMAGE=ghcr.io/ggml-org/llama.cpp@sha256:a8c56356fbfde209910b8098d0a060f4b84997f23b65491df3f2b61fae91dd7b
 FROM ${BASE_IMAGE} AS ggml-base
 
-# Build stage: use the base image itself (has CUDA toolkit) to build llama-bench
+# Build stage: use the base image itself (has CUDA runtime) to build llama-bench
 FROM ${BASE_IMAGE} AS build
 
 # Install build dependencies (git, cmake, build-essential)
@@ -27,11 +27,11 @@ RUN git clone https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp && \
     cd /tmp/llama.cpp && \
     git checkout "${LLAMA_CPP_REF}"
 
-# Build only llama-bench with CUDA support using CMake
+# Build llama-bench with CMake (CPU-only to avoid CUDA toolkit dependency)
 WORKDIR /tmp/llama.cpp
 RUN mkdir -p build && \
     cd build && \
-    cmake .. -DGGML_CUDA=ON -DLLAMA_BENCH=ON && \
+    cmake .. -DGGML_CUDA=OFF -DLLAMA_BENCH=ON && \
     cmake --build . --target llama-bench -j$(nproc)
 
 # Final stage: start from the base image and add llama-bench

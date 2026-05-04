@@ -13,18 +13,11 @@ spec:
     matchLabels:
       app: openwebui
   ingress:
-    # Traffic from the Gateway API parent namespace (Cilium Envoy proxy in `default`)
-    - fromEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: default
-      toPorts:
-        - ports:
-            - port: "8080"
-              protocol: TCP
-    # Kubelet-originated readiness/liveness probes
-    - fromEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: kube-system
+    # Cilium Envoy (gateway) runs hostNetwork in kube-system, so its connections
+    # arrive with host entity identity — must use fromEntities: host, not fromEndpoints.
+    # Kubelet probes are auto-exempted by Cilium and don't need an explicit rule.
+    - fromEntities:
+        - host
       toPorts:
         - ports:
             - port: "8080"

@@ -166,13 +166,15 @@ def run_one(base_url: str, model: str, prompt: str, max_tokens: int, timeout_s: 
             except json.JSONDecodeError:
                 continue
 
-            # First content chunk → TTFT
+            # First content chunk → TTFT (check both 'content' and 'reasoning_content'
+            # since Qwen3.6 models output thinking via reasoning_content first)
             choices = obj.get("choices") or []
             if choices:
                 delta = choices[0].get("delta") or {}
-                if delta.get("content") and ttft is None:
+                has_content = bool(delta.get("content")) or bool(delta.get("reasoning_content"))
+                if has_content and ttft is None:
                     ttft = time.perf_counter() - t0
-                if delta.get("content"):
+                if has_content:
                     chunks_seen += 1
 
             # Final usage block (when stream_options.include_usage is honored)
@@ -238,7 +240,8 @@ def main() -> int:
                 if jsonl:
                     jsonl.write(json.dumps(r) + "\n")
                     jsonl.flush()
-                print(f"  {name:<8} run {i+1}/{args.runs}: ttft={r['ttft_s']:.3f}s "
+                ttft_str = f"{r['ttft_s']:.3f}" if r['ttft_s'] is not None else "N/A"
+                print(f"  {name:<8} run {i+1}/{args.runs}: ttft={ttft_str}s "
                       f"tokens={r['tokens']} decode={r['decode_tps']:.1f} t/s total={r['total_s']:.2f}s "
                       f"({r['tokens_source']})", file=sys.stderr)
         except (urllib.error.URLError, TimeoutError) as e:

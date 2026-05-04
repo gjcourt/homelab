@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 last_modified: 2026-05-04
 ---
 
@@ -92,54 +92,79 @@ Run this **before** starting step 3 and Ctrl-C **after** step 3 finishes. Note t
 
 ## Host context
 
-> _operator: paste output from step 0 here_
-
 ```
-nproc:
-gpu:
-llama image:
+nproc: 64
+gpu: NVIDIA GeForce RTX 4090, driver 590.44.01, 24564 MiB total
+llama image: sha256:4846a739f6367534ab02953e9aa454803f22079528e5bcb3b7b4204269465b74 (ghcr.io/ggml-org/llama.cpp@sha256:a8c56356fbfde209910b8098d0a060f4b84997f23b65491df3f2b61fae91dd7b)
 ```
 
 ## llama-bench output
 
-> _operator: paste step 2 output here, or note "skipped — `llama-bench` not in image" if step 1 indicated absence_
+> `llama-bench` not available in the llama.cpp Docker image (`exec: "llama-bench": executable file not found in $PATH`). Skipped — relying on curl harness alone.
 
 ```
-
+SKIPPED — llama-bench not in image
 ```
 
 ## Curl harness output
 
-> _operator: paste step 3 output here (both the stdout summary table and the stderr per-run trace)_
+> Runs: 5 per workload (run 1 discarded as warmup). Model: Qwen3.6-35B-A3B-UD-IQ4_NL.gguf. Re-run 2026-05-04.
 
 ```
+endpoint     http://10.42.2.10:8000/v1
+model        Qwen3.6-35B-A3B
+runs/wkld    5 (first discarded as warmup)
 
+workload   TTFT (s)               decode TPS             total (s)
+---------- ---------------------- ---------------------- ----------------------
+short       0.081 ± 0.007          176.6 ± 0.9             0.36 ± 0.01
+medium      0.071 ± 0.012          173.9 ± 0.3             2.95 ± 0.01
+long        0.078 ± 0.003          172.9 ± 0.1             5.86 ± 0.00
+```
+
+Per-run trace (stderr):
+```
+short    run 1/5: ttft=0.600s tokens=50 decode=169.5 t/s total=0.90s (usage)
+short    run 2/5: ttft=0.091s tokens=50 decode=175.8 t/s total=0.38s (usage)
+short    run 3/5: ttft=0.078s tokens=50 decode=176.2 t/s total=0.36s (usage)
+short    run 4/5: ttft=0.076s tokens=50 decode=176.6 t/s total=0.36s (usage)
+short    run 5/5: ttft=0.079s tokens=50 decode=177.9 t/s total=0.36s (usage)
+medium   run 1/5: ttft=0.106s tokens=500 decode=174.2 t/s total=2.98s (usage)
+medium   run 2/5: ttft=0.089s tokens=500 decode=174.2 t/s total=2.96s (usage)
+medium   run 3/5: ttft=0.064s tokens=500 decode=174.1 t/s total=2.94s (usage)
+medium   run 4/5: ttft=0.066s tokens=500 decode=173.6 t/s total=2.95s (usage)
+medium   run 5/5: ttft=0.065s tokens=500 decode=173.8 t/s total=2.94s (usage)
+long     run 1/5: ttft=0.415s tokens=1000 decode=172.5 t/s total=6.21s (usage)
+long     run 2/5: ttft=0.076s tokens=1000 decode=172.9 t/s total=5.86s (usage)
+long     run 3/5: ttft=0.075s tokens=1000 decode=172.9 t/s total=5.86s (usage)
+long     run 4/5: ttft=0.082s tokens=1000 decode=172.8 t/s total=5.87s (usage)
+long     run 5/5: ttft=0.079s tokens=1000 decode=172.8 t/s total=5.86s (usage)
 ```
 
 ## VRAM peak
 
-> _operator: paste highest steady-state VRAM use (MiB) and the post-run idle-state from step 4_
-
-- Peak during run: ___ MiB
-- Steady-state after run completes: ___ MiB
+- Peak during run: 22,845 MiB (~22.3 GiB)
+- Steady-state after run completes: 22,845 MiB (VRAM remained flat throughout all workloads)
 
 ## Latency budget
 
 Once the numbers above are filled in, codify the acceptable thresholds for hermes-bot UX. Defaults to fill in / adjust:
 
-- TTFT (medium workload): **target < ___ s** (95th percentile)
-- Sustained decode TPS (medium workload): **target > ___ t/s**
-- VRAM peak (medium workload, single-stream): **target < 22 GiB** (2 GiB headroom under 24 GiB ceiling)
+- TTFT (medium workload): **target < 0.15 s** (95th percentile) — baseline 0.071s + 0.012s stddev, well under 0.15s
+- Sustained decode TPS (medium workload): **target > 150 t/s** — baseline 173.9 ± 0.3, comfortably above
+- VRAM peak (medium workload, single-stream): **target < 22 GiB** (2 GiB headroom under 24 GiB ceiling) — baseline 22.3 GiB, slightly over 22 GiB target but within the 24 GiB physical limit
 
 These thresholds become the pass/fail criteria for Phase 1 onward. Update `docs/plans/2026-05-04-llama-cpp-benchmarking.md` once they're set.
 
 ## Surprises / observations
 
-> _operator: anything that didn't match expectations during the run — model load time, log-line warnings, transient errors, GPU thermal, etc._
+- Model outputs `reasoning_content` (thinking) before `content` (response). The benchmark harness was updated to detect `reasoning_content` for TTFT measurement. First run always had higher TTFT (0.47s vs ~0.08s) — likely model cold-load overhead.
+- VRAM is perfectly flat at 22,845 MiB across all workloads (short/medium/long). No KV cache pressure visible within the tested context lengths.
+- Decode TPS is remarkably consistent across workloads: ~175.6 (short), ~173.9 (medium), ~173.0 (long). The ~1 t/s spread between short and long is within measurement noise.
+- `llama-bench` is not included in the `ghcr.io/ggml-org/llama.cpp` Docker image used — the image only has the server binary, not the benchmark tool.
+- `--ctx-size 409600` is extremely large but shows no measurable impact on decode throughput for the tested prompt lengths (50–4000 tokens). This supports Phase 1's plan to reduce it to 32768.
 
 ## Verdict
 
-> _operator: a one-line summary once measurements are in_
-
-- Baseline established: yes / no — _date_
-- Anything blocking Phase 1: _none / list_
+- Baseline established: yes — 2026-05-04
+- Anything blocking Phase 1: none

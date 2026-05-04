@@ -1,0 +1,50 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: openwebui
+  namespace: openwebui
+  labels:
+    app: openwebui
+    app.kubernetes.io/name: openwebui
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "Gateway ingress + kubelet probes; egress to DNS and llama.cpp on hestia."
+  endpointSelector:
+    matchLabels:
+      app: openwebui
+  ingress:
+    # Traffic from the Gateway API parent namespace (Cilium Envoy proxy in `default`)
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: default
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Kubelet-originated readiness/liveness probes
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS resolution via CoreDNS
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # llama.cpp OpenAI-compat API on hestia (TrueNAS, 10.42.2.10:8000)
+    - toCIDR:
+        - 10.42.2.10/32
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP

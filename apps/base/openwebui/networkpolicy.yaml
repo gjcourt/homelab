@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: openwebui
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: "Gateway ingress + kubelet probes; egress to DNS and llama.cpp on hestia."
+  description: "Gateway ingress + kubelet probes; egress to DNS, llama.cpp, and internet HTTPS (model downloads)."
   endpointSelector:
     matchLabels:
       app: openwebui
@@ -47,4 +47,11 @@ spec:
       toPorts:
         - ports:
             - port: "8000"
+              protocol: TCP
+    # Internet HTTPS for Hugging Face sentence-transformer downloads on first boot
+    - toCIDR:
+        - 0.0.0.0/0
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP

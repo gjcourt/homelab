@@ -27,15 +27,18 @@ RUN git clone https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp && \
     cd /tmp/llama.cpp && \
     git checkout "${LLAMA_CPP_REF}"
 
-# Build only llama-bench with CUDA support
+# Build only llama-bench with CUDA support using CMake
 WORKDIR /tmp/llama.cpp
-RUN LLAMA_CUDA=1 make llama-bench -j$(nproc)
+RUN mkdir -p build && \
+    cd build && \
+    cmake .. -DGGML_CUDA=ON -DLLAMA_BENCH=ON && \
+    cmake --build . --target llama-bench -j$(nproc)
 
 # Final stage: start from the base image and add llama-bench
 FROM ${BASE_IMAGE}
 
 # Copy the built llama-bench binary
-COPY --from=build /tmp/llama.cpp/bin/llama-bench /usr/local/bin/llama-bench
+COPY --from=build /tmp/llama.cpp/build/bin/llama-bench /usr/local/bin/llama-bench
 
 # Verify the binary loads correctly and is compatible
 RUN llama-bench --help | head -1

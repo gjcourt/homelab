@@ -44,22 +44,30 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 10
+          env:
+            # Default JVM MaxRAMPercentage (~25%) caps the heap far below the
+            # cgroup limit, so the container shows free RAM while the JVM
+            # throws `OutOfMemoryError: Java heap space`. Pin -Xmx so the
+            # heap actually uses the headroom.
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Xmx2048m -XX:MaxRAMPercentage=75.0"
           volumeMounts:
             - name: signal-cli-config
               mountPath: /var/lib/signal-cli
           resources:
             requests:
               cpu: 50m
-              memory: 512Mi
+              memory: 1Gi
             limits:
               cpu: 500m
-              # signal-cli is a JVM app and OOMs the container on the
-              # 512Mi limit during sustained operation (observed 42 restarts
-              # over 6h with `java.lang.OutOfMemoryError: Java heap space`).
-              # 1.5Gi gives the JVM headroom for the heap + metaspace +
-              # native code with a single linked account; bump again if a
-              # second account is added.
-              memory: 1536Mi
+              # signal-cli is a JVM app and OOMs the heap during sustained
+              # operation. 1.5Gi worked for one account; with two linked
+              # accounts (+16179397251 and +14153089014) it throws
+              # `OutOfMemoryError: Java heap space`. 3Gi covers two accounts;
+              # JAVA_TOOL_OPTIONS above pins -Xmx so the JVM uses it (default
+              # MaxRAMPercentage is ~25%). Bump both if a third account is
+              # added.
+              memory: 3Gi
         - name: signal-bridge
           image: ghcr.io/gjcourt/signal-bridge:2026-05-03
           env:

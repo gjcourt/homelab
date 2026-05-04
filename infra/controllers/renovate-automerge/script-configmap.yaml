@@ -8,7 +8,8 @@ data:
     #!/usr/bin/env python3
     """
     Renovate automerge: merges digest/patch-only Renovate PRs with passing CI.
-    Non-minor PRs are reported by email to EMAIL_TO.
+    Covers all repos listed in GITHUB_REPOS (comma-separated).
+    Non-safe PRs are reported by email to EMAIL_TO.
     """
     import json
     import os
@@ -17,17 +18,19 @@ data:
     import sys
     import urllib.request
     import urllib.error
-    from datetime import datetime
+    from datetime import datetime, timezone
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
 
     GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
-    GITHUB_REPO  = os.environ.get("GITHUB_REPO", "gjcourt/homelab")
     EMAIL_TO     = os.environ.get("EMAIL_TO", "gjcourt@gmail.com")
     SMTP_HOST    = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT    = int(os.environ.get("SMTP_PORT", "587"))
     SMTP_USER    = os.environ["SMTP_USER"]
     SMTP_PASS    = os.environ["SMTP_PASS"]
+
+    _repos_env = os.environ.get("GITHUB_REPOS") or os.environ.get("GITHUB_REPO", "gjcourt/homelab")
+    REPOS = [r.strip() for r in _repos_env.split(",") if r.strip()]
 
 
     def gh(path, method="GET", body=None):
@@ -88,14 +91,14 @@ data:
         return False, "cannot determine update type"
 
 
-    def ci_passing(pr):
+    def ci_passing(repo, pr):
         """True only when every completed check has succeeded."""
         sha = pr["head"]["sha"]
         try:
-            result = gh(f"/repos/{GITHUB_REPO}/commits/{sha}/check-runs")
+            result = gh(f"/repos/{repo}/commits/{sha}/check-runs")
             runs = result.get("check_runs", [])
             if not runs:
-                combined = gh(f"/repos/{GITHUB_REPO}/commits/{sha}/status")
+                combined = gh(f"/repos/{repo}/commits/{sha}/status")
                 state = combined.get("state", "")
                 return state in ("success", "pending")
             completed = [r for r in runs if r["status"] == "completed"]
@@ -105,11 +108,11 @@ data:
             return False
 
 
-    def merge_pr(pr):
+    def merge_pr(repo, pr):
         number = pr["number"]
         try:
             gh(
-                f"/repos/{GITHUB_REPO}/pulls/{number}/merge",
+                f"/repos/{repo}/pulls/{number}/merge",
                 method="PUT",
                 body={"merge_method": "merge", "commit_title": pr["title"]},
             )
@@ -119,32 +122,65 @@ data:
             return False
 
 
-    def send_report(merged, held):
+    def process_repo(repo):
+        prs = gh(f"/repos/{repo}/pulls?state=open&per_page=100")
+        renovate = [pr for pr in prs if is_renovate_pr(pr)]
+        print(f"  Open PRs: {len(prs)} total, {len(renovate)} from Renovate", flush=True)
+
+        merged, held = [], []
+        for pr in renovate:
+            print(f"\n  PR #{pr['number']}: {pr['title']}", flush=True)
+            safe, reason = classify_pr(pr)
+            if not safe:
+                print(f"    -> hold: {reason}", flush=True)
+                held.append({"pr": pr, "reason": reason})
+                continue
+
+            print(f"    -> {reason}, checking CI ...", flush=True)
+            if not ci_passing(repo, pr):
+                reason += " (CI not passing)"
+                print(f"    -> hold: {reason}", flush=True)
+                held.append({"pr": pr, "reason": reason})
+                continue
+
+            if merge_pr(repo, pr):
+                print(f"    -> merged", flush=True)
+                merged.append({"pr": pr, "reason": reason})
+            else:
+                held.append({"pr": pr, "reason": reason + " (merge failed)"})
+
+        return merged, held
+
+
+    def send_report(results):
+        total_merged = sum(len(r["merged"]) for r in results)
+        total_held = sum(len(r["held"]) for r in results)
+
         lines = [
-            f"Renovate automerge -- {datetime.utcnow().strftime('%Y-%m-%d')}",
-            f"Repo: https://github.com/{GITHUB_REPO}",
+            f"Renovate automerge -- {datetime.now(timezone.utc).strftime('%Y-%m-%d')}",
             "",
         ]
-        if merged:
-            lines.append(f"Merged ({len(merged)}):")
-            for item in merged:
-                pr = item["pr"]
-                lines.append(f"  #{pr['number']}: {pr['title']}")
-                lines.append(f"    ({item['reason']})")
-            lines.append("")
-        if held:
-            lines.append(f"Needs review ({len(held)}):")
-            for item in held:
-                pr = item["pr"]
-                lines.append(f"  #{pr['number']}: {pr['title']}")
-                lines.append(f"    https://github.com/{GITHUB_REPO}/pull/{pr['number']}")
-                lines.append(f"    ({item['reason']})")
+        for r in results:
+            if not r["merged"] and not r["held"]:
+                continue
+            lines.append(f"── {r['repo']} ──")
+            if r["merged"]:
+                lines.append(f"  Merged ({len(r['merged'])}):")
+                for item in r["merged"]:
+                    pr = item["pr"]
+                    lines.append(f"    #{pr['number']}: {pr['title']}")
+                    lines.append(f"      ({item['reason']})")
+            if r["held"]:
+                lines.append(f"  Needs review ({len(r['held'])}):")
+                for item in r["held"]:
+                    pr = item["pr"]
+                    lines.append(f"    #{pr['number']}: {pr['title']}")
+                    lines.append(f"      https://github.com/{r['repo']}/pull/{pr['number']}")
+                    lines.append(f"      ({item['reason']})")
             lines.append("")
 
         body = "\n".join(lines)
-        subject = (
-            f"[homelab] renovate: {len(merged)} merged, {len(held)} pending review"
-        )
+        subject = f"[renovate] {total_merged} merged, {total_held} pending review"
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject
         msg["From"] = SMTP_USER
@@ -160,41 +196,23 @@ data:
 
 
     def main():
-        run_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-        print(f"renovate-automerge {run_at}  repo={GITHUB_REPO}", flush=True)
+        run_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        print(f"renovate-automerge {run_at}  repos={','.join(REPOS)}", flush=True)
 
-        prs = gh(f"/repos/{GITHUB_REPO}/pulls?state=open&per_page=100")
-        renovate = [pr for pr in prs if is_renovate_pr(pr)]
-        print(f"Open PRs: {len(prs)} total, {len(renovate)} from Renovate", flush=True)
+        results = []
+        for repo in REPOS:
+            print(f"\n=== {repo} ===", flush=True)
+            merged, held = process_repo(repo)
+            results.append({"repo": repo, "merged": merged, "held": held})
+            print(f"  -> {len(merged)} merged, {len(held)} held", flush=True)
 
-        merged, held = [], []
+        total_merged = sum(len(r["merged"]) for r in results)
+        total_held = sum(len(r["held"]) for r in results)
+        print(f"\nTotal: {total_merged} merged, {total_held} held.", flush=True)
 
-        for pr in renovate:
-            print(f"\nPR #{pr['number']}: {pr['title']}", flush=True)
-            safe, reason = classify_pr(pr)
-            if not safe:
-                print(f"  -> hold: {reason}", flush=True)
-                held.append({"pr": pr, "reason": reason})
-                continue
-
-            print(f"  -> {reason}, checking CI ...", flush=True)
-            if not ci_passing(pr):
-                reason += " (CI not passing)"
-                print(f"  -> hold: {reason}", flush=True)
-                held.append({"pr": pr, "reason": reason})
-                continue
-
-            if merge_pr(pr):
-                print(f"  -> merged", flush=True)
-                merged.append({"pr": pr, "reason": reason})
-            else:
-                held.append({"pr": pr, "reason": reason + " (merge failed)"})
-
-        print(f"\nDone: {len(merged)} merged, {len(held)} held.", flush=True)
-
-        if merged or held:
+        if total_merged or total_held:
             try:
-                send_report(merged, held)
+                send_report(results)
             except Exception as exc:
                 print(f"Email failed: {exc}", file=sys.stderr, flush=True)
                 sys.exit(1)

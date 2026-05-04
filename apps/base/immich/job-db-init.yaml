@@ -16,7 +16,7 @@ spec:
       containers:
         - name: db-init
           # postgres 18-alpine
-          image: postgres@sha256:54451ecb8ab38c24c3ec123f2fd501303a3a1856a5c66e98cecf2460d5e1e9d7
+          image: postgres@sha256:78481659c47e862334611ccdaf7c369c986b3046da9857112f3b309114a65fb4
           command: ["/bin/sh", "-c"]
           args:
             - echo "Patch me"

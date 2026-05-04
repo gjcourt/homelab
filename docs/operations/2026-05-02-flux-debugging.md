@@ -2,7 +2,7 @@
 title: Flux debugging — common patterns
 status: Stable
 created: 2026-05-02
-updated: 2026-05-02
+updated: 2026-05-04
 updated_by: gjcourt
 tags: [operations, flux, debugging, runbook]
 ---
@@ -37,7 +37,9 @@ flux reconcile kustomization apps-staging -n flux-system
 | Symptom | Cause | Fix |
 |---|---|---|
 | `HelmRelease status: 'Failed'` blocking kustomization | Immutable StatefulSet field in chart upgrade | Delete the StatefulSet, `flux reconcile helmrelease --reset`. Add `upgrade.remediation.remediationStrategy: uninstall` to the HelmRelease. |
-| `dependency 'X' is not ready` | Upstream kustomization stalled | Fix the upstream kustomization first. |
+| `timeout waiting for: [StatefulSet/X status: 'InProgress']` | Helm install/upgrade timed out waiting for StatefulSet rollout | `flux reconcile helmrelease <name> -n <namespace> --reset` — clears the failure state and retries. |
+| `StatefulSet/X dry-run failed (Invalid): spec: Forbidden: updates to statefulset spec for fields other than…` | Immutable field changed on a Flux-managed StatefulSet — most commonly `volumeClaimTemplates` storage size | `kubectl delete statefulset <name> -n <ns> --cascade=orphan` (pods keep running), then `flux reconcile kustomization <name> -n flux-system`. Flux recreates the StatefulSet with the new spec; existing PVCs are unaffected and retain their original size. |
+| `dependency 'X' is not ready` | Upstream kustomization stalled | Fix the upstream kustomization first. Note: `infra-controllers` failure cascades to `infra-configs` → `apps-production` → `apps-staging`. |
 | HA enters recovery mode | 0-byte include file (`automations.yaml` etc.) | Init container must write `[]`, not `touch`. |
 | PR not appearing in staging | CI checks pending or failing | Fix CI failures; staging rebuilds automatically once CI is green. |
 | Staging has stale code | Staging workflow run failed | `gh workflow run staging-deploy.yaml`. |

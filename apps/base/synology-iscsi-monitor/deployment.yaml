@@ -18,21 +18,30 @@ spec:
     spec:
       serviceAccountName: synology-iscsi-monitor
       automountServiceAccountToken: false
+      # The python:3.14-slim base image has no USER directive and runs as
+      # root by default; pinning the pod to UID 1000 with fsGroup is
+      # intentional. The exporter only ever talks to the Synology over SSH
+      # and serves Prometheus metrics — it has no on-disk state.
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
+        fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: exporter
           # python 3.14-slim
-          image: python@sha256:5b3879b6f3cb77e712644d50262d05a7c146b7312d784a18eff7ff5462e77033
+          image: python@sha256:0ba001803c72c128063cfa88863755f905cefabe73c026c66a5a86d8f1d63e98
           command: ["/bin/sh", "-c"]
           args:
             - |
               pip install --user paramiko prometheus_client && python /app/exporter.py
           env:
+            # HOME=/tmp lets `pip install --user` and paramiko (which writes
+            # ~/.ssh/known_hosts via AutoAddPolicy) work under
+            # readOnlyRootFilesystem — the /tmp emptyDir below is the
+            # writable target for both.
             - name: HOME
               value: "/tmp"
             - name: PYTHONUNBUFFERED
@@ -68,13 +77,21 @@ spec:
               memory: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
           volumeMounts:
             - name: script-volume
               mountPath: /app
+            # `pip install --user` writes to $HOME/.local and paramiko writes
+            # ~/.ssh/known_hosts; both resolve under HOME=/tmp. Required when
+            # readOnlyRootFilesystem is enabled.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: script-volume
           configMap:
             name: synology-iscsi-exporter-script
+        - name: tmp
+          emptyDir: {}

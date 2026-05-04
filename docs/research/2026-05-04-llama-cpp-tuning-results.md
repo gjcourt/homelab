@@ -302,3 +302,89 @@ long     run 5/5: ttft=0.064s prefill=38410 t/s prompt=2444 tokens=1000 decode=1
 **Analysis:** Decode TPS is flat across all three thread counts — this model is 100% GPU-offloaded so CPU threads don't touch the hot path. TTFT improves 10–22% from 8→12, primarily because more threads reduce tokenisation and dispatch latency. 8→16 does not improve further over 8→12; scheduling overhead erases the marginal gain on the short workload and ties on medium/long.
 
 **Verdict:** **keep (threads=12)** — modest but consistent TTFT improvement across all workloads with no decode regression. threads=16 shows no additional benefit and slight short-prompt regression; sweet spot is 12 on this 64-core host.
+
+---
+
+## Phase 6 — `--ubatch-size 512 → 2048` (sweep: 512, 1024, 2048)
+
+**Hypothesis:** A larger physical micro-batch (ubatch) allows the CUDA kernel to process more tokens per launch during the prefill phase, reducing kernel dispatch overhead and improving prefill TPS for long prompts. No effect expected on decode (one token per step regardless of ubatch). The primary signal is `prefill_tps` on the `prefill_32k` workload (~55K tokens cold).
+
+**Variant flags vs Phase 3:**
+
+```diff
++  --ubatch-size 2048
+```
+
+(Default ubatch-size is 512; batch-size remains at default 2048.)
+
+**llama-bench:** skipped.
+
+**Curl harness — full sweep:**
+
+ubatch=512 (baseline, threads=12):
+```
+short      run 2-5: ttft=0.069 ± 0.006s  decode=176.3 t/s
+medium     run 2-5: ttft=0.053 ± 0.017s  decode=174.3 t/s
+long       run 2-5: ttft=0.065 ± 0.003s  decode=172.9 t/s
+prefill_32k run 2-3: ttft=9.545 ± 0.020s  prefill=5,823 ± 12 t/s
+```
+
+ubatch=1024:
+```
+short      run 1/5: ttft=0.138s prefill=167 t/s prompt=23 tokens=50 decode=171.9 t/s total=0.43s  ← warmup
+short      run 2/5: ttft=0.069s prefill=334 t/s prompt=23 tokens=50 decode=175.9 t/s total=0.35s
+short      run 3/5: ttft=0.065s prefill=353 t/s prompt=23 tokens=50 decode=176.0 t/s total=0.35s
+short      run 4/5: ttft=0.067s prefill=343 t/s prompt=23 tokens=50 decode=176.1 t/s total=0.35s
+short      run 5/5: ttft=0.064s prefill=357 t/s prompt=23 tokens=50 decode=176.0 t/s total=0.35s
+medium     run 1/5: ttft=0.100s prefill=1255 t/s prompt=125 tokens=500 decode=174.2 t/s total=2.97s  ← warmup
+medium     run 2/5: ttft=0.075s prefill=1662 t/s prompt=125 tokens=500 decode=174.1 t/s total=2.95s
+medium     run 3/5: ttft=0.058s prefill=2139 t/s prompt=125 tokens=500 decode=174.1 t/s total=2.93s
+medium     run 4/5: ttft=0.053s prefill=2345 t/s prompt=125 tokens=500 decode=174.1 t/s total=2.92s
+medium     run 5/5: ttft=0.054s prefill=2322 t/s prompt=125 tokens=500 decode=173.8 t/s total=2.93s
+long       run 1/5: ttft=0.356s prefill=6862 t/s prompt=2444 tokens=1000 decode=172.8 t/s total=6.14s  ← warmup
+long       run 2/5: ttft=0.068s prefill=35719 t/s prompt=2444 tokens=1000 decode=173.0 t/s total=5.85s
+long       run 3/5: ttft=0.069s prefill=35627 t/s prompt=2444 tokens=1000 decode=172.9 t/s total=5.85s
+long       run 4/5: ttft=0.063s prefill=38805 t/s prompt=2444 tokens=1000 decode=172.9 t/s total=5.85s
+long       run 5/5: ttft=0.052s prefill=46723 t/s prompt=2444 tokens=1000 decode=172.6 t/s total=5.85s
+prefill_32k run 1/3: ttft=7.694s prefill=7224 t/s prompt=55582 tokens=50 decode=137.5 t/s total=8.06s  ← warmup
+prefill_32k run 2/3: ttft=7.824s prefill=7104 t/s prompt=55582 tokens=50 decode=137.4 t/s total=8.19s
+prefill_32k run 3/3: ttft=7.829s prefill=7100 t/s prompt=55582 tokens=50 decode=137.5 t/s total=8.19s
+```
+
+ubatch=2048:
+```
+short      run 1/5: ttft=0.136s prefill=170 t/s prompt=23 tokens=50 decode=169.7 t/s total=0.43s  ← warmup
+short      run 2/5: ttft=0.069s prefill=334 t/s prompt=23 tokens=50 decode=175.7 t/s total=0.35s
+short      run 3/5: ttft=0.057s prefill=407 t/s prompt=23 tokens=50 decode=175.9 t/s total=0.34s
+short      run 4/5: ttft=0.065s prefill=357 t/s prompt=23 tokens=50 decode=176.0 t/s total=0.35s
+short      run 5/5: ttft=0.056s prefill=410 t/s prompt=23 tokens=50 decode=175.8 t/s total=0.34s
+medium     run 1/5: ttft=0.096s prefill=1298 t/s prompt=125 tokens=500 decode=173.8 t/s total=2.97s  ← warmup
+medium     run 2/5: ttft=0.072s prefill=1732 t/s prompt=125 tokens=500 decode=173.9 t/s total=2.95s
+medium     run 3/5: ttft=0.054s prefill=2356 t/s prompt=125 tokens=500 decode=174.0 t/s total=2.93s
+medium     run 4/5: ttft=0.054s prefill=2317 t/s prompt=125 tokens=500 decode=173.8 t/s total=2.93s
+medium     run 5/5: ttft=0.054s prefill=2332 t/s prompt=125 tokens=500 decode=173.9 t/s total=2.93s
+long       run 1/5: ttft=0.336s prefill=7280 t/s prompt=2444 tokens=1000 decode=172.8 t/s total=6.12s  ← warmup
+long       run 2/5: ttft=0.063s prefill=38669 t/s prompt=2444 tokens=1000 decode=172.8 t/s total=5.85s
+long       run 3/5: ttft=0.064s prefill=38330 t/s prompt=2444 tokens=1000 decode=172.8 t/s total=5.85s
+long       run 4/5: ttft=0.063s prefill=38896 t/s prompt=2444 tokens=1000 decode=172.7 t/s total=5.85s
+long       run 5/5: ttft=0.063s prefill=38671 t/s prompt=2444 tokens=1000 decode=172.6 t/s total=5.86s
+prefill_32k run 1/3: ttft=7.263s prefill=7653 t/s prompt=55582 tokens=50 decode=137.3 t/s total=7.63s  ← warmup
+prefill_32k run 2/3: ttft=7.408s prefill=7503 t/s prompt=55582 tokens=50 decode=137.5 t/s total=7.77s
+prefill_32k run 3/3: ttft=7.413s prefill=7498 t/s prompt=55582 tokens=50 decode=137.6 t/s total=7.78s
+```
+
+**Summary:**
+
+| Workload | ubatch=512 | ubatch=1024 | ubatch=2048 | decode TPS (all) |
+|---|---|---|---|---|
+| short TTFT | 0.069 ± 0.006s | 0.066 ± 0.002s | 0.062 ± 0.006s | 176 (flat) |
+| medium TTFT | 0.053 ± 0.017s | 0.060 ± 0.010s | 0.058 ± 0.009s | 174 (flat) |
+| long TTFT | 0.065 ± 0.003s | 0.063 ± 0.008s | 0.063 ± 0.000s | 173 (flat) |
+| **prefill_32k TTFT** | 9.545 ± 0.020s | 7.826 ± 0.004s | **7.410 ± 0.003s** | — |
+| **prefill_32k TPS** | 5,823 ± 12 | 7,102 ± 3 | **7,500 ± 3** | — |
+
+**VRAM peak:** unchanged — ubatch is a compute tiling parameter with no persistent memory overhead.
+
+**Analysis:** Short/medium/long workloads are unaffected because those prompts (23–2444 tokens) fit within a single ubatch tile at any tested size. The prefill_32k workload (55,582 tokens) clearly shows the benefit: larger ubatch reduces CUDA kernel dispatch overhead when processing many tiles. The gain follows diminishing returns: +22% from 512→1024, then +6% more from 1024→2048. ubatch=2048 is the natural ceiling since ubatch cannot exceed batch-size (default 2048); going higher would require raising both flags together. The +29% total gain on prefill is directly beneficial for hermes coding-agent contexts approaching the 256K limit.
+
+**Verdict:** **keep (ubatch=2048)** — +29% prefill TPS at 55K tokens with zero decode regression and no VRAM cost. Direct benefit for long coding-context TTFT in hermes. Clean stopping point at the batch-size boundary.

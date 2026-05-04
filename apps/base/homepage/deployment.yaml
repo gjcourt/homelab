@@ -50,6 +50,7 @@ spec:
               memory: 256Mi
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
@@ -85,10 +86,22 @@ spec:
               subPath: proxmox.yaml
             - mountPath: /app/config/logs
               name: logs
+            # Next.js standalone server writes its image-optimization cache
+            # under /app/.next/cache; required when readOnlyRootFilesystem
+            # is enabled.
+            - mountPath: /app/.next/cache
+              name: next-cache
+            # Generic /tmp for any tempfile writes during render.
+            - mountPath: /tmp
+              name: tmp
 
       volumes:
         - name: homepage-config
           configMap:
             name: homepage
         - name: logs
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
+        - name: tmp
           emptyDir: {}

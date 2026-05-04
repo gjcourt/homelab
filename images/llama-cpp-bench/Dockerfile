@@ -23,9 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Clone the exact commit used by the base image
 # The base image version is 8982 (b42c7fa5b)
 ARG LLAMA_CPP_REF=b42c7fa5b
-RUN git clone --depth 1 https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp && \
+RUN git clone https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp && \
     cd /tmp/llama.cpp && \
-    git fetch origin "${LLAMA_CPP_REF}" && \
     git checkout "${LLAMA_CPP_REF}"
 
 # Build only llama-bench with CUDA support

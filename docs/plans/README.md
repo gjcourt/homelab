@@ -45,6 +45,7 @@ Sorted by filing date (newest first).
 
 | File | Status | Description |
 | :--- | :--- | :--- |
+| [2026-05-04-llama-cpp-benchmarking.md](2026-05-04-llama-cpp-benchmarking.md) | `planned` | Systematic benchmarking methodology for llama.cpp on hestia 4090 (after #434/#441) |
 | [2026-05-03-snapcast-hifiberry-rollout.md](2026-05-03-snapcast-hifiberry-rollout.md) | `planned` | Wire kitchen + living-room HifiBerries as snapclients of the in-cluster snapserver |
 | [2026-05-02-hestia-gha-runner.md](2026-05-02-hestia-gha-runner.md) | `in-progress` | Self-hosted GHA runner on hestia for auto-deploy of Custom App compose changes |
 | [2026-05-02-hermes-bot-k8s.md](2026-05-02-hermes-bot-k8s.md) | `in-progress` | Hermes agent (Signal mode) deployed to melodic-muse so the bot is laptop-independent |

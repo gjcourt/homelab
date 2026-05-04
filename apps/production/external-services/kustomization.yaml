@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: external-services
+resources:
+  - namespace.yaml
+  # --- appliances ---
+  # To add a new device: create <name>.yaml with Service + Endpoints + HTTPRoutes,
+  # then add one line here.
+  - alcatraz.yaml
+  - hestia.yaml
+  - kitchen-music.yaml

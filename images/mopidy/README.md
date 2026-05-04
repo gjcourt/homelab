@@ -27,7 +27,7 @@ MPD client ──TCP:6600──► mopidy sidecar ──Subsonic──► Navidr
 |------------------|----------|--------------------------------------------------|
 | `mopidy`         | `3.4.2`  | Music server core                                |
 | `mopidy-mpd`     | `3.3.0`  | MPD protocol frontend (port 6600)                |
-| `mopidy-subidy`  | `0.9.1`  | Subsonic backend — talks to Navidrome            |
+| `mopidy-subidy`  | `1.1.0`  | Subsonic backend — talks to Navidrome            |
 | `mopidy-local`   | `3.2.1`  | Local-library backend (disabled in snapcast use) |
 
 System packages (Debian bookworm):

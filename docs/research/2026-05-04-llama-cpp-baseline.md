@@ -108,7 +108,7 @@ SKIPPED — llama-bench not in image
 
 ## Curl harness output
 
-> Runs: 5 per workload (run 1 discarded as warmup). Model: Qwen3.6-35B-A3B-UD-IQ4_NL.gguf
+> Runs: 5 per workload (run 1 discarded as warmup). Model: Qwen3.6-35B-A3B-UD-IQ4_NL.gguf. Re-run 2026-05-04.
 
 ```
 endpoint     http://10.42.2.10:8000/v1
@@ -117,28 +117,28 @@ runs/wkld    5 (first discarded as warmup)
 
 workload   TTFT (s)               decode TPS             total (s)
 ---------- ---------------------- ---------------------- ----------------------
-short       0.081 ± 0.007          175.6 ± 0.3             0.37 ± 0.01
-medium      0.061 ± 0.008          173.9 ± 0.1             2.94 ± 0.01
-long        0.075 ± 0.002          173.0 ± 0.1             5.86 ± 0.00
+short       0.081 ± 0.007          176.6 ± 0.9             0.36 ± 0.01
+medium      0.071 ± 0.012          173.9 ± 0.3             2.95 ± 0.01
+long        0.078 ± 0.003          172.9 ± 0.1             5.86 ± 0.00
 ```
 
 Per-run trace (stderr):
 ```
-short    run 1/5: ttft=0.474s tokens=50 decode=174.1 t/s total=0.76s (usage)
-short    run 2/5: ttft=0.091s tokens=50 decode=176.1 t/s total=0.37s (usage)
-short    run 3/5: ttft=0.079s tokens=50 decode=175.5 t/s total=0.36s (usage)
-short    run 4/5: ttft=0.077s tokens=50 decode=175.5 t/s total=0.36s (usage)
-short    run 5/5: ttft=0.076s tokens=50 decode=175.5 t/s total=0.36s (usage)
-medium   run 1/5: ttft=0.103s tokens=500 decode=174.5 t/s total=2.97s (usage)
-medium   run 2/5: ttft=0.064s tokens=500 decode=173.8 t/s total=2.94s (usage)
-medium   run 3/5: ttft=0.049s tokens=500 decode=174.0 t/s total=2.92s (usage)
-medium   run 4/5: ttft=0.067s tokens=500 decode=173.8 t/s total=2.94s (usage)
-medium   run 5/5: ttft=0.065s tokens=500 decode=173.9 t/s total=2.94s (usage)
-long     run 1/5: ttft=0.086s tokens=1000 decode=173.0 t/s total=5.87s (usage)
-long     run 2/5: ttft=0.077s tokens=1000 decode=173.0 t/s total=5.86s (usage)
-long     run 3/5: ttft=0.076s tokens=1000 decode=173.0 t/s total=5.86s (usage)
-long     run 4/5: ttft=0.073s tokens=1000 decode=172.9 t/s total=5.85s (usage)
-long     run 5/5: ttft=0.074s tokens=1000 decode=172.9 t/s total=5.86s (usage)
+short    run 1/5: ttft=0.600s tokens=50 decode=169.5 t/s total=0.90s (usage)
+short    run 2/5: ttft=0.091s tokens=50 decode=175.8 t/s total=0.38s (usage)
+short    run 3/5: ttft=0.078s tokens=50 decode=176.2 t/s total=0.36s (usage)
+short    run 4/5: ttft=0.076s tokens=50 decode=176.6 t/s total=0.36s (usage)
+short    run 5/5: ttft=0.079s tokens=50 decode=177.9 t/s total=0.36s (usage)
+medium   run 1/5: ttft=0.106s tokens=500 decode=174.2 t/s total=2.98s (usage)
+medium   run 2/5: ttft=0.089s tokens=500 decode=174.2 t/s total=2.96s (usage)
+medium   run 3/5: ttft=0.064s tokens=500 decode=174.1 t/s total=2.94s (usage)
+medium   run 4/5: ttft=0.066s tokens=500 decode=173.6 t/s total=2.95s (usage)
+medium   run 5/5: ttft=0.065s tokens=500 decode=173.8 t/s total=2.94s (usage)
+long     run 1/5: ttft=0.415s tokens=1000 decode=172.5 t/s total=6.21s (usage)
+long     run 2/5: ttft=0.076s tokens=1000 decode=172.9 t/s total=5.86s (usage)
+long     run 3/5: ttft=0.075s tokens=1000 decode=172.9 t/s total=5.86s (usage)
+long     run 4/5: ttft=0.082s tokens=1000 decode=172.8 t/s total=5.87s (usage)
+long     run 5/5: ttft=0.079s tokens=1000 decode=172.8 t/s total=5.86s (usage)
 ```
 
 ## VRAM peak
@@ -150,8 +150,8 @@ long     run 5/5: ttft=0.074s tokens=1000 decode=172.9 t/s total=5.86s (usage)
 
 Once the numbers above are filled in, codify the acceptable thresholds for hermes-bot UX. Defaults to fill in / adjust:
 
-- TTFT (medium workload): **target < 0.15 s** (95th percentile) — baseline 0.061s + 0.008s stddev, well under 0.15s
-- Sustained decode TPS (medium workload): **target > 150 t/s** — baseline 173.9 ± 0.1, comfortably above
+- TTFT (medium workload): **target < 0.15 s** (95th percentile) — baseline 0.071s + 0.012s stddev, well under 0.15s
+- Sustained decode TPS (medium workload): **target > 150 t/s** — baseline 173.9 ± 0.3, comfortably above
 - VRAM peak (medium workload, single-stream): **target < 22 GiB** (2 GiB headroom under 24 GiB ceiling) — baseline 22.3 GiB, slightly over 22 GiB target but within the 24 GiB physical limit
 
 These thresholds become the pass/fail criteria for Phase 1 onward. Update `docs/plans/2026-05-04-llama-cpp-benchmarking.md` once they're set.

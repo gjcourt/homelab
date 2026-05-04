@@ -58,3 +58,13 @@ To verify AdGuard Home is working:
   - Check the logs of the `adguard-sync` CronJob: `kubectl logs -n adguard -l job-name=adguard-sync`
   - Verify the credentials in the `adguard-sync-credentials` secret are correct.
   - Ensure the replica pods are reachable from the sync job pod.
+- **Flux reconciliation blocked: `StatefulSet dry-run failed (Invalid): spec: Forbidden`**:
+  - Cause: `volumeClaimTemplates` storage size was changed in the manifest. This field is immutable on existing StatefulSets.
+  - Fix: delete the StatefulSet with `--cascade=orphan` so pods keep running, then let Flux recreate it.
+  ```bash
+  kubectl delete statefulset adguard -n adguard-prod --cascade=orphan
+  kubectl delete statefulset adguard -n adguard-stage --cascade=orphan
+  flux reconcile kustomization apps-production -n flux-system
+  flux reconcile kustomization apps-staging -n flux-system
+  ```
+  The existing PVCs (`config-adguard-0`, `work-adguard-0`) retain their original size; the new template size applies only to PVCs created for future replicas. To actually resize existing PVCs, patch them manually — see `docs/plans/2026-02-15-adguard-ha.md`.

@@ -29,21 +29,14 @@ spec:
     matchLabels:
       app: excalidraw
   ingress:
-    # Traffic from the Gateway API parent namespace (`default`).
-    # Cilium Gateway API translates external HTTPS into pod-to-pod traffic
-    # whose source identity is the Envoy proxy in the `default` namespace.
-    - fromEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: default
-      toPorts:
-        - ports:
-            - port: "80"
-              protocol: TCP
-    # Kubelet-originated probes (readiness/liveness/startup). On Cilium,
-    # node-local traffic carries the `kube-system` namespace identity.
-    - fromEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: kube-system
+    # Gateway API traffic. Cilium's Envoy proxy binds upstream connections to a
+    # dedicated proxy IP (reserved identity 8, "ingress"). Same-node connections
+    # arrive as "host"; cross-node VXLAN connections as "remote-node". All three
+    # are required. Kubelet probes are auto-exempted by Cilium.
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
       toPorts:
         - ports:
             - port: "80"

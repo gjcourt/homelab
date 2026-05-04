@@ -207,11 +207,11 @@ spec:
               memory: 512Mi
 
         - name: mopidy
-          # gjcourt/mopidy:3.4.2-1 — first-party image built from images/mopidy/
-          # (Phase 1 of docs/plans/2026-03-14-navidrome-snapcast-mopidy.md). After
-          # the first build, this should be digest-pinned per AGENTS.md image
-          # discipline; tag-only is acceptable while bootstrapping the image.
-          image: gjcourt/mopidy:3.4.2-1
+          # ghcr.io/gjcourt/mopidy:2026-05-04 — first-party image built by
+          # .github/workflows/build-mopidy.yml from images/mopidy/. Tag-only is
+          # acceptable per AGENTS.md (CI guarantees date-tag immutability for
+          # first-party gjcourt/* images).
+          image: ghcr.io/gjcourt/mopidy:2026-05-04
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

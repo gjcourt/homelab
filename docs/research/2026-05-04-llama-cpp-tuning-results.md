@@ -186,3 +186,43 @@ long     run 5/5: ttft=0.080s tokens=1000 decode=173.0 t/s total=5.86s
 | long | 172.6 ± 0.2 | 172.9 ± 0.0 | +0.3 (noise) |
 
 **Verdict:** **keep** — No measurable TPS gain at tested context lengths (50–4000 token prompts), but no regression either and VRAM unchanged. Flash-attn's benefit is in the attention computation, which scales quadratically with sequence length — the tested workloads are short relative to the 256K window. Expected to show real benefit when hermes uses long coding contexts near the 256K limit. Zero cost to keep.
+
+---
+
+## Phase 2 extended — `prefill_32k` A/B test (cold prefill, flash-attn on vs off)
+
+**Motivation:** The short/medium/long workloads (50–4000 token prompts) are too short for flash-attn's O(n²)→O(n) attention kernel reduction to be measurable. A ~55K token cold-prefill workload was added to the bench script (`prefill_32k`) to isolate attention cost and make any flash-attn speedup directly visible in `prefill_tps = prompt_tokens / TTFT`.
+
+**Method:** `scripts/llama-cpp-bench.py` extended with:
+- `prefill_32k` workload: 55,582-token prompt (192 × webhook-service paragraph), 50-token response cap.
+- `cache_prompt: false` field in the API request.
+- Per-run nanosecond salt prepended to the prompt to defeat llama.cpp's LCP-similarity KV cache reuse (the server ignores `cache_prompt: false` for context checkpoint decisions in this build).
+- `prefill_tps` metric: `prompt_tokens / TTFT`.
+
+**Raw per-run traces:**
+
+No flash-attn (prod baseline, 256K ctx):
+```
+prefill_32k run 1/3: ttft=9.556s prefill=5816 t/s prompt=55582 tokens=50 decode=137.4 t/s total=9.92s
+prefill_32k run 2/3: ttft=9.515s prefill=5842 t/s prompt=55582 tokens=50 decode=138.2 t/s total=9.88s  ← post-warmup
+prefill_32k run 3/3: ttft=9.536s prefill=5829 t/s prompt=55582 tokens=50 decode=138.1 t/s total=9.90s  ← post-warmup
+```
+
+Flash-attn on (same 256K ctx, `--flash-attn on`):
+```
+prefill_32k run 1/3: ttft=9.410s prefill=5907 t/s prompt=55582 tokens=50 decode=136.0 t/s total=9.78s
+prefill_32k run 2/3: ttft=9.512s prefill=5843 t/s prompt=55582 tokens=50 decode=138.2 t/s total=9.87s  ← post-warmup
+prefill_32k run 3/3: ttft=9.543s prefill=5825 t/s prompt=55582 tokens=50 decode=138.1 t/s total=9.90s  ← post-warmup
+```
+
+**Summary (post-warmup runs 2–3 only):**
+
+| Config | TTFT (s) | Prefill TPS | Decode TPS |
+|---|---|---|---|
+| No flash-attn | 9.525 ± 0.015 | 5,835 ± 9 | 138.1 ± 0.1 |
+| Flash-attn on | 9.527 ± 0.022 | 5,834 ± 13 | 138.1 ± 0.1 |
+| Delta | +0.002s (noise) | -1 t/s (noise) | 0.0 |
+
+**Analysis:** Zero measurable prefill benefit even at 55K tokens. Root cause: Qwen3.6-35B-A3B is a Mixture of Experts (MoE) model with only 3.6B active parameters per token. Active compute is dominated by the expert FFN layers, not attention. Flash-attn only accelerates the attention kernel — for this model, attention is a small fraction of total prefill compute regardless of context length. Qwen3 also uses Grouped Query Attention (GQA), which already reduces attention memory bandwidth pressure, further shrinking flash-attn's opportunity window.
+
+**Verdict:** **keep** — Confirmed zero benefit at 55K tokens on this MoE+GQA architecture. Flash-attn has no VRAM or regression cost so it stays enabled. Any real benefit would require a dense (non-MoE) model at much longer contexts.

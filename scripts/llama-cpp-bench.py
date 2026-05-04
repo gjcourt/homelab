@@ -54,22 +54,20 @@ import time
 import urllib.error
 import urllib.request
 
-# Four fixed workloads:
+# Four fixed workloads — each entry is (prompt, max_tokens, cache_prompt).
 #   short       ~50 tokens prompt, ~50 tokens response   — TTFT-sensitive
 #   medium      ~500 tokens prompt, ~500 tokens response  — sustained decode
 #   long        ~4000 tokens prompt, ~1000 tokens response — prefill + KV
-#   prefill_32k ~32K tokens prompt, 50 tokens response   — flash-attn measurable
+#   prefill_32k ~55K tokens prompt, 50 tokens response   — flash-attn measurable
 #
-# prefill_32k isolates the prefill phase at a context length where flash-attn's
-# O(n²)→O(n) attention rewrite produces a real speedup. The key metric for this
-# workload is prefill_tps (prompt_tokens / TTFT), not decode_tps.
-#
-# Prompts are intentionally deterministic (no jinja, no current-date references)
-# so re-runs at different times produce comparable numbers.
-WORKLOADS: dict[str, tuple[str, int]] = {
+# prefill_32k uses cache_prompt=False so every run is a cold prefill — essential
+# to prevent the KV cache from masking the attention kernel cost after the first run.
+# The key metric is prefill_tps (prompt_tokens / TTFT), not decode_tps.
+WORKLOADS: dict[str, tuple[str, int, bool]] = {
     "short": (
         "What is the capital of France? Reply in one short sentence.",
         50,
+        True,
     ),
     "medium": (
         "Explain how a Bloom filter works, including: (1) what problem it "
@@ -82,6 +80,7 @@ WORKLOADS: dict[str, tuple[str, int]] = {
         "engineer who has not implemented one before. Be concrete with "
         "numbers where it helps.",
         500,
+        True,
     ),
     "long": (
         # ~4000-token prompt: a self-describing exercise that doesn't depend
@@ -128,6 +127,7 @@ WORKLOADS: dict[str, tuple[str, int]] = {
             "change had the intended effect."
         ),
         1000,
+        True,
     ),
     "prefill_32k": (
         # ~32K token prompt with a short (50-token) response cap.
@@ -169,19 +169,26 @@ WORKLOADS: dict[str, tuple[str, int]] = {
         ) * 192)  # 192 × ~170 tokens ≈ 32,640 tokens
         + "Now give the one-paragraph executive summary.",
         50,
+        False,  # cold prefill every run — KV cache reuse would mask attention cost
     ),
 }
 
 
-def run_one(base_url: str, model: str, prompt: str, max_tokens: int, timeout_s: int = 600) -> dict:
+def run_one(base_url: str, model: str, prompt: str, max_tokens: int, timeout_s: int = 600,
+            cache_prompt: bool = True) -> dict:
     """Issue one streaming chat-completions request, return per-run metrics."""
+    # When cache_prompt=False we need a cold prefill every run. llama.cpp's LCP similarity
+    # matching caches based on prompt prefix regardless of the cache_prompt field, so prepend
+    # a unique nanosecond salt to defeat prefix matching entirely.
+    effective_prompt = prompt if cache_prompt else f"[{time.time_ns()}] {prompt}"
     body = json.dumps({
         "model": model,
-        "messages": [{"role": "user", "content": prompt}],
+        "messages": [{"role": "user", "content": effective_prompt}],
         "max_tokens": max_tokens,
         "stream": True,
         "stream_options": {"include_usage": True},
         "temperature": 0.0,
+        "cache_prompt": cache_prompt,
     }).encode()
 
     req = urllib.request.Request(
@@ -290,11 +297,11 @@ def main() -> int:
     print(f"{'-'*12} {'-'*22} {'-'*22} {'-'*22} {'-'*22}")
 
     overall_ok = True
-    for name, (prompt, max_tokens) in workloads.items():
+    for name, (prompt, max_tokens, cache_prompt) in workloads.items():
         runs: list[dict] = []
         try:
             for i in range(args.runs):
-                r = run_one(args.base_url, args.model, prompt, max_tokens, args.timeout)
+                r = run_one(args.base_url, args.model, prompt, max_tokens, args.timeout, cache_prompt)
                 r["run"] = i
                 r["workload"] = name
                 runs.append(r)

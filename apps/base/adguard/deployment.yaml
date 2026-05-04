@@ -98,6 +98,12 @@ spec:
             - mountPath: /opt/adguardhome/work
               name: work
 
+  # NOTE: volumeClaimTemplates are immutable for already-existing PVCs.
+  # Bumping these values affects only PVCs created for *new* pod ordinals
+  # (e.g., a third replica). To resize existing PVCs, run the manual
+  # `kubectl patch pvc` step documented in
+  # docs/plans/2026-02-15-adguard-ha.md (or just patch on the cluster).
+  # Synology CSI supports online volume expansion.
   volumeClaimTemplates:
     - metadata:
         name: config
@@ -106,7 +112,7 @@ spec:
         storageClassName: synology-iscsi
         resources:
           requests:
-            storage: 1Gi
+            storage: 5Gi
     - metadata:
         name: work
       spec:
@@ -114,4 +120,4 @@ spec:
         storageClassName: synology-iscsi
         resources:
           requests:
-            storage: 1Gi
+            storage: 5Gi

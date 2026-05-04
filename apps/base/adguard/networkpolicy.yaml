@@ -51,15 +51,17 @@ spec:
     # to a dedicated proxy IP (reserved identity 8, "ingress"). Same-node
     # connections arrive as "host"; cross-node VXLAN as "remote-node".
     # All three entities are required. Kubelet probes are auto-exempted.
+    # Ports are pod ports (80/443/3000), not service ports (8080/8443/3000) —
+    # Cilium evaluates ingress policy after DNAT.
     - fromEntities:
         - host
         - remote-node
         - ingress
       toPorts:
         - ports:
-            - port: "8080"
+            - port: "80"
               protocol: TCP
-            - port: "8443"
+            - port: "443"
               protocol: TCP
             - port: "3000"
               protocol: TCP

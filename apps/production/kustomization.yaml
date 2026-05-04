@@ -19,6 +19,7 @@ resources:
   - mealie
   - memos
   - navidrome
+  - openwebui
   - overture
   - signal-cli
   - snapcast

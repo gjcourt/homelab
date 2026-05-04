@@ -11,5 +11,6 @@ resources:
   - mealie
   - memos
   - navidrome
+  - openwebui
   - snapcast
   - vitals

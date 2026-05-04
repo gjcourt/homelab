@@ -47,11 +47,14 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # Admin UI from the Gateway namespace (`default` — Cilium Gateway API).
-    # Matches the HTTPRoute that exposes adguard-admin externally.
-    - fromEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: default
+    # Admin UI via Gateway API. Cilium's Envoy proxy binds upstream connections
+    # to a dedicated proxy IP (reserved identity 8, "ingress"). Same-node
+    # connections arrive as "host"; cross-node VXLAN as "remote-node".
+    # All three entities are required. Kubelet probes are auto-exempted.
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
       toPorts:
         - ports:
             - port: "8080"
@@ -70,17 +73,6 @@ spec:
             - port: "80"
               protocol: TCP
             - port: "8080"
-              protocol: TCP
-    # Kubelet probes (readiness/liveness). Cilium tags node-local traffic
-    # with the kube-system namespace identity.
-    - fromEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: kube-system
-      toPorts:
-        - ports:
-            - port: "80"
-              protocol: TCP
-            - port: "443"
               protocol: TCP
   egress:
     # kube-dns / CoreDNS for in-cluster Service resolution.

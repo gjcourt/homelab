@@ -13,13 +13,14 @@ spec:
     matchLabels:
       app: openwebui
   ingress:
-    # Cilium Envoy (gateway) is a hostNetwork DaemonSet. On a multi-node cluster
-    # with VXLAN tunneling, the Envoy pod and the app pod may be on different nodes.
-    # Same-node connections arrive as host; cross-node connections arrive as
-    # remote-node. Both are required. Kubelet probes are auto-exempted by Cilium.
+    # Cilium Envoy (Gateway API) binds upstream sockets to a dedicated proxy IP
+    # (e.g. 10.244.x.15) that Cilium marks as reserved identity 8 ("ingress").
+    # Same-node connections arrive as "host"; cross-node VXLAN connections arrive
+    # as "remote-node". All three are required. Kubelet probes are auto-exempted.
     - fromEntities:
         - host
         - remote-node
+        - ingress
       toPorts:
         - ports:
             - port: "8080"

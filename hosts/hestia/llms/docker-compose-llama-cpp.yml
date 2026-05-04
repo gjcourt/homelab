@@ -1,6 +1,6 @@
 services:
   llama:
-    image: ghcr.io/gjcourt/llama-cpp-bench:latest
+    image: ghcr.io/gjcourt/llama-cpp-bench:2026-05-04
     container_name: llama
     restart: unless-stopped
     volumes:

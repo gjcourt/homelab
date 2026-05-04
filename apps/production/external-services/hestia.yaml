@@ -1,6 +1,8 @@
 # hestia — TrueNAS GPU server (10.42.2.10)
-# TrueNAS web UI runs HTTPS on 443 with a self-signed cert. We proxy to 443
-# and rely on the BackendTLSPolicy below to skip upstream cert verification.
+# TrueNAS web UI runs HTTPS on 443. BackendTLSPolicy (below) tells the gateway
+# to use TLS for the upstream connection and validate against system CAs.
+# Prereq: configure TrueNAS with a Let's Encrypt cert for hestia.burntbytes.com
+# via System → Certificates → ACME DNS Authenticator (Cloudflare).
 ---
 apiVersion: v1
 kind: Service
@@ -63,3 +65,19 @@ spec:
     - backendRefs:
         - name: hestia
           port: 443
+---
+# BackendTLSPolicy: gateway uses TLS to reach hestia:443 and validates the
+# cert against system (Let's Encrypt) CAs.
+apiVersion: gateway.networking.k8s.io/v1alpha3
+kind: BackendTLSPolicy
+metadata:
+  name: hestia-tls
+  namespace: external-services
+spec:
+  targetRefs:
+    - group: ""
+      kind: Service
+      name: hestia
+  validation:
+    wellKnownCACertificates: System
+    hostname: hestia.burntbytes.com

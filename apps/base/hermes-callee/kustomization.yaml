@@ -1,0 +1,39 @@
+# Second hermes-bot persona, listening on +14153089014.
+#
+# Mirrors the apps/base/hermes/ deployment exactly — same image, command,
+# probes, security context, and resources — and only patches what differs:
+#   - Namespace: hermes → hermes-callee.
+#   - SIGNAL_ACCOUNT and SIGNAL_HOME_CHANNEL in the env ConfigMap.
+#
+# Per-namespace `hermes-data` PVC stays the same name; because it lives in a
+# different namespace, it's a separate volume from the primary bot's PVC.
+#
+# When base hermes manifest changes (image bumps, probe tweaks, toolset
+# updates, etc.), this overlay inherits them automatically — no per-bot drift.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: hermes-callee
+resources:
+  - ../hermes/
+
+patches:
+  # Rename the Namespace resource itself (the `namespace:` directive only
+  # affects namespaced resources, not the Namespace object).
+  - target:
+      kind: Namespace
+      name: hermes
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: hermes-callee
+  # Point this bot at +14153089014's account on signal-cli.
+  - target:
+      kind: ConfigMap
+      name: hermes-config
+    patch: |
+      - op: replace
+        path: /data/SIGNAL_ACCOUNT
+        value: "+14153089014"
+      - op: replace
+        path: /data/SIGNAL_HOME_CHANNEL
+        value: "+14153089014"

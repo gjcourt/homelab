@@ -12,19 +12,17 @@
 ARG BASE_IMAGE=ghcr.io/ggml-org/llama.cpp@sha256:a8c56356fbfde209910b8098d0a060f4b84997f23b65491df3f2b61fae91dd7b
 FROM ${BASE_IMAGE} AS ggml-base
 
-# Build stage: use the base image itself (has CUDA runtime) to build llama-bench
-FROM ${BASE_IMAGE} AS build
+# Build stage: use nvidia/cuda image for CUDA toolkit, clone llama.cpp from base image commit
+FROM nvidia/cuda:12.8.0-devel-ubuntu22.04 AS build
 
-# Install build dependencies and CUDA toolkit
-# The base image has CUDA 12.8 runtime; we need the toolkit (nvcc) for compilation
+ARG LLAMA_CPP_REF=b42c7fa5b
+
+# Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git cmake \
-    cuda-toolkit-12-8 && \
+    build-essential git cmake && \
     rm -rf /var/lib/apt/lists/*
 
 # Clone the exact commit used by the base image
-# The base image version is 8982 (b42c7fa5b)
-ARG LLAMA_CPP_REF=b42c7fa5b
 RUN git clone https://github.com/ggml-org/llama.cpp.git /tmp/llama.cpp && \
     cd /tmp/llama.cpp && \
     git checkout "${LLAMA_CPP_REF}"

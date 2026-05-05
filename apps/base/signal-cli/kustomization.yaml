@@ -5,6 +5,7 @@ resources:
   - namespace.yaml
   - networkpolicy.yaml
   - pdb.yaml
+  - secret-ghcr.yaml
   - service.yaml
   - serviceaccount.yaml
   - servicemonitor.yaml

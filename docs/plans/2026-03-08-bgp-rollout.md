@@ -815,16 +815,29 @@ All 3 control-plane nodes carry `node.kubernetes.io/exclude-from-external-load-b
 ### LoadBalancer service IP map
 
 ```
-adguard-prod/adguard:                            10.42.2.43
-adguard-prod/adguard-dns-secondary:              10.42.2.45
-adguard-stage/adguard:                           10.42.2.42
+adguard-prod/adguard:                            10.42.2.43   # pinned (client DNS configs)
+adguard-prod/adguard-dns-secondary:              10.42.2.45   # pinned (client DNS configs)
+adguard-stage/adguard:                           10.42.2.42   # → standalone IP after this PR
 default/cilium-gateway-app-gateway-production:   10.42.2.40
-default/cilium-gateway-app-gateway-staging:      10.42.2.42
+default/cilium-gateway-app-gateway-staging:      10.42.2.42   # retains .42 alone after split
 snapcast-prod/snapcast:                          10.42.2.37
 snapcast-stage/snapcast:                         10.42.2.41
 ```
 
-> **Known anomaly:** `default/cilium-gateway-app-gateway-staging` and `adguard-stage/adguard` are both allocated `10.42.2.42`. BGP will advertise this /32 once. Cleanup tracked separately.
+> **Shared-IP cleanup (this PR):** Pre-PR, `gateway-staging` and `adguard-stage` co-tenanted `10.42.2.42` via `lbipam.cilium.io/sharing-key: homelab`, a single-node-era IP-compaction holdover. Multi-node cluster removes that scarcity. This PR strips the sharing annotations from `adguard-stage`'s overlay so IPAM allocates it a standalone IP from `home-c-pool`. `gateway-staging` retains `.42`. Production is unchanged: `adguard-prod` keeps `.43`/`.45` (pinned by client DNS configs) and `gateway-production` keeps `.40`.
+
+### LB IP pools
+
+Two pools are present (unchanged for BGP — the prefix-list `10.42.2.0/24 ge 32 le 32` covers both):
+
+| Pool | Range | Notes |
+|:-----|:------|:------|
+| `home-c-pool` | `10.42.2.40` – `10.42.2.254` | Legacy pool; covers all gateway and adguard IPs |
+| `home-compute-pool` | `10.42.2.30` – `10.42.2.37` | Added 2026-05-05 for snapcast/compute-tier services |
+
+### L2 announcement policy
+
+A single `CiliumL2AnnouncementPolicy` named `l2-announcement-policy-staging` is in effect. Despite the name, it has **no service selector** (`spec: {externalIPs: true, loadBalancerIPs: true}`) so it covers all LB IPs cluster-wide. Phase 4a removes this single resource.
 
 ### UCGF state at Phase 0.1
 

@@ -19,9 +19,14 @@ patches:
       kind: Service
       name: adguard
     patch: |
-      - op: replace
+      # Drop sharing annotations inherited from base. The multi-node cluster
+      # removes any IP-scarcity reason to co-tenant; only staging was actually
+      # sharing (with gateway-staging on .42). IPAM allocates a standalone IP
+      # for adguard-stage from home-c-pool after this patch.
+      - op: remove
         path: /metadata/annotations/lbipam.cilium.io~1sharing-cross-namespace
-        value: default,adguard-stage,audiobookshelf-stage,linkding-stage,mealie-stage,memos-stage
+      - op: remove
+        path: /metadata/annotations/lbipam.cilium.io~1sharing-key
   - target:
       kind: Namespace
       name: adguard

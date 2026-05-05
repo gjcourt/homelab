@@ -4,7 +4,7 @@ metadata:
   name: renovate-automerge-env
   namespace: renovate
 data:
-  GITHUB_REPOS: gjcourt/homelab,gjcourt/golinks,gjcourt/llmux,gjcourt/Pingo,gjcourt/soundbyte,gjcourt/tempo-interview,gjcourt/vitals
+  GITHUB_REPOS: gjcourt/homelab,gjcourt/golinks,gjcourt/llmux,gjcourt/Pingo,gjcourt/soundbyte,gjcourt/tempo-interview,gjcourt/vitals,gjcourt/drift,gjcourt/python-nginx-signing
   EMAIL_TO: gjcourt@gmail.com
   SMTP_HOST: smtp.gmail.com
   SMTP_PORT: "587"

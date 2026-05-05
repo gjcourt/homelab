@@ -1,0 +1,11 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: signal-cli
+  namespace: signal-cli
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: signal-cli

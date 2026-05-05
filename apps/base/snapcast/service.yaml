@@ -10,6 +10,9 @@ metadata:
     lbipam.cilium.io/ips: 10.42.2.37
 spec:
   type: LoadBalancer
+  # Preserve source IPs from LAN clients so the CNP fromCIDR rule can match.
+  # Without this, Cilium SNATs traffic to a node IP before it reaches the pod.
+  externalTrafficPolicy: Local
   selector:
     app: snapcast
   ports:

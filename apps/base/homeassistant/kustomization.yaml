@@ -22,8 +22,6 @@ configMapGenerator:
       - configuration.yaml=files/configuration.yaml
       - automations.yaml=files/automations.yaml
       - binary_sensors.yaml=files/binary_sensors.yaml
-      - control.yaml=dashboards/control.yaml
-      - switchboard.yaml=dashboards/switchboard.yaml
 
 labels:
   - includeSelectors: false

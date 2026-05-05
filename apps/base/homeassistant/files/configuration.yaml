@@ -5,17 +5,52 @@ default_config:
 frontend:
   themes: !include_dir_merge_named themes
 
-# Lovelace runs in storage mode (the default). Dashboards are registered via
-# the storage registry in /config/.storage/lovelace_dashboards. YAML-mode
-# dashboards listed there reference files mounted from this ConfigMap at
-# /config/dashboards/<name>.yaml (control.yaml, switchboard.yaml).
-#
-# Note: HA's YAML-config `lovelace.dashboards` block requires slug keys to
-# contain a hyphen (`url path needs to contain a hyphen`), which `control`
-# and `switchboard` don't have. The storage registry has no such rule, so
-# we manage these via the registry instead. To convert a UI-created (mode:
-# storage) dashboard to YAML mode, edit the registry entry directly: set
-# mode: yaml and filename: dashboards/<file>.yaml.
+# Lovelace runs in storage mode (the default). All dashboards (Map, Floor Plan,
+# Switchboard, Control) are registered in /config/.storage/lovelace_dashboards
+# and edited via the HA UI's Lovelace editor. We do not register any YAML-mode
+# dashboards from this file: HA's slug validator hard-rejects single-word slugs
+# like `control` / `switchboard`, and `mode: yaml` in the storage registry is
+# silently ignored (HA always uses LovelaceStorage for storage-registered
+# dashboards regardless of the `mode` field).
+
+# Bathroom-fan auto-off helpers. Each bathroom has:
+#   timer.<name>_fan_timer       — counts down once the switch flips on
+#   input_number.<name>_fan_minutes — operator-configurable timeout per bathroom
+# The auto-off automation in automations.yaml ties them to the corresponding
+# Lutron Caseta switch entities (switch.<name>_exhaust_fan).
+input_number:
+  hall_bathroom_fan_minutes:
+    name: Hall Bathroom Fan Timer
+    min: 5
+    max: 120
+    step: 5
+    initial: 30
+    unit_of_measurement: min
+    mode: slider
+  master_bathroom_fan_minutes:
+    name: Master Bathroom Fan Timer
+    min: 5
+    max: 120
+    step: 5
+    initial: 30
+    unit_of_measurement: min
+    mode: slider
+  powder_bathroom_fan_minutes:
+    name: Powder Bathroom Fan Timer
+    min: 5
+    max: 120
+    step: 5
+    initial: 30
+    unit_of_measurement: min
+    mode: slider
+
+timer:
+  hall_bathroom_fan_timer:
+    name: Hall Bathroom Fan Timer
+  master_bathroom_fan_timer:
+    name: Master Bathroom Fan Timer
+  powder_bathroom_fan_timer:
+    name: Powder Bathroom Fan Timer
 
 automation: !include automations.yaml
 script: !include scripts.yaml

@@ -89,9 +89,12 @@ cgroup:
   hostRoot: /sys/fs/cgroup
 
 # -- Configure L2 announcements
+# Disabled at the Helm level after the BGP migration (Phase 4b of the BGP
+# rollout plan). The CiliumL2AnnouncementPolicy resource was removed in
+# Phase 4a; this flag was a no-op without it, but flipping it false keeps
+# config consistent and stops Cilium from initializing the L2 module.
 l2announcements:
-  # -- Enable L2 announcements
-  enabled: true
+  enabled: false
 
 # -- Configure BGP control plane
 # Enabling this is cluster-wide; whether a node *peers* is determined by the

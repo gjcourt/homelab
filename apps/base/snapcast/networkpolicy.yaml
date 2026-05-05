@@ -8,11 +8,24 @@ metadata:
     app.kubernetes.io/name: snapcast
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Gateway ingress on 1780 (web UI); egress DNS + HTTPS for Spotify Connect.
+  description: Snapserver ingress on 1704/1705 from LAN; web UI on 1780 from gateway; egress DNS + HTTPS for Spotify Connect.
   endpointSelector:
     matchLabels:
       app: snapcast
   ingress:
+    # Snapserver stream + control: allow from anywhere on the LAN (snapclients
+    # connect directly, not through the gateway).
+    - fromEntities:
+        - world
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "1704"
+              protocol: TCP
+            - port: "1705"
+              protocol: TCP
+    # Snapweb UI: routed through the Cilium gateway.
     - fromEntities:
         - host
         - remote-node

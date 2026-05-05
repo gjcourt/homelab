@@ -1,0 +1,147 @@
+---
+# Three policies for Immich's three pod components (server, machine-learning, redis).
+# Pod labels use app=immich + component=<name>, not app.kubernetes.io/name.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: immich-server
+  namespace: immich
+  labels:
+    app.kubernetes.io/name: immich
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: Gateway ingress on 2283; egress DNS + CNPG + Redis + ML service + HTTPS.
+  endpointSelector:
+    matchLabels:
+      app: immich
+      component: server
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "2283"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # CNPG PostgreSQL (pgvecto.rs variant).
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/podRole: instance
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # In-namespace Redis for job queue.
+    - toEndpoints:
+        - matchLabels:
+            app: immich
+            component: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+    # In-namespace machine-learning service for CLIP / face recognition.
+    - toEndpoints:
+        - matchLabels:
+            app: immich
+            component: machine-learning
+      toPorts:
+        - ports:
+            - port: "3003"
+              protocol: TCP
+    # External HTTPS for geocoding, map tiles, and metadata enrichment.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: immich-machine-learning
+  namespace: immich
+  labels:
+    app.kubernetes.io/name: immich
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: Ingress from server only; egress DNS + HTTPS for model downloads.
+  endpointSelector:
+    matchLabels:
+      app: immich
+      component: machine-learning
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: immich
+            component: server
+      toPorts:
+        - ports:
+            - port: "3003"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Hugging Face and other model registries for initial model download.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: immich-redis
+  namespace: immich
+  labels:
+    app.kubernetes.io/name: immich
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: Ingress from server only on 6379; egress DNS only.
+  endpointSelector:
+    matchLabels:
+      app: immich
+      component: redis
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: immich
+            component: server
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

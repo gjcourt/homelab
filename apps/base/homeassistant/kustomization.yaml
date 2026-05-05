@@ -4,6 +4,7 @@ resources:
   - configmap.yaml
   - deployment.yaml
   - namespace.yaml
+  - networkpolicy.yaml
   - service.yaml
   - serviceaccount.yaml
   - storage.yaml

@@ -8,23 +8,19 @@ metadata:
     app.kubernetes.io/name: snapcast
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Gateway ingress on 1780 (web UI); LAN snapclients on 1704/1705/1780; egress DNS + Spotify HTTPS.
+  description: LAN snapclients (world entity; SNAT prevents CIDR match) on 1704/1705/1780; egress DNS + Spotify HTTPS.
   endpointSelector:
     matchLabels:
       app: snapcast
   ingress:
+    # Cilium SNATs external traffic to a node IP (10.244.x.x) before the pod sees
+    # it, so fromCIDR: 10.42.2.0/24 never matches. Use world to allow all external
+    # sources; the real boundary is the LAN VLAN which is the only path to this VIP.
     - fromEntities:
         - host
         - remote-node
         - ingress
-      toPorts:
-        - ports:
-            - port: "1780"
-              protocol: TCP
-    # snapclient connections from LAN (HifiBerry devices at .38/.39 and any
-    # future client on the compute VLAN). 1704=audio, 1705=control, 1780=MPRIS JSON-RPC.
-    - fromCIDR:
-        - 10.42.2.0/24
+        - world
       toPorts:
         - ports:
             - port: "1704"

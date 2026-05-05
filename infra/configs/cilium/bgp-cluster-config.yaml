@@ -1,0 +1,22 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPClusterConfig
+metadata:
+  name: homelab-bgp
+spec:
+  # Phase 2a: canary only (one worker labeled bgp-canary=true).
+  # Phase 2b will replace this with role-based exclusion of control-plane nodes.
+  nodeSelector:
+    matchLabels:
+      bgp-canary: "true"
+  bgpInstances:
+    - name: homelab
+      localASN: 65010
+      peers:
+        - name: ucgf
+          peerASN: 65100
+          peerAddress: 10.42.2.1
+          peerConfigRef:
+            name: ucgf-peer
+            group: cilium.io
+            kind: CiliumBGPPeerConfig

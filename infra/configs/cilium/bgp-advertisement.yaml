@@ -1,0 +1,16 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumBGPAdvertisement
+metadata:
+  name: lb-ip-advertisement
+  labels:
+    advertise: lb-ips
+spec:
+  advertisements:
+    - advertisementType: Service
+      service:
+        addresses:
+          - LoadBalancerIP
+      # Empty matchLabels = match all services with a LoadBalancer IP.
+      selector:
+        matchLabels: {}

@@ -1,5 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - l2-announcement-policy.yaml
+  - bgp-advertisement.yaml
+  - bgp-cluster-config.yaml
+  - bgp-peer-config.yaml
+  - l2-announcement-policy.yaml   # kept during transition; removed in Phase 4a
   - load-balancer-ip-pool.yaml

@@ -93,6 +93,14 @@ l2announcements:
   # -- Enable L2 announcements
   enabled: true
 
+# -- Configure BGP control plane
+# Enabling this is cluster-wide; whether a node *peers* is determined by the
+# CiliumBGPClusterConfig nodeSelector. Phase 2a of the BGP rollout starts with
+# a canary worker (label `bgp-canary=true`); Phase 2b promotes to all workers.
+# See docs/plans/2026-03-08-bgp-rollout.md.
+bgpControlPlane:
+  enabled: true
+
 # -- (string) Kubernetes service host - use "auto" for automatic lookup from the cluster-info ConfigMap
 k8sServiceHost: "10.42.2.20"
 # @schema

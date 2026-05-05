@@ -19,7 +19,6 @@ resources:
   - memos
   - navidrome
   - openwebui
-  - overture
   - signal-cli
   - snapcast
   - vitals

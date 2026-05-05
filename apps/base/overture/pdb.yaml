@@ -1,0 +1,11 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: overture
+  namespace: overture
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: overture

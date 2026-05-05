@@ -18,6 +18,7 @@ resources:
   - mealie
   - memos
   - navidrome
+  - openwebui
   - signal-cli
   - snapcast
   - vitals

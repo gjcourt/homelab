@@ -20,6 +20,23 @@ spec:
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
+  name: golinks-http-intranet
+  namespace: golinks-prod
+spec:
+  hostnames:
+    - go
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http
+  rules:
+    - backendRefs:
+        - name: golinks
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
   name: golinks-https
   namespace: golinks-prod
 spec:

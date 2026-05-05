@@ -1,0 +1,11 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: excalidraw
+  namespace: excalidraw
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: excalidraw

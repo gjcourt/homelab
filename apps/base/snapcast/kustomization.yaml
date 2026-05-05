@@ -5,6 +5,8 @@ resources:
   - configmap-go-librespot.yaml
   - deployment.yaml
   - namespace.yaml
+  - networkpolicy.yaml
+  - pdb.yaml
   - service.yaml
   - serviceaccount.yaml
   - storage.yaml

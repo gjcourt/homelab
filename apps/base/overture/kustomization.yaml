@@ -3,6 +3,8 @@ kind: Kustomization
 resources:
   - deployment.yaml
   - namespace.yaml
+  - networkpolicy.yaml
+  - pdb.yaml
   - secret-ghcr.yaml
   - service.yaml
   - service-monitor.yaml

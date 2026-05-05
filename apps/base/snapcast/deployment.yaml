@@ -115,6 +115,13 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 2
             failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
           volumeMounts:
             - name: snapserver-config
               mountPath: /etc/snapserver.conf
@@ -161,6 +168,17 @@ spec:
             initialDelaySeconds: 2
             periodSeconds: 5
             timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  test -p /audio/spotify.fifo
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
             failureThreshold: 6
           volumeMounts:
             - name: spotify-state

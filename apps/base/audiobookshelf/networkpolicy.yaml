@@ -1,0 +1,37 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: audiobookshelf
+  namespace: audiobookshelf
+  labels:
+    app.kubernetes.io/name: audiobookshelf
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: Gateway ingress on pod port 13378 (service maps 3005→13378); egress DNS only.
+  endpointSelector:
+    matchLabels:
+      app: audiobookshelf
+  ingress:
+    # Gateway API. Cilium's Envoy proxy source IP is identity 8 ("ingress").
+    # Same-node: "host", cross-node VXLAN: "remote-node". All three required.
+    # toPorts uses the pod port (13378), not the service port (3005).
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "13378"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

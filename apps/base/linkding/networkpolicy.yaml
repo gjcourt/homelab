@@ -1,0 +1,50 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: linkding
+  namespace: linkding
+  labels:
+    app.kubernetes.io/name: linkding
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: Gateway ingress on 9090; egress DNS + HTTPS for bookmark title/favicon enrichment.
+  endpointSelector:
+    matchLabels:
+      app: linkding
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/podRole: instance
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # Fetches page titles and favicons for newly saved bookmarks.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "80"
+              protocol: TCP

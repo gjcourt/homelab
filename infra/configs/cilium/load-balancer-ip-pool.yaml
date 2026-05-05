@@ -8,3 +8,14 @@ spec:
   blocks:
     - start: 10.42.2.40
       stop: 10.42.2.254
+---
+apiVersion: cilium.io/v2
+kind: CiliumLoadBalancerIPPool
+metadata:
+  # Static compute range (10.42.2.20-39, VLAN 2). Used for services that need
+  # a stable IP in the compute band rather than the DHCP pool above .40.
+  name: home-compute-pool
+spec:
+  blocks:
+    - start: 10.42.2.30
+      stop: 10.42.2.37

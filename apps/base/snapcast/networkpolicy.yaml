@@ -1,0 +1,41 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: snapcast
+  namespace: snapcast
+  labels:
+    app.kubernetes.io/name: snapcast
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: Gateway ingress on 1780 (web UI); egress DNS + HTTPS for Spotify Connect.
+  endpointSelector:
+    matchLabels:
+      app: snapcast
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "1780"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # go-librespot (Spotify Connect) connects to Spotify's servers over HTTPS.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

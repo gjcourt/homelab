@@ -1,0 +1,41 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: signal-cli
+  namespace: signal-cli
+  labels:
+    app.kubernetes.io/name: signal-cli
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: Ingress from hermes only; egress DNS + HTTPS for Signal servers.
+  endpointSelector:
+    matchLabels:
+      app: signal-cli
+  ingress:
+    # hermes calls signal-bridge on port 8080 to send messages.
+    - fromEndpoints:
+        - matchLabels:
+            app: hermes
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Signal protocol servers (TLS websocket over 443).
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

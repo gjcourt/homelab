@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: snapcast
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Gateway ingress on 1780 (web UI); egress DNS + HTTPS for Spotify Connect.
+  description: Gateway ingress on 1780 (web UI); LAN snapclients on 1704/1705/1780; egress DNS + Spotify HTTPS.
   endpointSelector:
     matchLabels:
       app: snapcast
@@ -19,6 +19,18 @@ spec:
         - ingress
       toPorts:
         - ports:
+            - port: "1780"
+              protocol: TCP
+    # snapclient connections from LAN (HifiBerry devices at .38/.39 and any
+    # future client on the compute VLAN). 1704=audio, 1705=control, 1780=MPRIS JSON-RPC.
+    - fromCIDR:
+        - 10.42.2.0/24
+      toPorts:
+        - ports:
+            - port: "1704"
+              protocol: TCP
+            - port: "1705"
+              protocol: TCP
             - port: "1780"
               protocol: TCP
   egress:

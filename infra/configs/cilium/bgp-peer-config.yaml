@@ -13,6 +13,11 @@ spec:
   families:
     - afi: ipv4
       safi: unicast
+      # Select which CiliumBGPAdvertisements feed this address-family.
+      # Matches `lb-ip-advertisement` (label advertise: lb-ips).
+      advertisements:
+        matchLabels:
+          advertise: lb-ips
   gracefulRestart:
     enabled: true
     restartTimeSeconds: 120

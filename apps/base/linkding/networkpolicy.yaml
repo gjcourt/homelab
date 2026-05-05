@@ -32,6 +32,13 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/podRole: instance
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
     # Fetches page titles and favicons for newly saved bookmarks.
     - toEntities:
         - world

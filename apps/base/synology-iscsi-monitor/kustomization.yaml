@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - deployment.yaml
   - namespace.yaml
+  - pdb.yaml
   - prometheus-rule.yaml
   - script-cm.yaml
   - service.yaml

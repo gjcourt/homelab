@@ -1,0 +1,11 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: synology-iscsi-monitor
+  namespace: synology-iscsi-monitor
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: synology-iscsi-exporter

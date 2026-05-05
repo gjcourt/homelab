@@ -18,3 +18,12 @@ patches:
       - op: replace
         path: /metadata/name
         value: signal-cli-stage
+  # No registered Signal accounts in staging — scale to zero to avoid
+  # CrashLoopBackOff from missing account data.
+  - target:
+      kind: Deployment
+      name: signal-cli
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 0

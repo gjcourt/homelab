@@ -1,0 +1,42 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: golinks
+  namespace: golinks
+  labels:
+    app.kubernetes.io/name: golinks
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: Gateway ingress on 8080; egress DNS + CNPG PostgreSQL.
+  endpointSelector:
+    matchLabels:
+      app: golinks
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # CNPG PostgreSQL cluster (primary + replicas).
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/podRole: instance
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP

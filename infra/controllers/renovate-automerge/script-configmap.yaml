@@ -214,8 +214,9 @@ data:
             try:
                 send_report(results)
             except Exception as exc:
-                print(f"Email failed: {exc}", file=sys.stderr, flush=True)
-                sys.exit(1)
+                # Email is best-effort notification; don't fail the job over it.
+                # The merge/hold decisions above already completed successfully.
+                print(f"Email failed (non-fatal): {exc}", file=sys.stderr, flush=True)
 
 
     if __name__ == "__main__":

@@ -41,3 +41,22 @@ spec:
               protocol: TCP
             - port: "80"
               protocol: TCP
+    # Lutron Caséta Smart Bridge at 10.42.2.16 — LEAP API (pylutron-caseta uses mTLS on 8083).
+    # toCIDR is required because Cilium classifies non-cluster LAN hosts as world,
+    # but the world rule above only opens 443/80. The bridge is LAN-only so a CIDR
+    # rule is more precise than widening the world ports.
+    - toCIDR:
+        - 10.42.2.16/32
+      toPorts:
+        - ports:
+            - port: "8083"
+              protocol: TCP
+    # Mosquitto MQTT broker (in-cluster, mosquitto namespace).
+    - toEndpoints:
+        - matchLabels:
+            app: mosquitto
+            k8s:io.kubernetes.pod.namespace: mosquitto
+      toPorts:
+        - ports:
+            - port: "1883"
+              protocol: TCP

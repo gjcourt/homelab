@@ -54,20 +54,17 @@ import time
 import urllib.error
 import urllib.request
 
-# Four fixed workloads — each entry is (prompt, max_tokens, cache_prompt).
-#   short       ~50 tokens prompt, ~50 tokens response   — TTFT-sensitive
-#   medium      ~500 tokens prompt, ~500 tokens response  — sustained decode
-#   long        ~4000 tokens prompt, ~1000 tokens response — prefill + KV
-#   prefill_32k ~55K tokens prompt, 50 tokens response   — flash-attn measurable
+# Three fixed workloads, sized per the plan doc:
+#   short    ~50 tokens prompt, ~50 tokens response — TTFT-sensitive
+#   medium   ~500 tokens prompt, ~500 tokens response — sustained decode
+#   long     ~4000 tokens prompt, ~1000 tokens response — prefill + KV
 #
-# prefill_32k uses cache_prompt=False so every run is a cold prefill — essential
-# to prevent the KV cache from masking the attention kernel cost after the first run.
-# The key metric is prefill_tps (prompt_tokens / TTFT), not decode_tps.
-WORKLOADS: dict[str, tuple[str, int, bool]] = {
+# Prompts are intentionally deterministic (no jinja, no current-date references)
+# so re-runs at different times produce comparable numbers.
+WORKLOADS: dict[str, tuple[str, int]] = {
     "short": (
         "What is the capital of France? Reply in one short sentence.",
         50,
-        True,
     ),
     "medium": (
         "Explain how a Bloom filter works, including: (1) what problem it "
@@ -80,7 +77,6 @@ WORKLOADS: dict[str, tuple[str, int, bool]] = {
         "engineer who has not implemented one before. Be concrete with "
         "numbers where it helps.",
         500,
-        True,
     ),
     "long": (
         # ~4000-token prompt: a self-describing exercise that doesn't depend
@@ -127,68 +123,19 @@ WORKLOADS: dict[str, tuple[str, int, bool]] = {
             "change had the intended effect."
         ),
         1000,
-        True,
-    ),
-    "prefill_32k": (
-        # ~32K token prompt with a short (50-token) response cap.
-        # Designed to make attention computation the dominant cost so that
-        # flash-attn's speedup is directly visible in prefill_tps (= prompt_tokens / TTFT).
-        # The prompt is the long webhook-service description repeated 24× — same
-        # deterministic content, just enough to hit ~32K tokens.
-        (
-            "You are reviewing a hypothetical Go service that handles "
-            "high-throughput webhook delivery for a multi-tenant SaaS. The "
-            "service has the following characteristics, described at length "
-            "below. After reading the full description, give a one-paragraph "
-            "executive summary of the top reliability risk.\n\n"
-        )
-        + ((
-            "Architecture: the service is a single Go binary deployed as a "
-            "horizontally-scaled Kubernetes Deployment behind an internal "
-            "load balancer. It receives webhook delivery jobs from a Kafka "
-            "topic partitioned by tenant id, attempts HTTP POST to the "
-            "tenant's configured endpoint with exponential backoff and a "
-            "5-minute total deadline, then writes the outcome (delivered, "
-            "failed, dropped) to a separate result topic. Failed deliveries "
-            "are retried up to three times with 30s, 5m, and 30m backoff "
-            "respectively. State for the in-flight retry queue lives in "
-            "Redis with a 24-hour TTL and is keyed by job id. The HTTP "
-            "client uses a default Go transport with MaxIdleConnsPerHost "
-            "set to 100. Each webhook target has a per-host rate limit of "
-            "50 requests per second enforced by a token-bucket limiter "
-            "shared across replicas via Redis Lua scripts. Logs go to "
-            "stdout in JSON format and are scraped by a sidecar; metrics "
-            "are exposed on /metrics in Prometheus format. The service "
-            "runs as non-root with a read-only root filesystem and a "
-            "small set of capabilities dropped. Authentication to tenant "
-            "endpoints uses HMAC signing of the request body with a "
-            "per-tenant secret stored in a Kubernetes Secret. There is no "
-            "circuit breaker; transient outages are handled by the retry "
-            "schedule alone. The service is on Go 1.21 and has 12 weeks "
-            "of production traffic.\n\n"
-        ) * 192)  # 192 × ~170 tokens ≈ 32,640 tokens
-        + "Now give the one-paragraph executive summary.",
-        50,
-        False,  # cold prefill every run — KV cache reuse would mask attention cost
     ),
 }
 
 
-def run_one(base_url: str, model: str, prompt: str, max_tokens: int, timeout_s: int = 600,
-            cache_prompt: bool = True) -> dict:
+def run_one(base_url: str, model: str, prompt: str, max_tokens: int, timeout_s: int = 600) -> dict:
     """Issue one streaming chat-completions request, return per-run metrics."""
-    # When cache_prompt=False we need a cold prefill every run. llama.cpp's LCP similarity
-    # matching caches based on prompt prefix regardless of the cache_prompt field, so prepend
-    # a unique nanosecond salt to defeat prefix matching entirely.
-    effective_prompt = prompt if cache_prompt else f"[{time.time_ns()}] {prompt}"
     body = json.dumps({
         "model": model,
-        "messages": [{"role": "user", "content": effective_prompt}],
+        "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
         "stream": True,
         "stream_options": {"include_usage": True},
         "temperature": 0.0,
-        "cache_prompt": cache_prompt,
     }).encode()
 
     req = urllib.request.Request(
@@ -204,7 +151,6 @@ def run_one(base_url: str, model: str, prompt: str, max_tokens: int, timeout_s: 
     t0 = time.perf_counter()
     ttft: float | None = None
     completion_tokens: int | None = None
-    prompt_tokens: int | None = None
     chunks_seen = 0
 
     with urllib.request.urlopen(req, timeout=timeout_s) as resp:
@@ -233,11 +179,8 @@ def run_one(base_url: str, model: str, prompt: str, max_tokens: int, timeout_s: 
 
             # Final usage block (when stream_options.include_usage is honored)
             usage = obj.get("usage")
-            if usage:
-                if usage.get("completion_tokens") is not None:
-                    completion_tokens = usage["completion_tokens"]
-                if usage.get("prompt_tokens") is not None:
-                    prompt_tokens = usage["prompt_tokens"]
+            if usage and usage.get("completion_tokens") is not None:
+                completion_tokens = usage["completion_tokens"]
 
     total = time.perf_counter() - t0
 
@@ -245,18 +188,12 @@ def run_one(base_url: str, model: str, prompt: str, max_tokens: int, timeout_s: 
     tokens = completion_tokens if completion_tokens is not None else chunks_seen
     decode_window = total - (ttft or 0.0)
     decode_tps = (tokens / decode_window) if (decode_window > 0 and tokens > 0) else 0.0
-    # prefill_tps = prompt tokens processed per second during the prefill phase.
-    # This is the primary metric for flash-attn comparison — it directly reflects
-    # attention kernel speed for the full prompt context.
-    prefill_tps = (prompt_tokens / ttft) if (prompt_tokens and ttft) else None
 
     return {
         "ttft_s": ttft,
         "total_s": total,
         "tokens": tokens,
-        "prompt_tokens": prompt_tokens,
         "decode_tps": decode_tps,
-        "prefill_tps": prefill_tps,
         "tokens_source": "usage" if completion_tokens is not None else "chunks_fallback",
     }
 
@@ -275,33 +212,28 @@ def main() -> int:
     ap.add_argument("--model", default=os.environ.get("MODEL", "Qwen3.6-35B-A3B"))
     ap.add_argument("--runs", type=int, default=int(os.environ.get("RUNS", "5")),
                     help="runs per workload (the first is discarded as warmup)")
-    ap.add_argument("--workload", choices=list(WORKLOADS.keys()) + ["all", "short_only"], default="all",
-                    help="run a single workload, 'short_only' for short+medium+long (skip prefill_32k), or 'all'")
+    ap.add_argument("--workload", choices=list(WORKLOADS.keys()) + ["all"], default="all",
+                    help="run a single workload, or 'all'")
     ap.add_argument("--jsonl", default=None, help="archive raw per-run measurements to this file")
     ap.add_argument("--timeout", type=int, default=600, help="per-request timeout (seconds)")
     args = ap.parse_args()
 
-    if args.workload == "all":
-        workloads = WORKLOADS
-    elif args.workload == "short_only":
-        workloads = {k: v for k, v in WORKLOADS.items() if k != "prefill_32k"}
-    else:
-        workloads = {args.workload: WORKLOADS[args.workload]}
+    workloads = WORKLOADS if args.workload == "all" else {args.workload: WORKLOADS[args.workload]}
     jsonl = open(args.jsonl, "a") if args.jsonl else None
 
     print(f"endpoint     {args.base_url}")
     print(f"model        {args.model}")
     print(f"runs/wkld    {args.runs} (first discarded as warmup)")
     print()
-    print(f"{'workload':<12} {'TTFT (s)':<22} {'prefill TPS':<22} {'decode TPS':<22} {'total (s)':<22}")
-    print(f"{'-'*12} {'-'*22} {'-'*22} {'-'*22} {'-'*22}")
+    print(f"{'workload':<10} {'TTFT (s)':<22} {'decode TPS':<22} {'total (s)':<22}")
+    print(f"{'-'*10} {'-'*22} {'-'*22} {'-'*22}")
 
     overall_ok = True
-    for name, (prompt, max_tokens, cache_prompt) in workloads.items():
+    for name, (prompt, max_tokens) in workloads.items():
         runs: list[dict] = []
         try:
             for i in range(args.runs):
-                r = run_one(args.base_url, args.model, prompt, max_tokens, args.timeout, cache_prompt)
+                r = run_one(args.base_url, args.model, prompt, max_tokens, args.timeout)
                 r["run"] = i
                 r["workload"] = name
                 runs.append(r)
@@ -309,30 +241,24 @@ def main() -> int:
                     jsonl.write(json.dumps(r) + "\n")
                     jsonl.flush()
                 ttft_str = f"{r['ttft_s']:.3f}" if r['ttft_s'] is not None else "N/A"
-                pfill_str = f"{r['prefill_tps']:.0f}" if r['prefill_tps'] is not None else "N/A"
-                print(f"  {name:<10} run {i+1}/{args.runs}: ttft={ttft_str}s "
-                      f"prefill={pfill_str} t/s prompt={r['prompt_tokens']} "
+                print(f"  {name:<8} run {i+1}/{args.runs}: ttft={ttft_str}s "
                       f"tokens={r['tokens']} decode={r['decode_tps']:.1f} t/s total={r['total_s']:.2f}s "
                       f"({r['tokens_source']})", file=sys.stderr)
         except (urllib.error.URLError, TimeoutError) as e:
-            print(f"  {name:<10} ERROR: {e}", file=sys.stderr)
+            print(f"  {name:<8} ERROR: {e}", file=sys.stderr)
             overall_ok = False
             continue
 
         post_warm = runs[1:] if len(runs) > 1 else runs
         ttfts = [r["ttft_s"] for r in post_warm if r["ttft_s"] is not None]
-        pfills = [r["prefill_tps"] for r in post_warm if r["prefill_tps"] is not None]
         tpsps = [r["decode_tps"] for r in post_warm if r["decode_tps"] > 0]
         totals = [r["total_s"] for r in post_warm]
 
         m_ttft, sd_ttft = stats(ttfts)
-        m_pfill, sd_pfill = stats(pfills)
         m_tps, sd_tps = stats(tpsps)
         m_tot, sd_tot = stats(totals)
 
-        pfill_col = f"{m_pfill:>6.0f} ± {sd_pfill:<10.0f}" if pfills else f"{'N/A':>6} {' ':<10}"
-        print(f"{name:<12} {m_ttft:>6.3f} ± {sd_ttft:<10.3f}    "
-              f"{pfill_col}    "
+        print(f"{name:<10} {m_ttft:>6.3f} ± {sd_ttft:<10.3f}    "
               f"{m_tps:>6.1f} ± {sd_tps:<10.1f}    "
               f"{m_tot:>6.2f} ± {sd_tot:<10.2f}")
 

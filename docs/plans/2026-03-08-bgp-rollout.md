@@ -308,6 +308,13 @@ spec:
   families:
     - afi: ipv4
       safi: unicast
+      # REQUIRED on Cilium 1.19 / CRD v2: select which CiliumBGPAdvertisement
+      # resources feed each address-family. Without this, the peer reaches
+      # Established but Advertised stays at 0 — no /32s are sent.
+      # The label must match the labels on bgp-advertisement.yaml below.
+      advertisements:
+        matchLabels:
+          advertise: lb-ips
   gracefulRestart:
     enabled: true
     restartTimeSeconds: 120
@@ -357,9 +364,10 @@ spec:
           peerASN: 65100
           peerAddress: 10.42.2.1
           peerConfigRef:
+            # CRD v2 only accepts `name`. The v2alpha1 fields `group` and
+            # `kind` are not in the v2 schema — including them causes
+            # `field not declared in schema` and Flux dry-run failure.
             name: ucgf-peer
-            group: cilium.io
-            kind: CiliumBGPPeerConfig
 ```
 
 ### 2a.7 Wire into kustomization
@@ -387,7 +395,16 @@ flux reconcile kustomization infra-controllers -n flux-system --with-source
 flux reconcile kustomization infra-configs -n flux-system --with-source
 ```
 
-Wait for the `cilium` DaemonSet rollout to complete (`bgpControlPlane: true` triggers an agent restart on every node).
+> **Cilium 1.19 gotcha:** flipping `bgpControlPlane.enabled` updates the `cilium-config` ConfigMap but **does not change the DaemonSet pod template hash**. The Helm upgrade reports success, the DaemonSet reports "successfully rolled out", but the existing agent pods keep running with the old config — `cilium-dbg bgp peers` returns "BGP Control Plane is disabled". The same applies to the `cilium-operator` Deployment, which is what auto-generates `CiliumBGPNodeConfig` per matched node. Both must be bounced manually:
+>
+> ```bash
+> kubectl rollout restart ds/cilium -n kube-system
+> kubectl rollout status ds/cilium -n kube-system
+> kubectl rollout restart deploy/cilium-operator -n kube-system
+> kubectl rollout status deploy/cilium-operator -n kube-system
+> ```
+>
+> Symptom of skipping the operator restart: `kubectl get ciliumbgpnodeconfig` returns `No resources found` even though the cluster config and node label both exist. After the operator restart, one `CiliumBGPNodeConfig` per matched node appears within seconds and the peer initiates BGP.
 
 ### 2a.9 Verify (one peer only)
 

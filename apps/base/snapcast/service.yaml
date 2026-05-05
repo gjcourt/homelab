@@ -6,7 +6,8 @@ metadata:
   labels:
     app: snapcast
   annotations:
-    lbipam.cilium.io/ip-pool: home-c-pool
+    lbipam.cilium.io/ip-pool: home-compute-pool
+    lbipam.cilium.io/ips: 10.42.2.37
 spec:
   type: LoadBalancer
   selector:

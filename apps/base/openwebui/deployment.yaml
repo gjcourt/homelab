@@ -35,12 +35,29 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /app/backend/data
+          # startupProbe gates liveness/readiness while Open WebUI initializes.
+          # Allows up to 5 minutes for first-run model loading.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /health
               port: 8080
-            initialDelaySeconds: 15
+            initialDelaySeconds: 0
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 0
+            periodSeconds: 20
             timeoutSeconds: 5
             failureThreshold: 6
           resources:

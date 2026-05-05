@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: overture
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Gateway ingress on 8080; egress DNS + CNPG PostgreSQL.
+  description: Gateway ingress on 8080; egress DNS + CNPG PostgreSQL + external Ethereum RPC (tempo-bridge).
   endpointSelector:
     matchLabels:
       app: overture
@@ -38,4 +38,13 @@ spec:
       toPorts:
         - ports:
             - port: "5432"
+              protocol: TCP
+    # tempo-bridge makes HTTPS calls to the Moderato/Tempo Ethereum RPC
+    # (rpc.moderato.tempo.xyz) and ghcr.io at startup. Without this rule
+    # Cilium drops all outbound HTTPS and the container OOM-kills on retry storms.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP

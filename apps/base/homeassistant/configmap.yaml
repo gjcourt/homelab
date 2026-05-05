@@ -12,6 +12,10 @@ data:
     frontend:
       themes: !include_dir_merge_named themes
 
+    # Enable YAML dashboards (loads *.yaml from /config/dashboards/)
+    lovelace:
+      mode: yaml
+
     automation: !include automations.yaml
     script: !include scripts.yaml
     scene: !include scenes.yaml
@@ -35,3 +39,71 @@ data:
       name: Day
       after: sunrise
       before: sunset
+
+  automations.yaml: |
+    # ============================================================================
+    # Bathroom fan auto-off timer
+    # ============================================================================
+    automation:
+      - alias: "Bathroom fan auto-off — start timer"
+        description: "When a bathroom fan turns on, start a timer. Turns fan off when timer expires."
+        trigger:
+          - platform: state
+            entity_id:
+              - fan.*
+            from: "off"
+            to: "on"
+        condition:
+          # Only bathroom fans
+          - condition: template
+            value_template: >
+              {{ "bathroom" in trigger.to_state.entity_id | lower or
+                 "bath" in trigger.to_state.entity_id | lower }}
+        action:
+          - variables:
+              # Extract bathroom name from entity ID
+              # fan.bathroom_main_fan → bathroom_main
+              # fan.bath_guest_fan → bath_guest
+              fan_name: >
+                {{ trigger.to_state.object_id
+                   | replace("_fan", "")
+                   | replace("fan_", "") }}
+              helper_id: >
+                {{ "input_text." ~ fan_name ~ "_timer" }}
+              timer_entity: >
+                {{ "timer." ~ fan_name ~ "_fan_timer" }}
+              delay_minutes: >
+                {{ states(helper_id) | default("30") | int(30) }}
+              delay_seconds: "{{ delay_minutes * 60 }}"
+          # Start the timer with configured duration
+          - service: timer.start
+            target:
+              entity_id: "{{ timer_entity }}"
+            data:
+              duration: "{{ delay_seconds }}"
+        mode: restart
+
+      - alias: "Bathroom fan auto-off — turn off fan"
+        description: "When a bathroom fan timer expires, turn off the fan."
+        trigger:
+          - platform: event
+            event_type: timer.finished
+        condition:
+          # Only bathroom fan timers (not other timers in the house)
+          - condition: template
+            value_template: >
+              {{ "timer.bathroom_" in trigger.event.data.entity_id | lower or
+                 "timer.bath_" in trigger.event.data.entity_id | lower }}
+        action:
+          - variables:
+              # Derive fan entity ID from timer entity ID
+              # timer.bathroom_main_fan_timer → fan.bathroom_main_fan
+              fan_entity: >
+                {{ trigger.event.data.entity_id
+                   | replace("timer.", "fan.")
+                   | replace("_fan_timer", "_fan") }}
+          # Turn off the fan
+          - service: fan.turn_off
+            target:
+              entity_id: "{{ fan_entity }}"
+            continue_on_error: true

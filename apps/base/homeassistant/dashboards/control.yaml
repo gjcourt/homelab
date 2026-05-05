@@ -1,0 +1,196 @@
+# Bathroom Fan Control Dashboard
+#
+# A controlplane dashboard for bathroom fan timers.
+# Shows all bathroom fan timers, their state, and allows manual control.
+#
+# Setup per bathroom (after creating helpers via HA UI):
+#   1. Add a section below for the new bathroom
+#   2. Copy one of the existing <bathroom> sections
+#   3. Replace <bathroom> with the bathroom name
+#   4. Replace the fan entity ID with the actual fan entity
+#
+# Example for a 4th bathroom:
+#   - type: vertical-stack
+#     cards:
+#       - type: entity
+#         entity: timer.bathroom_4th_fan_timer
+#       - type: button
+#         entity: timer.bathroom_4th_fan_timer
+#         name: Cancel Timer
+#         tap_action:
+#           action: call-service
+#           service: timer.cancel
+#           service_data:
+#             entity_id: timer.bathroom_4th_fan_timer
+#       - type: entity
+#         entity: fan.bathroom_4th_fan
+#       - type: button
+#         entity: fan.bathroom_4th_fan
+#         name: Turn Off
+#         tap_action:
+#           action: call-service
+#           service: fan.turn_off
+#           service_data:
+#             entity_id: fan.bathroom_4th_fan
+
+title: Control
+views:
+  - title: Control
+    badges: []
+    cards:
+      # ========================================================================
+      # Header
+      # ========================================================================
+      - type: heading
+        heading: Bathroom Fan Timers
+        heading_size: h2
+
+      - type: markdown
+        content: >
+          **How it works:** When a bathroom fan turns on, a timer starts.
+          When the timer expires, the fan turns off.
+          Adjust the delay per bathroom using the input helper.
+
+      # ========================================================================
+      # Bathroom Main
+      # ========================================================================
+      - type: vertical-stack
+        cards:
+          - type: heading
+            heading: Main Bathroom
+            heading_size: h3
+
+          - type: horizontal-stack
+            cards:
+              - type: entity
+                entity: timer.bathroom_main_fan_timer
+                name: Timer
+                state_color: true
+              - type: entity
+                entity: input_text.bathroom_main_timer
+                name: Delay (min)
+                state_color: false
+
+          - type: horizontal-stack
+            cards:
+              - type: button
+                entity: timer.bathroom_main_fan_timer
+                name: Cancel Timer
+                show_icon: false
+                tap_action:
+                  action: call-service
+                  service: timer.cancel
+                  data:
+                    entity_id: timer.bathroom_main_fan_timer
+                show_name: true
+              - type: entity
+                entity: fan.bathroom_main_fan
+                name: Fan
+                state_color: true
+
+          - type: button
+            entity: fan.bathroom_main_fan
+            name: Turn Off Fan
+            show_icon: false
+            tap_action:
+              action: call-service
+              service: fan.turn_off
+              data:
+                entity_id: fan.bathroom_main_fan
+            show_name: true
+
+      # ========================================================================
+      # Bathroom Guest
+      # ========================================================================
+      - type: vertical-stack
+        cards:
+          - type: heading
+            heading: Guest Bathroom
+            heading_size: h3
+
+          - type: horizontal-stack
+            cards:
+              - type: entity
+                entity: timer.bathroom_guest_fan_timer
+                name: Timer
+                state_color: true
+              - type: entity
+                entity: input_text.bathroom_guest_timer
+                name: Delay (min)
+                state_color: false
+
+          - type: horizontal-stack
+            cards:
+              - type: button
+                entity: timer.bathroom_guest_fan_timer
+                name: Cancel Timer
+                show_icon: false
+                tap_action:
+                  action: call-service
+                  service: timer.cancel
+                  data:
+                    entity_id: timer.bathroom_guest_fan_timer
+                show_name: true
+              - type: entity
+                entity: fan.bathroom_guest_fan
+                name: Fan
+                state_color: true
+
+          - type: button
+            entity: fan.bathroom_guest_fan
+            name: Turn Off Fan
+            show_icon: false
+            tap_action:
+              action: call-service
+              service: fan.turn_off
+              data:
+                entity_id: fan.bathroom_guest_fan
+            show_name: true
+
+      # ========================================================================
+      # Bathroom Master
+      # ========================================================================
+      - type: vertical-stack
+        cards:
+          - type: heading
+            heading: Master Bathroom
+            heading_size: h3
+
+          - type: horizontal-stack
+            cards:
+              - type: entity
+                entity: timer.bathroom_master_fan_timer
+                name: Timer
+                state_color: true
+              - type: entity
+                entity: input_text.bathroom_master_timer
+                name: Delay (min)
+                state_color: false
+
+          - type: horizontal-stack
+            cards:
+              - type: button
+                entity: timer.bathroom_master_fan_timer
+                name: Cancel Timer
+                show_icon: false
+                tap_action:
+                  action: call-service
+                  service: timer.cancel
+                  data:
+                    entity_id: timer.bathroom_master_fan_timer
+                show_name: true
+              - type: entity
+                entity: fan.bathroom_master_fan
+                name: Fan
+                state_color: true
+
+          - type: button
+            entity: fan.bathroom_master_fan
+            name: Turn Off Fan
+            show_icon: false
+            tap_action:
+              action: call-service
+              service: fan.turn_off
+              data:
+                entity_id: fan.bathroom_master_fan
+            show_name: true

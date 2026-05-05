@@ -24,9 +24,12 @@ spec:
             - port: "53"
               protocol: TCP
     # signal-cli bridge service for outbound Signal messages.
+    # Cilium toEndpoints is namespace-scoped for namespaced CNPs — must include
+    # k8s:io.kubernetes.pod.namespace to reach signal-cli's own namespace.
     - toEndpoints:
         - matchLabels:
             app: signal-cli
+            k8s:io.kubernetes.pod.namespace: signal-cli
       toPorts:
         - ports:
             - port: "8080"

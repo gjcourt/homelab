@@ -13,10 +13,22 @@ spec:
     matchLabels:
       app: signal-cli
   ingress:
-    # hermes calls signal-bridge on port 8080 to send messages.
+    # hermes and hermes-callee call signal-bridge on port 8080. Cilium
+    # fromEndpoints is namespace-scoped for namespaced CNPs — each hermes
+    # namespace must be listed explicitly with k8s:io.kubernetes.pod.namespace.
     - fromEndpoints:
         - matchLabels:
             app: hermes
+            k8s:io.kubernetes.pod.namespace: hermes-prod
+        - matchLabels:
+            app: hermes
+            k8s:io.kubernetes.pod.namespace: hermes-stage
+        - matchLabels:
+            app: hermes
+            k8s:io.kubernetes.pod.namespace: hermes-callee-prod
+        - matchLabels:
+            app: hermes
+            k8s:io.kubernetes.pod.namespace: hermes-callee-stage
       toPorts:
         - ports:
             - port: "8080"

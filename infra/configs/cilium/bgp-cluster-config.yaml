@@ -18,5 +18,3 @@ spec:
           peerAddress: 10.42.2.1
           peerConfigRef:
             name: ucgf-peer
-            group: cilium.io
-            kind: CiliumBGPPeerConfig

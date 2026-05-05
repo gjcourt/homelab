@@ -29,6 +29,10 @@
         description: Audiobook and podcast server
 
 - Tools:
+    - Chat:
+        icon: mdi-chat
+        href: https://chat.burntbytes.com
+        description: AI chat interface
     - Vitals:
         icon: mdi-heart-pulse
         href: https://vitals.burntbytes.com

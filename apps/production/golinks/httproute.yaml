@@ -28,7 +28,7 @@ spec:
   parentRefs:
     - name: app-gateway-production
       namespace: default
-      sectionName: http
+      sectionName: http-go
   rules:
     - backendRefs:
         - name: golinks

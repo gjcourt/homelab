@@ -41,7 +41,14 @@ spec:
               protocol: TCP
             - port: "80"
               protocol: TCP
-    # Lutron Caséta Smart Bridge at 10.42.2.16 — LEAP API (pylutron-caseta uses mTLS on 8083).
+    # Lutron Caséta Smart Bridge at 10.42.2.16. Two TLS ports are required:
+    #   8083 — LAP (Lutron Authentication Protocol): cert signing during the
+    #          pairing flow (CSR submission, button-press wait, signed-cert return).
+    #   8081 — LEAP (Lutron Extensible Application Protocol): post-pair
+    #          verification AND all normal device control/state communication.
+    # Earlier comment claimed pylutron-caseta uses 8083 alone — wrong; pairing
+    # uses 8083 then verification + steady-state ops use 8081. Without 8081 the
+    # bridge appears to "pair successfully" then immediately becomes unreachable.
     # toCIDR is required because Cilium classifies non-cluster LAN hosts as world,
     # but the world rule above only opens 443/80. The bridge is LAN-only so a CIDR
     # rule is more precise than widening the world ports.
@@ -50,6 +57,8 @@ spec:
       toPorts:
         - ports:
             - port: "8083"
+              protocol: TCP
+            - port: "8081"
               protocol: TCP
     # Mosquitto MQTT broker (in-cluster, mosquitto namespace).
     - toEndpoints:

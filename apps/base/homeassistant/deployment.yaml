@@ -62,6 +62,22 @@ spec:
           name: homeassistant
           ports:
             - containerPort: 8123
+          readinessProbe:
+            httpGet:
+              path: /api/
+              port: 8123
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/
+              port: 8123
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
               cpu: 10m

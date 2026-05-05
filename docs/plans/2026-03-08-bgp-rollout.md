@@ -1,9 +1,12 @@
 ---
-status: planned
-last_modified: 2026-05-03
+status: completed
+last_modified: 2026-05-05
+completed: 2026-05-05
 ---
 
 # BGP Rollout Plan — UniFi Cloud Gateway Fiber + Cilium
+
+> **Completed 2026-05-05.** All 7 LoadBalancer IPs are now advertised via BGP from each of the 3 worker nodes (AS 65010 → UCGF AS 65100); the UCGF installs 3 ECMP next-hops per /32. L2 announcements (`CiliumL2AnnouncementPolicy`) deleted in Phase 4a, `l2announcements.enabled: false` in Helm values as of Phase 4b. Plan-vs-reality gotchas (CRD v2 schema differences, helm-config-only changes not auto-rolling, deprecated `lovelace.dashboards` slug-validator, port 8081 also needed for Lutron) folded into the Phase 2a/4b sections inline. Outstanding follow-up: enable `prometheus.enabled: true` in Cilium Helm values so the BGP alert rules in `infra/configs/alerts/prometheus-rules.yaml` (group `cilium-bgp`) actually fire.
 
 Replace Cilium L2 announcements (ARP-based) with BGP peering between the Kubernetes node and the UniFi Cloud Gateway Fiber (UCGF). The router gets real routing-table entries for LoadBalancer IPs instead of relying on gratuitous ARP — better reliability, observability, and multi-node readiness.
 

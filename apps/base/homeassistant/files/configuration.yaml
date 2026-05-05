@@ -5,20 +5,17 @@ default_config:
 frontend:
   themes: !include_dir_merge_named themes
 
-# Enable YAML dashboards (explicit dashboard registration)
-lovelace:
-  dashboards:
-    control:
-      mode: yaml
-      filename: dashboards/control.yaml
-      title: Control
-      show_in_sidebar: true
-    switchboard:
-      mode: yaml
-      filename: dashboards/switchboard.yaml
-      title: Switchboard
-      icon: mdi:lightbulb-group
-      show_in_sidebar: true
+# Lovelace runs in storage mode (the default). Dashboards are registered via
+# the storage registry in /config/.storage/lovelace_dashboards. YAML-mode
+# dashboards listed there reference files mounted from this ConfigMap at
+# /config/dashboards/<name>.yaml (control.yaml, switchboard.yaml).
+#
+# Note: HA's YAML-config `lovelace.dashboards` block requires slug keys to
+# contain a hyphen (`url path needs to contain a hyphen`), which `control`
+# and `switchboard` don't have. The storage registry has no such rule, so
+# we manage these via the registry instead. To convert a UI-created (mode:
+# storage) dashboard to YAML mode, edit the registry entry directly: set
+# mode: yaml and filename: dashboards/<file>.yaml.
 
 automation: !include automations.yaml
 script: !include scripts.yaml

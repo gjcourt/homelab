@@ -796,19 +796,49 @@ If a future requirement demands BGP from CP nodes (e.g., advertising pod CIDRs f
 
 ## Baseline appendix
 
-> Filled in during Phase 0.3.
+> Filled in during Phase 0.3 — captured 2026-05-04.
+
+### Cluster topology
 
 ```
-# kubectl get svc -A -o jsonpath='...' (paste output here)
-default/cilium-gateway-app-gateway-production: 10.42.2.40
-default/cilium-gateway-app-gateway-staging: 10.42.2.42
-adguard-prod/adguard: 10.42.2.43
-adguard-stage/adguard: 10.42.2.42
-snapcast-prod/snapcast: 10.42.2.44
-snapcast-stage/snapcast: 10.42.2.41
+NAME            STATUS   ROLES           INTERNAL-IP
+talos-ykb-uir   Ready    control-plane   10.42.2.20
+talos-2mz-rfj   Ready    control-plane   10.42.2.21
+talos-v2l-hng   Ready    control-plane   10.42.2.22
+talos-lmh-kyf   Ready    <none>          10.42.2.23   # canary worker (Phase 2a)
+talos-18u-ski   Ready    <none>          10.42.2.24
+talos-kot-7x7   Ready    <none>          10.42.2.25
 ```
 
-Replace with the live output captured at Phase 0.3 time. Anyone reading this plan a year from now needs to know what was advertised at cutover.
+All 3 control-plane nodes carry `node.kubernetes.io/exclude-from-external-load-balancers` (verified at Phase 0.3).
+
+### LoadBalancer service IP map
+
+```
+adguard-prod/adguard:                            10.42.2.43
+adguard-prod/adguard-dns-secondary:              10.42.2.45
+adguard-stage/adguard:                           10.42.2.42
+default/cilium-gateway-app-gateway-production:   10.42.2.40
+default/cilium-gateway-app-gateway-staging:      10.42.2.42
+snapcast-prod/snapcast:                          10.42.2.37
+snapcast-stage/snapcast:                         10.42.2.41
+```
+
+> **Known anomaly:** `default/cilium-gateway-app-gateway-staging` and `adguard-stage/adguard` are both allocated `10.42.2.42`. BGP will advertise this /32 once. Cleanup tracked separately.
+
+### UCGF state at Phase 0.1
+
+| | |
+|:--|:--|
+| Firmware | 5.0.16 |
+| Kernel | 5.4.213-ui-ipq9574 |
+| FRR package | `frr 10.1.2-1+ubnt-35995+g695732fae09e` (arm64) |
+| FRR service before pre-flight | `disabled / inactive (dead)` |
+| Action taken | `bgpd=yes` in `/etc/frr/daemons` (backup at `/etc/frr/daemons.bak-pre-bgp`); `systemctl enable --now frr` |
+| Dry-run `router bgp 65100` / `no router bgp 65100` | accepted, no errors |
+| LAN segment | `br2 = 10.42.2.0/24`, gateway `10.42.2.1` |
+
+**Operator note:** UniFi firmware upgrades may revert `/etc/frr/daemons`. Re-apply `bgpd=yes` and re-enable FRR after any upgrade — the existing Phase 1.4 persistence note already covers `frr.conf`; extend it to `daemons` as well.
 
 ---
 

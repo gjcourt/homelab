@@ -64,7 +64,7 @@ spec:
             - containerPort: 8123
           readinessProbe:
             httpGet:
-              path: /api/
+              path: /
               port: 8123
             initialDelaySeconds: 10
             periodSeconds: 10
@@ -72,7 +72,7 @@ spec:
             failureThreshold: 3
           livenessProbe:
             httpGet:
-              path: /api/
+              path: /
               port: 8123
             initialDelaySeconds: 30
             periodSeconds: 20

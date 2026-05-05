@@ -76,3 +76,44 @@ kubectl -n snapcast-prod exec deploy/snapcast -c snapserver -- sh -c 'cat /dev/u
 - **Audio Sync Issues**:
   - Ensure all clients and the server have accurate time synchronization (NTP).
   - Adjust the latency offset for specific clients in the Snapweb UI if necessary.
+
+## 10. HifiBerry Clients (kitchen / living-room)
+
+Two HifiBerry OS devices run snapclient as a Docker extension:
+- `kitchen` — `10.42.2.38`
+- `living-room` — `10.42.2.39`
+
+### Image
+
+The upstream HifiBerry extension image (`ghcr.io/hifiberry/extension_snapcast:0.28.0`) has two bugs that prevent snapclient from running. A patched image is maintained at `ghcr.io/gjcourt/snapcast-hifiberry` with a build pipeline in `images/snapcast-hifiberry/`. See `images/snapcast-hifiberry/README.md` for full details on the bugs and upgrade procedure.
+
+**Known upstream bugs fixed by the patch image:**
+1. Runtime audio libs missing from the final build stage — `libasound`, `libvorbis`, `libogg`, `libFLAC`, `libopus`, `libsoxr` are built in the compile stage but not installed in the runtime image.
+2. Wrong binary path — `snapcastmpris.py` hardcodes `/bin/snapclient` but the binary lands at `/usr/local/bin/snapclient`. The patch adds a symlink.
+
+### Device setup
+
+Each device has:
+- `/data/extensions/snapcast/docker-compose.yaml` — extension config; references `ghcr.io/gjcourt/snapcast-hifiberry:<tag>`
+- `/etc/snapcastmpris.conf` — INI file (no section header) with `server = 10.42.2.37` (the production LB VIP)
+
+To check status:
+```bash
+ssh root@10.42.2.38 "docker exec snapcast ps aux"
+# Should show: /usr/bin/python3 snapcastmpris.py AND /bin/snapclient -e -h 10.42.2.37
+```
+
+To pull and deploy a new image on both devices:
+```bash
+for ip in 10.42.2.38 10.42.2.39; do
+  ssh root@$ip "
+    docker pull ghcr.io/gjcourt/snapcast-hifiberry:<tag>
+    sed -i 's|image: ghcr.io/gjcourt/snapcast-hifiberry:.*|image: ghcr.io/gjcourt/snapcast-hifiberry:<tag>|' /data/extensions/snapcast/docker-compose.yaml
+    docker-compose -f /data/extensions/snapcast/docker-compose.yaml up -d
+  "
+done
+```
+
+### Network policy note
+
+The snapcast CNP uses `fromEntities: world` (not `fromCIDR: 10.42.2.0/24`) for ports 1704/1705/1780. This is intentional: Cilium SNATs LB traffic to a node IP before it reaches the pod, so a CIDR rule for the LAN subnet never matches. The security boundary is the LAN VLAN — `10.42.2.37` is unreachable from outside VLAN 2.

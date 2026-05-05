@@ -18,13 +18,11 @@ patches:
       - op: replace
         path: /metadata/name
         value: hermes-callee-stage
-  # Mirror the staging-only overrides applied to the primary hermes bot:
-  # repoint at signal-cli-stage and bump verbosity. This keeps the two staging
-  # bots symmetric.
+  # Staging shares the production signal-cli (staging has no registered accounts)
   - target:
       kind: ConfigMap
       name: hermes-config
     patch: |
       - op: replace
         path: /data/SIGNAL_HTTP_URL
-        value: http://signal-cli-bridge.signal-cli-stage.svc.cluster.local:8080
+        value: http://signal-cli-bridge.signal-cli.svc.cluster.local:8080

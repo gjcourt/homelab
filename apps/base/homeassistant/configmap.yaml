@@ -12,9 +12,14 @@ data:
     frontend:
       themes: !include_dir_merge_named themes
 
-    # Enable YAML dashboards (loads *.yaml from /config/dashboards/)
+    # Enable YAML dashboards (explicit dashboard registration)
     lovelace:
-      mode: yaml
+      dashboards:
+        control:
+          mode: yaml
+          filename: dashboards/control.yaml
+          title: Control
+          show_in_sidebar: true
 
     automation: !include automations.yaml
     script: !include scripts.yaml

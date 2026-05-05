@@ -99,8 +99,12 @@ spec:
           env:
             - name: HOME
               value: /tmp
+            # State file (server.json: client MACs, group/stream assignments) is
+            # persisted to the spotify-state PVC so pod restarts don't lose stream
+            # assignments. go-librespot files live at the PVC root; snapserver
+            # writes to the snapserver/ subdirectory — no conflict.
             - name: XDG_CONFIG_HOME
-              value: /tmp/.config
+              value: /var/lib/snapserver
           ports:
             - name: stream
               containerPort: 1704
@@ -130,6 +134,8 @@ spec:
               mountPath: /tmp
             - name: audio-pipes
               mountPath: /audio
+            - name: spotify-state
+              mountPath: /var/lib/snapserver
           resources:
             requests:
               cpu: 10m

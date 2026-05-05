@@ -1,0 +1,41 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: hermes
+  namespace: hermes
+  labels:
+    app.kubernetes.io/name: hermes
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: No external ingress; egress DNS + signal-cli bridge + LAN LLM API.
+  endpointSelector:
+    matchLabels:
+      app: hermes
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # signal-cli bridge service for outbound Signal messages.
+    - toEndpoints:
+        - matchLabels:
+            app: signal-cli
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # LLM inference API on TrueNAS (10.42.2.10). Not in-cluster so Cilium
+    # treats it as world; toCIDR keeps it scoped to a single host.
+    - toCIDR:
+        - 10.42.2.10/32
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP

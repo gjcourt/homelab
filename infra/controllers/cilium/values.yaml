@@ -89,12 +89,11 @@ cgroup:
   hostRoot: /sys/fs/cgroup
 
 # -- Configure L2 announcements
-# Disabled at the Helm level after the BGP migration (Phase 4b of the BGP
-# rollout plan). The CiliumL2AnnouncementPolicy resource was removed in
-# Phase 4a; this flag was a no-op without it, but flipping it false keeps
-# config consistent and stops Cilium from initializing the L2 module.
+# Re-enabled alongside BGP: BGP handles cross-subnet routing (e.g. VLAN 4
+# clients via UCG-Fiber), but same-subnet clients (VLAN 2, 10.42.2.x) ARP
+# directly for LB IPs and need L2 announcements to get a response.
 l2announcements:
-  enabled: false
+  enabled: true
 
 # -- Configure BGP control plane
 # Enabling this is cluster-wide; whether a node *peers* is determined by the

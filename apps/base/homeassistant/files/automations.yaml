@@ -10,16 +10,11 @@
   trigger:
     - platform: state
       entity_id:
-        - switch.*_exhaust_fan
+        - switch.hall_bathroom_exhaust_fan
+        - switch.master_bathroom_exhaust_fan
+        - switch.powder_bathroom_exhaust_fan
       from: "off"
       to: "on"
-  condition:
-    # Only bathroom exhaust fans
-    - condition: template
-      value_template: >
-        {{ "bathroom" in trigger.to_state.entity_id | lower or
-           "bath" in trigger.to_state.entity_id | lower or
-           "powder" in trigger.to_state.entity_id | lower }}
   action:
     - variables:
         # Extract bathroom name from entity ID
@@ -113,29 +108,29 @@
     - platform: sun
       event: sunset
   action:
-    # Turn on dining room chandelier if off
+    # Turn on dining room chandelier if off (Lutron Caseta switch)
     - condition: state
-      entity_id: light.dining_room_chandelier
+      entity_id: switch.dining_room_chandelier
+      state: "off"
+    - service: switch.turn_on
+      target:
+        entity_id: switch.dining_room_chandelier
+    # Turn on chandelier_central at target brightness if off (MiBoxer LED)
+    - condition: state
+      entity_id: light.0xa4c138b55dac7973
       state: "off"
     - service: light.turn_on
       target:
-        entity_id: light.dining_room_chandelier
-    # Turn on chandelier_central at target brightness if off
-    - condition: state
-      entity_id: light.chandelier_central
-      state: "off"
-    - service: light.turn_on
-      target:
-        entity_id: light.chandelier_central
+        entity_id: light.0xa4c138b55dac7973
       data:
         brightness: "{{ states('input_number.nightlight_brightness') | int(6) }}"
-    # Turn on chandelier_flowers at target brightness if off
+    # Turn on chandelier_flowers at target brightness if off (MiBoxer LED)
     - condition: state
-      entity_id: light.chandelier_flowers
+      entity_id: light.0xa4c138a9f6011cac
       state: "off"
     - service: light.turn_on
       target:
-        entity_id: light.chandelier_flowers
+        entity_id: light.0xa4c138a9f6011cac
       data:
         brightness: "{{ states('input_number.nightlight_brightness') | int(6) }}"
 
@@ -155,13 +150,14 @@
 - alias: "Nightlight — turn off dining room chandelier"
   description: "Turn off the dining room chandelier at configurable time + random offset."
   trigger:
-    - platform: time
-      at: "{{ states('sensor.nightlight_turnoff_time') }}"
+    - platform: template
+      value_template: >
+        {{ now().strftime('%H:%M') == states('sensor.nightlight_turnoff_time') }}
   condition:
     - condition: state
-      entity_id: light.dining_room_chandelier
+      entity_id: switch.dining_room_chandelier
       state: "on"
   action:
-    - service: light.turn_off
+    - service: switch.turn_off
       target:
-        entity_id: light.dining_room_chandelier
+        entity_id: switch.dining_room_chandelier

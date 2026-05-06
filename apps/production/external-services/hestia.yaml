@@ -1,8 +1,10 @@
 # hestia — TrueNAS GPU server (10.42.2.10)
-# TrueNAS web UI runs HTTPS on 443. BackendTLSPolicy (below) tells the gateway
-# to use TLS for the upstream connection and validate against system CAs.
-# Prereq: configure TrueNAS with a Let's Encrypt cert for hestia.burntbytes.com
-# via System → Certificates → ACME DNS Authenticator (Cloudflare).
+# TrueNAS web UI runs HTTPS on 443. appProtocol: kubernetes.io/https tells
+# Cilium Envoy to use TLS for the upstream connection (requires
+# enable-gateway-api-app-protocol: true in cilium-config, which is set).
+# BackendTLSPolicy (v1) is retained but currently a no-op: Cilium 1.19 only
+# reconciles the deprecated v1alpha3 version of this resource.
+# Prereq: TrueNAS must have a valid TLS cert for hestia.burntbytes.com.
 ---
 apiVersion: v1
 kind: Service
@@ -16,6 +18,7 @@ spec:
       port: 443
       protocol: TCP
       targetPort: 443
+      appProtocol: kubernetes.io/https
 ---
 apiVersion: v1
 kind: Endpoints

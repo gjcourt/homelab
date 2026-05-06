@@ -10,9 +10,7 @@
   trigger:
     - platform: state
       entity_id:
-        - switch.hall_bathroom_exhaust_fan
-        - switch.master_bathroom_exhaust_fan
-        - switch.powder_bathroom_exhaust_fan
+        - switch.*_exhaust_fan
       from: "off"
       to: "on"
   condition:
@@ -157,9 +155,8 @@
 - alias: "Nightlight — turn off dining room chandelier"
   description: "Turn off the dining room chandelier at configurable time + random offset."
   trigger:
-    - platform: template
-      value_template: >
-        {{ now().strftime('%H:%M') == states('sensor.nightlight_turnoff_time') }}
+    - platform: time
+      at: "{{ states('sensor.nightlight_turnoff_time') }}"
   condition:
     - condition: state
       entity_id: switch.dining_room_chandelier

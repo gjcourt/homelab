@@ -1,12 +1,25 @@
 ---
-status: completed
+status: partially-reverted
 last_modified: 2026-05-05
 completed: 2026-05-05
 ---
 
 # BGP Rollout Plan — UniFi Cloud Gateway Fiber + Cilium
 
-> **Completed 2026-05-05.** All 7 LoadBalancer IPs are now advertised via BGP from each of the 3 worker nodes (AS 65010 → UCGF AS 65100); the UCGF installs 3 ECMP next-hops per /32. L2 announcements (`CiliumL2AnnouncementPolicy`) deleted in Phase 4a, `l2announcements.enabled: false` in Helm values as of Phase 4b. Plan-vs-reality gotchas (CRD v2 schema differences, helm-config-only changes not auto-rolling, deprecated `lovelace.dashboards` slug-validator, port 8081 also needed for Lutron) folded into the Phase 2a/4b sections inline. Outstanding follow-up: enable `prometheus.enabled: true` in Cilium Helm values so the BGP alert rules in `infra/configs/alerts/prometheus-rules.yaml` (group `cilium-bgp`) actually fire.
+> **Phases 1–3 complete. Phase 4 reverted 2026-05-05.** BGP is active and healthy (3
+> worker peers, ECMP). Phase 4a/4b (L2 removal) caused a regression for wired devices
+> on `10.42.2.0/24` that ARP directly for LB IPs — see incident postmortem
+> `docs/operations/incidents/2026-05-05-bgp-l2-wired-device-regression.md`. L2
+> announcements are restored. The correct steady state is **L2 + BGP together** until
+> the LB pool is moved to a dedicated subnet. Forward execution is consolidated in
+> `docs/plans/2026-05-06-network-resilience-and-bgp-completion.md` (Phase D = LB pool
+> migration, Phase E = pure BGP).
+>
+> Plan-vs-reality gotchas (CRD v2 schema differences, helm-config-only changes not
+> auto-rolling, deprecated `lovelace.dashboards` slug-validator, port 8081 also needed
+> for Lutron) folded into the Phase 2a/4b sections inline. Outstanding follow-up: enable
+> `prometheus.enabled: true` in Cilium Helm values so the BGP alert rules in
+> `infra/configs/alerts/prometheus-rules.yaml` (group `cilium-bgp`) actually fire.
 
 Replace Cilium L2 announcements (ARP-based) with BGP peering between the Kubernetes node and the UniFi Cloud Gateway Fiber (UCGF). The router gets real routing-table entries for LoadBalancer IPs instead of relying on gratuitous ARP — better reliability, observability, and multi-node readiness.
 

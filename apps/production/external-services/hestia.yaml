@@ -1,10 +1,10 @@
 # hestia — TrueNAS GPU server (10.42.2.10)
-# TrueNAS web UI runs HTTPS on 443. appProtocol: kubernetes.io/https tells
-# Cilium Envoy to use TLS for the upstream connection (requires
-# enable-gateway-api-app-protocol: true in cilium-config, which is set).
-# BackendTLSPolicy (v1) is retained but currently a no-op: Cilium 1.19 only
-# reconciles the deprecated v1alpha3 version of this resource.
-# Prereq: TrueNAS must have a valid TLS cert for hestia.burntbytes.com.
+# TrueNAS UI is served over HTTP on port 80 (no redirect to HTTPS when
+# ui_httpsredirect is false). The gateway terminates TLS at the edge and
+# proxies plaintext HTTP to hestia:80 — no backend TLS required.
+# Note: BackendTLSPolicy (v1) is unsupported in Cilium 1.19 (only v1alpha3
+# was implemented); appProtocol: kubernetes.io/https triggers the GAMMA
+# reconciler and breaks gateway routing. Port-80 approach avoids both issues.
 ---
 apiVersion: v1
 kind: Service
@@ -14,11 +14,10 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - name: https
-      port: 443
+    - name: http
+      port: 80
       protocol: TCP
-      targetPort: 443
-      appProtocol: kubernetes.io/https
+      targetPort: 80
 ---
 apiVersion: v1
 kind: Endpoints
@@ -29,8 +28,8 @@ subsets:
   - addresses:
       - ip: 10.42.2.10
     ports:
-      - name: https
-        port: 443
+      - name: http
+        port: 80
         protocol: TCP
 ---
 apiVersion: gateway.networking.k8s.io/v1beta1
@@ -67,20 +66,4 @@ spec:
   rules:
     - backendRefs:
         - name: hestia
-          port: 443
----
-# BackendTLSPolicy: gateway uses TLS to reach hestia:443 and validates the
-# cert against system (Let's Encrypt) CAs.
-apiVersion: gateway.networking.k8s.io/v1
-kind: BackendTLSPolicy
-metadata:
-  name: hestia-tls
-  namespace: external-services
-spec:
-  targetRefs:
-    - group: ""
-      kind: Service
-      name: hestia
-  validation:
-    wellKnownCACertificates: System
-    hostname: hestia.burntbytes.com
+          port: 80

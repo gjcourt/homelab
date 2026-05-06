@@ -19,4 +19,6 @@ How the cluster is built **today** — the present shape of overlays, networking
 
 **Naming convention:** `<topic>.md` for the existing inventory (DNS strategy, gateway-auth, overlays-and-structure); new docs added under this folder going forward should use `<yyyy-mm-dd>-<topic>.md`. Multi-doc bundles use a subfolder named `<topic>/` containing a `README.md` entry point and topic-specific siblings.
 
+**Today vs planned.** Architecture docs describe present state. When a planned change is relevant (because a current arrangement only makes sense alongside the plan that fixes it), reference the plan in a clearly-labeled "Forward links" section at the end of the doc — never inline in the main tables. The plan itself lives in `docs/plans/`.
+
 **Allowed `status:` values:** `Stable`, `Superseded`.

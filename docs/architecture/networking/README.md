@@ -18,18 +18,24 @@ last_modified: 2026-05-06
 > dependent on chain-loading. As-of dates appear in every frontmatter so a
 > reader knows when a fact was last verified.
 
-## One-paragraph mental model
+## Mental model
 
 The house has a single physical LAN segment terminating at a UniFi Cloud
-Gateway Fiber (UCGF) at `10.42.2.1`. The UCGF tags traffic into VLANs at the
-edge: cluster + wired devices share VLAN 2 (`10.42.2.0/24`), wireless clients
-sit on a separate VLAN (`10.42.4.0/24`), and the LB IP pool currently overlaps
-VLAN 2. Inside the cluster, Cilium runs as the CNI with VXLAN tunneling for
-pod-to-pod traffic, BGP for advertising LoadBalancer IPs to the UCGF, and L2
-announcements for same-subnet ARP fallback. External traffic enters via
+Gateway Fiber (UCGF) at `10.42.2.1`. The UCGF terminates 6 VLANs (Core,
+Lab, Security, Family, Guest, IoT), each on its own bridge interface and
+`/24`: Lab (`br2`, `10.42.2.0/24`) hosts the cluster, storage, and most
+wired devices; Family (`br4`, `10.42.4.0/24`) hosts wireless; the others
+serve their named purposes. The LoadBalancer IP pool currently overlaps
+the Lab VLAN — the source of the 2026-05-05 wired-device incident.
+
+Inside the cluster, Cilium runs as the CNI with VXLAN tunneling for
+pod-to-pod traffic, BGP for advertising LoadBalancer IPs to the UCGF, and
+L2 announcements for same-subnet ARP fallback. External traffic enters via
 Cloudflare Tunnel (no port-forwarding); internal traffic resolves through
-AdGuard split-horizon DNS to internal LB IPs and terminates TLS at a Cilium
-Gateway running Envoy.
+AdGuard (distributed via DHCP option 6 to every VLAN as
+`[10.42.2.43, 10.42.2.45]`), gets a wildcard-rewritten LB IP for
+`*.burntbytes.com`, and terminates TLS at a Cilium Gateway running Envoy
+on a worker node.
 
 ## Quick map
 
@@ -52,8 +58,9 @@ bug or incomplete migration.
 
 1. **Single physical LAN, segmented by VLAN.** All wired ports terminate on
    the UCGF or a UCGF-managed switch. VLAN tagging is the only network
-   isolation mechanism at L2.
-2. **The cluster is on one /24 (VLAN 2).** All 6 Talos nodes have IPs in
+   isolation mechanism at L2. Six VLANs are configured (Core, Lab, Security,
+   Family, Guest, IoT) — see [addressing.md](addressing.md).
+2. **The cluster is on the Lab VLAN.** All 6 Talos nodes have IPs in
    `10.42.2.20–.25`. The UCGF gateway is `10.42.2.1`.
 3. **External traffic enters via Cloudflare Tunnel only.** No port-forwarding
    on the UCGF; no router-side NAT for inbound. The tunnel

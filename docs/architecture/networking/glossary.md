@@ -59,12 +59,10 @@ Set to 90s on this network's BGP sessions.
 **HTTPRoute.** Gateway API resource defining how requests to a hostname/path
 are routed to backend services. Each `*.burntbytes.com` app has one.
 
-**ICMP redirect.** Router message saying "you should send packets directly
-to <other-router>." Not used here; routing is BGP-installed and stable.
-
 **iSCSI (SCSI over TCP).** Block storage protocol. Cluster nodes connect to
 hestia (TrueNAS) and Synology iSCSI targets to back PersistentVolumes.
-Default port 3260.
+Default port 3260. Both targets sit on the Lab VLAN with the cluster, so
+delivery is single-hop L2.
 
 **Kube-proxy replacement.** Cilium's eBPF data path that replaces the
 `kube-proxy` component. Implements ClusterIP/NodePort/LoadBalancer service
@@ -136,7 +134,9 @@ uplinks are typically trunks.
 arrive without 802.1Q tags. End-device ports are typically untagged.
 
 **VLAN (Virtual LAN).** L2 segmentation. Each VLAN is its own broadcast
-domain with its own subnet. Tags are 12 bits (VLAN IDs 1–4094).
+domain with its own subnet. Tags are 12 bits (VLAN IDs 1–4094). The home
+network has 6 VLANs (Core, Lab, Security, Family, Guest, IoT) — see
+[addressing.md](addressing.md) for the full table.
 
 **VXLAN.** L2-over-UDP encapsulation. Cilium uses it for pod-to-pod traffic
 between nodes — pod IPs are encapsulated and tunneled over the LAN, so the
@@ -144,11 +144,17 @@ underlying network never sees pod CIDRs.
 
 ## Homelab-specific terms
 
+**AdGuard (AdGuard Home).** The cluster's DNS server + ad/tracker filter.
+Runs in the `adguard-prod` namespace as a 2-replica StatefulSet behind two
+LoadBalancer service IPs: `10.42.2.43` (primary) and `10.42.2.45`
+(secondary). Distinct sharing-key annotations force the two services onto
+distinct IPs. UCGF distributes both as DHCP DNS option 6 to every LAN VLAN.
+
 **`burntbytes.com`.** The public domain. Cloudflare-authoritative. AdGuard
-intercepts `*.burntbytes.com` for LAN clients.
+intercepts `*.burntbytes.com` for LAN clients via wildcard rewrite.
 
 **Cilium.** The CNI. Provides networking, BGP, L2 announcements, Gateway
-API, and observability via Hubble.
+API, NetworkPolicy enforcement, and observability via Hubble.
 
 **Cloudflare Tunnel (`cloudflared`).** Persistent outbound QUIC tunnel
 from a pod inside the cluster to Cloudflare's edge. Provides public
@@ -166,10 +172,13 @@ serves iSCSI for non-Synology PVCs.
 UniFi OS, FRRouting (FRR) for BGP, dnsmasq for DHCP. Single point of
 failure for cross-subnet traffic.
 
-**VLAN 2.** `10.42.2.0/24`. Cluster nodes, hestia, Synology, wired client
-devices, and the LB IP pool all share this VLAN currently.
+**Lab VLAN (`br2`).** `10.42.2.0/24`. Cluster nodes, hestia, Synology,
+wired client devices, and the LB IP pool all share this VLAN currently.
 
-**VLAN 4.** `10.42.4.0/24`. Wireless clients.
+**Family VLAN (`br4`).** `10.42.4.0/24`. Wireless clients.
+
+**Other VLANs.** Core (`br0`, `10.42.1.0/24` UniFi mgmt), Security (`br3`,
+`10.42.3.0/24` cameras), Guest (`br6`), IoT (`br7`, `10.42.7.0/24`).
 
 **`10.42.2.40` / `home-c-pool`.** The default LB IP pool for production
 gateway and AdGuard (`.43`/`.45`).

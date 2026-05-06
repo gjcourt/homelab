@@ -60,16 +60,40 @@ LB IP is unchanged.
    does service load balancing to a backend pod (which may live on any
    node).
 
+### Stable speaker-pool labels
+
+Lease elections by default use the cilium-operator's hashing across all
+nodes matched by the policy's `nodeSelector`. Pinning a service to a
+specific node by hostname is brittle — Talos auto-generates hostnames per
+install, so a node re-image yields a new hostname and the selector stops
+matching.
+
+The pattern used (or planned, depending on the migration phase) here is
+custom labels:
+
+```bash
+# Bootstrap-time, applied per worker
+kubectl label node <node> homelab.io/l2-speaker-pool=<a|b>
+```
+
+L2 policies select on `homelab.io/l2-speaker-pool` instead of hostname.
+Re-imaged nodes pick up the same pool by reapplying the label as part of
+the bootstrap runbook.
+
 ### Current state (verify)
 
 ```bash
-# All L2 leases
+# All L2 leases — note the holder (this changes on speaker re-election)
 kubectl -n kube-system get leases | grep cilium-l2announce
 
 # Module health on a cilium-agent
 CILIUM_POD=$(kubectl -n kube-system get pod -l app.kubernetes.io/name=cilium-agent -o name | head -1 | sed 's|pod/||')
 kubectl -n kube-system exec $CILIUM_POD -- cilium-dbg status --all-health 2>&1 | grep -A 2 "l2-announcer\|l2-responder"
 ```
+
+> The lease holder is whichever node won the most recent election. **Don't
+> hard-code the current speaker name into runbooks** — verify with the
+> command above whenever it matters.
 
 ### Failure modes
 
@@ -199,6 +223,82 @@ Because of the above, the HA story is asymmetric for the two client types:
 Practical implication: when the elected L2 speaker reboots, wired VLAN-2
 clients lose access for ~5–15s. Wireless clients are unaffected. When a
 worker reboots, no one notices.
+
+## Observability — Hubble
+
+Cilium ships a flow-observability layer called Hubble. It captures every
+packet seen by the BPF datapath at L3/L4 (and optionally L7) and exposes it
+via CLI, gRPC API, and web UI. **This is the primary tool for debugging
+"why didn't this packet reach that pod" questions.**
+
+Enabled in `infra/controllers/cilium/values.yaml`:
+
+```yaml
+hubble:
+  enabled: true
+  relay:
+    enabled: true
+  ui:
+    enabled: true
+```
+
+### Common usages
+
+```bash
+# Tail every flow on a specific node
+kubectl -n kube-system exec ds/cilium -- hubble observe --follow
+
+# Filter by namespace
+hubble observe --namespace adguard-prod
+
+# Filter to drops only
+hubble observe --verdict DROPPED
+
+# Visualize in the UI (port-forward)
+cilium hubble ui
+# then open http://localhost:12000
+```
+
+### What Hubble can / can't see
+
+- ✅ Pod-to-pod traffic (every packet, both directions, with verdict).
+- ✅ Pod-to-LB and LB-to-pod (the BPF rewrite is visible).
+- ✅ External-to-LB after the packet enters a worker node.
+- ✅ DNS lookups when L7 visibility is enabled for the namespace.
+- ❌ Traffic between two LAN devices that doesn't traverse a cluster node
+  (e.g. Apple TV to UCGF). That stays on the wire and never hits BPF.
+- ❌ Traffic before BPF (raw frames on the host NIC). Use `tcpdump` on the
+  node for that.
+
+## Cilium Network Policies
+
+The cluster uses `CiliumNetworkPolicy` (Cilium's superset of Kubernetes
+`NetworkPolicy`) to gate east-west pod traffic. As of 2026-05-06: ~45
+`CiliumNetworkPolicy` resources and 3 `NetworkPolicy` resources active.
+
+```bash
+# Enumerate
+kubectl get ciliumnetworkpolicy -A
+kubectl get networkpolicy -A
+```
+
+Per-app policies live in `apps/base/<app>/networkpolicy.yaml` and are
+overlaid into staging/production. The default posture is "default-deny
+where a policy exists; default-allow where one doesn't" — which is the
+Kubernetes NetworkPolicy semantic, not a true zero-trust default.
+
+### What's typically locked down
+
+- Application pods: ingress restricted to gateway envoy + same-namespace.
+- AdGuard: ingress allowed from any LAN client (it's a DNS resolver), egress to upstream resolvers.
+- Storage-adjacent pods: egress allowed to the iSCSI targets (Synology, hestia).
+
+### Debugging a denied packet
+
+`hubble observe --verdict DROPPED` shows the policy that dropped the
+packet (look for `policy-verdict` reason). If the packet should have been
+allowed, identify the relevant `CiliumNetworkPolicy` and verify the
+`endpointSelector` + ingress/egress rules.
 
 ## Configuration files index
 

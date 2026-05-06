@@ -25,22 +25,23 @@ last_modified: 2026-05-06
 
 ## Cluster nodes
 
-6-node Talos cluster (`melodic-muse`). All on VLAN 2 (`10.42.2.0/24`):
+6-node Talos cluster (`melodic-muse`). All on the Lab VLAN (`br2`,
+`10.42.2.0/24`):
 
 | Node | Role | Mgmt IP | Hardware notes |
 |---|---|---|---|
-| `talos-ykb-uir` | control-plane | `10.42.2.20` | Hardcoded as `k8sServiceHost` in Cilium values (SPOF — see plan `2026-05-06`) |
+| `talos-ykb-uir` | control-plane | `10.42.2.20` | Hardcoded as `k8sServiceHost` in Cilium values (SPOF) |
 | `talos-2mz-rfj` | control-plane | `10.42.2.21` | |
 | `talos-v2l-hng` | control-plane | `10.42.2.22` | |
 | `talos-lmh-kyf` | worker | `10.42.2.23` | BGP peer |
 | `talos-18u-ski` | worker | `10.42.2.24` | BGP peer |
 | `talos-kot-7x7` | worker | `10.42.2.25` | BGP peer |
 
-Talos hostnames are auto-generated with random suffixes. **A node re-image
-yields a new hostname** — any selector that references hostnames must be
-updated post-reimage. Plan `2026-05-06-network-resilience-and-bgp-completion.md`
-introduces stable `homelab.io/l2-speaker-pool=<a|b>` labels to insulate L2
-policies from this fragility.
+> Talos hostnames are auto-generated with random suffixes; a node re-image
+> produces a new hostname. Any Kubernetes selector that references hostnames
+> must be reapplied post-reimage. The L2 announcer's speaker-pool labels
+> ([cluster-load-balancing.md](cluster-load-balancing.md#stable-speaker-pool-labels))
+> avoid this trap by selecting on a custom label instead.
 
 ## Other infrastructure devices
 
@@ -56,9 +57,9 @@ for every SCSI op.
 
 ## Wired client devices
 
-These are user/service devices on VLAN 2 that share L2 with the cluster.
-Listed in the BGP plan as the gating constraint for ever removing L2
-announcements.
+These are user/service devices on the Lab VLAN that share L2 with the
+cluster. Listed in the BGP plan as the gating constraint for ever removing
+L2 announcements (`docs/plans/2026-05-06-network-resilience-and-bgp-completion.md`).
 
 | Device | IP | Notes |
 |---|---|---|
@@ -67,26 +68,36 @@ announcements.
 | HifiBerry living-room | `10.42.2.39` | Snapcast client |
 | `kitchen-pi` | `10.42.2.143` | Raspberry Pi 4; `bcmgenet` NIC with EEE disabled (see incident `2026-03-10`) |
 
-Plan `2026-05-06-network-resilience-and-bgp-completion.md` Phase F.1 proposes
-moving these to a new VLAN 20 (`10.42.20.0/24`) once mDNS reflector
-prerequisites are confirmed.
-
 ## Wireless
 
-Wireless clients (Macs, phones, tablets) sit on a separate VLAN
-(`10.42.4.0/24`). They route to cluster services through the UCGF — see
-[traffic-flows.md](traffic-flows.md) for the path.
+Wireless clients (Macs, phones, tablets) sit on the Family VLAN
+(`br4`, `10.42.4.0/24`). They route to cluster services through the UCGF —
+see [traffic-flows.md](traffic-flows.md) for the path.
+
+## Other VLANs
+
+The UCGF terminates four additional VLANs that don't participate in the
+cluster's data plane but are part of the broader house network:
+
+| VLAN | Subnet | Purpose |
+|---|---|---|
+| Core (`br0`) | `10.42.1.0/24` | UniFi infrastructure mgmt — switches, APs, gateway control plane |
+| Security (`br3`) | `10.42.3.0/24` | Cameras and security devices |
+| Guest (`br6`) | `10.42.6.0/24` | Guest WiFi |
+| IoT (`br7`) | `10.42.7.0/24` | IoT devices (currently lightly populated; migration target for the wired client devices above) |
+
+See [addressing.md](addressing.md) for the full VLAN/subnet map.
 
 ## VLAN tagging boundaries
 
 VLAN tagging is applied at:
 
-1. **UCGF LAN ports** — assign each port to a VLAN (untagged) or trunk multiple VLANs (tagged).
+1. **UCGF LAN ports / bridges** — each VLAN is its own bridge (`br0`, `br2`, `br3`, `br4`, `br6`, `br7`) with the UCGF holding `.1` of each `/24`.
 2. **WAP SSIDs** — each SSID maps to a VLAN tag; wireless clients are placed on the configured VLAN.
 3. **Switch ports** — typically untagged on the configured VLAN; trunk uplinks tag everything.
 
 The cluster nodes do not use 802.1Q on their NICs — Talos sees VLAN-untagged
-frames on whichever access port the UCGF puts them on.
+frames on whichever access port the UCGF puts them on (the Lab VLAN).
 
 ## Spanning tree
 

@@ -285,7 +285,19 @@ Revert UCGF DHCP option to `[10.42.2.43, 10.42.2.45]`. Clients pick up on next l
 
 ### D.1 Allocate dedicated subnet
 
-`10.42.3.0/24` is currently unused on the LAN. Reserve it as the LB-only subnet — **no client host will live here.**
+> **2026-05-06 correction:** an earlier draft of this plan named `10.42.3.0/24`
+> as the target, but on UCGF inspection that subnet is already in use as the
+> **Security VLAN** (`br3`, `10.42.3.0/24`). `10.42.5.0/24` is currently
+> unallocated — UCGF has interfaces for `br0/2/3/4/6/7` only, and `br5` is
+> free. Reserve `10.42.5.0/24` as the LB-only subnet — **no client host will
+> live here.**
+
+Verify before reserving (firmware drift could change available bridges):
+
+```bash
+ssh root@10.42.2.1 'ip -br addr show | grep "br[0-9]"'
+# Confirm no br5 / 10.42.5.x interface; if present, pick the next free /24.
+```
 
 ### D.2 Add new Cilium IP pool (additive)
 
@@ -298,8 +310,8 @@ metadata:
   name: home-c-pool-v2
 spec:
   blocks:
-    - start: 10.42.3.40
-      stop: 10.42.3.254
+    - start: 10.42.5.40
+      stop: 10.42.5.254
 ---
 apiVersion: cilium.io/v2
 kind: CiliumLoadBalancerIPPool
@@ -307,8 +319,8 @@ metadata:
   name: home-compute-pool-v2
 spec:
   blocks:
-    - start: 10.42.3.30
-      stop: 10.42.3.37
+    - start: 10.42.5.30
+      stop: 10.42.5.37
 ```
 
 Add to `infra/configs/cilium/kustomization.yaml`. Both old and new pools coexist; services keep their existing IPs until explicitly migrated.
@@ -319,7 +331,7 @@ Add to `infra/configs/cilium/kustomization.yaml`. Both old and new pools coexist
 ssh root@10.42.2.1
 vtysh
 configure terminal
-ip prefix-list K8S-LB-IPS seq 20 permit 10.42.3.0/24 ge 32 le 32
+ip prefix-list K8S-LB-IPS seq 20 permit 10.42.5.0/24 ge 32 le 32
 end
 write memory
 ```
@@ -350,7 +362,7 @@ Specific places to verify (not exhaustive):
 
 #### D.4.1 Apply
 
-1. Allocate `10.42.3.40` to `gateway-production` via overlay annotation `lbipam.cilium.io/ip-pool: home-c-pool-v2`.
+1. Allocate `10.42.5.40` to `gateway-production` via overlay annotation `lbipam.cilium.io/ip-pool: home-c-pool-v2`.
 2. Update every location from D.4.0's inventory atomically (a single PR for repo changes; a coordinated UI/AdGuard/Cloudflare change for non-repo).
 3. Remove the old `.40` IP allocation.
 
@@ -388,8 +400,8 @@ ssh root@10.42.2.1 'cat /run/dnsmasq.leases 2>/dev/null || ip neighbor show | gr
 #### D.5.1 Apply
 
 Procedure:
-1. Allocate new IPs (`10.42.3.43`, `10.42.3.45`) via per-service overlay.
-2. Update UCGF DHCP DNS option from Phase C to advertise BOTH old and new: `[10.42.3.43, 10.42.3.45, 10.42.2.43, 10.42.2.45, 1.1.1.1]`.
+1. Allocate new IPs (`10.42.5.43`, `10.42.5.45`) via per-service overlay.
+2. Update UCGF DHCP DNS option from Phase C to advertise BOTH old and new: `[10.42.5.43, 10.42.5.45, 10.42.2.43, 10.42.2.45, 1.1.1.1]`.
 3. **Force-update every static device from D.5.0** in parallel with the DHCP change.
 4. Wait through the UCGF DHCP lease half-life (verify lease duration in the UCGF UI; default is often 24h, so renewal kicks in at ~12h). Force renew on critical devices: `sudo dhclient -r && sudo dhclient` (Linux) or toggle Wi-Fi (macOS/iOS).
 5. Verify each test device's `/etc/resolv.conf` (or equivalent) shows the new IPs.
@@ -405,22 +417,22 @@ Less-pinned services (snapcast, etc.) migrate via overlay annotation change. Soa
 Routing-layer checks (necessary but not sufficient):
 
 ```bash
-# All LB IPs now in 10.42.3.x range
+# All LB IPs now in 10.42.5.x range
 kubectl get svc -A -o jsonpath='{range .items[?(@.spec.type=="LoadBalancer")]}{.status.loadBalancer.ingress[0].ip}{"\n"}{end}' | sort -u
-# Expected: only 10.42.3.x, no 10.42.2.x
+# Expected: only 10.42.5.x, no 10.42.2.x
 
 # UCGF has BGP routes for new range
-ssh root@10.42.2.1 'vtysh -c "show ip route 10.42.3.0/24"'
+ssh root@10.42.2.1 'vtysh -c "show ip route 10.42.5.0/24"'
 
 # Wired VLAN-2 device reaches new IPs via routing (NOT ARP — they're cross-subnet now)
-ssh kitchen-pi 'arp -n 10.42.3.43'   # Expected: no entry (gateway routes it)
+ssh kitchen-pi 'arp -n 10.42.5.43'   # Expected: no entry (gateway routes it)
 ```
 
 **Application-layer checks (required — catches HTTPRoute / cert-binding regressions):**
 
 ```bash
 # DNS resolution
-ssh kitchen-pi 'dig @10.42.3.43 example.com +short'
+ssh kitchen-pi 'dig @10.42.5.43 example.com +short'
 
 # Full HTTPS stack against the gateway (SNI + cert + HTTPRoute match)
 ssh kitchen-pi 'curl -sk --max-time 5 -o /dev/null -w "%{http_code}\n" https://home.burntbytes.com'
@@ -445,7 +457,7 @@ After ≥48h of clean operation:
 ### Phase D GO criteria
 - Zero LB services on `10.42.2.x`.
 - All wired clients have updated DNS configs (DHCP-distributed first; manual configs verified).
-- BGP routes for `10.42.3.0/24` installed on UCGF.
+- BGP routes for `10.42.5.0/24` installed on UCGF.
 - Wired VLAN-2 test device reaches every service via routed delivery (not ARP).
 
 ### Phase D rollback per sub-step
@@ -461,7 +473,7 @@ After ≥48h of clean operation:
 
 **Problem #10 (partial).** Once Phase D completes, the LB pool is on a subnet with no client hosts. L2 announcements become genuinely unnecessary.
 
-> **Pre-flight gate:** Phase D complete for ≥48h. No host on `10.42.3.0/24` (verify via UCGF ARP table and DHCP leases).
+> **Pre-flight gate:** Phase D complete for ≥48h. No host on `10.42.5.0/24` (verify via UCGF ARP table and DHCP leases).
 
 ### E.1 Delete L2 policy resources
 
@@ -522,7 +534,7 @@ kubectl -n kube-system get leases | grep -c cilium-l2announce
 ssh root@10.42.2.1 'vtysh -c "show bgp summary"'
 
 # Wired VLAN-2 device still reaches services (via routing now)
-ssh kitchen-pi 'dig @10.42.3.43 example.com +short'
+ssh kitchen-pi 'dig @10.42.5.43 example.com +short'
 ```
 
 ### Phase E GO criteria
@@ -542,14 +554,20 @@ These can run in any order after Phase E. Each is independent.
 
 ### F.1 IoT VLAN segmentation (Problem #10 cont.)
 
-Move pure client devices off VLAN 2 onto a new VLAN 20 (`10.42.20.0/24`):
+> **2026-05-06 correction:** an earlier draft proposed creating a new VLAN 20.
+> UCGF inspection shows an **IoT VLAN already exists** at `10.42.7.0/24`
+> (`br7`, configured as "IoT" in UniFi). Migrate to the existing VLAN rather
+> than provisioning a parallel one.
+
+Move pure client devices off the Lab VLAN (`br2`, `10.42.2.0/24`) onto the
+existing IoT VLAN (`br7`, `10.42.7.0/24`):
 
 | Device | Current | Target |
 |---|---|---|
-| Apple TV | 10.42.2.19 | 10.42.20.x |
-| HifiBerry kitchen | 10.42.2.38 | 10.42.20.x |
-| HifiBerry living-room | 10.42.2.39 | 10.42.20.x |
-| `kitchen-pi` | 10.42.2.143 | 10.42.20.x |
+| Apple TV | 10.42.2.19 | 10.42.7.x |
+| HifiBerry kitchen | 10.42.2.38 | 10.42.7.x |
+| HifiBerry living-room | 10.42.2.39 | 10.42.7.x |
+| `kitchen-pi` | 10.42.2.143 | 10.42.7.x |
 
 Keep on VLAN 2 (mgmt/storage):
 - Cluster nodes (`.20-.25`)
@@ -559,7 +577,7 @@ Keep on VLAN 2 (mgmt/storage):
 
 #### F.1.0 mDNS reflector pre-flight (BLOCKING)
 
-AirPlay (Apple TV ↔ Mac/iPhone), Snapcast/Bonjour, HomeKit pairing, and Spotify Connect all rely on mDNS discovery. Without cross-VLAN mDNS reflection, splitting Apple TV onto VLAN 20 breaks AirPlay from VLAN 4 wireless devices.
+AirPlay (Apple TV ↔ Mac/iPhone), Snapcast/Bonjour, HomeKit pairing, and Spotify Connect all rely on mDNS discovery. Without cross-VLAN mDNS reflection, splitting Apple TV onto the IoT VLAN breaks AirPlay from VLAN 4 (Family) wireless devices.
 
 **Verify before any device moves:**
 
@@ -568,7 +586,9 @@ AirPlay (Apple TV ↔ Mac/iPhone), Snapcast/Bonjour, HomeKit pairing, and Spotif
 # UniFi Network UI: Settings → Networks → <network> → Advanced → "Multicast DNS"
 # (Path varies by firmware version; "mDNS Repeater" or "Multicast DNS" both apply.)
 
-# 2. If supported, enable on BOTH VLAN 2 and VLAN 20 (and the wireless VLAN that needs to discover).
+# 2. If supported, enable mDNS reflector on the Lab VLAN (br2), IoT VLAN (br7),
+#    and Family/wireless VLAN (br4) — every VLAN that needs to discover or
+#    advertise services should be in the reflector group.
 
 # 3. Test cross-VLAN discovery BEFORE moving the Apple TV.
 #    From a Mac on the wireless VLAN: should see Apple TV and HifiBerry advertisements.

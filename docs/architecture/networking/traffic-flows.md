@@ -28,27 +28,41 @@ forwarder, or LB doing the work.
 
 ## Flow 1: Wireless client → internal HTTPS service
 
-**Scenario.** Mac on VLAN 4 (wireless, `10.42.4.x`) opens
+**Scenario.** Mac on the Family VLAN (`br4`, `10.42.4.x`) opens
 `https://grafana.burntbytes.com`.
+
+The UCGF's DHCP server distributes AdGuard `[10.42.2.43, 10.42.2.45]`
+directly as the resolvers for **every** LAN VLAN (verified from
+`/run/dnsmasq.dhcp.conf.d/*.conf`). The UCGF is **not** in the DNS
+forwarding path — clients send DNS queries directly to AdGuard via
+routed delivery.
 
 ```
 [Mac, 10.42.4.50]
-  ↓ DNS query: "grafana.burntbytes.com" → 10.42.2.1 (DHCP-distributed resolver)
-[UCGF dnsmasq]
-  ↓ forwards to AdGuard at 10.42.2.43
-[AdGuard]
-  ↓ wildcard rewrite *.burntbytes.com → 10.42.2.40
-  ↓ returns 10.42.2.40
+  ↓ DNS query for grafana.burntbytes.com → 10.42.2.43 (DHCP-distributed)
+  ↓ "10.42.2.43 is not on my /24 (10.42.4.0/24); send to default gateway"
+  ↓ ARP for 10.42.4.1 (UCGF Family-VLAN interface br4)
+  ↓ Frame to UCGF
+[UCGF]
+  ↓ Routing-table lookup for 10.42.2.43/32 → BGP next-hop on talos-X (worker)
+  ↓ forwards frame to talos-X
+[talos-X cilium-agent BPF]
+  ↓ kube-proxy replacement: 10.42.2.43:53 → adguard-0 or adguard-1 pod
+  ↓ (VXLAN if the pod is on another node)
+[adguard pod]
+  ↓ Wildcard rewrite *.burntbytes.com → 10.42.2.40 (see ../dns-strategy.md)
+  ↓ DNS reply: 10.42.2.40
+  → reverse path back to Mac
 [Mac]
-  ↓ "10.42.2.40 is not on my /24 (10.42.4.0/24); send to default gateway"
-  ↓ ARP for 10.42.4.1 (UCGF VLAN-4 interface)
-  ↓ TCP SYN to 10.42.2.40:443
+  ↓ Now opens TCP to 10.42.2.40:443
+  ↓ "10.42.2.40 is not on my /24; send to default gateway"
+  ↓ TCP SYN frame to UCGF
 [UCGF]
   ↓ BGP route lookup: 10.42.2.40/32 → next-hops [.23, .24, .25] ECMP, picks one
-  ↓ forwards frame to talos-lmh-kyf (.23), arriving on its eno1
+  ↓ forwards frame to (e.g.) talos-lmh-kyf (.23), arriving on eno1
 [talos-lmh-kyf cilium-agent BPF]
-  ↓ kube-proxy replacement: dest 10.42.2.40:443 → cilium-envoy pod (any worker)
-  ↓ tunnels via VXLAN if pod is on another node
+  ↓ kube-proxy replacement: dest 10.42.2.40:443 → cilium-envoy pod (any node)
+  ↓ tunnels via VXLAN if envoy is on another node
 [cilium-envoy on talos-X]
   ↓ TLS handshake (SNI = grafana.burntbytes.com)
   ↓ cert-manager certificate served (Let's Encrypt)
@@ -58,6 +72,11 @@ forwarder, or LB doing the work.
   ↓ HTTP response
   → reverse path: VXLAN → cilium-envoy → BPF → eno1 → UCGF → Mac
 ```
+
+> **Note on DNS path.** The DNS query and the HTTPS connection follow
+> independent paths: both end at the cluster, but they hit different
+> services (AdGuard vs gateway), and each has its own ECMP next-hop choice
+> on the UCGF.
 
 ### What can break
 
@@ -81,11 +100,11 @@ forwarder, or LB doing the work.
   ↓ Configured DNS: 10.42.2.43 (manually set in tvOS)
   ↓ "10.42.2.43 is on my /24 (10.42.2.0/24); ARP directly"
   ↓ ARP broadcast: "Who has 10.42.2.43?"
-[Cilium L2 speaker — currently talos-2mz-rfj, .21]
+[Cilium L2 speaker — the elected node for this LB IP, e.g. talos-X]
   ↓ Cilium L2 announcer responds: "10.42.2.43 is at <my MAC>"
 [Apple TV]
-  ↓ Sends DNS query frame to .21's MAC
-[talos-2mz-rfj BPF]
+  ↓ Sends DNS query frame to talos-X's MAC
+[talos-X BPF — the L2 speaker for this IP]
   ↓ kube-proxy replacement: 10.42.2.43:53 → adguard-0 or adguard-1 pod
   ↓ forwards (possibly via VXLAN if adguard pod is on another node)
 [adguard pod]
@@ -209,30 +228,57 @@ service `grafana.monitoring.svc.cluster.local:80` whose backing pod is on
 
 ---
 
-## Flow 6: iSCSI from cluster to NAS
+## Flow 6: iSCSI from cluster to storage
 
-**Scenario.** A CNPG pod's PVC is backed by Synology iSCSI. Pod is on
-`talos-lmh-kyf` (`.23`).
+The cluster has **two** iSCSI providers, each via its own CSI driver and
+StorageClass. Both targets sit on the Lab VLAN (`br2`, `10.42.2.0/24`)
+alongside the cluster nodes, so the iSCSI path is single-hop L2 in both
+cases — no UCGF, no BGP, no Cilium service IPs involved.
+
+### 6a — Synology iSCSI (CNPG PVCs and most stateful workloads)
 
 ```
 [CNPG pod on .23]
   ↓ block I/O → kernel iSCSI initiator on the node
 [talos-lmh-kyf kernel]
-  ↓ TCP to Synology at 10.42.2.11:3260 (iSCSI target port)
-[switch L2 forwarding — same VLAN 2]
+  ↓ TCP to Synology at 10.42.2.11:3260
+[switch L2 forwarding — same VLAN]
 [Synology]
+  ↓ serves block; btrfs-backed
+```
+
+CSI driver: `csi.san.synology.com` (Synology official CSI). StorageClasses:
+`synology-iscsi`, `synology-iscsi-ephemeral`, `synology-nfs`.
+
+### 6b — hestia (TrueNAS) iSCSI via democratic-csi
+
+```
+[Pod on .24]
+  ↓ block I/O → kernel iSCSI initiator
+[talos-18u-ski kernel]
+  ↓ TCP to hestia at 10.42.2.10:3260
+[switch L2 forwarding — same VLAN]
+[hestia (TrueNAS)]
   ↓ serves block; ZFS-backed
 ```
 
-### Properties
+CSI driver: `org.democratic-csi.truenas-iscsi`. StorageClasses:
+`truenas-iscsi`, `truenas-iscsi-ephemeral`, `truenas-iscsi-ssd` (the SSD
+variant uses a separate ZFS pool).
 
-- **iSCSI traffic stays on VLAN 2.** Cluster nodes and Synology share the
-  broadcast domain — single-hop L2 delivery.
-- **No Cilium service IP involved.** The Synology CSI driver targets the
-  Synology directly via its mgmt IP; Cilium doesn't proxy.
-- **PVC churn = iSCSI session churn.** Mass PVC re-attach (e.g., after a
-  node reboot) creates many concurrent sessions; the Synology iSCSI manager
-  handles up to ~32 sessions cleanly.
+### Properties (both)
+
+- **L2-direct delivery.** Cluster nodes and storage targets share the Lab
+  VLAN broadcast domain. Single-hop frame from the node to the target.
+- **No Cilium service IP.** CSI drivers target the storage device's mgmt
+  IP directly; Cilium doesn't proxy iSCSI traffic.
+- **PVC churn = iSCSI session churn.** Mass PVC re-attach (e.g. after a
+  node reboot) creates many concurrent sessions on the target. Both
+  Synology and TrueNAS handle ~32 concurrent sessions cleanly; beyond that,
+  expect login retries.
+- **Storage outage = pod outage.** No multi-target failover; if the
+  Synology or hestia is offline, every PVC backed by it goes read-only or
+  fails. See `docs/operations/incidents/2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md`.
 
 ---
 

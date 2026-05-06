@@ -59,6 +59,14 @@ input_number:
     initial: 30
     unit_of_measurement: min
     mode: slider
+  laundry_room_light_minutes:
+    name: Laundry Room Light Timer
+    min: 5
+    max: 120
+    step: 5
+    initial: 30
+    unit_of_measurement: min
+    mode: slider
 
 timer:
   hall_bathroom_fan_timer:
@@ -67,6 +75,8 @@ timer:
     name: Master Bathroom Fan Timer
   powder_bathroom_fan_timer:
     name: Powder Bathroom Fan Timer
+  laundry_room_light_timer:
+    name: Laundry Room Light Timer
 
 automation: !include automations.yaml
 script: !include scripts.yaml

@@ -47,25 +47,47 @@ From the 2026-05-06 architecture critique:
 
 Risk: low. Recoverable by reverting a single PR. No client-visible disruption expected.
 
-### A.1 Restrict L2 announcements to worker nodes
+> **Atomicity requirement:** A.1 through A.5 must ship as a single PR. Splitting A.1 and A.2 across two merges creates a transient window where AdGuard services are matched by both the cluster-wide policy and the per-service policies, causing ambiguous lease ownership.
 
-**Problem #1.** Edit `infra/configs/cilium/l2-announcement-policy.yaml` to add a worker-only `nodeSelector` mirroring `bgp-cluster-config.yaml:9-14`:
+### A.0 Apply stable speaker-pool labels to workers
+
+**Pre-step for A.1 and A.2.** Hostname-based pinning is brittle — Talos nodes get a new auto-generated hostname after a re-image. Apply a durable custom label to each worker, then select on that label everywhere downstream:
+
+```bash
+# Pool A — speakers for AdGuard primary and the cluster-wide default
+kubectl label node talos-lmh-kyf homelab.io/l2-speaker-pool=a
+kubectl label node talos-18u-ski homelab.io/l2-speaker-pool=a
+
+# Pool B — speakers for AdGuard secondary (forced different from primary)
+kubectl label node talos-kot-7x7 homelab.io/l2-speaker-pool=b
+```
+
+Document this step in `docs/operations/talos-node-bootstrap.md` so a future node-replacement run reapplies the label. If the runbook doesn't yet exist, create it with this section.
+
+### A.1 Restrict L2 announcements to worker nodes (default policy)
+
+**Problem #1.** Edit `infra/configs/cilium/l2-announcement-policy.yaml` to add a worker-only `nodeSelector` and exclude AdGuard services (deferred to A.2's per-service policies):
 
 ```yaml
 spec:
   externalIPs: true
   loadBalancerIPs: true
+  serviceSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: NotIn
+        values: ["adguard"]
   nodeSelector:
     matchExpressions:
       - key: node-role.kubernetes.io/control-plane
         operator: DoesNotExist
 ```
 
-Effect: lease leader election restricts to `talos-lmh-kyf` / `-18u-ski` / `-kot-7x7`. CP nodes (`-2mz-rfj` / `-v2l-hng` / `-ykb-uir`) drop out.
+Effect: cluster-wide policy covers everything **except** AdGuard, restricted to worker nodes. AdGuard is owned by per-service policies in A.2.
 
 ### A.2 Split AdGuard primary/secondary onto different L2 speakers
 
-**Problem #2.** Add per-service `CiliumL2AnnouncementPolicy` resources with `serviceSelector` to force lease distribution. Two policies, one per service, each pinning to a disjoint node subset:
+**Problem #2.** Add per-service `CiliumL2AnnouncementPolicy` resources with `serviceSelector` and the speaker-pool labels from A.0:
 
 ```yaml
 # infra/configs/cilium/l2-announcement-policy-adguard-primary.yaml
@@ -73,30 +95,29 @@ apiVersion: cilium.io/v2alpha1
 kind: CiliumL2AnnouncementPolicy
 metadata:
   name: l2-adguard-primary
-  namespace: kube-system
 spec:
   loadBalancerIPs: true
   serviceSelector:
     matchLabels:
       app.kubernetes.io/name: adguard
-      cilium.io/lb-pool: primary
+      homelab.io/dns-pool: primary
   nodeSelector:
-    matchExpressions:
-      - key: kubernetes.io/hostname
-        operator: In
-        values: ["talos-lmh-kyf", "talos-18u-ski"]
+    matchLabels:
+      homelab.io/l2-speaker-pool: a
 ```
 
 ```yaml
 # infra/configs/cilium/l2-announcement-policy-adguard-secondary.yaml
-# pins to talos-kot-7x7 only — different node from primary
+# Same shape, dns-pool=secondary, l2-speaker-pool=b — pinned to a different worker
 ```
 
-Add a label `cilium.io/lb-pool: primary` / `secondary` to the matching services in `apps/base/adguard/service.yaml` and `apps/production/adguard/service-dns-secondary.yaml`.
+Add labels to the matching services:
+- `apps/base/adguard/service.yaml` — `homelab.io/dns-pool: primary`
+- `apps/production/adguard/service-dns-secondary.yaml` — `homelab.io/dns-pool: secondary`
 
-Then narrow the cluster-wide policy from A.1 to **exclude** AdGuard services (add a `serviceSelector` matchExpression `NotIn: [adguard]`), or split it into a default-deny + per-service-allow model.
-
-> **Trade-off:** more YAML, but per-service ownership means a node failure breaks at most one DNS IP.
+> **Note:** `homelab.io/*` is a custom label namespace local to this repo, not a Cilium API. Choosing a non-`cilium.io` prefix avoids implying upstream semantics.
+>
+> **Trade-off:** more YAML, but per-service ownership means a node failure breaks at most one DNS IP. The `homelab.io/l2-speaker-pool` labels survive node re-image as long as A.0's bootstrap step is followed.
 
 ### A.3 Tune L2 lease timing
 
@@ -127,19 +148,30 @@ Cuts speaker-failover ARP outage from ~15s to ~5s.
 
 ### A.5 Add L2 churn alert
 
-**Problem #6.** Add a rule to `infra/configs/alerts/prometheus-rules.yaml` (group `cilium-bgp` or new `cilium-l2`):
+**Problem #6.** Add a rule to `infra/configs/alerts/prometheus-rules.yaml` (group `cilium-bgp` or new `cilium-l2`).
+
+> **Pre-step — verify metric names against the running operator.** Cilium 1.19's L2 metric names are not stable in the docs; enumerate what's actually emitted before drafting the alert:
+> ```bash
+> kubectl -n kube-system port-forward deploy/cilium-operator 9963:9963 &
+> curl -s localhost:9963/metrics | grep -i 'l2\|lease' | grep -v '^#'
+> kill %1
+> ```
+> Use the actual metric name(s) you see in the alert below. The names below are illustrative placeholders.
 
 ```yaml
 - alert: CiliumL2LeaseChurn
   expr: |
-    rate(cilium_operator_lb_l2_acquired_leases_total[5m])
-      + rate(cilium_operator_lb_l2_released_leases_total[5m]) > 0.1
+    # Replace with verified metric names from the pre-step above.
+    rate(<l2_acquired_metric>[5m])
+      + rate(<l2_released_metric>[5m]) > 0.1
   for: 10m
   labels: { severity: warning }
   annotations:
     summary: "Cilium L2 leases churning"
     description: "More than 0.1 lease handovers/sec over 10min — speaker is flapping."
 ```
+
+Validate the rule loads: `kubectl -n monitoring exec prometheus-kube-prometheus-stack-prometheus-0 -- promtool check rules /etc/prometheus/rules/...`. If the metric doesn't exist yet, the alert silently no-ops; the validation step would catch a typo but not a missing metric — only the runtime emission check above does.
 
 ### A.6 Verify
 
@@ -294,28 +326,83 @@ write memory
 
 ### D.4 Migrate gateway IP
 
-The gateway services (`gateway-production`, `gateway-staging`) are referenced only by HTTPRoute hostnames + DNS, so the actual IP is largely transparent.
+The gateway services (`gateway-production`, `gateway-staging`) are referenced only by HTTPRoute hostnames + DNS, so the actual IP is largely transparent. Before changing the IP, inventory every place it appears.
+
+#### D.4.0 Inventory checklist (gateway IP `10.42.2.40`)
+
+Run before D.4.1. Update each location in lockstep with the IP change:
+
+```bash
+# Check the repo for hardcoded references
+grep -rn "10\.42\.2\.40" --include="*.yaml" --include="*.md" --include="*.conf" .
+```
+
+Specific places to verify (not exhaustive):
+
+| Location | What to check |
+|---|---|
+| AdGuard rewrites (UI export) | `*.burntbytes.com` and any explicit per-host A records pointing at `.40` |
+| Cloudflare zone (public DNS) | Any A record pointing at `.40` for externally exposed services |
+| `apps/base/cloudflare-tunnel/` | `cloudflared` config — does it route to a gateway IP or to a Service name? |
+| Tailscale subnet routes (if used) | Advertised routes covering `10.42.2.40` |
+| Manual `/etc/hosts` entries | Any host with hand-rolled overrides |
+| Per-app HTTPRoute resources | None should hardcode the IP, but verify no overlay does |
+
+#### D.4.1 Apply
 
 1. Allocate `10.42.3.40` to `gateway-production` via overlay annotation `lbipam.cilium.io/ip-pool: home-c-pool-v2`.
-2. Update split-horizon DNS (AdGuard internal zone) to point `*.burntbytes.com` → `10.42.3.40`.
+2. Update every location from D.4.0's inventory atomically (a single PR for repo changes; a coordinated UI/AdGuard/Cloudflare change for non-repo).
 3. Remove the old `.40` IP allocation.
 
 ### D.5 Migrate AdGuard pinned IPs (the hard one)
 
 AdGuard `.43` and `.45` are baked into wired-client DNS configs (DHCP option from Phase C, plus any manual configs).
 
+#### D.5.0 Static-DNS device inventory (BLOCKING pre-step)
+
+DHCP-managed clients pick up new resolvers automatically; **statically configured devices won't.** Walk through each non-DHCP device and enumerate where DNS is set:
+
+| Device | DNS config location | How to update |
+|---|---|---|
+| Apple TV (`.19`) | Settings → Network → configure DNS manually | UI — must be done by hand |
+| HifiBerry kitchen (`.38`) | `/etc/resolv.conf` or `/etc/systemd/resolved.conf` | SSH + edit + restart |
+| HifiBerry living-room (`.39`) | same | SSH + edit + restart |
+| `kitchen-pi` (`.143`) | NetworkManager — `nmcli con mod … ipv4.dns …` | SSH + nmcli |
+| hestia (`.10`) | TrueNAS Network → Global Configuration | Web UI |
+| Synology (`.11`) | Control Panel → Network → DSM Settings | Web UI |
+| Talos nodes (`.20`–`.25`) | Talos machine config (`spec.resolvers`) | `talosctl edit machineconfig` |
+| Anything else with `cat /etc/resolv.conf` showing `10.42.2.43` | host-specific | host-specific |
+
+Generate the list:
+
+```bash
+# DHCP leases — these update automatically
+ssh root@10.42.2.1 'cat /run/dnsmasq.leases 2>/dev/null || ip neighbor show | grep -v FAIL'
+
+# Cross-reference with static-IP devices outside DHCP
+# (manual walk through UCGF "Clients" → filter by static)
+```
+
+**Do not proceed to D.5.1 until every statically configured device has an owner and an update procedure documented.**
+
+#### D.5.1 Apply
+
 Procedure:
 1. Allocate new IPs (`10.42.3.43`, `10.42.3.45`) via per-service overlay.
 2. Update UCGF DHCP DNS option from Phase C to advertise BOTH old and new: `[10.42.3.43, 10.42.3.45, 10.42.2.43, 10.42.2.45, 1.1.1.1]`.
-3. Wait 24h for clients to pick up new leases (or force renew on critical devices).
-4. Remove old `.43` / `.45` assignments. Update DHCP option to drop them.
-5. Sweep manual DNS configs (HomeKit/Home Assistant config, anything hand-rolled) for hardcoded `10.42.2.43`.
+3. **Force-update every static device from D.5.0** in parallel with the DHCP change.
+4. Wait through the UCGF DHCP lease half-life (verify lease duration in the UCGF UI; default is often 24h, so renewal kicks in at ~12h). Force renew on critical devices: `sudo dhclient -r && sudo dhclient` (Linux) or toggle Wi-Fi (macOS/iOS).
+5. Verify each test device's `/etc/resolv.conf` (or equivalent) shows the new IPs.
+6. Remove old `.43` / `.45` assignments. Update DHCP option to drop them.
+7. Sweep the repo for `10.42.2.43`/`10.42.2.45` hardcoding: `grep -rn "10\.42\.2\.4[35]" .`
 
 ### D.6 Migrate remaining LB services
 
 Less-pinned services (snapcast, etc.) migrate via overlay annotation change. Soak each for 24h before moving on.
 
 ### D.7 Soak and verify pre-pure-BGP
+
+Routing-layer checks (necessary but not sufficient):
 
 ```bash
 # All LB IPs now in 10.42.3.x range
@@ -327,8 +414,24 @@ ssh root@10.42.2.1 'vtysh -c "show ip route 10.42.3.0/24"'
 
 # Wired VLAN-2 device reaches new IPs via routing (NOT ARP — they're cross-subnet now)
 ssh kitchen-pi 'arp -n 10.42.3.43'   # Expected: no entry (gateway routes it)
-ssh kitchen-pi 'dig @10.42.3.43 example.com +short'   # Works via UCGF
 ```
+
+**Application-layer checks (required — catches HTTPRoute / cert-binding regressions):**
+
+```bash
+# DNS resolution
+ssh kitchen-pi 'dig @10.42.3.43 example.com +short'
+
+# Full HTTPS stack against the gateway (SNI + cert + HTTPRoute match)
+ssh kitchen-pi 'curl -sk --max-time 5 -o /dev/null -w "%{http_code}\n" https://home.burntbytes.com'
+ssh kitchen-pi 'curl -sk --max-time 5 -o /dev/null -w "%{http_code}\n" https://grafana.burntbytes.com'
+# Expected: 200 (or expected redirect / auth code; NOT a connection failure or 502)
+
+# Repeat from a cross-subnet client (Mac on VLAN 4) to verify both paths
+curl -sk --max-time 5 -o /dev/null -w "%{http_code}\n" https://home.burntbytes.com
+```
+
+A 200/302/401 confirms TCP connection + TLS handshake + HTTPRoute match + backend reachability — the full stack the 2026-05-05 hestia gateway incident broke. A `dig` alone wouldn't have caught that class of bug.
 
 ### D.8 Remove old pools
 
@@ -362,22 +465,40 @@ After ≥48h of clean operation:
 
 ### E.1 Delete L2 policy resources
 
+Remove every `CiliumL2AnnouncementPolicy` resource and matching kustomization entry. Filenames depend on what Phase A.2 created — list and delete by glob, not by hardcoded names:
+
 ```bash
-# Remove every CiliumL2AnnouncementPolicy created in Phase A
-rm infra/configs/cilium/l2-announcement-policy.yaml
-rm infra/configs/cilium/l2-announcement-policy-adguard-primary.yaml
-rm infra/configs/cilium/l2-announcement-policy-adguard-secondary.yaml
-# Update kustomization.yaml accordingly
+# Enumerate every L2 policy file currently tracked
+ls infra/configs/cilium/l2-announcement-policy*.yaml
+
+# Delete them
+rm infra/configs/cilium/l2-announcement-policy*.yaml
+
+# Drop the corresponding entries from infra/configs/cilium/kustomization.yaml
+# (every line matching `l2-announcement-policy*.yaml`)
 ```
 
-### E.2 Disable L2 in Helm + roll DaemonSet
+Confirm zero policies exist in the rendered output before committing:
 
-Edit `infra/controllers/cilium/values.yaml`:
+```bash
+kustomize build infra/configs/cilium/ | grep -c CiliumL2AnnouncementPolicy
+# Expected: 0
+```
 
+### E.2 Remove L2 from Helm values + roll DaemonSet
+
+Edit `infra/controllers/cilium/values.yaml` — **remove the entire `l2announcements:` block**, including the timing values added in Phase A.3. Leaving `enabled: false` with dead `leaseDuration` keys works but is confusing for future readers.
+
+Before:
 ```yaml
 l2announcements:
-  enabled: false
+  enabled: true
+  leaseDuration: "5s"
+  leaseRenewDeadline: "3s"
+  leaseRetryPeriod: "1s"
 ```
+
+After: the block is deleted entirely (Cilium defaults to `enabled: false`).
 
 After Flux reconcile:
 
@@ -436,11 +557,48 @@ Keep on VLAN 2 (mgmt/storage):
 - Synology (`.11`) — iSCSI peer to cluster
 - UCGF (`.1`)
 
-Procedure (per device): change UCGF port-VLAN assignment for the wired port, force DHCP renew, verify routed connectivity. Snapcast multicast (Bonjour) needs UCGF mDNS reflector enabled across VLAN 2 ↔ 20 to keep auto-discovery working.
+#### F.1.0 mDNS reflector pre-flight (BLOCKING)
+
+AirPlay (Apple TV ↔ Mac/iPhone), Snapcast/Bonjour, HomeKit pairing, and Spotify Connect all rely on mDNS discovery. Without cross-VLAN mDNS reflection, splitting Apple TV onto VLAN 20 breaks AirPlay from VLAN 4 wireless devices.
+
+**Verify before any device moves:**
+
+```bash
+# 1. Confirm UCGF firmware exposes mDNS reflector
+# UniFi Network UI: Settings → Networks → <network> → Advanced → "Multicast DNS"
+# (Path varies by firmware version; "mDNS Repeater" or "Multicast DNS" both apply.)
+
+# 2. If supported, enable on BOTH VLAN 2 and VLAN 20 (and the wireless VLAN that needs to discover).
+
+# 3. Test cross-VLAN discovery BEFORE moving the Apple TV.
+#    From a Mac on the wireless VLAN: should see Apple TV and HifiBerry advertisements.
+dns-sd -B _airplay._tcp local.
+dns-sd -B _raop._tcp local.        # AirPlay receiver
+dns-sd -B _snapcast._tcp local.    # if Snapcast advertises
+```
+
+**Known limitations:** UCG-Fiber's mDNS reflector has historically struggled with `_homekit._tcp` on some firmware versions. If HomeKit pairing breaks after F.1, fall back to keeping HomeKit-paired devices on the same VLAN as their controller, or use a dedicated mDNS bridge (e.g. Avahi on a Pi).
+
+**If the pre-flight fails** (mDNS reflector unavailable or unreliable on current UCGF firmware): do not execute F.1. Either upgrade UCGF firmware to a version with stable mDNS reflection, or accept that IoT VLAN segmentation requires a dedicated mDNS bridge appliance — file as a follow-up plan.
+
+#### F.1.1 Per-device migration
+
+Procedure (per device): change UCGF port-VLAN assignment for the wired port, force DHCP renew, verify routed connectivity, verify cross-VLAN mDNS discovery still works after each move.
 
 ### F.2 Narrow BGP listen-range (Problem #11)
 
-After F.1, only cluster nodes remain on VLAN 2. Narrow the FRR `listen range`:
+After F.1, only cluster nodes remain on VLAN 2. Narrow the FRR `listen range`.
+
+Cluster nodes occupy `10.42.2.20–10.42.2.25` (6 addresses). The smallest CIDR block that covers all 6 is `10.42.2.16/28` (`.16–.31`, 16 addresses). A `/29` (8 addresses) does **not** suffice — `10.42.2.20/29` normalizes to `10.42.2.16/29` (`.16–.23`), excluding workers `.24` and `.25`.
+
+```bash
+# Verify before applying
+ipcalc 10.42.2.16/28
+# Network: 10.42.2.16/28
+# HostMin: 10.42.2.17
+# HostMax: 10.42.2.30
+# (covers all 6 cluster nodes plus a few spares)
+```
 
 ```bash
 ssh root@10.42.2.1
@@ -448,12 +606,17 @@ vtysh
 configure terminal
 router bgp 65100
   no bgp listen range 10.42.2.0/24
-  bgp listen range 10.42.2.20/29 peer-group K8S-NODES
+  bgp listen range 10.42.2.16/28 peer-group K8S-NODES
 end
 write memory
 ```
 
-`/29` covers `.16-.23` (3 CP + 3 worker + spare) — much smaller attack surface.
+After applying, confirm all 3 worker peers re-establish:
+
+```bash
+ssh root@10.42.2.1 'vtysh -c "show bgp summary"'
+# Expected: 3 dynamic peers (*10.42.2.23/.24/.25) Established
+```
 
 ### F.3 Per-service externalTrafficPolicy review (Problem #12)
 
@@ -464,9 +627,23 @@ For each LoadBalancer service in `apps/`, classify:
 
 Document the decision per-service in a comment next to the service definition.
 
-### F.4 Optional: BGP MD5 authentication
+### F.4 BGP MD5 authentication (defense-in-depth, conditional)
 
-If F.1/F.2 are deemed insufficient, add BGP password auth on both UCGF and Cilium peer-config. Out of scope unless an actual untrusted-LAN risk emerges.
+Add BGP password auth on both UCGF and Cilium peer-config to prevent any host on the BGP listen range from asserting AS 65010.
+
+**Trigger condition (must execute F.4 within 7 days if any of the following becomes true):**
+
+1. Any non-cluster device appears in the BGP listen range (e.g. a new node IP outside `10.42.2.20–.25` on the management VLAN).
+2. UCGF firmware upgrade re-broadens the listen range (e.g. by reverting `frr.conf`).
+3. F.1 is rolled back, putting non-cluster devices back on VLAN 2.
+
+Otherwise: low-priority hardening, not blocking.
+
+**Implementation sketch** (when triggered):
+
+- UCGF: `neighbor K8S-NODES password <secret>` in the BGP config.
+- Cilium: add `authSecretRef:` to `CiliumBGPPeerConfig` pointing at a SOPS-encrypted secret in `kube-system`.
+- Roll the cilium DaemonSet (per the operator gotcha in A.4).
 
 ### Phase F GO criteria
 Per sub-phase. F.1: all listed devices on new VLAN, all services still reachable. F.2: BGP peers re-establish on the narrower range. F.3: per-service migration verified.
@@ -481,19 +658,20 @@ Per sub-phase. F.1: all listed devices on new VLAN, all services still reachable
 
 ## Sequencing summary
 
-```
-Week 1  ─ Phase A (L2 hygiene + tuning)
-        └ Phase B (test plan hardening, parallel)
-        └ Phase C (DNS fallback, parallel)
+Phases serialize, but soak windows dominate the calendar. Realistic durations:
 
-Week 2  ─ Phase D start (allocate new pool, migrate gateway)
-Week 3  ─ Phase D continue (migrate AdGuard, then long-tail services)
-Week 4  ─ Phase D soak (48h+) → Phase E (pure BGP)
+| Phase | Active work | Soak / wait | Total |
+|---|---|---|---|
+| A — L2 hygiene | ~half day | 48h post-merge | ~3 days |
+| B — Test plan hardening | ~1 hour | none (procedural) | same day as A |
+| C — DNS fallback | ~1 hour | 24h DHCP propagation | ~1–2 days |
+| D — LB pool migration | ~1 day spread across sub-steps | 24h per migrated service + 48h final soak | **2–3 weeks** |
+| E — Pure BGP | ~1 hour | 24h soak | ~2 days |
+| F — Defense in depth | ~1 day per sub-phase | 24h post each | ~1 week per sub-phase |
 
-Week 5+ ─ Phase F sub-phases (IoT VLAN, listen-range, eTP review)
-```
+Total wall-clock from kickoff to Phase E completion: **~3 weeks of soak windows + ~3 days of active work**, assuming no rollbacks. Phase F sub-phases run in any order after E and don't gate each other.
 
-Each gate explicit. No phase auto-fires from the previous one.
+Each gate is explicit. No phase auto-fires from the previous one.
 
 ## Backout to current state
 

@@ -217,15 +217,21 @@
           - light.laundry_room_cove
       continue_on_error: true
 
-- alias: "Laundry room light auto-off — cancel timer when manually switched off"
-  description: "If either laundry room light is turned off before the timer expires, cancel the timer."
+- alias: "Laundry room light auto-off — cancel timer when both lights off"
+  description: "If both laundry room lights are turned off before the timer expires, cancel the timer."
   trigger:
     - platform: state
       entity_id:
         - light.laundry_room_main_lights
         - light.laundry_room_cove
-      from: "on"
-      to: "off"
+  condition:
+    # Only cancel if BOTH lights are off
+    - condition: state
+      entity_id: light.laundry_room_main_lights
+      state: "off"
+    - condition: state
+      entity_id: light.laundry_room_cove
+      state: "off"
   action:
     - service: timer.cancel
       target:

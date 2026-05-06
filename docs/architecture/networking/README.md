@@ -82,6 +82,51 @@ bug or incomplete migration.
    `infra/configs/cilium/` and `infra/controllers/cilium/`. Out-of-band
    changes drift back on the next Flux reconcile.
 
+## Threat model — what this folder intentionally exposes
+
+This is a public GitHub repo. The networking docs publish concrete IPs,
+VLAN layout, service-to-IP mappings, cluster node hostnames, and storage
+backend addresses. That is intentional: the threat model assumes
+**perimeter defenses hold**, and internal network reconnaissance is not
+something we expect to defend by topology obscurity.
+
+What is in scope (i.e. what defends the network):
+
+- **Perimeter:** Cloudflare Tunnel handles all inbound (no port-forwarding,
+  no public LAN exposure). The UCGF firewall blocks unsolicited inbound.
+- **Public services:** Authelia SSO + per-service authentication; TLS
+  terminates at the Cilium gateway with cert-manager-issued certificates.
+- **Internal segmentation:** CiliumNetworkPolicy gates pod-to-pod traffic
+  (~45 active policies); Kubernetes RBAC gates API access; SOPS encrypts
+  secrets at rest in the repo.
+- **Auditability:** GitOps means every change is in the commit history;
+  Hubble logs every flow.
+
+What is **not** defended by these docs:
+
+- Internal network recon by an attacker already on the LAN. Anyone with a
+  foothold can `nmap` the same map in seconds, browse mDNS, or read the
+  Cilium API for the full service inventory. Topology obscurity adds no
+  meaningful defense here.
+- Subdomain enumeration. Every Let's Encrypt cert issued by cert-manager
+  goes into Certificate Transparency logs (publicly searchable via
+  `crt.sh`), so listing service hostnames in docs reveals nothing new.
+
+What we deliberately keep **out** of the public repo:
+
+- Credentials, API keys, tokens, private keys, certificates.
+- SOPS-decrypted secrets (the `.sops.yaml` key reference is committed; the
+  decrypted contents never are).
+- MAC addresses, DHCP reservation tables, and any per-device identifiers
+  that would aid hardware-targeted attacks.
+- Specific firmware versions of network gear.
+
+If you're forking this repo or borrowing the architecture, the published
+detail level is appropriate **only** if your security model also leans on
+auth/perimeter rather than topology secrecy. If you need topology
+secrecy, move addressing.md and the per-device inventory into a private
+repo.
+
 ## Out of scope for this folder
 
 - **Per-app HTTPRoute and Service definitions** — see `apps/base/<app>/`.

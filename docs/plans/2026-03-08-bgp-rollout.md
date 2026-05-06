@@ -11,9 +11,9 @@ completed: 2026-05-05
 > on `10.42.2.0/24` that ARP directly for LB IPs — see incident postmortem
 > `docs/operations/incidents/2026-05-05-bgp-l2-wired-device-regression.md`. L2
 > announcements are restored. The correct steady state is **L2 + BGP together** until
-> the LB pool is moved to a dedicated subnet. See
-> `docs/plans/2026-05-05-bgp-phase4-revision.md` for the revised Phase 4 gate and
-> topology change path.
+> the LB pool is moved to a dedicated subnet. Forward execution is consolidated in
+> `docs/plans/2026-05-06-network-resilience-and-bgp-completion.md` (Phase D = LB pool
+> migration, Phase E = pure BGP).
 >
 > Plan-vs-reality gotchas (CRD v2 schema differences, helm-config-only changes not
 > auto-rolling, deprecated `lovelace.dashboards` slug-validator, port 8081 also needed

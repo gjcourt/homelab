@@ -1,10 +1,17 @@
 ---
-status: active
-last_modified: 2026-05-05
+status: superseded
+last_modified: 2026-05-06
+superseded_by: docs/plans/2026-05-06-network-resilience-and-bgp-completion.md
 ---
 
 # BGP Phase 4 Revision — Safe L2 Removal Gate
 
+> **Superseded 2026-05-06 by `docs/plans/2026-05-06-network-resilience-and-bgp-completion.md`.**
+> The unified plan folds this revision into its Phase D (LB pool migration) and
+> Phase E (pure BGP), and adds Phases A–C/F for the broader resilience and security
+> findings surfaced in the 2026-05-06 critique. Read this doc for historical context;
+> follow the unified plan for execution.
+>
 > **Context:** The original BGP rollout plan (`docs/plans/2026-03-08-bgp-rollout.md`)
 > completed Phases 1–4b on 2026-05-05 and removed L2 announcements entirely. This
 > caused a regression for wired devices on `10.42.2.0/24` that share a subnet with the

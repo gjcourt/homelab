@@ -63,3 +63,49 @@ http:
     - 10.244.0.0/16  # Trust Cluster Pod CIDR
     - 10.42.2.0/24 # Trust Node Network (Envoy HostNetwork)
     - 127.0.0.1
+
+# Nightlight input helpers
+input_number:
+  nightlight_brightness:
+    name: Nightlight Brightness
+    min: 1
+    max: 100
+    step: 1
+    initial: 6
+    unit_of_measurement: "%"
+    mode: slider
+  nightlight_random_offset:
+    name: Nightlight Random Offset
+    min: 0
+    max: 120
+    step: 5
+    initial: 30
+    unit_of_measurement: min
+    mode: slider
+
+input_datetime:
+  nightlight_turnoff_time:
+    name: Nightlight Turn Off Time
+    has_date: false
+    has_time: true
+    initial: "23:00"
+
+# Nightlight template sensors
+template:
+  - sensor:
+      - name: "Nightlight Random Offset"
+        unique_id: nightlight_random_offset
+        state: >
+          {{ (now().strftime('%j') | int) % (state_attr('input_number.nightlight_random_offset', 'max') | default(120) | int + 1) }}
+
+  - sensor:
+      - name: "Nightlight Turn Off Time"
+        unique_id: nightlight_turnoff_time
+        state: >
+          {{
+            base_time = strptime(state_attr('input_datetime.nightlight_turnoff_time', 'timestamp') or '23:00', '%H:%M')
+            base_minutes = base_time.hour * 60 + base_time.minute
+            offset = states('sensor.nightlight_random_offset') | int(0)
+            total_minutes = (base_minutes + offset) % 1440
+            '%02d:%02d' | format(total_minutes // 60, total_minutes % 60)
+          }}

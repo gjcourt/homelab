@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh truenas_admin@10.42.2.10*)"
+    ]
+  }
+}

@@ -102,10 +102,8 @@ template:
       - name: "Nightlight Turn Off Time"
         unique_id: nightlight_turnoff_time
         state: >
-          {{
-            base_time = strptime(state_attr('input_datetime.nightlight_turnoff_time', 'timestamp') or '23:00', '%H:%M')
-            base_minutes = base_time.hour * 60 + base_time.minute
-            offset = states('sensor.nightlight_random_offset') | int(0)
-            total_minutes = (base_minutes + offset) % 1440
-            '%02d:%02d' | format(total_minutes // 60, total_minutes % 60)
-          }}
+          {% set base_time = strptime(state_attr('input_datetime.nightlight_turnoff_time', 'timestamp') or '23:00', '%H:%M') %}
+          {% set base_minutes = base_time.hour * 60 + base_time.minute %}
+          {% set offset = states('sensor.nightlight_random_offset') | int(0) %}
+          {% set total_minutes = (base_minutes + offset) % 1440 %}
+          {{ '%02d:%02d' | format(total_minutes // 60, total_minutes % 60) }}

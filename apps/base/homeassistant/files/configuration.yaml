@@ -43,6 +43,22 @@ input_number:
     initial: 30
     unit_of_measurement: min
     mode: slider
+  nightlight_brightness:
+    name: Nightlight Brightness
+    min: 1
+    max: 100
+    step: 1
+    initial: 6
+    unit_of_measurement: "%"
+    mode: slider
+  nightlight_random_offset:
+    name: Nightlight Random Offset
+    min: 0
+    max: 120
+    step: 5
+    initial: 30
+    unit_of_measurement: min
+    mode: slider
 
 timer:
   hall_bathroom_fan_timer:
@@ -64,25 +80,6 @@ http:
     - 10.42.2.0/24 # Trust Node Network (Envoy HostNetwork)
     - 127.0.0.1
 
-# Nightlight input helpers
-input_number:
-  nightlight_brightness:
-    name: Nightlight Brightness
-    min: 1
-    max: 100
-    step: 1
-    initial: 6
-    unit_of_measurement: "%"
-    mode: slider
-  nightlight_random_offset:
-    name: Nightlight Random Offset
-    min: 0
-    max: 120
-    step: 5
-    initial: 30
-    unit_of_measurement: min
-    mode: slider
-
 input_datetime:
   nightlight_turnoff_time:
     name: Nightlight Turn Off Time
@@ -102,10 +99,16 @@ template:
       - name: "Nightlight Turn Off Time"
         unique_id: nightlight_turnoff_time
         state: >
-          {{
-            base_time = strptime(state_attr('input_datetime.nightlight_turnoff_time', 'timestamp') or '23:00', '%H:%M')
-            base_minutes = base_time.hour * 60 + base_time.minute
-            offset = states('sensor.nightlight_random_offset') | int(0)
-            total_minutes = (base_minutes + offset) % 1440
-            '%02d:%02d' | format(total_minutes // 60, total_minutes % 60)
-          }}
+          {% set ts = state_attr('input_datetime.nightlight_turnoff_time', 'timestamp') %}
+          {% if ts is none %}
+            {% set base_minutes = 23 * 60 %}
+          {% elif ts is string %}
+            {% set base_time = strptime(ts, '%H:%M') %}
+            {% set base_minutes = base_time.hour * 60 + base_time.minute %}
+          {% else %}
+            {# timestamp is seconds since midnight %}
+            {% set base_minutes = ts | int %}
+          {% endif %}
+          {% set offset = states('sensor.nightlight_random_offset') | int(0) %}
+          {% set total_minutes = (base_minutes + offset) % 1440 %}
+          {{ '%02d:%02d' | format(total_minutes // 60, total_minutes % 60) }}

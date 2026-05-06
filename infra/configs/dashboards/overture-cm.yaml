@@ -28,13 +28,20 @@ data:
             "thresholds": { "steps": [{ "value": 0, "color": "green" }, { "value": 0.01, "color": "red" }] } }
         },
         {
-          "id": 3, "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+          "id": 3, "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
           "type": "stat", "title": "Onramps Minted (total)",
           "targets": [{ "expr": "sum(acme_onramp_operations_total{step=\"minted\"})", "legendFormat": "minted" }],
           "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
         },
         {
-          "id": 4, "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+          "id": 9, "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+          "type": "stat", "title": "Offramps Burned (total)",
+          "description": "Successful offramp completions. Each one represents an on-chain transferFromWithMemo + burn pair; AcmeUSD supply has been retired and the user's ledger balance debited.",
+          "targets": [{ "expr": "sum(acme_offramp_operations_total{outcome=\"ok\"})", "legendFormat": "burned" }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }
+        },
+        {
+          "id": 4, "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
           "type": "stat", "title": "Transfers (total)",
           "targets": [{ "expr": "sum(acme_transfer_operations_total{outcome=\"ok\"})", "legendFormat": "ok" }],
           "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value" }

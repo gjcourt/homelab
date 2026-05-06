@@ -13,11 +13,20 @@ frontend:
 # silently ignored (HA always uses LovelaceStorage for storage-registered
 # dashboards regardless of the `mode` field).
 
-# Bathroom-fan auto-off helpers. Each bathroom has:
-#   timer.<name>_fan_timer       — counts down once the switch flips on
-#   input_number.<name>_fan_minutes — operator-configurable timeout per bathroom
-# The auto-off automation in automations.yaml ties them to the corresponding
-# Lutron Caseta switch entities (switch.<name>_exhaust_fan).
+# Auto-off helpers. Each has:
+#   timer.<name>_timer       — counts down once triggered
+#   input_number.<name>_minutes — operator-configurable timeout
+#
+# Bathroom fans (via Lutron Caseta switches):
+#   timer.hall_bathroom_fan_timer / input_number.hall_bathroom_fan_minutes
+#   timer.master_bathroom_fan_timer / input_number.master_bathroom_fan_minutes
+#   timer.powder_bathroom_fan_timer / input_number.powder_bathroom_fan_minutes
+#
+# Laundry room lights (via Lutron Caseta):
+#   timer.laundry_room_light_timer / input_number.laundry_room_light_minutes
+#
+# The auto-off automations in automations.yaml tie them to the corresponding
+# Lutron Caseta switch/light entities.
 input_number:
   hall_bathroom_fan_minutes:
     name: Hall Bathroom Fan Timer

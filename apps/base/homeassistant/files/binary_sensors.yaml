@@ -1,0 +1,11 @@
+# Time-of-day sensors — used by nightlight and thermostat automations.
+# Note: workday sensor must be configured via the UI (no longer supports YAML platform setup).
+- platform: tod
+  name: Night
+  after: sunset
+  before: sunrise
+
+- platform: tod
+  name: Day
+  after: sunrise
+  before: sunset

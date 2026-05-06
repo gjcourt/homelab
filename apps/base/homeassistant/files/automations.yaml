@@ -1,0 +1,76 @@
+# Bathroom fan auto-off
+#
+# Each bathroom exhaust fan is a Lutron Caséta in-wall switch (switch.*).
+# Per-bathroom timeout lives in an input_number; per-bathroom timer counts down.
+# Naming convention: switch.<name>_exhaust_fan / timer.<name>_fan_timer /
+# input_number.<name>_fan_minutes — keep these in sync with configuration.yaml.
+
+- alias: "Bathroom fan auto-off — start timer"
+  description: "When a bathroom exhaust-fan switch turns on, start its timer with the configured minutes."
+  trigger:
+    - platform: state
+      entity_id:
+        - switch.hall_bathroom_exhaust_fan
+        - switch.master_bathroom_exhaust_fan
+        - switch.powder_bathroom_exhaust_fan
+      from: "off"
+      to: "on"
+  action:
+    - variables:
+        # switch.hall_bathroom_exhaust_fan -> hall_bathroom
+        bathroom: "{{ trigger.to_state.object_id | replace('_exhaust_fan', '') }}"
+        timer_entity: "timer.{{ bathroom }}_fan_timer"
+        minutes_entity: "input_number.{{ bathroom }}_fan_minutes"
+        # input_number stores floats; coerce to int and fall back to 30 on read failure
+        minutes: "{{ states(minutes_entity) | float(30) | int(30) }}"
+        seconds: "{{ minutes * 60 }}"
+    - service: timer.start
+      target:
+        entity_id: "{{ timer_entity }}"
+      data:
+        duration: "{{ seconds }}"
+  mode: restart
+
+- alias: "Bathroom fan auto-off — turn off fan"
+  description: "When a bathroom fan timer expires, turn off the corresponding switch."
+  trigger:
+    - platform: event
+      event_type: timer.finished
+  condition:
+    - condition: template
+      value_template: >
+        {{ trigger.event.data.entity_id in [
+            'timer.hall_bathroom_fan_timer',
+            'timer.master_bathroom_fan_timer',
+            'timer.powder_bathroom_fan_timer'
+        ] }}
+  action:
+    - variables:
+        # timer.hall_bathroom_fan_timer -> switch.hall_bathroom_exhaust_fan
+        switch_entity: >
+          {{ trigger.event.data.entity_id
+             | replace('timer.', 'switch.')
+             | replace('_fan_timer', '_exhaust_fan') }}
+    - service: switch.turn_off
+      target:
+        entity_id: "{{ switch_entity }}"
+      continue_on_error: true
+
+- alias: "Bathroom fan auto-off — cancel timer when switched off manually"
+  description: "If someone flips the switch off before the timer expires, cancel the corresponding timer."
+  trigger:
+    - platform: state
+      entity_id:
+        - switch.hall_bathroom_exhaust_fan
+        - switch.master_bathroom_exhaust_fan
+        - switch.powder_bathroom_exhaust_fan
+      from: "on"
+      to: "off"
+  action:
+    - variables:
+        bathroom: "{{ trigger.to_state.object_id | replace('_exhaust_fan', '') }}"
+        timer_entity: "timer.{{ bathroom }}_fan_timer"
+    - service: timer.cancel
+      target:
+        entity_id: "{{ timer_entity }}"
+      continue_on_error: true

@@ -159,3 +159,47 @@ spec:
             summary: "Container {{ $labels.namespace }}/{{ $labels.pod }}/{{ $labels.container }} CPU > 90% of limit"
             description: >
               Container {{ $labels.container }} in pod {{ $labels.pod }} (namespace {{ $labels.namespace }}) has been using more than 90% of its CPU limit for 10+ minutes (current: {{ $value | humanizePercentage }}). Consider increasing the CPU limit or investigating a busy loop.
+
+    # -------------------------------------------------------------------------
+    # Cilium BGP session health
+    #
+    # LoadBalancer IPs are advertised to the UCGF via BGP from each worker
+    # (Phase 4 of docs/plans/2026-03-08-bgp-rollout.md). With ECMP across 3
+    # worker peers, a single peer down still serves traffic via the other 2 —
+    # but two down means traffic capacity is halved and a third loss is total
+    # outage.
+    #
+    # Cilium 1.19 exports a binary up/down gauge:
+    #   cilium_bgp_control_plane_session_state{neighbor=...,vrouter=...}
+    #     1 = session is Established (up)
+    #     0 = anything else (idle/connect/active/etc.)
+    # -------------------------------------------------------------------------
+    - name: cilium-bgp
+      rules:
+        - alert: CiliumBGPSessionDown
+          expr: cilium_bgp_control_plane_session_state == 0
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Cilium BGP peer down to {{ $labels.neighbor }}"
+            description: >
+              BGP peer {{ $labels.neighbor }} (AS {{ $labels.neighbor_asn }}, vrouter {{ $labels.vrouter }}) on pod {{ $labels.pod }} is not Established for ≥2m. LB IPs advertised by this node are no longer reaching the UCGF; ECMP path count drops by one. Check the agent log: kubectl logs -n kube-system {{ $labels.pod }} #magic___^_^___line
+        - alert: CiliumBGPNoPeers
+          expr: absent(cilium_bgp_control_plane_session_state) or sum(cilium_bgp_control_plane_session_state == 1) < 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Cilium has zero BGP peers Established cluster-wide"
+            description: >
+              No Cilium worker has a BGP session in Established state with the UCGF for ≥5m. All LoadBalancer IPs are unreachable from outside the node hosting their backing pod. This is a total LB IP outage. Check UCGF: ssh root@10.42.2.1 'vtysh -c "show bgp summary"' #magic___^_^___line
+        - alert: CiliumBGPMultipleSessionsDown
+          expr: sum(cilium_bgp_control_plane_session_state == 0) >= 2
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Cilium has {{ $value }} BGP peers down — ECMP halved or worse"
+            description: >
+              {{ $value }} BGP peers are not Established. ECMP path count per LB IP has dropped from 3 to ≤1; one more failure is a total outage. Investigate before traffic is affected.

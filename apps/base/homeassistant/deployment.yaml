@@ -35,7 +35,6 @@ spec:
             - sh
             - -c
             - |
-              mkdir -p /config/dashboards
               for f in /config/automations.yaml /config/scripts.yaml /config/scenes.yaml; do
                 [ ! -s "$f" ] && printf '[]' > "$f"
               done
@@ -103,9 +102,6 @@ spec:
             - name: config-file
               mountPath: /config/automations.yaml
               subPath: automations.yaml
-            - name: config-file
-              mountPath: /config/dashboards/control.yaml
-              subPath: control.yaml
       volumes:
         - name: config
           persistentVolumeClaim:

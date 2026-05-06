@@ -1,7 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - configmap.yaml
   - deployment.yaml
   - namespace.yaml
   - networkpolicy.yaml
@@ -9,6 +8,21 @@ resources:
   - service.yaml
   - serviceaccount.yaml
   - storage.yaml
+
+# The homeassistant-config ConfigMap is generated from real files on disk so
+# Kustomize emits a name-suffixed-by-content-hash (e.g. homeassistant-config-abc123).
+# When any input file changes, the hash changes, the deployment's volume reference
+# is auto-rewritten by Kustomize, the pod template hash changes, and the
+# Deployment rolls. Without this, subPath-mounted ConfigMap updates are silently
+# ignored by running pods until something else triggers a restart.
+configMapGenerator:
+  - name: homeassistant-config
+    namespace: homeassistant
+    files:
+      - configuration.yaml=files/configuration.yaml
+      - automations.yaml=files/automations.yaml
+      - binary_sensors.yaml=files/binary_sensors.yaml
+
 labels:
   - includeSelectors: false
     pairs:

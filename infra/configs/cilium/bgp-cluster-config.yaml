@@ -4,11 +4,15 @@ kind: CiliumBGPClusterConfig
 metadata:
   name: homelab-bgp
 spec:
-  # Phase 2a: canary only (one worker labeled bgp-canary=true).
-  # Phase 2b will replace this with role-based exclusion of control-plane nodes.
+  # Phase 2b: every node EXCEPT control-plane peers. Workers establish BGP;
+  # CP nodes are excluded — they wouldn't advertise LB IPs anyway because of
+  # node.kubernetes.io/exclude-from-external-load-balancers, so a BGP session
+  # from them would just be noise. New workers are picked up automatically as
+  # soon as they join the cluster.
   nodeSelector:
-    matchLabels:
-      bgp-canary: "true"
+    matchExpressions:
+      - key: node-role.kubernetes.io/control-plane
+        operator: DoesNotExist
   bgpInstances:
     - name: homelab
       localASN: 65010

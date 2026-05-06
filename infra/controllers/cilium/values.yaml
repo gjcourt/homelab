@@ -89,9 +89,12 @@ cgroup:
   hostRoot: /sys/fs/cgroup
 
 # -- Configure L2 announcements
+# Disabled at the Helm level after the BGP migration (Phase 4b of the BGP
+# rollout plan). The CiliumL2AnnouncementPolicy resource was removed in
+# Phase 4a; this flag was a no-op without it, but flipping it false keeps
+# config consistent and stops Cilium from initializing the L2 module.
 l2announcements:
-  # -- Enable L2 announcements
-  enabled: true
+  enabled: false
 
 # -- Configure BGP control plane
 # Enabling this is cluster-wide; whether a node *peers* is determined by the
@@ -137,6 +140,14 @@ operator:
   replicas: 2
   # Cluster-critical: the operator manages identities and IP pools.
   priorityClassName: system-node-critical
+  # Expose operator metrics + ServiceMonitor scraped by kube-prometheus-stack
+  # (selector: release=kube-prometheus-stack on the ServiceMonitor).
+  prometheus:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+      labels:
+        release: kube-prometheus-stack
 
 hubble:
   # -- Enable Hubble (true by default).
@@ -147,3 +158,15 @@ hubble:
   ui:
     # -- Whether to enable the Hubble UI.
     enabled: true
+
+# -- Expose Cilium agent metrics on :9962. Required for the cilium-bgp
+# alert rules in infra/configs/alerts/prometheus-rules.yaml to fire
+# (cilium_bgp_session_state lives on this endpoint). The ServiceMonitor
+# carries `release: kube-prometheus-stack` so it matches our Prometheus
+# instance's serviceMonitorSelector.
+prometheus:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack

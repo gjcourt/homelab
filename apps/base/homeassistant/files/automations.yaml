@@ -166,7 +166,7 @@
 # Laundry room light auto-off timer
 # ============================================================================
 # When either laundry room light turns on, start a timer. When the timer
-# expires, turn off both lights. If either light is manually turned off
+# expires, turn off both lights. If both lights are manually turned off
 # before the timer expires, cancel the timer.
 #
 # Input helper:

@@ -10,7 +10,10 @@ Cilium is deployed via Flux using the official Helm chart. It runs as a DaemonSe
 
 - **Datapath**: eBPF with `kubeProxyReplacement: true` (kube-proxy is completely removed).
 - **IPAM**: Kubernetes IPAM mode.
-- **LoadBalancer IP advertisement**: BGP peering with the UCGF (UniFi Cloud Gateway Fiber). Each worker establishes an eBGP session from AS 65010 to UCGF AS 65100 and advertises every LoadBalancer IP as a /32. The UCGF installs three ECMP next-hops per /32 (one per worker), so any single-worker BGP failure leaves traffic served by the other two. **L2 announcements are no longer used** — see [`docs/plans/2026-03-08-bgp-rollout.md`](../plans/2026-03-08-bgp-rollout.md) for the migration history. The canonical UCGF FRR config is snapshotted at [`docs/reference/ucgf-bgp-frr.conf`](ucgf-bgp-frr.conf).
+- **LoadBalancer IP advertisement**: **L2 + BGP simultaneously** (as of 2026-05-06).
+  - **BGP** peering with the UCGF (UniFi Cloud Gateway Fiber): each worker establishes an eBGP session from AS 65010 to UCGF AS 65100 and advertises every LoadBalancer IP as a /32. The UCGF installs three ECMP next-hops per /32 (one per worker), so any single-worker BGP failure leaves traffic served by the other two. Cross-subnet clients (wireless, etc.) reach LB IPs via these BGP routes.
+  - **L2 announcements** for same-subnet wired clients on `10.42.2.0/24`: an elected node responds to ARP for each LB IP. Required because clients sharing a /24 with the LB pool ARP directly and never consult the UCGF's routing table. See [`docs/architecture/networking/cluster-load-balancing.md`](../architecture/networking/cluster-load-balancing.md) for the full mechanism and [`docs/operations/incidents/2026-05-05-bgp-l2-wired-device-regression.md`](../operations/incidents/2026-05-05-bgp-l2-wired-device-regression.md) for why both are needed.
+  - The canonical UCGF FRR config is snapshotted at [`docs/reference/ucgf-bgp-frr.conf`](ucgf-bgp-frr.conf). The forward plan to remove L2 (after migrating the LB pool to a dedicated subnet) is [`docs/plans/2026-05-06-network-resilience-and-bgp-completion.md`](../plans/2026-05-06-network-resilience-and-bgp-completion.md).
 - **Gateway API**: Cilium acts as the Gateway API controller, provisioning Envoy proxies for routing ingress traffic.
 - **Observability**: Hubble, Hubble Relay, and Hubble UI are enabled for network visibility.
 
@@ -26,7 +29,7 @@ Located in `infra/controllers/cilium/values.yaml`:
 
 - `kubeProxyReplacement: true`
 - `bgpControlPlane.enabled: true` — enables the agent's BGP module
-- `l2announcements.enabled: false` — disabled after migration (Phase 4b)
+- `l2announcements.enabled: true` — re-enabled 2026-05-05 after the wired-device regression incident; required for same-subnet wired clients on `10.42.2.0/24`
 - `gatewayAPI.enabled: true`
 - `hubble.enabled: true`
 

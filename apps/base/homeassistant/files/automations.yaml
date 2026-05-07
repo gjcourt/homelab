@@ -1,12 +1,12 @@
-# Bathroom fan auto-off
-#
-# Each bathroom exhaust fan is a Lutron Caséta in-wall switch (switch.*).
-# Per-bathroom timeout lives in an input_number; per-bathroom timer counts down.
-# Naming convention: switch.<name>_exhaust_fan / timer.<name>_fan_timer /
-# input_number.<name>_fan_minutes — keep these in sync with configuration.yaml.
+# ============================================================================
+# Bathroom fan auto-off timer
+# ============================================================================
+# NOTE: Do NOT wrap in 'automation:' key here. Since configuration.yaml
+# already has 'automation: !include automations.yaml', the included file
+# must be a bare list of automation objects.
 
 - alias: "Bathroom fan auto-off — start timer"
-  description: "When a bathroom exhaust-fan switch turns on, start its timer with the configured minutes."
+  description: "When a bathroom exhaust fan switch turns on, start a timer. Turns fan off when timer expires."
   trigger:
     - platform: state
       entity_id:
@@ -17,40 +17,51 @@
       to: "on"
   action:
     - variables:
-        # switch.hall_bathroom_exhaust_fan -> hall_bathroom
-        bathroom: "{{ trigger.to_state.object_id | replace('_exhaust_fan', '') }}"
-        timer_entity: "timer.{{ bathroom }}_fan_timer"
-        minutes_entity: "input_number.{{ bathroom }}_fan_minutes"
-        # input_number stores floats; coerce to int and fall back to 30 on read failure
-        minutes: "{{ states(minutes_entity) | float(30) | int(30) }}"
-        seconds: "{{ minutes * 60 }}"
+        # Extract bathroom name from entity ID
+        # switch.master_bathroom_exhaust_fan → master_bathroom
+        # switch.hall_bathroom_exhaust_fan → hall_bathroom
+        # switch.powder_bathroom_exhaust_fan → powder_bathroom
+        fan_name: >
+          {{ trigger.to_state.object_id
+             | replace("_exhaust_fan", "") }}
+        helper_id: >
+          {{ "input_number." ~ fan_name ~ "_fan_minutes" }}
+        timer_entity: >
+          {{ "timer." ~ fan_name ~ "_fan_timer" }}
+        delay_minutes: >
+          {{ states(helper_id) | default("30") | int(30) }}
+        delay_seconds: "{{ delay_minutes * 60 }}"
+    # Start the timer with configured duration
     - service: timer.start
       target:
         entity_id: "{{ timer_entity }}"
       data:
-        duration: "{{ seconds }}"
+        duration: "{{ delay_seconds }}"
   mode: restart
 
 - alias: "Bathroom fan auto-off — turn off fan"
-  description: "When a bathroom fan timer expires, turn off the corresponding switch."
+  description: "When a bathroom fan timer expires, turn off the fan."
   trigger:
     - platform: event
       event_type: timer.finished
   condition:
+    # Only bathroom fan timers (not other timers in the house)
     - condition: template
       value_template: >
-        {{ trigger.event.data.entity_id in [
-            'timer.hall_bathroom_fan_timer',
-            'timer.master_bathroom_fan_timer',
-            'timer.powder_bathroom_fan_timer'
-        ] }}
+        {{ "timer.master_bathroom" in trigger.event.data.entity_id | lower or
+           "timer.hall_bathroom" in trigger.event.data.entity_id | lower or
+           "timer.powder_bathroom" in trigger.event.data.entity_id | lower }}
   action:
     - variables:
-        # timer.hall_bathroom_fan_timer -> switch.hall_bathroom_exhaust_fan
+        # Derive switch entity ID from timer entity ID
+        # timer.master_bathroom_fan_timer → switch.master_bathroom_exhaust_fan
+        # timer.hall_bathroom_fan_timer → switch.hall_bathroom_exhaust_fan
+        # timer.powder_bathroom_fan_timer → switch.powder_bathroom_exhaust_fan
         switch_entity: >
           {{ trigger.event.data.entity_id
-             | replace('timer.', 'switch.')
-             | replace('_fan_timer', '_exhaust_fan') }}
+             | replace("timer.", "switch.")
+             | replace("_fan_timer", "_exhaust_fan") }}
+    # Turn off the fan
     - service: switch.turn_off
       target:
         entity_id: "{{ switch_entity }}"
@@ -74,3 +85,79 @@
       target:
         entity_id: "{{ timer_entity }}"
       continue_on_error: true
+
+# ============================================================================
+# Nightlight automation
+# ============================================================================
+# At sundown, turn on the dining room chandelier and chandelier components
+# at a configurable brightness. At a configurable time (+ random offset),
+# turn off the dining room chandelier.
+#
+# Input helpers:
+#   input_number.nightlight_brightness       — target brightness % (default 6)
+#   input_number.nightlight_random_offset    — max offset minutes (default 30)
+#   input_datetime.nightlight_turnoff_time   — base turnoff time (default 23:00)
+#
+# Template sensors:
+#   sensor.nightlight_random_offset          — daily random 0..max
+#   sensor.nightlight_turnoff_time           — base time + offset → HH:MM
+
+- alias: "Nightlight — turn on at sundown"
+  description: "Turn on dining room chandelier and chandelier components at sundown."
+  trigger:
+    - platform: sun
+      event: sunset
+  action:
+    # Turn on dining room chandelier if off (Lutron Caseta switch)
+    - condition: state
+      entity_id: switch.dining_room_chandelier
+      state: "off"
+    - service: switch.turn_on
+      target:
+        entity_id: switch.dining_room_chandelier
+    # Turn on chandelier_central at target brightness if off (MiBoxer LED)
+    - condition: state
+      entity_id: light.0xa4c138b55dac7973
+      state: "off"
+    - service: light.turn_on
+      target:
+        entity_id: light.0xa4c138b55dac7973
+      data:
+        brightness: "{{ states('input_number.nightlight_brightness') | int(6) }}"
+    # Turn on chandelier_flowers at target brightness if off (MiBoxer LED)
+    - condition: state
+      entity_id: light.0xa4c138a9f6011cac
+      state: "off"
+    - service: light.turn_on
+      target:
+        entity_id: light.0xa4c138a9f6011cac
+      data:
+        brightness: "{{ states('input_number.nightlight_brightness') | int(6) }}"
+
+- alias: "Nightlight — reset random offset at midnight"
+  description: "Generate a new random offset each day at midnight."
+  trigger:
+    - platform: time
+      at: "00:00:01"
+  action:
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.nightlight_random_offset
+      data:
+        value: >
+          {{ range(0, states('input_number.nightlight_random_offset') | int(120) + 1) | random }}
+
+- alias: "Nightlight — turn off dining room chandelier"
+  description: "Turn off the dining room chandelier at configurable time + random offset."
+  trigger:
+    - platform: template
+      value_template: >
+        {{ now().strftime('%H:%M') == states('sensor.nightlight_turnoff_time') }}
+  condition:
+    - condition: state
+      entity_id: switch.dining_room_chandelier
+      state: "on"
+  action:
+    - service: switch.turn_off
+      target:
+        entity_id: switch.dining_room_chandelier

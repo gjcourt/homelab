@@ -4,4 +4,5 @@ resources:
   - bgp-advertisement.yaml
   - bgp-cluster-config.yaml
   - bgp-peer-config.yaml
+  - l2-announcement-policy.yaml
   - load-balancer-ip-pool.yaml

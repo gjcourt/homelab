@@ -125,8 +125,8 @@ template:
             {% set base_time = strptime(ts, '%H:%M') %}
             {% set base_minutes = base_time.hour * 60 + base_time.minute %}
           {% else %}
-            {# timestamp is seconds since midnight #}
-            {% set base_minutes = ts | int %}
+            {# timestamp is SECONDS since midnight (verified live: 23:00 → 82800) #}
+            {% set base_minutes = (ts | int) // 60 %}
           {% endif %}
           {% set offset = states('sensor.nightlight_random_offset') | int(0) %}
           {% set total_minutes = (base_minutes + offset) % 1440 %}

@@ -61,16 +61,28 @@ If methods 1–4 all fail, do method 5 in the same maintenance window as the act
 
 ## Storage relocation plan
 
-The displaced T710 set (4 NVMes) needs a home. Options, in preference order:
+Phase A confirmed `dmidecode --type 9` mapping: PCIE1 is the slot on RC `0000:40` (paired with PCIE3 / GPU1). All 8 4TB T710s in PCIE1 + PCIE7 are members of a single 8-wide raidz2 vdev in pool `main`; raidz2 tolerates 2 missing drives, so the 4 in PCIE1 cannot simply be disconnected — that would fault the pool.
 
-1. **Move both T710 sets to PCIE7 stacked** — only works if PCIE7 was the one on `0000:c0` and we're displacing the PCIE1 set. PCIE7 is already populated with one T710 set; you can't put two there. **Skip this option.**
-2. **Move the displaced T710 set to MCIO1 + MCIO2 via MCIO-to-x4-NVMe breakout cables** — each MCIO is x8, can carry 2× x4 NVMe. Two MCIOs = 4 NVMes. Hardware exists; cables ~$30–60 each. This is the clean answer.
-3. **Move the displaced T710 set to PCIE6 (x8) + PCIE3 (after GPU1 has moved)** — wait, PCIE3 is one of the two slots we want to leave free for the GPU. **Skip.**
-4. **Temporarily disconnect the displaced T710 set entirely** — viable if it holds non-critical scratch data and the user can tolerate losing access to those 4 drives during the experiment window. This is the minimum-cost path if you just want to test whether P2P works before committing to MCIO breakouts.
+**Recommended option: PCIE5 slot swap.** GPU0 is currently in PCIE5 and is moving to PCIE1 anyway, so PCIE5 (an x16 direct-CPU slot, RC `0000:00`) becomes free in the same trip. The displaced T710 4×NVMe bifurcation card from PCIE1 fits straight into PCIE5 — same physical form factor, same x16 lanes, same bifurcation support — with no new hardware required.
 
-**Recommended:** option 4 for the experiment (so we can test the hypothesis fast), option 2 if the experiment succeeds and the layout becomes permanent.
+Concrete swap (one operation, no parts ordered):
 
-Storage layout decisions about which pool the displaced drives belonged to, what data they hold, and whether reslivering / restoring is needed are out of scope here — call them out before the maintenance window starts.
+- PCIE1: `T710 card` → **GPU0 (riser)**
+- PCIE5: `GPU0` → **T710 card** (the same one that came out of PCIE1)
+- PCIE3: GPU1 (unchanged)
+- PCIE7: T710 card (unchanged)
+
+ZFS imports by partition UUID, so the 4 displaced drives will reassemble into pool `main` regardless of their new bus addresses (RC `0000:00` instead of `0000:40`). Verified via the partuuid-to-device map captured in Phase A.
+
+Bifurcation needs to swap with the cards: PCIE1 → x16 (for the GPU), PCIE5 → x4/x4/x4/x4 (for the T710 card). Same BIOS visit as the rest of the pass.
+
+### Fallback options (if the slot swap turns up an unexpected blocker)
+
+1. **MCIO1 + MCIO2 breakouts** — MCIO1 and MCIO2 are both empty (4 sub-lanes available, all on RC `0000:00`). 2× "MCIO Gen5 x8 → 2× M.2 NVMe" cards would host the 4 drives. ~$40–80/card, 1–2 day shipping. Cleaner long-term layout because PCIE5 stays open as a future expansion slot, but adds parts cost and shipping wait. Use only if the slot-swap approach surfaces a problem during the maintenance window.
+2. **Temporarily disconnect** — **disqualified.** Pool `main` is a single 8-wide raidz2 vdev; losing 4 drives faults it. Do not pursue.
+3. **PCIE6** for storage — disqualified. PCIE6 is x8 mechanical (won't fit the x16 T710 card without a slot adapter) and is currently occupied by the Mellanox ConnectX-6 Dx anyway.
+
+Storage decisions about pool layout, data residing on those drives, and post-move scrub timing are documented in the per-step PR that executes the move; the move itself is non-destructive (drives keep all data; ZFS reassembles on import).
 
 ## BIOS pass (independent of slot decision)
 
@@ -82,14 +94,16 @@ To be done in the same boot as the GPU move:
 | Re-Size BAR Support | Advanced → PCIe Configuration | **Enabled** |
 | ACS (Access Control Services) | Advanced → AMD CBS → NBIO Common Options → ACS Enable | **Disabled** |
 | IOMMU | Advanced → AMD CBS → NBIO Common Options → IOMMU | **Auto** (or "Passthrough" if explicit) |
-| Target slot link width | Advanced → PCIe Configuration → PCIE{1,3,7} Link Width | **x16** |
-| Target slot bifurcation | Advanced → PCIe Configuration → PCIE{1,3,7} Bifurcation | **Auto** (or `x16` non-bifurcated) |
+| PCIE1 link width | Advanced → PCIe Configuration → PCIE1 Link Width | **x16** |
+| PCIE3 link width | Advanced → PCIe Configuration → PCIE3 Link Width | **x16** |
+| PCIE1 bifurcation | Advanced → PCIe Configuration → PCIE1 Bifurcation | **x16** (was x4/x4/x4/x4 for the displaced T710 card) |
+| PCIE5 bifurcation | Advanced → PCIe Configuration → PCIE5 Bifurcation | **x4/x4/x4/x4** (was x16 for the GPU) |
 
 Save, reboot. First post-reboot check is `nvidia-smi topo --matrix`. Expected: `NODE` → `PHB` (or `PXB` if there's a switch in between).
 
 If still `NODE` after the BIOS pass, the most common silent culprit is ACS still on for the GPU's slot — CBS hides this in two layers ("ACS Enable" + per-slot ACS overrides). Walk the menus methodically.
 
-Also verify kernel command line includes `iommu=pt amd_iommu=on` (TrueNAS default may or may not — check `cat /proc/cmdline`).
+Kernel cmdline already includes `amd_iommu=on iommu=pt` on TrueNAS 26.0.0-BETA.1 (verified in Phase A: `cat /proc/cmdline`). No GRUB edit required.
 
 ## Driver patch (only after BIOS+slot success)
 

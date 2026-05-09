@@ -176,3 +176,100 @@ The bigger surprise is that the model labeled `AWQ-INT4` actually deserializes a
 - **`max_model_len=16384`** is half of what I'd ideally want for hermes coding workloads. With FP8 KV cache we could probably push it back to 24K or 32K — to be tested in a follow-up phase or via `--gpu-memory-utilization 0.97 --max-num-seqs 4` if the trade-off is worth it.
 - **Phase 2** (`Qwen/Qwen3.6-27B-FP8`, TP=1, GPU0) was supposed to test native FP8 path. With this model at ~27 GiB it won't fit on a single 24 GiB card; Phase 2 effectively becomes "FP8 is single-GPU-impossible on this hardware" and gets folded into Phase 4 (TP=2 record-only).
 - Soak (step 5) and long-context probe (step 6) are owed for a complete record. Schedule them when convenient.
+
+## Phase 6 — `cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit` direct A/B with llama.cpp prod
+
+**Date:** 2026-05-09. SCALE app: `vllm`. Variant compose: same file, content swapped.
+
+This is the headline experiment of the plan: same model family as production llama.cpp (`Qwen3.6-35B-A3B`, MoE with ~3 B active params per token), different engine, different quant. The question it answers is "should hermes move off llama.cpp?"
+
+### Iteration log
+
+| Attempt | Change | Outcome |
+|---|---|---|
+| v0 (deferred — GGUF) | Pointed vLLM at the production `/mnt/main/ai/models/gguf/Qwen3.6-35B-A3B-UD-IQ4_NL.gguf` directly | **fail** — `ValueError: GGUF model with architecture qwen35moe is not supported yet`. vLLM's GGUF path doesn't have a kernel for the qwen35moe MoE architecture. Skipped to AWQ. |
+| v1 (TP=1, GPU0 only) | Same flag template as Phase 1; `cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit` | **fail** — model loaded ~80% of safetensors then `CUDA out of memory. Tried to allocate 144 MiB. Of 23.52 GiB total, 76 MiB free.` AWQ variant is bigger than the GGUF (~22 GiB on disk vs ~18 GiB IQ4_NL). MoE retains all expert weights in VRAM; doesn't fit single-GPU. |
+| **v2 (TP=2)** | Switched to `--tensor-parallel-size 2`, kept `--kv-cache-dtype fp8`, `--max-model-len 32768`, `--gpu-memory-utilization 0.90`, `count: all` for Docker GPUs | **pass** — both GPUs come up at ~21 GiB each (model split + KV cache). All gauntlet steps pass. |
+
+### Final config under test
+
+```
+cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit
+  --tensor-parallel-size 2
+  --dtype auto
+  --gpu-memory-utilization 0.90
+  --max-model-len 32768
+  --kv-cache-dtype fp8
+  --enable-chunked-prefill
+  --max-num-seqs 8
+  --enable-auto-tool-choice
+  --tool-call-parser hermes
+  --trust-remote-code
+deploy.resources.reservations.devices: count=all (both GPUs)
+```
+
+### Stability gauntlet
+
+| Step | Probe | Outcome |
+|---|---|---|
+| 0 | Cold load → `/health` 200 | **pass** (~3 min after redeploy; ~21 GiB each on both GPUs) |
+| 1 | Single-shot smoke (implicit in benchmark short workload) | **pass** |
+| 2 | Streaming (benchmark uses `stream=true`) | **pass** |
+| 3 | Long-prompt prefill (~4 K tok prompt → 1 K tok output, benchmark long workload) | **pass** — 5.33 s total |
+| 4 | Concurrent baseline (8 parallel × 100 tok) | **pass** — 8 reqs in 1.28 s, 800 tok total, **625.8 tok/s aggregate**, 0 errors |
+| 5 | 30-min soak | not run this session |
+| 6 | Long-context probe at ~75% of 32 K | not run this session |
+
+Steps 0–4 pass on first attempt of v2.
+
+### Benchmark — `scripts/llama-cpp-bench.py`, 5 runs/workload, first discarded as warmup
+
+```
+endpoint     http://127.0.0.1:8000/v1
+model        qwen3.6-35b-a3b-awq
+
+workload   TTFT (s)               decode TPS             total (s)
+---------- ---------------------- ---------------------- ----------------------
+short       0.086 ± 0.000          197.8 ± 0.1             0.34 ± 0.00
+medium      0.088 ± 0.000          194.5 ± 0.1             2.66 ± 0.00
+long        0.167 ± 0.000          193.6 ± 0.1             5.33 ± 0.00
+```
+
+### VRAM
+
+GPU0: ~21 GiB. GPU1: ~21 GiB. Both pegged near `--gpu-memory-utilization 0.90` cap.
+
+### The headline comparison
+
+| Setup | TTFT (medium) | Decode TPS (medium) | 8-concurrent agg. tok/s |
+|---|---|---|---|
+| llama.cpp / Qwen3.6-35B-A3B-UD-IQ4_NL.gguf / both GPUs (production) | 0.071 s | **173.9 t/s** | n/a (single-stream config) |
+| **vLLM / Qwen3.6-35B-A3B-AWQ-4bit / TP=2 / both GPUs (Phase 6 v2)** | **0.088 s** | **194.5 t/s** | **625.8 t/s** |
+| vLLM / Qwen3.6-27B-AWQ-INT4 / TP=1 / GPU0 (Phase 1) | 0.100 s | 49.7 t/s | 165.8 t/s |
+
+**vLLM TP=2 beats llama.cpp on the same MoE model by ~12 % on single-stream decode**, with TTFT essentially identical (0.088 vs 0.071 s). And under concurrent load vLLM's continuous batching produces 626 t/s aggregate vs llama.cpp's effectively-single-stream throughput.
+
+### Why TP=2 worked here when Phase 1 / Phase 4 expectations said it wouldn't
+
+The Phase 4 pre-plan TP=2 number (FP8, ~32 t/s) led the parent plan to mark TP=2 as expected-bad on this NODE-topology hardware. Phase 6 v2 says that conclusion was right *for dense models* and wrong *for low-active-param MoEs*. The reason:
+
+- Tensor-parallel all-reduce volume per token in the FFN layers is proportional to **active** parameters, not total. Qwen3.6-35B-A3B activates ~3 B params per token (top-2 of N experts). The all-reduce traffic per token is ~3/35 × that of a 35 B dense model.
+- AWQ-INT4 uses Marlin/CompressedTensorsWNA16 kernels on Ada — comparable peak compute to Q4_K_M GGUF, with cleaner memory access patterns.
+- FP8 KV cache halves the per-token memory bandwidth pressure on KV ops.
+- vLLM's V1 engine continuous-batches across the gauntlet's concurrent load, where llama.cpp's `--parallel 1` config serializes.
+
+The result: NCCL all-reduce overhead exists, but it's small enough relative to per-token compute that the gain from continuous batching, FP8 KV, and Marlin-kernel decode outweighs it.
+
+### Verdict
+
+**Pass — by a wide margin. This is the candidate that justifies switching hermes to vLLM**, conditional on:
+
+- 30-min soak still owed (step 5 of gauntlet).
+- Real hermes traffic shape may differ from synthetic short/medium/long workloads — confirm with one or two real coding sessions before committing.
+- Operator must accept vLLM-on-SCALE's redeploy quirks (pre-Phase-1 we hit several `app.update`/`app.start` race conditions; `app.redeploy` is the more reliable verb).
+
+### Open follow-ups
+
+- Soak + long-context probe before promoting to prod.
+- Re-run the same harness against the running config in two days to spot any drift.
+- A/B against the soon-to-be Gemma 4 NVFP4 phase (Phase 7 in the new ordering): same hardware, a comparable-scale dense model, different family.

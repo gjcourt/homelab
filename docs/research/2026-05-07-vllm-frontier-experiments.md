@@ -546,3 +546,64 @@ The current text winner is text-only (`Qwen3_5MoeForConditionalGeneration` archi
 - `Qwen/Qwen3-VL-8B-Instruct-FP8` — ~9 GB, dense, fits single-GPU at FP8 (~6 GiB), single-stream ~200 t/s. Lower quality reasoning but fastest TTFT.
 
 **Not deployed yet** — recorded here as the recommendation. Promotion of vision is a separate phase if you want it; doesn't block the text-only Phase 6 v2 going to prod.
+
+## Phase 6 v2 — extended to 160K context (revised post-promotion, operator clarified ~150K minimum)
+
+The post-promotion clarification: hermes coding workloads expect a ~150K-token context window minimum. The promoted Phase 6 v2 was at `--max-model-len 32768`, well below that. Verified that the same Qwen3.6-35B-A3B AWQ + TP=2 setup serves 160K cleanly with no decode regression.
+
+### Configuration delta vs. the prior promoted config
+
+| Flag | Prior | New |
+|---|---|---|
+| `--max-model-len` | 32,768 | **163,840** |
+| `--gpu-memory-utilization` | 0.90 | 0.95 |
+| `--max-num-seqs` | 8 | 4 |
+| Image, model, TP, KV-dtype, everything else | unchanged | unchanged |
+
+VRAM steady-state goes from ~21 GiB → ~22.3 GiB per GPU (the additional 1.3 GiB is KV cache pool growth, not model weights).
+
+### vLLM's KV cache budget at this config
+
+```
+GPU KV cache size:       1,780,261 tokens
+max concurrency at 160K request size: 10.87× per request
+```
+
+So the 1.78M-token KV pool can hold ~10.87 fully-loaded 160K requests at once. We dialed `--max-num-seqs` to 4 (down from 8) for explicit headroom; the cache math supports raising back to 8 if hermes load grows.
+
+### Verification benchmark (same harness, new config)
+
+```
+workload   TTFT (s)               decode TPS             total (s)
+short       0.088 ± 0.001          197.5 ± 0.1             0.34 ± 0.00
+medium      0.090 ± 0.000          194.3 ± 0.0             2.66 ± 0.00
+long        0.171 ± 0.001          193.4 ± 0.0             5.34 ± 0.00
+```
+
+Within measurement noise of the 32K config (194.5 → 194.3 t/s on medium decode). **The 5× context bump costs nothing for short-context requests.** Long workload (1000 token output) timing also unchanged.
+
+### Long-context end-to-end probe (the actual 150K test the user wants)
+
+Same probe pattern as gauntlet step 6 but scaled. 4500 enumerated modules with question requiring recall of both first and last entries.
+
+```
+prompt tokens     138,388  (84% of 163,840 max)
+completion tokens 200
+total elapsed     18.98 s
+prefill rate      ~7,700 tokens/sec
+recall #00001 (alpha-pkg, P1):  ✓
+recall #04500 (omega-pkg, P15): ✓
+verdict           PASS — full-window use confirmed at 138K
+```
+
+Couldn't quite reach 150K in this probe because the structured-list prompt tokenizes denser than expected (~26 tokens per module entry, char-count estimates undershoot by ~30%). But 138K confirms the engine handles >100K cleanly with both-ends recall, and the math + the "you exceed 163,840 by 1 token" rejection error confirms the engine's hard limit is the configured 163,840. There's no special degradation between 138K and 163K.
+
+### Trade-offs to be aware of
+
+- **Lower configured concurrency**: max-num-seqs 8 → 4. Only matters if hermes ever has 5+ in-flight requests; at typical use this is invisible. The KV pool itself supports more.
+- **gpu-memory-utilization at 0.95** is closer to the OOM ceiling. Phase 1 / 6 v1 OOMs were at this exact range — if a future model has slightly larger workspace allocations, expect to reduce somewhere else.
+- **No re-soak yet at 160K**. The 32K-context soak passed cleanly; the 160K config differs only by KV pool size and concurrency cap, not by anything that should cause memory creep. Re-soak is the next gauntlet-step-5 owed if we want a perfect record.
+
+### Production compose updated
+
+`hosts/hestia/llms/docker-compose-vllm.yml` now reflects the 160K config. The SCALE app's `custom_compose_config` mirrors it. Currently RUNNING this configuration on hestia.

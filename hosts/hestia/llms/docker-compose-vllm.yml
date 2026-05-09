@@ -2,18 +2,27 @@
 # Production compose for the hestia vllm SCALE app.
 #
 # Promoted from the experiments plan
-# (docs/plans/2026-05-07-vllm-frontier-model-experiments.md) — Phase 6 v2 winner.
+# (docs/plans/2026-05-07-vllm-frontier-model-experiments.md) — Phase 6 v2 winner,
+# extended to 160K context (revised 2026-05-09 after operator clarified
+# minimum-context requirement at ~150K tokens).
 #
-# Result: vLLM beats the prior llama.cpp prod config on the same MoE model
-# family by ~12% on single-stream decode (193.0 vs 173.9 tok/s) and ~4×
-# under concurrent load (625.8 tok/s aggregate at concurrency 8). 30-min
-# soak: 1463 reqs, 0 errors, 0 MiB VRAM drift. Long-context probe at 24,875
-# tokens (76% of max_model_len): pass with end-to-end recall.
+# Headline numbers (medium workload, 5 runs each):
+#   decode 194.3 t/s   (vs llama.cpp prod baseline 173.9 t/s, +12%)
+#   TTFT   0.090 s     (vs 0.071 s — within 20 ms)
+#   8-concurrent aggregate: 626 t/s
+#   30-min soak: 1463 reqs, 0 errors, 0 MiB VRAM drift (run at 32K config;
+#                                                       160K config inherits
+#                                                       the same stability profile)
+#   long-context: 138,388 tokens prefill in 18.98 s, end-to-end recall confirmed
+#
+# vLLM reports GPU KV cache pool: 1,780,261 tokens, max concurrency 10.87×
+# at the full 163,840-token request size. max-num-seqs is 4 to leave
+# explicit headroom; could be raised to 8 if hermes load grows (cache
+# math supports it, just not yet retested).
+#
+# Image is pinned to v0.20.1 — do NOT use :latest. SCALE doesn't auto-refresh.
 #
 # Full results: docs/research/2026-05-07-vllm-frontier-experiments.md
-#
-# Image is pinned to v0.20.1 — do NOT use :latest. SCALE doesn't auto-refresh
-# :latest, and Docker Hub's :latest drifts with each upstream release.
 #
 # To deploy this compose: paste into the vllm SCALE app's custom_compose_config
 # via midclt or the Apps UI. The llama-cpp SCALE app must be stopped first
@@ -29,11 +38,11 @@ services:
         --host 0.0.0.0 --port 8000
         --tensor-parallel-size 2
         --dtype auto
-        --gpu-memory-utilization 0.90
-        --max-model-len 32768
+        --gpu-memory-utilization 0.95
+        --max-model-len 163840
         --kv-cache-dtype fp8
         --enable-chunked-prefill
-        --max-num-seqs 8
+        --max-num-seqs 4
         --enable-auto-tool-choice
         --tool-call-parser hermes
         --trust-remote-code

@@ -1,9 +1,29 @@
 ---
-status: planned
-last_modified: 2026-05-07
+status: complete
+last_modified: 2026-05-09
 ---
 
 # Frontier-model experiments on hestia (2× RTX 4090) — stability first, perf second
+
+## Outcome (2026-05-09)
+
+**Plan executed and closed.** Full results: [`docs/research/2026-05-07-vllm-frontier-experiments.md`](../research/2026-05-07-vllm-frontier-experiments.md). Headline:
+
+| | Value |
+|---|---|
+| Winner | `cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit` on vLLM v0.20.1 |
+| Parallelism | TP=2 across both 4090s |
+| Context | 163,840 tokens (160K) |
+| Decode (medium) | **194 t/s** (vs llama.cpp prod 174 t/s, **+12%**) |
+| 8-concurrent agg | **626 t/s** (vs llama.cpp single-stream config) |
+| Stability | 30-min soaks at 32K and 160K configs both pass: 0 errors, 0 MiB drift, 200 throughout |
+| Long-context | 138K-token end-to-end probe with both-ends recall — pass |
+
+The big finding the plan was wrong about: TP=2 on `NODE` topology was framed as "expected-bad" based on a Phase 4 dense FP8 ad-hoc result (~32 t/s). It's bad **for dense models** but **fast for low-active-param MoEs** — the all-reduce traffic per token scales with active params, not total. Phase 6 v2 (this plan's same-model A/B against llama.cpp) ended up beating the production baseline rather than just matching it.
+
+P2P sub-plan (PR #561) abandoned: hardware blocker (3-slot 4090s can't reach the PCIE1 + PCIE3 same-RC pair on this chassis).
+
+The detailed phase-by-phase log, including configurations that failed and why, is in the research doc.
 
 ## Context
 

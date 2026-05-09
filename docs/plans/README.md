@@ -45,7 +45,7 @@ Sorted by filing date (newest first).
 
 | File | Status | Description |
 | :--- | :--- | :--- |
-| [2026-05-07-vllm-frontier-model-experiments.md](2026-05-07-vllm-frontier-model-experiments.md) | `planned` | Stability-first vLLM experiments on hestia (2× 4090, no P2P) — frontier-model and parallelism matrix |
+| [2026-05-07-vllm-frontier-model-experiments.md](2026-05-07-vllm-frontier-model-experiments.md) | `complete` | Stability-first vLLM experiments on hestia (2× 4090, no P2P) — winner: Qwen3.6-35B-A3B-AWQ TP=2, 194 t/s, beats prior llama.cpp prod |
 | [2026-05-04-llama-cpp-benchmarking.md](2026-05-04-llama-cpp-benchmarking.md) | `planned` | Systematic benchmarking methodology for llama.cpp on hestia 4090 (after #434/#441) |
 | [2026-05-03-snapcast-hifiberry-rollout.md](2026-05-03-snapcast-hifiberry-rollout.md) | `planned` | Wire kitchen + living-room HifiBerries as snapclients of the in-cluster snapserver |
 | [2026-05-02-hestia-gha-runner.md](2026-05-02-hestia-gha-runner.md) | `in-progress` | Self-hosted GHA runner on hestia for auto-deploy of Custom App compose changes |

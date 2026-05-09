@@ -2,15 +2,18 @@
 # Variant compose for the vLLM frontier-model experiments plan
 # (see docs/plans/2026-05-07-vllm-frontier-model-experiments.md).
 #
-# This file is rewritten per phase. Current contents: PHASE 7 v3
-#   model:        nvidia/Gemma-4-31B-IT-NVFP4 (~31 GB on disk; NVFP4 transformer
-#                                              + FP16 vision tower + embeddings)
-#   parallelism:  TP=2 across both GPUs (single-GPU OOMs in v0.20.0's NVFP4 path)
-#   purpose:      cross-family sanity check — different architecture (Gemma),
-#                 different quant format (NVFP4) than Phase 6 v2's Qwen+AWQ.
-#                 Result: 49.6 t/s decode, 0.033 s TTFT (best in matrix), 157 t/s
-#                 at concurrency 8. Confirms TP=2 dense is slow on NODE topology;
-#                 doesn't beat Phase 6 v2's MoE TP=2 (194.5 t/s).
+# This file is rewritten per phase. Current contents: PHASE 6 v2 + vLLM v0.20.1
+# (post-soak; promotion-ready).
+#
+#   model:        cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit (~22 GB AWQ-INT4 MoE,
+#                                                    Qwen3_5MoeForConditionalGeneration)
+#   parallelism:  TP=2 across both GPUs (model doesn't fit single-GPU)
+#   image pin:    vllm/vllm-openai:v0.20.1   <-- explicit, NOT :latest
+#   purpose:      direct A/B vs production llama.cpp on the same model
+#                 family. Result: vLLM beats llama.cpp by ~12% on single-
+#                 stream decode (193 vs 174 t/s) and 4× under concurrent
+#                 load (625.8 t/s aggregate at concurrency 8).
+#                 Soak (30 min, 1463 reqs, 0 errors, 0 MiB VRAM drift): pass.
 #
 # Iteration log for each phase lives in docs/research/2026-05-07-vllm-frontier-experiments.md.
 #
@@ -24,16 +27,15 @@ services:
     command:
       - '-c'
       - >-
-        echo "=== START $(date) [PHASE 7 v3: Gemma-4-31B-NVFP4 / TP=2] ===" >>
+        echo "=== START $(date) [PHASE 6 v2 + vllm v0.20.1: 35B-A3B-AWQ / TP=2] ===" >>
         /root/.cache/huggingface/vllm.log 2>&1;
-        exec vllm serve nvidia/Gemma-4-31B-IT-NVFP4
-        --served-model-name gemma-4-31b-nvfp4
+        exec vllm serve cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit
+        --served-model-name qwen3.6-35b-a3b-awq
         --host 0.0.0.0 --port 8000
         --tensor-parallel-size 2
         --dtype auto
         --gpu-memory-utilization 0.90
-        --max-model-len 16384
-        --max-num-batched-tokens 4096
+        --max-model-len 32768
         --kv-cache-dtype fp8
         --enable-chunked-prefill
         --max-num-seqs 8
@@ -62,14 +64,14 @@ services:
     healthcheck:
       interval: 30s
       retries: 5
-      start_period: 1200s
+      start_period: 900s
       test:
         - CMD
         - curl
         - '-f'
         - http://localhost:8000/health
       timeout: 10s
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.20.1
     ipc: host
     ports:
       - '8000:8000'

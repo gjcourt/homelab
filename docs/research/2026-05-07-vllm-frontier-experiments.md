@@ -389,3 +389,91 @@ Gemma 4 NVFP4 *works* on this hardware but doesn't compete with Phase 6 v2 for h
 | (failed) | vLLM GGUF / qwen35 dense (Option C) | — | — | — | — | architecture unsupported |
 | (failed) | vLLM AWQ-INT4 / 35B-A3B / TP=1 (Phase 6 v1) | — | — | — | — | OOM, doesn't fit single-GPU |
 | (failed) | vLLM NVFP4 / Gemma 4 31B / TP=1 (Phase 7 v2) | — | — | — | — | OOM in QKV-init under v0.20.0 NVFP4 path |
+
+## Phase 6 v2 — vLLM v0.20.1 verification + 30-minute soak (gauntlet step 5)
+
+**Date:** 2026-05-09. The Phase 6 v2 winner is now soak-validated.
+
+### vLLM upgrade: v0.20.0 → v0.20.1
+
+Upgraded by pinning the variant compose's `image` from `vllm/vllm-openai:latest` (which had cached as the v0.20.0 layer in our local Docker) to the explicit tag `vllm/vllm-openai:v0.20.1`. SCALE pulled the new image cleanly; image diff was small (most layers shared between v0.20.0 and v0.20.1). Cold load completed in ~5 minutes.
+
+**The lesson worth pinning** (literal pun): always reference vLLM by an explicit version tag, not `:latest`. SCALE's pull strategy doesn't auto-refresh `:latest`, and Docker Hub's `:latest` drifts with each upstream release — the image you got two weeks ago isn't the image `:latest` resolves to today.
+
+### Verification benchmark (same Phase 6 v2 config, new image)
+
+```
+endpoint     http://127.0.0.1:8000/v1
+model        qwen3.6-35b-a3b-awq
+vllm version 0.20.1
+
+workload   TTFT (s)               decode TPS             total (s)
+---------- ---------------------- ---------------------- ----------------------
+short       0.089 ± 0.001          196.2 ± 0.1             0.34 ± 0.00
+medium      0.091 ± 0.001          193.0 ± 0.0             2.68 ± 0.00
+long        0.172 ± 0.001          192.2 ± 0.0             5.37 ± 0.00
+```
+
+Compared to v0.20.0 (`194.5 ± 0.0` decode for medium): within 1 % — measurement noise. **Patch release neither helped nor hurt this configuration.** Worth doing at major version bumps (v0.21+) but not a routine concern.
+
+### 30-minute soak (gauntlet step 5)
+
+Workload: a stdlib-only Python script issuing one chat-completion roughly every second (capped at the request's actual completion time, so effective rate is the higher of "1/s" or "as-fast-as-the-engine-completes-the-prior-one"). Six prompt templates rotated at random with a fixed seed: short Q&A (×2), medium summarization (×2), long reflection, and a coding prompt. `max_tokens` ranged 30–400 across templates. Thinking disabled.
+
+In parallel, a 30-second-cadence sampler logged GPU memory and `/health` HTTP code.
+
+```
+soak workload metrics:
+  wall                    1801 s   (30 min on the dot)
+  requests                1463
+  errors                  0
+  tokens generated total  246,840
+  avg aggregate throughput  137.1 tok/s
+  per-minute request rate range  44–52 reqs/min
+  per-minute avg latency range   0.78–1.12 s
+
+memory + health stability:
+  GPU0 VRAM   21,297 MiB → 21,297 MiB (delta 0 MiB across the entire run)
+  GPU1 VRAM   21,297 MiB → 21,297 MiB (delta 0 MiB)
+  /health     HTTP 200 throughout (60 samples, 0 anomalies)
+```
+
+The plan's gauntlet step 5 pass criterion is "no memory creep > 500 MiB/hr; no crashes." Both are met by margins so wide they're essentially tested at zero. The VRAM line shows literally zero variation — `nvidia-smi`'s integer-MiB resolution would have caught anything > 0.5 MiB drift. There is none.
+
+### Per-minute latency trend across the soak (qualitative)
+
+```
+t=01: 0.84s   t=11: 0.78s   t=21: 1.11s
+t=02: 0.93s   t=12: 1.08s   t=22: 0.81s
+t=03: 0.92s   t=13: 1.00s   t=23: 1.07s
+t=04: 1.12s   t=14: 1.06s   t=24: 0.95s
+t=05: 0.93s   t=15: 0.97s   t=25: 1.03s
+t=06: 0.81s   t=16: 0.92s   t=26: 1.02s
+t=07: 0.86s   t=17: 0.87s   t=27: 0.86s
+t=08: 1.05s   t=18: 1.11s   t=28: 1.04s
+t=09: 0.99s   t=19: 0.99s   t=29: 0.96s
+t=10: 0.90s   t=20: 0.88s   t=30: 0.93s
+```
+
+No monotonic trend. The variance is dominated by which prompt template the random sampler picked (long reflection vs short Q&A make a 5× difference in per-request time). Steady-state behavior is what we wanted to see.
+
+### Verdict
+
+**Phase 6 v2 on vLLM v0.20.1 is promotion-ready.** Stability gauntlet steps 0–5 all pass. Step 6 (long-context probe at ~75 % of `max_model_len`) is still owed for a complete record, but it's not gating for the hermes use case (current production hermes runs at 32 K context max anyway).
+
+Promotion path:
+
+1. Land the experiment compose's contents into the production vllm SCALE app's compose (mirror the `image: vllm/vllm-openai:v0.20.1` pin and the rest of the Phase 6 v2 settings).
+2. Update `~/.claude/HOMELAB.md` to flip the vLLM service from "Disabled" to "Active, Phase 6 v2 config".
+3. Update `hermes-config-yaml` to point at `qwen3.6-35b-a3b-awq` instead of the existing `Qwen3.6-35B-A3B` model name (and the same endpoint URL — port 8000 is already where llama-cpp lives).
+4. Stop llama-cpp; start vllm.
+5. The Mellanox / pool / kubernetes apps stay untouched — only the LLM endpoint moves.
+
+The signal-cli unrelated breakage (CrashLoopBackOff for 4+ days noted in this session) blocks hermes end-to-end testing regardless of which LLM backend is in front of it. Promotion of vLLM as the LLM endpoint is independent of fixing signal-cli.
+
+### Open follow-ups
+
+- Step 6 long-context probe (~24 K-token request) before promotion if context-window correctness matters for the use case.
+- Real hermes traffic shape A/B once signal-cli is fixed.
+- Re-run on next major vLLM release (v0.21+) to harvest any kernel improvements.
+- A dedicated phase exploring `--max-model-len 65536` with `--max-num-seqs 4` to see if the longer context can be supported without breaking the soak.

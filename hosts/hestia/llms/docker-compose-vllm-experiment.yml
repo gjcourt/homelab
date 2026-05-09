@@ -1,9 +1,20 @@
 ---
 # Variant compose for the vLLM frontier-model experiments plan
-# (see docs/plans/2026-05-07-vllm-frontier-model-experiments.md).
+# (see docs/plans/2026-05-07-vllm-frontier-model-experiments.md — STATUS: COMPLETE).
 #
-# This file is rewritten per phase. Current contents: PHASE 6 v2 + vLLM v0.20.1
-# (post-soak; promotion-ready).
+# Plan executed 2026-05-09. Phase 6 v2 winner promoted to the production
+# compose at hosts/hestia/llms/docker-compose-vllm.yml (now running with
+# 160K context per operator clarification).
+#
+# THIS FILE IS THE FROZEN PHASE 6 V2 RECORD AT 32K CONTEXT — kept verbatim
+# as the historical artifact of the experiment that won. The 160K-context
+# variant is in the prod compose, NOT here.
+#
+# This file will be rewritten if a new phase opens (e.g., the documented-but-
+# not-deployed vision phase, or a re-test of v0.20.0 blockers on a future
+# vLLM major release).
+#
+# Current contents: PHASE 6 v2 + vLLM v0.20.1 (32K context, original promotion config).
 #
 #   model:        cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit (~22 GB AWQ-INT4 MoE,
 #                                                    Qwen3_5MoeForConditionalGeneration)

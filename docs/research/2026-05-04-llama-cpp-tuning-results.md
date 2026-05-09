@@ -5,6 +5,8 @@ last_modified: 2026-05-04
 
 # llama.cpp tuning results — hestia (RTX 4090)
 
+> **2026-05-09 follow-up**: production LLM endpoint moved from llama.cpp to vLLM (see [`2026-05-07-vllm-frontier-experiments.md`](2026-05-07-vllm-frontier-experiments.md)). The tuning results below are still valid as the historical record of how this stack was tuned, and as the reference numbers vLLM had to beat. They no longer describe the running production config.
+
 Per-phase results for [`docs/plans/2026-05-04-llama-cpp-benchmarking.md`](../plans/2026-05-04-llama-cpp-benchmarking.md).
 
 Baseline (Phase 0) numbers are in [`docs/research/2026-05-04-llama-cpp-baseline.md`](2026-05-04-llama-cpp-baseline.md). Pass/fail thresholds per the latency budget established there:

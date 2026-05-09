@@ -38,7 +38,7 @@ services:
         --host 0.0.0.0 --port 8000
         --tensor-parallel-size 2
         --dtype auto
-        --gpu-memory-utilization 0.92
+        --gpu-memory-utilization 0.72
         --max-model-len 163840
         --kv-cache-dtype fp8
         --enable-chunked-prefill

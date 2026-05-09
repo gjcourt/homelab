@@ -273,3 +273,119 @@ The result: NCCL all-reduce overhead exists, but it's small enough relative to p
 - Soak + long-context probe before promoting to prod.
 - Re-run the same harness against the running config in two days to spot any drift.
 - A/B against the soon-to-be Gemma 4 NVFP4 phase (Phase 7 in the new ordering): same hardware, a comparable-scale dense model, different family.
+
+## Side-finding (Option C / Phase 6 v0): vLLM's GGUF path doesn't support the Qwen 3.5/3.6 family
+
+Two attempts to point vLLM at the existing GGUF files in `/mnt/main/ai/models/gguf/` both failed with the same error class, just different architecture name:
+
+| File | Architecture in error | Outcome |
+|---|---|---|
+| `Qwen3.6-35B-A3B-UD-IQ4_NL.gguf` (production llama.cpp model) | `qwen35moe` | `ValueError: GGUF model with architecture qwen35moe is not supported yet.` |
+| `Qwen3.6-27B-Q4_K_M.gguf` | `qwen35` | `ValueError: GGUF model with architecture qwen35 is not supported yet.` |
+
+vLLM v0.20.0 has GGUF kernels for many architectures (Llama, Mistral, Phi, etc.) but **not** for the Qwen 3.5/3.6 dense or MoE variants. Both attempts crash-loop in the SCALE app within seconds.
+
+**Implication:** the cleanest possible engine A/B (same exact GGUF, same exact quant, llama.cpp vs vLLM) is not available on this model family until vLLM lands the kernel. The next-best A/B is what Phase 6 v2 already does — same model family, same active-param profile, at AWQ-INT4 instead of GGUF IQ4_NL. That's still useful, just not strictly identical bytes-on-disk.
+
+**Cost of the side-experiment:** zero — the SCALE app simply restart-loops until manually stopped, no resource leak.
+
+## Phase 7 — Gemma 4 31B (NVFP4) on TP=2
+
+**Date:** 2026-05-09. SCALE app: `vllm`. Variant compose: same file, content swapped.
+
+Cross-family sanity check from the parent plan, replacing Llama-4-Scout per operator request. NVIDIA published an official NVFP4 quant of `Gemma-4-31B-IT` (`nvidia/Gemma-4-31B-IT-NVFP4`) — the Ada-optimized 4-bit format. Frontier-class dense ~31 B model.
+
+### Iteration log
+
+| Attempt | Change | Outcome |
+|---|---|---|
+| v1 (TP=1, GPU0) | Phase 1's flag template | **fail** — `ValueError: Chunked MM input disabled but max_tokens_per_mm_item (2496) is larger than max_num_batched_tokens (2048).` Gemma 4 is multimodal; default batch budget is too small for one image item. |
+| v2 (TP=1, GPU0, `--max-num-batched-tokens 4096`) | added MM-friendly batch budget | **fail** — `CUDA out of memory` during `gemma4.py:408` QKV layer construction. 23.41 GiB allocated of 23.52 GiB capacity. NVFP4 support is marked "experimental" by vLLM and appears to over-allocate transient buffers during init. Dense 31B doesn't fit single-GPU under v0.20.0's NVFP4 path. |
+| **v3 (TP=2, both GPUs, kept v2's flags)** | Split across both 4090s | **pass** — ~17.9 GiB on each GPU after CUDA graph capture; rises to ~21.9 GiB during the long workload. |
+
+### Final config under test
+
+```
+nvidia/Gemma-4-31B-IT-NVFP4
+  --tensor-parallel-size 2
+  --dtype auto
+  --gpu-memory-utilization 0.90
+  --max-model-len 16384
+  --max-num-batched-tokens 4096
+  --kv-cache-dtype fp8
+  --enable-chunked-prefill
+  --max-num-seqs 8
+  --enable-auto-tool-choice
+  --tool-call-parser hermes
+  --trust-remote-code
+deploy.resources.reservations.devices: count=all
+```
+
+Cached at `/mnt/main/ai/models/hub/models--nvidia--Gemma-4-31B-IT-NVFP4` (~31 GB on disk; the safetensors include FP16 vision-tower weights and embeddings on top of NVFP4 transformer blocks).
+
+### Stability gauntlet
+
+| Step | Probe | Outcome |
+|---|---|---|
+| 0 | Cold load → `/health` 200 | **pass** (~5 min, ~3 min download + ~2 min load) |
+| 1 | Single-shot smoke | **pass** — 0.20 s for short response |
+| 2 | Streaming | **pass** (benchmark uses streaming) |
+| 3 | Long-prompt prefill | **pass** — 21 s / 1000 tokens |
+| 4 | Concurrent baseline (8 × 100) | **pass** — 8 reqs in 2.66 s, 418 tokens (Gemma stopped early on most), 157.3 tok/s aggregate, 0 errors |
+| 5/6 | Soak, long-context probe | not run |
+
+### Benchmark — 5 runs/workload, first discarded
+
+```
+endpoint     http://127.0.0.1:8000/v1
+model        gemma-4-31b-nvfp4
+
+workload   TTFT (s)               decode TPS             total (s)
+---------- ---------------------- ---------------------- ----------------------
+short       0.059 ± 0.004           56.6 ± 0.2             0.20 ± 0.00
+medium      0.033 ± 0.000           49.6 ± 0.0            10.12 ± 0.00
+long        0.050 ± 0.001           48.4 ± 0.0            20.71 ± 0.00
+```
+
+Note: Gemma 4 produced only 8 tokens for the short workload prompt (model decided the answer was complete at "Paris."). Decode TPS for short is computed over a tiny window and is noisier; medium/long are the trustworthy readings.
+
+### VRAM
+
+GPU0 + GPU1: each ~21 GiB peak under load.
+
+### What this confirms (and what it doesn't)
+
+The cross-family dimension was the goal: Gemma-class architecture, official NVIDIA NVFP4 quant. Took two corrections to get it cold-loaded but ran cleanly afterward.
+
+**Decode rate (49.6 t/s medium) is essentially identical to Phase 1's dense Qwen3.6-27B AWQ on a single GPU** (49.7 t/s) — and **dramatically lower than Phase 6 v2's MoE on the same TP=2 hardware** (194.5 t/s). This is the cleanest evidence so far for the underlying claim from Phase 6 v2:
+
+> Tensor-parallel all-reduce cost is proportional to **active** params, not total. Dense 31B at TP=2 pays the full all-reduce per token; the MoE's ~3 B active per token does not.
+
+So:
+- **Dense + TP=2 on NODE topology: slow** (Gemma 4: 49.6 t/s; pre-plan Qwen3.6-27B-FP8 dense TP=2: 32.4 t/s).
+- **MoE + TP=2 on NODE topology: fast** (Phase 6 v2: 194.5 t/s).
+
+Gemma 4 NVFP4 *works* on this hardware but doesn't compete with Phase 6 v2 for hermes use. Worth noting: **TTFT (0.033 s) is the lowest in the entire experiment matrix** — if a workload is TTFT-sensitive (cron-driven autonomous tool calls, latency-critical UX), Gemma 4 has a real edge over the MoE.
+
+### Verdict
+
+**Pass — but secondary to Phase 6 v2 for the hermes use case.** Recorded as the cross-family data point: vLLM's NVFP4 path works on Ada once you give it TP=2 + adequate `max-num-batched-tokens`. NVFP4-status flag in the log says "experimental and could change in future" — re-test after vLLM upgrades.
+
+### Open follow-ups
+
+- Re-test on vLLM v0.20.1+ (current is v0.20.0). Patch release may include NVFP4 fixes that allow single-GPU.
+- Investigate why Gemma 4 stops early on terse prompts — may interact with hermes' tool-calling expectations.
+- A vision-input test (image describe) since this is an MM model — out of scope for the current text-decoded-rate gauntlet.
+
+## Cumulative scoreboard (post-Phase-7)
+
+| Phase | Setup | TTFT (medium) | Decode (medium) | 8-concurrent agg. | VRAM | Verdict |
+|---|---|---|---|---|---|---|
+| (ref) | llama.cpp / Qwen3.6-35B-A3B-UD-IQ4_NL.gguf / both GPUs | 0.071 s | 173.9 t/s | n/a | 22.3 GiB total | production baseline |
+| 1 | vLLM / Qwen3.6-27B-AWQ-INT4 / TP=1 GPU0 | 0.100 s | 49.7 t/s | 165.8 t/s | 21.5 GiB GPU0 | pass — dense single-GPU floor |
+| 6 v2 | vLLM / Qwen3.6-35B-A3B-AWQ-4bit / TP=2 | **0.088 s** | **194.5 t/s** | **625.8 t/s** | ~21 GiB each | **pass — beats baseline** |
+| 7 v3 | vLLM / Gemma-4-31B-IT-NVFP4 / TP=2 | **0.033 s** | 49.6 t/s | 157.3 t/s | ~21 GiB each | pass — best TTFT, dense-tax decoded |
+| (failed) | vLLM GGUF / qwen35moe (Phase 6 v0) | — | — | — | — | architecture unsupported |
+| (failed) | vLLM GGUF / qwen35 dense (Option C) | — | — | — | — | architecture unsupported |
+| (failed) | vLLM AWQ-INT4 / 35B-A3B / TP=1 (Phase 6 v1) | — | — | — | — | OOM, doesn't fit single-GPU |
+| (failed) | vLLM NVFP4 / Gemma 4 31B / TP=1 (Phase 7 v2) | — | — | — | — | OOM in QKV-init under v0.20.0 NVFP4 path |

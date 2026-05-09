@@ -2,16 +2,17 @@
 # Variant compose for the vLLM frontier-model experiments plan
 # (see docs/plans/2026-05-07-vllm-frontier-model-experiments.md).
 #
-# This file is rewritten per phase. The current contents are PHASE 6 v2:
-#   model:        cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit (~22 GB AWQ-INT4 MoE)
-#   parallelism:  TP=2 across both GPUs (model doesn't fit single-GPU)
-#   purpose:      direct A/B vs production llama.cpp on the same model
-#                 family. Result: vLLM beats llama.cpp by ~12% on single-
-#                 stream decode (194.5 vs 173.9 t/s) and 4× under
-#                 concurrent load (625.8 t/s aggregate at concurrency 8).
+# This file is rewritten per phase. Current contents: PHASE 7 v3
+#   model:        nvidia/Gemma-4-31B-IT-NVFP4 (~31 GB on disk; NVFP4 transformer
+#                                              + FP16 vision tower + embeddings)
+#   parallelism:  TP=2 across both GPUs (single-GPU OOMs in v0.20.0's NVFP4 path)
+#   purpose:      cross-family sanity check — different architecture (Gemma),
+#                 different quant format (NVFP4) than Phase 6 v2's Qwen+AWQ.
+#                 Result: 49.6 t/s decode, 0.033 s TTFT (best in matrix), 157 t/s
+#                 at concurrency 8. Confirms TP=2 dense is slow on NODE topology;
+#                 doesn't beat Phase 6 v2's MoE TP=2 (194.5 t/s).
 #
-# Phase 1 (Qwen3.6-27B-AWQ-INT4 / TP=1 / GPU0) and Phase 6 v1 (35B-A3B
-# AWQ TP=1 GPU0 only — OOM, doesn't fit) are recorded in the research log.
+# Iteration log for each phase lives in docs/research/2026-05-07-vllm-frontier-experiments.md.
 #
 # The vllm SCALE app's custom_compose_config mirrors this file. To deploy:
 #   midclt call app.update vllm '{"custom_compose_config": <THIS FILE AS JSON>}'
@@ -23,15 +24,16 @@ services:
     command:
       - '-c'
       - >-
-        echo "=== START $(date) [PHASE 6 v2: 35B-A3B-AWQ / TP=2] ===" >>
+        echo "=== START $(date) [PHASE 7 v3: Gemma-4-31B-NVFP4 / TP=2] ===" >>
         /root/.cache/huggingface/vllm.log 2>&1;
-        exec vllm serve cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit
-        --served-model-name qwen3.6-35b-a3b-awq
+        exec vllm serve nvidia/Gemma-4-31B-IT-NVFP4
+        --served-model-name gemma-4-31b-nvfp4
         --host 0.0.0.0 --port 8000
         --tensor-parallel-size 2
         --dtype auto
         --gpu-memory-utilization 0.90
-        --max-model-len 32768
+        --max-model-len 16384
+        --max-num-batched-tokens 4096
         --kv-cache-dtype fp8
         --enable-chunked-prefill
         --max-num-seqs 8
@@ -47,7 +49,6 @@ services:
             - capabilities:
                 - gpu
                 - utility
-              # Phase 6 v2 uses both GPUs (TP=2). Phase 1 used device_ids: ['0'].
               count: all
               driver: nvidia
     entrypoint:
@@ -61,7 +62,7 @@ services:
     healthcheck:
       interval: 30s
       retries: 5
-      start_period: 900s
+      start_period: 1200s
       test:
         - CMD
         - curl

@@ -607,3 +607,27 @@ Couldn't quite reach 150K in this probe because the structured-list prompt token
 ### Production compose updated
 
 `hosts/hestia/llms/docker-compose-vllm.yml` now reflects the 160K config. The SCALE app's `custom_compose_config` mirrors it. Currently RUNNING this configuration on hestia.
+
+### Re-soak at 160K config (gauntlet step 5, second pass)
+
+Re-ran the same 30-minute soak script against the 160K config to formally close out gauntlet step 5 at the new context window.
+
+```
+soak workload metrics:
+  wall                    1801 s   (30 min)
+  requests                1469
+  errors                  0
+  tokens generated total  247,560
+  avg aggregate throughput  137.5 tok/s
+  per-minute request rate range  45–53 reqs/min
+  per-minute avg latency range   0.82–1.11 s
+
+memory + health stability:
+  GPU0 VRAM   22,507 MiB → 22,507 MiB (delta 0 MiB)
+  GPU1 VRAM   22,507 MiB → 22,507 MiB (delta 0 MiB)
+  /health     HTTP 200 throughout (60 samples, 0 anomalies)
+```
+
+Identical profile to the 32K soak: zero memory drift, zero errors, no latency trend. Compared to the 32K soak (1463 reqs / 247K tokens), the 160K config processed 1469 requests / 248K tokens — same throughput envelope. The larger KV pool is allocated up-front and stable; under typical load (single-stream-dominant), the larger context costs nothing in steady-state behavior.
+
+**Verdict: gauntlet steps 0–6 all pass at the 160K config.** No remaining open items for promotion-grade validation.

@@ -493,3 +493,56 @@ Each retry was: stop vllm, swap variant compose, redeploy, watch the log for the
 **Conclusion:** v0.20.1 is a no-op for our workload across the entire failure surface, not just the winner. Re-test these on the next *major* release (v0.21+) — particularly NVFP4 single-GPU, which the upstream code path explicitly flags as "experimental and could change in future." GGUF kernel coverage for the Qwen 3.5/3.6 family is its own distinct missing feature; tracking against vLLM's GGUF roadmap rather than waiting on patch luck.
 
 The retry sweep also produced one piece of useful confirmation: **the failure modes are deterministic, not flaky.** Same prompts, same flags, same error byte-for-byte across versions. So when one of them eventually passes, it'll be a real fix, not a transient.
+
+## Phase 6 v2 — gauntlet step 6 (long-context probe)
+
+Final gauntlet step before promotion. Goal: a single request near 75 % of `max_model_len` (24 K of 32 K) that requires the model to use both ends of its context — not just the recent tail.
+
+**Workload.** Pre-amble explaining the task → 900 enumerated modules with deterministic per-module text → final question asking for the *full name* of module #0001 and module #0900 (forcing recall from both extremes of the context window).
+
+**Result.**
+
+```
+prompt chars   79,174
+prompt tokens  24,875  (76 % of 32 K max)
+completion     200 tokens
+elapsed        6.35 s
+recall #0001   ✓ (alpha-package — start of context)
+recall #0900   ✓ (beta-900-package — end of context)
+verdict        PASS
+```
+
+The response was slightly verbose vs. the "two sentences only" instruction (model explained its reasoning before answering), but functionally correct — both first and last modules identified correctly with their full descriptive text. The 32 K window is being used end-to-end, not just the tail.
+
+Total prefill+decode time of 6.35 s for a 24 K-token prompt + 200 generated tokens implies a prefill rate of ~3,900 tokens/s — consistent with continuous-batch MoE prefill on the Marlin AWQ kernel. Steady-state KV-cache pressure visible in `nvidia-smi` was unchanged from the soak baseline.
+
+**With this, gauntlet steps 0–6 all pass.** Phase 6 v2 is fully validated.
+
+## Phase 7-bis (research only) — vision capability is viable; concrete plan
+
+The current text winner is text-only (`Qwen3_5MoeForConditionalGeneration` architecture). The user asked whether vision can be added without giving up the win. Researched independently of the live setup; not deployed.
+
+**Verdict: yes, viable.** Same uploader, same MoE skeleton, native vLLM support since v0.11.0.
+
+**Recommended candidate** (matches the architecture and uploader of the current winner):
+
+- **HF repo:** `cyankiwi/Qwen3-VL-30B-A3B-Instruct-AWQ-4bit`
+- **On-disk:** ~19 GB
+- **Architecture:** `qwen3_vl_moe` (vLLM-supported)
+- **Active params:** ~3 B per token (same as text winner — TP=2 stays cheap)
+- **Suggested flags:** add `--mm-encoder-tp-mode data` (vision tower in data-parallel, avoids all-reduce for the small encoder), `--enable-vit-cuda-graph`. Keep TP=2, FP8 KV, max-model-len 32K.
+- **Expected single-stream decode:** 120–150 t/s (~25 % below text-only because of vision encoder overhead, still well above llama.cpp baseline).
+- **Expected VRAM:** ~10–12 GiB per GPU at TP=2 for weights, plus KV cache.
+
+**Two coexistence patterns** if you want vision *and* text simultaneously:
+
+1. *Sequential mode (recommended for hermes):* swap configs based on whether the inbound message has an image. Single SCALE app, one `--served-model-name` at a time. Simpler.
+2. *Parallel mode:* run two separate vLLM containers — text on GPU0 alone (single-GPU AWQ-INT4 27B from Phase 1, ~21 GiB), vision on GPU1 alone (smaller VL fallback like `Qwen/Qwen3-VL-8B-Instruct-FP8`, ~6 GiB). Each on its own port. No cross-GPU communication. Adds operational complexity.
+
+**Hermes integration:** zero SDK changes — vLLM's `/v1/chat/completions` already accepts the OpenAI multimodal content format (`{"type":"image_url","image_url":{"url":"data:image/png;base64,..."}}`). `hermes-config-yaml` would need a new `base_url`/`served-model-name` if the active deployment switches.
+
+**Fallback if the AWQ vision quant has issues:**
+
+- `Qwen/Qwen3-VL-8B-Instruct-FP8` — ~9 GB, dense, fits single-GPU at FP8 (~6 GiB), single-stream ~200 t/s. Lower quality reasoning but fastest TTFT.
+
+**Not deployed yet** — recorded here as the recommendation. Promotion of vision is a separate phase if you want it; doesn't block the text-only Phase 6 v2 going to prod.

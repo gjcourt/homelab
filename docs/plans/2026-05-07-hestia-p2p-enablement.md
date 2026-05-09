@@ -1,9 +1,44 @@
 ---
-status: planned
+status: abandoned
 last_modified: 2026-05-07
 ---
 
 # Hestia P2P enablement (sub-plan to vLLM frontier experiments)
+
+## Status: abandoned (physical-clearance blocker)
+
+**Blocker.** Both 4090s installed in hestia are 3-slot cards. The plan's recommended swap (GPU0: PCIE5 → PCIE1, T710 card: PCIE1 → PCIE5) cannot be physically realized because a 3-slot 4090 in PCIE1 occupies the space normally allocated to PCIE2 + PCIE3 — and PCIE3 must remain populated by GPU1 for the same-RC pairing. Riser cables can route the second card to a non-blocking position in principle, but with both GPUs needing risers in a single mid-tower, the mechanical layout is unworkable for routine operation.
+
+**Trigger to revisit.** This plan is reactivated if either of these happens:
+
+1. The 4090s are replaced by 2-slot cards (or 2.5-slot blower-style variants that fit the layout). The kernel-level findings below stay valid; only the physical placement step changes.
+2. A larger chassis with sufficient inter-slot clearance is adopted, removing the 3-slot collision.
+
+**What was already discovered and is worth preserving** (independent of whether we ever ship the move):
+
+- The Siena 8004 IOD on this board exposes **three PCIe Root Complexes** (`0000:00`, `0000:40`, `0000:c0`) — `lspci -tv` confirmation.
+- Authoritative slot ↔ RC map (via `dmidecode --type 9`):
+
+  | Slot | Bus address | RC |
+  |---|---|---|
+  | PCIE1 | `0000:40:01.1` | `0000:40` |
+  | PCIE3 | `0000:40:03.1` | `0000:40` |
+  | PCIE5 | `0000:00:01.1` | `0000:00` |
+  | PCIE6 | `0000:c0:03.3` | `0000:c0` |
+  | PCIE7 | `0000:c0:01.1` | `0000:c0` |
+  | M2_1 | `0000:c0:03.1` | `0000:c0` |
+  | M2_2 | `0000:c0:03.2` | `0000:c0` |
+  | MCIO1-1/-2, MCIO2-1/-2 | `0000:00:03.{1,2,3,4}` | `0000:00` |
+
+- The only x16-paired slots that share an RC are **PCIE1 + PCIE3** (both on RC `0000:40`).
+- Pool `main` is a single 8-wide raidz2-0 vdev across the 8 4TB T710s in PCIE1 + PCIE7. Cannot tolerate 4-drive loss; therefore "temporarily disconnect" was always disqualified. The detailed partuuid-to-device map is captured in the [parent plan's research log](../research/2026-05-07-vllm-frontier-experiments.md).
+- Kernel cmdline already includes `amd_iommu=on iommu=pt` on TrueNAS 26.0.0-BETA.1 — that part of the BIOS pass was already done.
+
+The parent plan ([`docs/plans/2026-05-07-vllm-frontier-model-experiments.md`](2026-05-07-vllm-frontier-model-experiments.md)) was designed for `NODE` topology and proceeds without depending on this sub-plan. Single-GPU AWQ-INT4 phases are unblocked.
+
+The original plan body is preserved below as the activation runbook for whenever the trigger fires.
+
+---
 
 ## Context
 

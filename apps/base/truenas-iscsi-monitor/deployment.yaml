@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: truenas-iscsi-exporter
+  namespace: truenas-iscsi-monitor
+  labels:
+    app: truenas-iscsi-exporter
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: truenas-iscsi-exporter
+  template:
+    metadata:
+      labels:
+        app: truenas-iscsi-exporter
+    spec:
+      serviceAccountName: truenas-iscsi-monitor
+      # automountServiceAccountToken left at default (true): the exporter
+      # needs the projected SA token to call the in-cluster K8s API for
+      # the PV -> claimRef join. RBAC is read-only on PVs (rbac.yaml).
+      # The python:3.14-slim base image has no USER directive and runs as
+      # root by default; pinning the pod to UID 1000 with fsGroup is
+      # intentional. The exporter only ever talks to TrueNAS over wss://
+      # and to the K8s API; it has no on-disk state.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: exporter
+          # python 3.14-slim
+          image: python@sha256:0ba001803c72c128063cfa88863755f905cefabe73c026c66a5a86d8f1d63e98
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              pip install --user websockets kubernetes prometheus_client && python /app/exporter.py
+          env:
+            # HOME=/tmp lets `pip install --user` write to ~/.local under
+            # readOnlyRootFilesystem — the /tmp emptyDir is the writable target.
+            - name: HOME
+              value: "/tmp"
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: TRUENAS_HOST
+              value: "10.42.2.10"
+            - name: TRUENAS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: truenas-iscsi-monitor-secret
+                  key: api_key
+          ports:
+            - containerPort: 8000
+              name: metrics
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            # The exporter installs websockets/kubernetes/prometheus_client
+            # via pip on startup before listening, so allow a generous
+            # initial delay.
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 10m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: script-volume
+              mountPath: /app
+            # `pip install --user` writes to $HOME/.local; required when
+            # readOnlyRootFilesystem is enabled.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: script-volume
+          configMap:
+            name: truenas-iscsi-exporter-script
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,45 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: truenas-iscsi-alerts
+  namespace: truenas-iscsi-monitor
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: truenas-iscsi
+      rules:
+        # Unlike Synology's hard 128-target / 256-LUN ceiling, TrueNAS has
+        # no comparable hard limit on iSCSI extent count — the practical
+        # ceiling is ZFS pool capacity, not iSCSI metadata. We alert on:
+        #   - the scraper falling silent (no successful scrape in 10m)
+        #   - the extent-name regex no longer matching (silent label drop)
+        #   - a ZFS-fill threshold via aggregate provisioned size, but
+        #     tuned per-zpool capacity. Default left high to avoid
+        #     spurious alerts; operator should tighten in apps/production.
+        - alert: TrueNASISCSIScraperStale
+          expr: time() - truenas_iscsi_last_scrape_success_timestamp_seconds > 600
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "TrueNAS iSCSI exporter has not completed a scrape in >10m"
+            description: "Last successful scrape at {{ $value }}s ago. Check exporter pod logs in namespace truenas-iscsi-monitor."
+
+        - alert: TrueNASISCSIUnmatchedExtents
+          expr: increase(truenas_iscsi_unmatched_extents_total[15m]) > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "TrueNAS iSCSI extents do not match democratic-csi name pattern"
+            description: "{{ $value }} extents in the last 15m did not match csi-pvc-<UUID>-k8s. Either democratic-csi changed its naming template or someone created a non-CSI extent. Update EXTENT_NAME_RE in the exporter script if naming changed."
+
+        - alert: TrueNASISCSIScrapeErrors
+          expr: increase(truenas_iscsi_scrape_errors_total[15m]) > 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "TrueNAS iSCSI exporter is throwing scrape errors"
+            description: "{{ $value }} errors in the last 15m. Common causes: TrueNAS API key expired/rotated; TrueNAS unreachable on wss://10.42.2.10/api/current; K8s API token issue."

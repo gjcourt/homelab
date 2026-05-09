@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - namespace.yaml
+  - pdb.yaml
+  - prometheus-rule.yaml
+  - rbac.yaml
+  - script-cm.yaml
+  - service.yaml
+  - serviceaccount.yaml
+  - servicemonitor.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: truenas-iscsi-monitor
+      app.kubernetes.io/component: monitor
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux
+
+configMapGenerator:
+  - name: truenas-iscsi-dashboard
+    namespace: truenas-iscsi-monitor
+    files:
+      - dashboard.json
+    options:
+      labels:
+        grafana_dashboard: "1"

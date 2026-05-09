@@ -5,6 +5,8 @@ last_modified: 2026-05-04
 
 # llama.cpp baseline measurement on hestia (RTX 4090) — Phase 0
 
+> **2026-05-09 follow-up**: this baseline (decode 173.9 t/s on Qwen3.6-35B-A3B-UD-IQ4_NL.gguf) was the must-beat bar for the vLLM frontier-model experiments. It was beaten — vLLM v0.20.1 on `cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit` / TP=2 measured **194 t/s decode** on the same model family with **626 t/s aggregate at concurrency 8**. llama.cpp has been retired from prod; full results in [`2026-05-07-vllm-frontier-experiments.md`](2026-05-07-vllm-frontier-experiments.md). The numbers below are preserved as the as-measured 2026-05-04 reference.
+
 Phase 0 of [`docs/plans/2026-05-04-llama-cpp-benchmarking.md`](../plans/2026-05-04-llama-cpp-benchmarking.md). Establishes a reference baseline of the current production llama.cpp config so future tuning phases (Phase 1 onward) have something concrete to compare against.
 
 > **Status note**: this doc is `in-progress` while the operator runs the measurements on hestia. Once numbers are pasted into the placeholder sections, status flips to `complete` (per `docs/research/README.md`'s "research is frozen once written" convention — what's frozen is the *measurement at one point in time*, not the abstract idea of benchmarking).

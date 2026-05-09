@@ -161,3 +161,79 @@
     - service: switch.turn_off
       target:
         entity_id: switch.dining_room_chandelier
+
+# ============================================================================
+# Laundry room light auto-off timer
+# ============================================================================
+# When either laundry room light turns on, start a timer. When the timer
+# expires, turn off both lights. If both lights are manually turned off
+# before the timer expires, cancel the timer.
+#
+# Input helper:
+#   input_number.laundry_room_light_minutes — configurable timeout (default 30 min)
+#
+# Timer:
+#   timer.laundry_room_light_timer — counts down once either light turns on
+
+- alias: "Laundry room light auto-off — start timer"
+  description: "When a laundry room light turns on, start a timer. Turns off both lights when timer expires."
+  trigger:
+    - platform: state
+      entity_id:
+        - light.laundry_room_main_lights
+        - light.laundry_room_cove
+      from: "off"
+      to: "on"
+  action:
+    - variables:
+        timer_entity: "timer.laundry_room_light_timer"
+        delay_minutes: >
+          {{ states('input_number.laundry_room_light_minutes') | default('30') | int(30) }}
+        delay_seconds: "{{ delay_minutes * 60 }}"
+    # Start the timer with configured duration
+    - service: timer.start
+      target:
+        entity_id: "{{ timer_entity }}"
+      data:
+        duration: "{{ delay_seconds }}"
+  mode: restart
+
+- alias: "Laundry room light auto-off — turn off lights"
+  description: "When the laundry room light timer expires, turn off both lights."
+  trigger:
+    - platform: event
+      event_type: timer.finished
+  condition:
+    # Only laundry room light timer (not other timers in the house)
+    - condition: template
+      value_template: >
+        {{ "timer.laundry_room_light_timer" in trigger.event.data.entity_id | lower }}
+  action:
+    # Turn off both laundry room lights
+    - service: light.turn_off
+      target:
+        entity_id:
+          - light.laundry_room_main_lights
+          - light.laundry_room_cove
+      continue_on_error: true
+
+- alias: "Laundry room light auto-off — cancel timer when both lights off"
+  description: "If both laundry room lights are turned off before the timer expires, cancel the timer."
+  trigger:
+    - platform: state
+      entity_id:
+        - light.laundry_room_main_lights
+        - light.laundry_room_cove
+  condition:
+    # Only cancel if BOTH lights are off
+    - condition: state
+      entity_id: light.laundry_room_main_lights
+      state: "off"
+    - condition: state
+      entity_id: light.laundry_room_cove
+      state: "off"
+  action:
+    - service: timer.cancel
+      target:
+        entity_id: timer.laundry_room_light_timer
+      continue_on_error: true

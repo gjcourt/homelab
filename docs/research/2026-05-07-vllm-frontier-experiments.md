@@ -477,3 +477,19 @@ The signal-cli unrelated breakage (CrashLoopBackOff for 4+ days noted in this se
 - Real hermes traffic shape A/B once signal-cli is fixed.
 - Re-run on next major vLLM release (v0.21+) to harvest any kernel improvements.
 - A dedicated phase exploring `--max-model-len 65536` with `--max-num-seqs 4` to see if the longer context can be supported without breaking the soak.
+
+## Retry sweep — does v0.20.1 fix any of v0.20.0's failures?
+
+After confirming the winner is stable, retried each previously-failed configuration on v0.20.1 to see if any of the patch-release fixes happened to land on our blockers.
+
+| Failed on v0.20.0 | Symptom | Result on v0.20.1 |
+|---|---|---|
+| Phase 6 v0 — GGUF prod IQ4_NL file (`qwen35moe` arch) | `ValueError: GGUF model with architecture qwen35moe is not supported yet` | **same error, byte-identical** |
+| Option C — GGUF dense Q4_K_M (`qwen35` arch) | `ValueError: GGUF model with architecture qwen35 is not supported yet` | **same error, byte-identical** |
+| Phase 7 v2 — Gemma 4 NVFP4 single-GPU TP=1 | `CUDA out of memory. Tried to allocate 168.00 MiB. GPU 0 has total capacity of 23.52 GiB of which 102.69 MiB is free.` | **same OOM, byte-identical** (same allocation size, same free count) |
+
+Each retry was: stop vllm, swap variant compose, redeploy, watch the log for the cold-load result. ~3 minutes apiece. None passed.
+
+**Conclusion:** v0.20.1 is a no-op for our workload across the entire failure surface, not just the winner. Re-test these on the next *major* release (v0.21+) — particularly NVFP4 single-GPU, which the upstream code path explicitly flags as "experimental and could change in future." GGUF kernel coverage for the Qwen 3.5/3.6 family is its own distinct missing feature; tracking against vLLM's GGUF roadmap rather than waiting on patch luck.
+
+The retry sweep also produced one piece of useful confirmation: **the failure modes are deterministic, not flaky.** Same prompts, same flags, same error byte-for-byte across versions. So when one of them eventually passes, it'll be a real fix, not a transient.

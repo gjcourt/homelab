@@ -1,0 +1,11 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: truenas-iscsi-monitor
+  namespace: truenas-iscsi-monitor
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: truenas-iscsi-exporter

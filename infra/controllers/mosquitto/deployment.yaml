@@ -26,6 +26,20 @@ spec:
               name: mqtt
             - containerPort: 9001
               name: websockets
+          readinessProbe:
+            tcpSocket:
+              port: mqtt
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: mqtt
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
           volumeMounts:
             - name: config
               mountPath: /mosquitto/config/mosquitto.conf

@@ -24,4 +24,5 @@ resources:
   - signal-cli
   - snapcast
   - synology-iscsi-monitor
+  - truenas-iscsi-monitor
   - vitals

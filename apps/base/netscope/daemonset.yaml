@@ -35,7 +35,7 @@ spec:
         - operator: Exists
       containers:
         - name: agent
-          image: "ghcr.io/gjcourt/netscope:1c0081d@sha256:83ec159e2a8ce10ea38e5ea7a84871ede061bf3babdf7e06a4c8dbd58a7d16ff"
+          image: "ghcr.io/gjcourt/netscope:e80a0d6@sha256:6948afeda1ef78cdcf2e02c9f976e0d257424415f59ebf072388ca5422bf4747"
           imagePullPolicy: IfNotPresent
           # NETSCOPE_IFACE intentionally unset — the agent discovers the
           # IPv4 default-route interface at startup from /proc/net/route.

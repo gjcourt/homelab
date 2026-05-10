@@ -36,25 +36,6 @@
         siteMonitor: https://audiobooks.burntbytes.com
 
 - Tools:
-    - OpenWebUI:
-        icon: open-webui.png
-        href: https://chat.burntbytes.com
-        # Disabled 2026-05-10: hestia GPU removed for sale; openwebui scaled
-        # to 0. siteMonitor dropped so the tile doesn't render permanently red.
-        description: AI chat interface (disabled — hestia GPU removed)
-    - Hestia:
-        icon: truenas-scale.png
-        href: https://hestia.burntbytes.com
-        description: TrueNAS NAS (GPU removed 2026-05-10)
-        # TrueNAS root path returns a 302 to http://hestia.burntbytes.com/ui/
-        # (a scheme-downgrading redirect served by TrueNAS itself), which the
-        # homepage siteMonitor renders as HTTP 500. /ui/ returns 200 directly.
-        siteMonitor: https://hestia.burntbytes.com/ui/
-    - Overture:
-        icon: mdi-rss
-        href: https://overture.burntbytes.com
-        description: Personal feed / aggregation
-        siteMonitor: https://overture.burntbytes.com
     - Vitals:
         icon: mdi-heart-pulse
         href: https://vitals.burntbytes.com
@@ -108,6 +89,18 @@
           url: https://10.42.2.11:5001
           username: "{{HOMEPAGE_VAR_SYNOLOGY_USER}}"
           password: "{{HOMEPAGE_VAR_SYNOLOGY_PASS}}"
+    - Hestia:
+        icon: truenas-scale.png
+        href: https://hestia.burntbytes.com
+        # Originally provisioned as a GPU server (RTX 4090, vLLM, signal-cli)
+        # but the GPU was removed and sold 2026-05-10. Hestia is now a
+        # TrueNAS storage server, primarily backing democratic-csi-provisioned
+        # iSCSI volumes for the cluster.
+        description: TrueNAS storage server (iSCSI for cluster PVCs)
+        # TrueNAS root emits a scheme-downgrading 302 → http://hestia.../ui/
+        # which homepage's siteMonitor renders as HTTP 500. /ui/ returns 200
+        # directly in one hop.
+        siteMonitor: https://hestia.burntbytes.com/ui/
     - Home Assistant:
         icon: home-assistant.png
         href: https://hass.burntbytes.com

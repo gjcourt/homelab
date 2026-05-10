@@ -58,7 +58,7 @@ For each of the 23 workload apps, determine whether the running image exposes a 
 | app | exposes-metrics | port name | port number | sample metric | source |
 |-----|-----------------|-----------|-------------|---------------|--------|
 | authelia | yes | metrics | 9959 | `authelia_authentication_attempts_total` | https://www.authelia.com/reference/guides/metrics/ |
-| immich | no | n/a | n/a | n/a | upstream issue #1234 (no native /metrics) |
+| immich | no | n/a | n/a | n/a | inspected `apps/base/immich/deployment.yaml` — no metrics port; upstream docs make no Prometheus claim |
 
 The rule: **only create an SM for an app that actually exposes `/metrics`.** Pod readiness, restart counts, and uptime for apps without `/metrics` are already covered by kube-state-metrics. Adding an SM that scrapes a 404 produces permanent `up=0` noise and false alerts.
 
@@ -117,14 +117,13 @@ For each new SM, add `- servicemonitor.yaml` to `apps/base/<app>/kustomization.y
 
 ### 2.1 Pin down the bridge API
 
-Inspect the running signal bridge container to confirm:
+Verified against `apps/base/signal-cli/`:
 
-- The image is `bbernhard/signal-cli-rest-api` or a custom hermes bridge.
-- The exact endpoint shape (`bbernhard` exposes `/v2/send` with JSON `{number, recipients[], message}`).
-- The in-cluster Service DNS name (likely `signal-cli-rest-api.signal-cli.svc.cluster.local`).
-- Whether auth is required (in-cluster traffic is typically open).
+- **Image:** `ghcr.io/gjcourt/signal-bridge:2026-05-03` (custom bridge built in this org, not `bbernhard/signal-cli-rest-api`). The API is whatever that image exposes — read the source to determine the endpoint shape; do not assume the bbernhard `/v2/send` contract applies.
+- **Service:** `signal-cli-bridge.signal-cli.svc.cluster.local:8080` (per `apps/base/signal-cli/service.yaml`; the Service is named `signal-cli-bridge`).
+- **Auth:** in-cluster traffic is open by default; confirm the bridge container does not enforce a bearer token before relying on this.
 
-Source: read `apps/base/signal-cli/deployment.yaml` and the upstream image docs. Hermes already calls this endpoint — its source is the authoritative reference.
+Action: read the gjcourt/signal-bridge image source (or its README) to record the actual `POST` path and JSON body shape. Hermes already calls this endpoint — its code is the authoritative reference for the contract.
 
 ### 2.2 Pick routing strategy
 
@@ -152,7 +151,7 @@ Then add `- alertmanager-signal-relay` to `infra/controllers/kustomization.yaml`
 
 **Configuration** (env vars, no secrets — the bridge holds the Signal credentials, the relay only needs the bridge URL):
 
-- `SIGNAL_BRIDGE_URL` — `http://signal-cli-rest-api.signal-cli.svc.cluster.local:<port>/v2/send` (port from §2.1).
+- `SIGNAL_BRIDGE_URL` — `http://signal-cli-bridge.signal-cli.svc.cluster.local:8080/<path>` where `<path>` is whatever endpoint the gjcourt/signal-bridge image exposes (resolved in §2.1).
 - `SIGNAL_RECIPIENT_NUMBER` — destination phone number, sourced from a non-secret ConfigMap value or hardcoded in the manifest (it's a phone number, not a credential).
 - `SIGNAL_FROM_NUMBER` — sender, same source.
 
@@ -188,17 +187,23 @@ Edit `infra/controllers/kube-prometheus-stack/values.yaml` inside the `alertmana
 
 4. **Do not touch** the `inhibit_rules:` block or the `templates:` block. They stay as-is.
 
-After editing, `git diff infra/controllers/kube-prometheus-stack/values.yaml` should show four small additions/edits and **no** changes to `inhibit_rules:` or `templates:`. If it does, revert and retry.
+After editing, `git diff infra/controllers/kube-prometheus-stack/values.yaml` should show four small additions/edits and **no** changes to `inhibit_rules:` or `templates:`. If the diff shows any changes inside `inhibit_rules:` or `templates:`, revert and retry.
 
 ### 2.4 Test
 
-1. Lower the threshold on an existing alert rule to force a critical fire (or pick one already firing — query `ALERTS{severity="critical",alertstate="firing"}`).
-2. Confirm the Signal message arrives within 5 minutes.
-3. Restore the threshold; confirm the resolved message arrives.
+1. Confirm the relay's metrics are exposed:
+   ```bash
+   kubectl -n monitoring port-forward svc/alertmanager-signal-relay 8080:8080 &
+   curl -s localhost:8080/metrics | grep -E '^alertmanager_signal_relay_messages_(sent|failed)_total'
+   ```
+   Both metric families must appear (even with value `0`). If either is missing, the relay was implemented incorrectly — the §2.5 self-monitoring rule depends on these names.
+2. Lower the threshold on an existing alert rule to force a critical fire (or pick one already firing — query `ALERTS{severity="critical",alertstate="firing"}`).
+3. Confirm the Signal message arrives within 5 minutes.
+4. Restore the threshold; confirm the resolved message arrives.
 
 ### 2.5 Self-monitoring (mandatory)
 
-Add to `infra/configs/alerts/prometheus-rules.yaml`:
+Add **both** rules to `infra/configs/alerts/prometheus-rules.yaml` — together they catch delivery failures *and* full relay outages:
 
 ```yaml
 - alert: AlertmanagerSignalRelayFailing
@@ -208,9 +213,17 @@ Add to `infra/configs/alerts/prometheus-rules.yaml`:
     severity: critical
   annotations:
     summary: "Signal alert relay failing — critical alerts may be silently dropped"
+
+- alert: AlertmanagerSignalRelayDown
+  expr: up{job="alertmanager-signal-relay"} == 0
+  for: 5m
+  labels:
+    severity: critical
+  annotations:
+    summary: "Signal alert relay scrape target is down — no critical alerts can be delivered"
 ```
 
-Without this, a relay outage swallows every critical alert and we'd never know.
+The `Failing` rule covers the case where the relay is up but POSTs to signal-cli-bridge are erroring (counter increments). The `Down` rule covers the case where the relay pod is gone entirely — no metric increments, but `up=0`. Without both, a hard relay outage produces total silence.
 
 ## Phase 3 — PrometheusRules for Flux reconciliation
 
@@ -276,7 +289,9 @@ Each phase is independently revertable. Default Kustomization interval is **10 m
 - Each app the §1.1 audit identifies as exposing `/metrics` has a discovered SM; `up{job=~"<app>.*"} == 1` on the Prometheus targets page.
 - `kubectl get servicemonitor -A -l release=kube-prometheus-stack` returns the expected count (4 existing + N from audit).
 - A test `severity=critical` alert delivers a Signal message within 5 minutes; `_resolved` follows when the threshold is restored.
+- The relay's `/metrics` exposes both `alertmanager_signal_relay_messages_sent_total` and `_failed_total` (curl on `:8080/metrics` shows both metric families).
 - `alertmanager_signal_relay_messages_failed_total` stays at 0 over a 24h window after the rollout.
+- `up{job="alertmanager-signal-relay"} == 1` continuously over a 24h window.
 - `flux get kustomizations -A` is green for every Kustomization touched.
 
 ## Out of scope (deliberately)

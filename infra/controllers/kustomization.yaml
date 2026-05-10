@@ -9,7 +9,7 @@ resources:
   - kube-prometheus-stack
   - loki
   - mosquitto
-  # - pingo
+  - pingo
   - promtail
   - renovate
   - renovate-automerge

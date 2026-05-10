@@ -76,6 +76,17 @@ spec:
               protocol: TCP
             - port: "8080"
               protocol: TCP
+    # Homepage widget (production) polls the AdGuard admin API via the
+    # adguard-admin Service (port 8080 → pod port 80). Cilium evaluates
+    # ingress after DNAT, so the rule matches the pod port (80).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homepage-prod
+            app.kubernetes.io/name: homepage
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
   egress:
     # kube-dns / CoreDNS for in-cluster Service resolution.
     - toEndpoints:

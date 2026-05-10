@@ -3,7 +3,6 @@ kind: Kustomization
 namespace: immich-prod
 resources:
   - ../../base/immich/
-  - configmap-oauth.yaml
   - database.yaml
   - httproute.yaml
   - nfs-photos.yaml
@@ -18,6 +17,18 @@ labels:
       env: production
       app.kubernetes.io/instance: production
     includeSelectors: false
+
+# OAuth/OIDC config template. The init container in deployment-patch.yaml
+# reads /config-template/immich-config.yaml, substitutes the SOPS-decrypted
+# CLIENT_SECRET, and writes the rendered file to an emptyDir volume that
+# immich-server reads as IMMICH_CONFIG_FILE. The hash suffix on the
+# generated ConfigMap name guarantees a rolling restart on edit, with
+# Kustomize's nameReference transformer rewriting the volume reference.
+configMapGenerator:
+  - name: immich-oauth-config
+    namespace: immich
+    files:
+      - config/immich-config.yaml
 
 patches:
   - path: deployment-patch.yaml

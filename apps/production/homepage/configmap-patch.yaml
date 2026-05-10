@@ -11,21 +11,20 @@ data:
     layout:
       Media:
         style: column
-        rows: 8
+        rows: 10
       Tools:
         style: column
-        rows: 8
+        rows: 10
       Infrastructure:
         style: column
-        rows: 8
+        rows: 10
       Monitoring:
         style: column
-        rows: 8
+        rows: 10
     background:
       image: https://images.unsplash.com/photo-1502790671504-542ad42d5189?auto=format&fit=crop&w=2560&q=80
       blur: sm
-      opacity: 50
-    cardBlur: md
+      opacity: 30
     theme: dark
     color: slate
 
@@ -40,14 +39,29 @@ data:
         - learning:
             - abbr: LR
               href: https://github.com/gjcourt/learning
+        - GitHub Inbox:
+            - abbr: GHI
+              href: https://github.com/notifications
+        - ghcr.io:
+            - abbr: GCR
+              href: https://github.com/orgs/gjcourt/packages
 
     - Reference:
         - Kubernetes Docs:
-            - abbr: K8s
+            - abbr: K8S
               href: https://kubernetes.io/docs/
         - Cilium Docs:
             - abbr: CIL
               href: https://docs.cilium.io/
+        - Flux Docs:
+            - abbr: FLX
+              href: https://fluxcd.io/flux/
+        - CNPG Docs:
+            - abbr: CNP
+              href: https://cloudnative-pg.io/documentation/
+        - Renovate:
+            - abbr: REN
+              href: https://developer.mend.io/github/gjcourt
 
   widgets.yaml: |
     - kubernetes:

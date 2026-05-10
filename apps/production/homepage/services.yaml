@@ -3,66 +3,91 @@
         icon: immich.png
         href: https://photos.burntbytes.com
         description: Photo and video management
+        siteMonitor: https://photos.burntbytes.com
     - Jellyfin:
         icon: jellyfin.png
         href: https://jellyfin.burntbytes.com
         description: Media streaming server
+        siteMonitor: https://jellyfin.burntbytes.com
     - Navidrome:
         icon: navidrome.png
         href: https://music.burntbytes.com
         description: Music server and streamer
+        siteMonitor: https://music.burntbytes.com
     - Kitchen:
         icon: mdi-speaker
         href: http://10.42.2.38
         description: HifiBerry OS – Kitchen
+        siteMonitor: http://10.42.2.38
     - Living Room:
         icon: mdi-speaker
         href: http://10.42.2.39
         description: HifiBerry OS – Living Room
+        siteMonitor: http://10.42.2.39
     - Snapcast:
         icon: mdi-speaker-multiple
         href: https://snapcast.burntbytes.com
         description: Multi-room audio (Snapweb)
+        siteMonitor: https://snapcast.burntbytes.com
     - Audiobookshelf:
         icon: audiobookshelf.png
         href: https://audiobooks.burntbytes.com
         description: Audiobook and podcast server
+        siteMonitor: https://audiobooks.burntbytes.com
 
 - Tools:
-    - Chat:
-        icon: mdi-chat
+    - OpenWebUI:
+        icon: openwebui.png
         href: https://chat.burntbytes.com
-        description: AI chat interface
+        description: AI chat interface (frontend for vLLM)
+        siteMonitor: https://chat.burntbytes.com
+    - vLLM:
+        icon: mdi-brain
+        href: https://hestia.burntbytes.com
+        description: LLM inference server (Qwen3 on RTX 4090)
+        siteMonitor: https://hestia.burntbytes.com
+    - Overture:
+        icon: mdi-rss
+        href: https://overture.burntbytes.com
+        description: Personal feed / aggregation
+        siteMonitor: https://overture.burntbytes.com
     - Vitals:
         icon: mdi-heart-pulse
         href: https://vitals.burntbytes.com
         description: Health and fitness tracker
+        siteMonitor: https://vitals.burntbytes.com
     - Memos:
         icon: memos.png
         href: https://memos.burntbytes.com
         description: Lightweight note-taking service
+        siteMonitor: https://memos.burntbytes.com
     - Linkding:
         icon: linkding.png
         href: https://links.burntbytes.com
         description: Bookmark manager
+        siteMonitor: https://links.burntbytes.com
     - Mealie:
         icon: mealie.png
         href: https://mealie.burntbytes.com
         description: Recipe management
+        siteMonitor: https://mealie.burntbytes.com
     - GoLinks:
         icon: mdi-link-variant
         href: https://go.burntbytes.com
         description: URL shortener
+        siteMonitor: https://go.burntbytes.com
     - Excalidraw:
         icon: excalidraw.png
         href: https://excalidraw.burntbytes.com
         description: Virtual whiteboard for sketching
+        siteMonitor: https://excalidraw.burntbytes.com
 
 - Infrastructure:
     - Synology NAS:
         icon: synology-dsm.png
         href: https://10.42.2.11:5001
         description: Network storage
+        siteMonitor: http://10.42.2.11:5000
         widget:
           type: diskstation
           url: https://10.42.2.11:5001
@@ -72,22 +97,32 @@
         icon: home-assistant.png
         href: https://hass.burntbytes.com
         description: Home automation platform
+        siteMonitor: https://hass.burntbytes.com
     - AdGuard Home:
         icon: adguard-home.png
         href: https://adguard.burntbytes.com
         description: DNS ad blocker
+        siteMonitor: https://adguard.burntbytes.com
+        widget:
+          type: adguard
+          url: https://adguard.burntbytes.com
+          username: "{{HOMEPAGE_VAR_ADGUARD_USER}}"
+          password: "{{HOMEPAGE_VAR_ADGUARD_PASS}}"
     - Authelia:
         icon: mdi-shield-account
         href: https://auth.burntbytes.com
         description: Authentication portal (SSO)
+        siteMonitor: https://auth.burntbytes.com
     - Zigbee2MQTT:
         icon: zigbee2mqtt.png
         href: https://zigbee.burntbytes.com
         description: Zigbee to MQTT Bridge
+        siteMonitor: https://zigbee.burntbytes.com
     - Pingo:
         icon: mdi-dns
         href: https://vpn.burntbytes.com
         description: DNS updater for vpn.burntbytes.com
+        siteMonitor: https://vpn.burntbytes.com
 
 - Monitoring:
     - Cluster Resources:
@@ -120,7 +155,8 @@
         icon: grafana.png
         href: https://grafana.burntbytes.com
         description: Metrics dashboard
-    - Loki:
-        icon: loki.png
+        siteMonitor: https://grafana.burntbytes.com
+    - Logs:
+        icon: grafana.png
         href: https://grafana.burntbytes.com/explore?schemaVersion=1&panes=%7B%22jZ4%22:%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22expr%22:%22%7Bnamespace%3D%5C%22homepage-prod%5C%22%7D%22%7D%5D%7D%7D
-        description: Cluster logs (via Grafana)
+        description: Cluster logs (Grafana → Loki)

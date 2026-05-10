@@ -25,6 +25,12 @@ spec:
       hostNetwork: true
       hostPID: false
       dnsPolicy: ClusterFirstWithHostNet
+      # Intentional: schedule on every node including control-plane.
+      # Network observability is most useful when it covers all 6 nodes
+      # (3 CP + 3 worker). The agent footprint is small (~50m CPU / 64Mi
+      # memory request) and CP nodes route a non-trivial share of cluster
+      # traffic (Cilium VXLAN, control-plane API). Revisit if CP capacity
+      # becomes tight.
       tolerations:
         - operator: Exists
       containers:
@@ -41,7 +47,14 @@ spec:
               protocol: TCP
           securityContext:
             privileged: false
+            # runAsUser: 0 — eBPF tcx attach + BPF_PROG_GET_NEXT_ID
+            # discovery require UID 0; non-root would need ambient
+            # capabilities support which Talos doesn't expose.
             runAsUser: 0
+            allowPrivilegeEscalation: false
+            # readOnlyRootFilesystem deferred: the upstream agent
+            # is a scratch-image Go binary and likely tolerates it,
+            # but unverified — flip after first prod soak.
             seccompProfile:
               type: RuntimeDefault
             capabilities:

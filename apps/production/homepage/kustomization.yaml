@@ -15,7 +15,6 @@ labels:
 
 patches:
   - path: deployment-patch.yaml
-  - path: configmap-patch.yaml
   - target:
       kind: Namespace
       name: homepage
@@ -29,4 +28,7 @@ configMapGenerator:
     namespace: homepage
     behavior: merge
     files:
-      - services.yaml
+      - config/settings.yaml
+      - config/bookmarks.yaml
+      - config/widgets.yaml
+      - config/services.yaml

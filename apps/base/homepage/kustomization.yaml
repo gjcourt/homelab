@@ -1,7 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - configmap.yaml
   - deployment.yaml
   - namespace.yaml
   - networkpolicy.yaml
@@ -15,3 +14,16 @@ labels:
       app.kubernetes.io/component: web
       app.kubernetes.io/part-of: homelab
       app.kubernetes.io/managed-by: flux
+configMapGenerator:
+  - name: homepage
+    namespace: homepage
+    files:
+      - config/settings.yaml
+      - config/bookmarks.yaml
+      - config/widgets.yaml
+      - config/services.yaml
+      - config/kubernetes.yaml
+      - config/docker.yaml
+      - config/proxmox.yaml
+      - config/custom.css
+      - config/custom.js

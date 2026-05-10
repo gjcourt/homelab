@@ -1,0 +1,5 @@
+# Empty default — overridden per environment.
+# Example:
+# providers:
+#   longhorn:
+#     url: https://longhorn.my.network

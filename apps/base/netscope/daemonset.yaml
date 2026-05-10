@@ -37,6 +37,10 @@ spec:
         - name: agent
           image: "ghcr.io/gjcourt/netscope:579e662@sha256:4caec2a1650be7b0623f27adf121c1b39c1a9dac48af5edbb1ca224fdb7308d2"
           imagePullPolicy: IfNotPresent
+          # NETSCOPE_IFACE intentionally unset — the agent discovers the
+          # IPv4 default-route interface at startup from /proc/net/route.
+          # Set explicitly here (e.g. value: "eno1") to pin to a specific
+          # NIC and skip discovery.
           ports:
             - name: metrics
               containerPort: 9101

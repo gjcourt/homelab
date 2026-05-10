@@ -4,6 +4,8 @@ resources:
   - namespace.yaml
   - serviceaccount.yaml
   - daemonset.yaml
+  - service.yaml
+  - servicemonitor.yaml
 labels:
   - includeSelectors: false
     pairs:

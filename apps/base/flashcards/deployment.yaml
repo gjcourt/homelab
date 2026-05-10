@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flashcards
+  namespace: flashcards
+  labels:
+    app: flashcards
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: flashcards
+  template:
+    metadata:
+      labels:
+        app: flashcards
+    spec:
+      serviceAccountName: flashcards
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-secret
+      securityContext:
+        # nginx-unprivileged runs as uid 101 by default; match it here so the
+        # container's pre-built /tmp + cache emptyDirs are owned correctly.
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: flashcards
+          image: ghcr.io/gjcourt/flashcards:2026-05-10
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          # Probe pattern per docs/operations/2026-05-02-adding-an-app.md:
+          # readiness HTTP-tight, liveness tcpSocket-loose so the two can't
+          # co-restart the pod off a single flap.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          # nginx-unprivileged writes its pid + temp paths under /tmp; mount
+          # an emptyDir there so readOnlyRootFilesystem doesn't break startup.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/nginx
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}

@@ -37,12 +37,12 @@
 
 - Tools:
     - OpenWebUI:
-        icon: openwebui.png
+        icon: open-webui.png
         href: https://chat.burntbytes.com
         description: AI chat interface (frontend for vLLM)
         siteMonitor: https://chat.burntbytes.com
     - vLLM:
-        icon: mdi-brain
+        icon: vllm.png
         href: https://hestia.burntbytes.com
         description: LLM inference server (Qwen3 on RTX 4090)
         siteMonitor: https://hestia.burntbytes.com

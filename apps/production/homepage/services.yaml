@@ -45,7 +45,10 @@
         icon: truenas-scale.png
         href: https://hestia.burntbytes.com
         description: TrueNAS GPU server (vLLM, signal-cli, RTX 4090)
-        siteMonitor: https://hestia.burntbytes.com
+        # TrueNAS root path returns a 302 to http://hestia.burntbytes.com/ui/
+        # (a scheme-downgrading redirect served by TrueNAS itself), which the
+        # homepage siteMonitor renders as HTTP 500. /ui/ returns 200 directly.
+        siteMonitor: https://hestia.burntbytes.com/ui/
     - Overture:
         icon: mdi-rss
         href: https://overture.burntbytes.com

@@ -141,3 +141,26 @@ Once all four PRs land, update `docs/plans/2026-05-02-critique-remediation.md`
 `status:` to `complete` and open the default-deny
 `CiliumClusterwideNetworkPolicy` rollout (Phase 1.1 step 4) namespace by
 namespace, starting with `excalidraw` (stateless canary).
+
+## Follow-up landed (2026-05-09)
+
+A cluster-wide probe re-audit on 2026-05-09 surfaced four workloads that
+PR #408 didn't cover (because they live outside `apps/base/` or are
+inline sidecars). Closed in a follow-up PR alongside lifting the probe
+conventions into the onboarding doc + AGENTS.md quality gate:
+
+- `apps/production/cloudflare-tunnel/deployment.yaml` — `/ready` moved
+  from livenessProbe (mislabeled, `failureThreshold: 1` was aggressive)
+  to readinessProbe; new TCP livenessProbe on :2000.
+- `infra/controllers/mosquitto/deployment.yaml` — TCP L+R on :1883.
+- `infra/controllers/zigbee2mqtt/deployment.yaml` — `httpGet /` readiness
+  + TCP liveness on :8080.
+- `apps/base/immich/deployment.yaml` (`immich-redis` Deployment) —
+  `redis-cli ping` exec probes for both L and R.
+- `docs/operations/2026-05-02-adding-an-app.md` — new "Health probes"
+  section with locked timings, probe-type selection, "don't co-restart"
+  rule, and skip rationale.
+- `AGENTS.md` — added probes line to "Quality gate before push".
+
+Deliberate skip: `cert-manager` controller readinessProbe — upstream
+Helm chart doesn't expose the override (controller is leader-elected).

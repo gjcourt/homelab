@@ -45,7 +45,7 @@ Sorted by filing date (newest first).
 
 | File | Status | Description |
 | :--- | :--- | :--- |
-| [2026-05-09-vllm-vision-sidecar.md](2026-05-09-vllm-vision-sidecar.md) | `planned` | Add image-input capability via a small VL sidecar (Qwen3-VL-2B FP8 on GPU1) without disturbing the Phase 6 v2 text winner |
+| [2026-05-09-vllm-vision-sidecar.md](2026-05-09-vllm-vision-sidecar.md) | `abandoned` | Sidecar built and stability-tested (co-tenancy soak passed, 0 errors); reverted on quality — Qwen3-VL-2B-FP8 scored 47% on real eBay photos vs 70% target |
 | [2026-05-07-hestia-p2p-enablement.md](2026-05-07-hestia-p2p-enablement.md) | `abandoned` | Sub-plan: enable GPU P2P on hestia (blocked: 3-slot 4090s can't physically swap to PCIE1+PCIE3 in current chassis) |
 | [2026-05-07-vllm-frontier-model-experiments.md](2026-05-07-vllm-frontier-model-experiments.md) | `complete` | Stability-first vLLM experiments on hestia (2× 4090, no P2P) — winner: Qwen3.6-35B-A3B-AWQ TP=2, 194 t/s, beats prior llama.cpp prod |
 | [2026-05-04-llama-cpp-benchmarking.md](2026-05-04-llama-cpp-benchmarking.md) | `planned` | Systematic benchmarking methodology for llama.cpp on hestia 4090 (after #434/#441) |

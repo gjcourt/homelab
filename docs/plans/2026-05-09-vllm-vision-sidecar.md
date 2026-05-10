@@ -1,6 +1,44 @@
 ---
-status: planned
+status: abandoned
 last_modified: 2026-05-09
+---
+
+## Status: abandoned (vision quality on Qwen3-VL-2B-FP8 insufficient)
+
+**2026-05-09 update.** The plan was executed end-to-end. Co-tenancy plumbing worked perfectly — 30-min soak passed with 0 errors and 0 MiB VRAM drift, text endpoint decode preserved at 192.4 t/s (= solo-mode baseline). The blocker was the model's vision quality on real-world inputs.
+
+**Quality test** (19 ebay-listing photos, resized to 1024 max via PIL, scored against pre-defined criteria of correct item ID + label OCR + plausible condition assessment):
+
+- **9/19 clear-pass (47 %)**, below the 50 % threshold the operator had set as "revert without question."
+- Failure modes most concerning for hermes use:
+  - **Brand confusion**: Micron RAM identified as HP; Stages 105-5800 power meter identified as "Shimano 501."
+  - **Hallucinated context**: server PSU described as "for cryptocurrency mining."
+  - **Multi-image degenerate looping**: confidently asserted "Dell PowerEdge R730" for an iStar D-300 chassis, with paragraph-long repetitive sentences.
+
+Per the operator's directive that text-only is significantly more important than image performance, the sidecar was reverted.
+
+**Final state:**
+
+- `vllm` SCALE app: RUNNING at `--gpu-memory-utilization 0.92`, `--max-model-len 163840`, full 1.78M-token KV pool restored, decode 192.4 t/s.
+- `vllm-vision` SCALE app: STOPPED on hestia (kept for fast re-test on a different model; `midclt call app.delete vllm-vision` to fully reclaim).
+- Canonical text compose `hosts/hestia/llms/docker-compose-vllm.yml` already at 0.92 from the prior merge of #571 — no canonical-YAML change needed for the revert.
+
+**What worked, recorded for future re-tries:**
+
+- The co-tenancy mechanism (two SCALE apps, one per port, GPU1-pinned sidecar with explicit `device_ids: ['1']`) is sound. Memory math required 4 iterations: text-util 0.92 → 0.85 → 0.80 → 0.72 paired with vision-util 0.10 → 0.20 → 0.25. The 2B FP8 model's actual runtime VRAM was ~5 GiB (vs the plan's 2.4 GiB estimate) — bake the higher number into any future variant of this design.
+- HEIC iPhone images need PIL resize (`thumbnail((1024, 1024))`) before base64-encoding, or the per-image vision token count exceeds `--max-model-len`. Default vLLM does not auto-downscale.
+- The `app.create` → `app.update` → `app.start` sequence on SCALE Custom Apps works for spinning up a sidecar without disturbing existing apps.
+
+**Trigger to revisit:**
+
+Try one of these on a new vLLM version (v0.21+) or in a planned swap-mode design:
+
+1. **Larger sidecar** — `Qwen/Qwen3-VL-4B-Instruct-FP8` or `8B-FP8`. Won't fit alongside the text winner; needs swap-mode (vision app stops the text app while serving). Quality is the bet — 4B/8B should resolve the brand-confusion + hallucinated-context failure modes.
+2. **Different family** — `OpenGVLab/InternVL3_5-8B` or `mistralai/Pixtral-12B-2409`. Better OCR characteristics per public benchmarks; similar memory needs to a 4B/8B Qwen variant.
+3. **OCR-specialist** — `microsoft/Florence-2-large` (~770 MB, fits easily in remaining headroom even at 0.92 text utilization). No chat semantics, but for the dominant ebay use case (read product labels off photos) it likely outperforms a general-purpose 2B VL model. Different integration pattern (HF Transformers `pipeline()`, not OpenAI chat completions) — would need a small shim service.
+
+The original plan body is preserved below as the activation runbook for any of those follow-ups.
+
 ---
 
 # vLLM vision sidecar on hestia — add image-input capability without disturbing the text winner

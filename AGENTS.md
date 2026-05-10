@@ -85,6 +85,7 @@ See `docs/architecture/` for component-level architecture (DNS strategy, gateway
 5. Namespace follows the convention (production unsuffixed, staging `-stage`)
 6. New CNPG clusters: iSCSI PVC provisioned and StorageClass correct
 7. Docs updated if the change affects a runbook or architecture doc
+8. Every container has a `readinessProbe`; a `livenessProbe` is added only with a signal distinct from readiness (see `docs/operations/2026-05-02-adding-an-app.md#health-probes`)
 
 ## Documentation
 

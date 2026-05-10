@@ -44,7 +44,7 @@ services:
         --enable-chunked-prefill
         --max-num-seqs 4
         --enable-auto-tool-choice
-        --tool-call-parser hermes
+        --tool-call-parser qwen3_xml
         --trust-remote-code
         >> /root/.cache/huggingface/vllm.log 2>&1
     container_name: vllm
@@ -75,7 +75,7 @@ services:
         - '-f'
         - http://localhost:8000/health
       timeout: 10s
-    image: vllm/vllm-openai:v0.20.1
+    image: vllm/vllm-openai:v0.20.2
     ipc: host
     ports:
       - '8000:8000'

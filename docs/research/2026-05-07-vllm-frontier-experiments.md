@@ -631,3 +631,180 @@ memory + health stability:
 Identical profile to the 32K soak: zero memory drift, zero errors, no latency trend. Compared to the 32K soak (1463 reqs / 247K tokens), the 160K config processed 1469 requests / 248K tokens — same throughput envelope. The larger KV pool is allocated up-front and stable; under typical load (single-stream-dominant), the larger context costs nothing in steady-state behavior.
 
 **Verdict: gauntlet steps 0–6 all pass at the 160K config.** No remaining open items for promotion-grade validation.
+
+## Vision sidecar — execution log (parallel to plan #569)
+
+**Date:** 2026-05-09. Plan: [`docs/plans/2026-05-09-vllm-vision-sidecar.md`](../plans/2026-05-09-vllm-vision-sidecar.md). Outcome: technical execution succeeded, vision quality on real-world images was insufficient, reverted. Plan flipped to `abandoned` with the outcome in its top-of-doc status block. This section captures the *execution narrative* per the established research-log convention.
+
+### Memory-budget tuning (4 iterations to find a working pair)
+
+The plan estimated the 2 B FP8 vision model would consume ~2.4 GiB. **Actual runtime was ~5 GiB** (model + vision tower + activations + KV cache). Iterative tuning converged on:
+
+| Iteration | text `--gpu-memory-utilization` | vision `--gpu-memory-utilization` | Outcome |
+|---|---|---|---|
+| Plan target | 0.92 | 0.10 | Vision OOM at startup (1.86 GiB free, 2.35 needed) |
+| 2 | 0.85 | 0.10 | Vision crash mid-load |
+| 3 | 0.80 | 0.20 | Vision OOM after 4.05 GiB use (cap was 4.92 GiB) |
+| 4 (working) | **0.72** | **0.25** | ✅ Both endpoints serving |
+
+GPU0 used: ~16.8 GiB (text-only via TP=2 split). GPU1 used: ~21.3 GiB (text + vision). Margin ~700 MiB per GPU.
+
+### Sidecar gauntlet — steps 1-5
+
+| Step | Probe | Result |
+|---|---|---|
+| 1 | Text-only via vision endpoint (vision model also serves text) | ✅ 0.72 s, "Hello! How are you?" |
+| 2 | Single-image smoke | ✅ 0.42 s, multimodal pipe end-to-end |
+| 3 | 2-image multi-content turn | ✅ 0.21 s, multi-image content blocks accepted |
+| 4 | 4 concurrent image-bearing requests | ✅ 0/4 errors, continuous batching works |
+| 5 | Co-tenancy snapshot (2 text + 2 vision parallel) | ✅ both endpoints 200, text avg 2.97 s, vision avg 0.38 s |
+
+### 30-minute co-tenancy soak (gauntlet step 6)
+
+Mixed workload at ~1 text req/sec + ~1 vision req/2sec for 1801 s.
+
+```
+text:    1102 reqs   0 errors   216,280 tokens   avg latency 1.39 s
+vision:   900 reqs   0 errors    53,500 tokens   avg latency 0.85 s
+GPU0 VRAM:  16,765 → 16,765 MiB (delta 0)
+GPU1 VRAM:  21,302 → 21,302 MiB (delta 0)
+text /health:    HTTP 200 throughout (61 samples, 30 s cadence)
+vision /health:  HTTP 200 throughout (61 samples)
+```
+
+Post-soak text-endpoint regression check (5-run benchmark):
+
+```
+short:  TTFT 0.090 s, decode 195.7 t/s
+medium: TTFT 0.090 s, decode 192.4 t/s   ← matches solo-mode 192 t/s baseline
+long:   TTFT 0.170 s, decode 191.7 t/s
+```
+
+**Co-tenancy plumbing verdict: PASS.** Text endpoint perf preserved within noise; zero VRAM drift on either GPU; zero errors across 1,002 vision-side requests.
+
+### Vision quality test (the actual blocker)
+
+Tested against 19 real eBay listing photos sampled from `~/ebay-listings/listings/` (10 different listings). HEIC images were converted to JPEG via `sips` and resized via PIL `thumbnail((1024, 1024))` before base64 encoding (full iPhone resolution tokenized to ~14 K vision tokens, exceeding `--max-model-len 8192` — confirmed via initial test that hit `400 Bad Request: input length exceeds max_model_len`).
+
+Each image was sent with a focused product-description prompt asking for: (1) item identification, (2) any visible condition issues, (3) one verifiable detail (model number, label text, port count, etc.). Scored binary clear-pass / not-clear-pass.
+
+**Score: 9/19 clear-pass = 47 %.**
+
+Pass examples:
+
+- crucial-64gb-ddr4 → "64GB Crucial DDR4 SODIMM RAM module"
+- futaba-4ex-fm-airplane-rc → "Futaba 4-channel digital radio transmitter for remote-controlled aircraft, specifically a 4EX-FM model"
+- oculus-quest-2 → "Oculus Quest 2 virtual reality headset and its accompanying controllers"
+- teamgroup-elite-32gb-ddr4 → "32GB DDR4 RAM module from the brand TeamGroup"
+
+Failure modes worth recording:
+
+- **Brand confusion:** Micron-branded RAM identified as "HP DDR4 RAM modules"; Stages 105-5800 power meter identified as "Shimano 501 bicycle crank arm".
+- **Hallucinated context:** SilverStone server PSU described as "for cryptocurrency mining rig".
+- **Multi-image degenerate looping:** the multi-image probe (4 photos of the iStar D-300 chassis) generated repetitive sentences ("a 1U rack-mountable chassis" 8 times in a paragraph) and asserted a confidently-wrong specific model ("Dell PowerEdge R730").
+
+The pre-defined operator threshold was: **< 50 % clear-pass = revert without question.** Met that condition.
+
+### Revert
+
+Per operator directive ("text-only is significantly more important than image performance"):
+
+1. `midclt call app.stop vllm-vision`
+2. Text endpoint utilization restored to `0.92` (matches the post-#571 canonical compose; KV pool back to 1.78 M tokens).
+3. Post-revert text decode benchmark: medium 192.4 t/s, short 195.6 t/s, long 191.7 t/s — **identical to pre-sidecar baseline**. Zero regression.
+4. PR #573 (sidecar app) closed without merge; PR #577 (revert documentation, plan→abandoned) merged.
+5. `vllm-vision` SCALE app left in `STOPPED` state on hestia for fast re-test on a different model.
+
+### Lessons captured (for any future re-attempt)
+
+- **2 B-class FP8 VL runtime VRAM is ~5 GiB**, not the ~2.4 GiB I'd estimated from on-disk size. Bake the higher number into any future plan.
+- **HEIC iPhone images need PIL/sips downscale** to ≤1024 max dimension before base64 encoding, or per-image vision-token count exceeds typical `--max-model-len`. vLLM does not auto-downscale.
+- The two-SCALE-app co-tenancy pattern (different ports, GPU1-pinned via `device_ids: ['1']`, `--gpu-memory-utilization 0.10–0.25` cap) **works mechanically** — the bottleneck was model quality, not the co-tenancy mechanism.
+- Future vision re-tries should target either **larger sidecar** (Qwen3-VL-4B/8B FP8 in swap-mode, no co-tenancy because it won't fit alongside text), **different family** (InternVL3-8B, Pixtral-12B), or **OCR-specialist** (Florence-2-large with a small shim for the chat-completions API). All recorded in the plan's "Trigger to revisit" section.
+
+## Tool-call parser correction (hermes → qwen3_xml)
+
+**Date:** 2026-05-09. PR: [#578](https://github.com/gjcourt/homelab/pull/578).
+
+After the Phase 6 v2 promotion shipped, hermes (the Signal-bot agent locally) reported tool calling wasn't working. Diagnosis caught a parser-format mismatch that was silently breaking every tool-bearing turn since promotion.
+
+### Symptom
+
+Hermes' OpenAI-style tool-call requests came back with empty `tool_calls` arrays. A direct probe of the vLLM endpoint with a standard `tools` array + `tool_choice: auto` payload reproduced the issue:
+
+```json
+{
+  "finish_reason": "stop",
+  "tool_calls": [],
+  "content": "Thinking Process: ...\n<tool_call>\n<function=get_weather>\n<parameter=city>Tokyo</parameter>\n</function>\n</tool_call>"
+}
+```
+
+The model **was** generating a tool call — it's right there in `content`. But `tool_calls` was empty. Hermes (the agent) reads `tool_calls`, not `content`, on tool turns, so to it the model "wasn't doing tool calls."
+
+### Root cause
+
+The Phase 6 v2 promotion shipped with `--tool-call-parser hermes`, copied from the original prod-disabled compose template. That parser expects **Nous Hermes-style JSON** wrapped in `<tool_call>` tags:
+
+```
+<tool_call>
+{"name": "get_weather", "arguments": {"city": "Tokyo"}}
+</tool_call>
+```
+
+But `cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit` was fine-tuned to emit **XML attribute-style** tool calls:
+
+```
+<tool_call>
+<function=get_weather>
+<parameter=city>Tokyo</parameter>
+</function>
+</tool_call>
+```
+
+Same outer tag, different inner dialect. The hermes parser tried to JSON-decode the XML and threw `JSONDecodeError: Expecting value: line 2 column 1 (char 1)` on every tool turn (visible in `vllm.log`). When the parser fails, vLLM falls back to leaving the raw model output in `content` and returning an empty `tool_calls` array — exactly the symptom hermes saw.
+
+The model was right; the parser was wrong.
+
+### Fix
+
+vLLM v0.20.1 ships `qwen3_xml` specifically for this dialect. One-line compose change: `--tool-call-parser hermes` → `--tool-call-parser qwen3_xml`.
+
+### Verification
+
+After applying via `midclt` and redeploying:
+
+```json
+{
+  "finish_reason": "tool_calls",
+  "tool_calls": [
+    {
+      "id": "chatcmpl-tool-...",
+      "type": "function",
+      "function": {
+        "name": "get_weather",
+        "arguments": "{\"city\": \"Tokyo\"}"
+      }
+    }
+  ]
+}
+```
+
+Standard OpenAI shape. Hermes confirmed working end-to-end immediately after the change.
+
+### Lesson for future Qwen-family promotions
+
+Qwen3.x models emit XML-style tool calls and need `--tool-call-parser qwen3_xml` (vLLM v0.20+). Don't reach for `--tool-call-parser hermes` just because the agent is named "hermes" — that parser is for the Nous Hermes format, not for "the parser hermes-bot uses." Different things, same word.
+
+A simple post-promotion sanity check would have caught this immediately:
+
+```bash
+curl http://10.42.2.10:8000/v1/chat/completions -H "Content-Type: application/json" -d '{
+  "model": "<served-model-name>",
+  "messages": [{"role":"user","content":"What is the weather in Tokyo?"}],
+  "tools": [{"type":"function","function":{"name":"get_weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}}],
+  "tool_choice": "auto", "max_tokens": 100
+}' | grep -E 'finish_reason|tool_calls'
+```
+
+Pass: `"finish_reason": "tool_calls"` with a populated `tool_calls` array. Fail: `"finish_reason": "stop"` with `tool_calls: []` and the structured call as raw text in `content`. Adding this to the gauntlet for any future model-swap.

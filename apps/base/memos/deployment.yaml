@@ -37,7 +37,7 @@ spec:
 
       containers:
         - name: memos
-          image: neosmemo/memos@sha256:6088f656db8ffa928338d174295b35403d7b7c0015dce93bbc8a48ceb6932362
+          image: neosmemo/memos:0.28.0@sha256:06066de94333c091ee67c2ad5dec5f15bf5f35b31498c90092f9915dd05e9f92
           ports:
             - containerPort: 5230
 

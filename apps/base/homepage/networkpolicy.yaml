@@ -54,15 +54,23 @@ spec:
             - port: "6443"
               protocol: TCP
     # AdGuard widget — cluster-internal admin Service in adguard-prod.
-    # The adguard-admin Service exposes 8080, but its targetPort is the
-    # `http` named port → AdGuard pod port 80. Cilium evaluates egress
-    # after DNAT, so the policy must match the post-DNAT pod port (80),
-    # not the Service port (8080). The previous `port: "8080"` matched
-    # nothing, dropping the widget API call.
+    # Two Cilium gotchas in one rule:
+    #   1) The adguard-admin Service exposes 8080, but its targetPort is the
+    #      `http` named port → AdGuard pod port 80. Cilium evaluates egress
+    #      after DNAT, so the policy must match the post-DNAT pod port (80),
+    #      not the Service port (8080).
+    #   2) Cilium only promotes a subset of pod labels into its policy-visible
+    #      identity (notably the `app.kubernetes.io/*` prefix). It does NOT
+    #      promote `statefulset.kubernetes.io/pod-name`. A previous version of
+    #      this rule used that label (mirroring the adguard-admin Service's
+    #      pod selector) and matched zero identities — Hubble showed
+    #      `policy-verdict:none EGRESS DENIED`. Use `app.kubernetes.io/name`
+    #      instead; that broadens to all adguard pods (adguard-0 + adguard-1),
+    #      but the Service itself still routes only to adguard-0.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: adguard-prod
-            statefulset.kubernetes.io/pod-name: adguard-0
+            app.kubernetes.io/name: adguard
       toPorts:
         - ports:
             - port: "80"

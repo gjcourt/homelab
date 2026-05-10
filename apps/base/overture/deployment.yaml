@@ -6,7 +6,10 @@ metadata:
   labels:
     app: overture
 spec:
-  replicas: 1
+  # Disabled 2026-05-10: overture is no longer in active use. The CNPG
+  # cluster has been hibernated separately; bringing this back up
+  # requires de-hibernating overture-db-production-cnpg-v1 first.
+  replicas: 0
   revisionHistoryLimit: 5
   selector:
     matchLabels:

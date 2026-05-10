@@ -6,6 +6,7 @@ resources:
   - authelia
   - certificates
   - excalidraw
+  - flashcards
   - golinks
   - hermes
   - hermes-callee
@@ -18,6 +19,7 @@ resources:
   - mealie
   - memos
   - navidrome
+  - netscope
   - openwebui
   - signal-cli
   - snapcast

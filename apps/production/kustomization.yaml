@@ -8,6 +8,7 @@ resources:
   - cloudflare-tunnel
   - excalidraw
   - external-services
+  - flashcards
   - golinks
   - hermes
   - hermes-callee

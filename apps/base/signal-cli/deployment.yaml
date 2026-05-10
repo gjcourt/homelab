@@ -6,7 +6,10 @@ metadata:
   labels:
     app: signal-cli
 spec:
-  replicas: 1
+  # Disabled 2026-05-10: signal-cli's only consumer was hermes, which is
+  # itself disabled following the hestia GPU removal. Restore replicas to
+  # 1 if any new Signal-bound workload needs the bridge.
+  replicas: 0
   revisionHistoryLimit: 5
   strategy:
     type: Recreate

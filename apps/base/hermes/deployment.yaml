@@ -6,7 +6,11 @@ metadata:
   labels:
     app: hermes
 spec:
-  replicas: 1
+  # Disabled 2026-05-10: GPUs removed from hestia for sale, vLLM at
+  # http://10.42.2.10:8000 is unavailable. Applies to both hermes and
+  # hermes-callee (which overlays this base). Restore replicas to 1 once
+  # GPU inference is back online.
+  replicas: 0
   revisionHistoryLimit: 5
   strategy:
     type: Recreate
@@ -32,7 +36,7 @@ spec:
       containers:
         - name: hermes
           # nousresearch/hermes-agent:v2026.4.30 (linux/amd64)
-          image: nousresearch/hermes-agent@sha256:f3fb170c9d2def1368eddee38c730b048bdea5216cda466ca2d7c20e54aa05c1
+          image: nousresearch/hermes-agent@sha256:8e384fa39790a36013861795a8ec1035cd14e78637a7c71389db1258505da2ca
           imagePullPolicy: IfNotPresent
           # Use `args` (not `command`) so the upstream entrypoint chain
           # (tini → uv venv → `hermes`) stays intact. Setting `command`

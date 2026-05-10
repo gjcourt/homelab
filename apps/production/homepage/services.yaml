@@ -39,12 +39,13 @@
     - OpenWebUI:
         icon: open-webui.png
         href: https://chat.burntbytes.com
-        description: AI chat interface (frontend for vLLM)
-        siteMonitor: https://chat.burntbytes.com
+        # Disabled 2026-05-10: hestia GPU removed for sale; openwebui scaled
+        # to 0. siteMonitor dropped so the tile doesn't render permanently red.
+        description: AI chat interface (disabled — hestia GPU removed)
     - Hestia:
         icon: truenas-scale.png
         href: https://hestia.burntbytes.com
-        description: TrueNAS GPU server (vLLM, signal-cli, RTX 4090)
+        description: TrueNAS NAS (GPU removed 2026-05-10)
         # TrueNAS root path returns a 302 to http://hestia.burntbytes.com/ui/
         # (a scheme-downgrading redirect served by TrueNAS itself), which the
         # homepage siteMonitor renders as HTTP 500. /ui/ returns 200 directly.

@@ -84,6 +84,12 @@
         href: https://excalidraw.burntbytes.com
         description: Virtual whiteboard for sketching
         siteMonitor: https://excalidraw.burntbytes.com
+    - Flashcards:
+        icon: mdi-cards
+        href: https://flashcards.burntbytes.com
+        description: Spaced-repetition flashcards (FSRS)
+        # nginx /healthz returns 200 "ok"; root path is a SPA so probe the healthz endpoint.
+        siteMonitor: https://flashcards.burntbytes.com/healthz
 
 - Infrastructure:
     - Synology NAS:

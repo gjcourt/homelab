@@ -57,6 +57,8 @@ For each of the 23 workload apps, determine whether the running image exposes a 
 
 | app | exposes-metrics | port name | port number | sample metric | source |
 |-----|-----------------|-----------|-------------|---------------|--------|
+| authelia | yes | metrics | 9959 | `authelia_authentication_attempts_total` | https://www.authelia.com/reference/guides/metrics/ |
+| immich | no | n/a | n/a | n/a | upstream issue #1234 (no native /metrics) |
 
 The rule: **only create an SM for an app that actually exposes `/metrics`.** Pod readiness, restart counts, and uptime for apps without `/metrics` are already covered by kube-state-metrics. Adding an SM that scrapes a 404 produces permanent `up=0` noise and false alerts.
 
@@ -111,6 +113,8 @@ For each new SM, add `- servicemonitor.yaml` to `apps/base/<app>/kustomization.y
 
 ## Phase 2 — Critical-alert routing to Signal
 
+**Order of operations:** §2.1 audit → §2.2 deploy relay and smoke-test → §2.3 enable webhook in Alertmanager → §2.4 end-to-end test → §2.5 self-monitoring rule. Flipping the webhook (§2.3) before the relay is up will cause Alertmanager delivery timeouts.
+
 ### 2.1 Pin down the bridge API
 
 Inspect the running signal bridge container to confirm:
@@ -126,7 +130,7 @@ Source: read `apps/base/signal-cli/deployment.yaml` and the upstream image docs.
 
 **Option A — direct Alertmanager webhook to signal-cli-rest-api.** Tempting but does not work cleanly: Alertmanager's webhook payload is `{alerts: [{labels, annotations, status, …}, …]}`, while signal-cli-rest-api expects `{number, recipients, message}`. Alertmanager `webhook_configs` has no body-templating field — only the URL. A direct POST will fail or render an unreadable payload.
 
-**Option B (chosen) — small relay.** A ~50-line Python service (mirroring the `apps/base/synology-iscsi-monitor/script-cm.yaml` pattern: ConfigMap-embedded script, `prometheus_client` for metrics, plain `http.server` or `aiohttp` for the webhook handler). It receives Alertmanager webhooks, formats one Signal message per firing alert (grouped by `alertname` + `namespace`), and POSTs to signal-cli-rest-api.
+**Option B (chosen) — small relay.** A ~50-line Python service mirroring the *script structure* of `apps/base/synology-iscsi-monitor/script-cm.yaml` — ConfigMap-embedded script, `prometheus_client` for metrics, plain `http.server` or `aiohttp` for the webhook handler. Placement differs from synology-iscsi-monitor (relay is alerting infrastructure, not a workload). It receives Alertmanager webhooks, formats one Signal message per firing alert (grouped by `alertname` + `namespace`), and POSTs to signal-cli-rest-api.
 
 **Placement:** `infra/controllers/alertmanager-signal-relay/` in the existing `monitoring` namespace, colocated with kube-prometheus-stack/Alertmanager. Rationale: this is alerting plumbing, not a user-facing workload — it belongs with the monitoring stack, not under `apps/`. No HelmRelease (custom code, not an upstream chart); plain Kustomize.
 
@@ -158,13 +162,13 @@ The relay exposes `alertmanager_signal_relay_messages_sent_total` and `_failed_t
 
 ### 2.3 Update values.yaml
 
-Edit `infra/controllers/kube-prometheus-stack/values.yaml` (the `alertmanager.config:` block starts at line 508; the `inhibit_rules` and `templates` sections **must remain intact** — only modify `route:` and `receivers:`).
+Edit `infra/controllers/kube-prometheus-stack/values.yaml` inside the `alertmanager.config:` block. The `inhibit_rules:` and `templates:` sections **must remain intact** — only modify `route:` and `receivers:`. Use anchoring text below, not line numbers, since both shift as the file is edited.
 
 **Diff-style instruction (do not replace the whole `config:` block):**
 
-1. **Update `config.route.group_by`** from `['namespace']` to `['namespace', 'alertname']` (line 537).
+1. **Update `config.route.group_by`** from `['namespace']` to `['namespace', 'alertname']`.
 
-2. **Add a new route** under `config.route.routes:` (before the closing of `routes:`, after the existing Watchdog entry around line 543):
+2. **Add a new route** to `config.route.routes:`, immediately after the existing Watchdog route (`- receiver: 'null'` with `matchers: alertname = "Watchdog"`):
 
    ```yaml
          - receiver: 'signal-critical'
@@ -173,7 +177,7 @@ Edit `infra/controllers/kube-prometheus-stack/values.yaml` (the `alertmanager.co
            continue: false
    ```
 
-3. **Add a new receiver** under `config.receivers:` (after the existing `- name: 'null'` at line 545):
+3. **Add a new receiver** to `config.receivers:`, immediately after the existing `- name: 'null'` entry:
 
    ```yaml
        - name: 'signal-critical'
@@ -182,9 +186,9 @@ Edit `infra/controllers/kube-prometheus-stack/values.yaml` (the `alertmanager.co
              send_resolved: true
    ```
 
-4. **Do not touch** `inhibit_rules:` (lines 511–533) or `templates:` (line 547). They stay as-is.
+4. **Do not touch** the `inhibit_rules:` block or the `templates:` block. They stay as-is.
 
-After editing, the diff against `origin/master` should be limited to the four small edits above. Run `git diff infra/controllers/kube-prometheus-stack/values.yaml` to confirm the inhibit rules are unchanged.
+After editing, `git diff infra/controllers/kube-prometheus-stack/values.yaml` should show four small additions/edits and **no** changes to `inhibit_rules:` or `templates:`. If it does, revert and retry.
 
 ### 2.4 Test
 

@@ -53,15 +53,19 @@ spec:
               protocol: TCP
             - port: "6443"
               protocol: TCP
-    # AdGuard widget — cluster-internal admin Service in adguard-prod (port 8080).
-    # Selector matches the StatefulSet pod that adguard-admin's Service targets.
+    # AdGuard widget — cluster-internal admin Service in adguard-prod.
+    # The adguard-admin Service exposes 8080, but its targetPort is the
+    # `http` named port → AdGuard pod port 80. Cilium evaluates egress
+    # after DNAT, so the policy must match the post-DNAT pod port (80),
+    # not the Service port (8080). The previous `port: "8080"` matched
+    # nothing, dropping the widget API call.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: adguard-prod
             statefulset.kubernetes.io/pod-name: adguard-0
       toPorts:
         - ports:
-            - port: "8080"
+            - port: "80"
               protocol: TCP
     # Prometheus widget (Cluster Resources) — kube-prometheus-stack-prometheus
     # in the monitoring namespace, port 9090.

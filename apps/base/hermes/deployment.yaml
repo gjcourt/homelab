@@ -6,7 +6,11 @@ metadata:
   labels:
     app: hermes
 spec:
-  replicas: 1
+  # Disabled 2026-05-10: GPUs removed from hestia for sale, vLLM at
+  # http://10.42.2.10:8000 is unavailable. Applies to both hermes and
+  # hermes-callee (which overlays this base). Restore replicas to 1 once
+  # GPU inference is back online.
+  replicas: 0
   revisionHistoryLimit: 5
   strategy:
     type: Recreate

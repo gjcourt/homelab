@@ -53,6 +53,10 @@
         icon: excalidraw.png
         href: https://excalidraw.stage.burntbytes.com
         description: Virtual whiteboard for sketching
+    - Flashcards:
+        icon: mdi-cards
+        href: https://flashcards.stage.burntbytes.com
+        description: Spaced-repetition flashcards (FSRS)
 
 - Infrastructure:
     - Synology NAS:

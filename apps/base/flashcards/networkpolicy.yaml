@@ -1,0 +1,40 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: flashcards
+  namespace: flashcards
+  labels:
+    app.kubernetes.io/name: flashcards
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: |
+    Static site served by nginx; no DB, no external calls. Gateway ingress
+    on 8080 only.
+  endpointSelector:
+    matchLabels:
+      app: flashcards
+  ingress:
+    # Cluster gateway proxy ingress. host + remote-node + ingress are all
+    # required — see feedback memory `feedback_cilium_gateway_netpol`.
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS only — nginx logs resolve hostnames; the app itself is local-first
+    # and never hits the network.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

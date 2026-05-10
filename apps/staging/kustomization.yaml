@@ -6,6 +6,7 @@ resources:
   - authelia
   - certificates
   - excalidraw
+  - flashcards
   - golinks
   - hermes
   - hermes-callee

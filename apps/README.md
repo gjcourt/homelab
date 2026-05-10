@@ -21,6 +21,7 @@
 - [mealie](base/mealie/)
 - [memos](base/memos/)
 - [navidrome](base/navidrome/)
+- [netscope](base/netscope/)
 - [openwebui](base/openwebui/)
 - [overture](base/overture/)
 - [signal-cli](base/signal-cli/)

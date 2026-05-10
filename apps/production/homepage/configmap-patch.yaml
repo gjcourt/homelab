@@ -37,6 +37,9 @@ data:
         - brainstorm:
             - abbr: BS
               href: https://github.com/gjcourt/brainstorm
+        - learning:
+            - abbr: LR
+              href: https://github.com/gjcourt/learning
 
     - Reference:
         - Kubernetes Docs:

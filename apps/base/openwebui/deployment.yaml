@@ -6,7 +6,10 @@ metadata:
   labels:
     app: openwebui
 spec:
-  replicas: 1
+  # Disabled 2026-05-10: GPUs removed from hestia for sale, vLLM at
+  # http://10.42.2.10:8000 is unavailable. Restore replicas to 1 once
+  # GPU inference is back online (or the upstream URL is repointed).
+  replicas: 0
   revisionHistoryLimit: 5
   selector:
     matchLabels:

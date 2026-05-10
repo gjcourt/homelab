@@ -1,8 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
-  - configmap.yaml
-  - configmap-go-librespot.yaml
   - deployment.yaml
   - namespace.yaml
   - networkpolicy.yaml
@@ -17,3 +15,12 @@ labels:
       app.kubernetes.io/component: audio
       app.kubernetes.io/part-of: homelab
       app.kubernetes.io/managed-by: flux
+configMapGenerator:
+  - name: snapserver-config
+    namespace: snapcast
+    files:
+      - config/snapserver.conf
+  - name: go-librespot-config
+    namespace: snapcast
+    files:
+      - config/config.yml

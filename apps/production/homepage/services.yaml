@@ -105,7 +105,9 @@
         siteMonitor: https://adguard.burntbytes.com
         widget:
           type: adguard
-          url: https://adguard.burntbytes.com
+          # Cluster-internal Service URL avoids the gateway round-trip
+          # and TLS termination just for widget polling.
+          url: http://adguard-admin.adguard-prod.svc.cluster.local:8080
           username: "{{HOMEPAGE_VAR_ADGUARD_USER}}"
           password: "{{HOMEPAGE_VAR_ADGUARD_PASS}}"
     - Authelia:

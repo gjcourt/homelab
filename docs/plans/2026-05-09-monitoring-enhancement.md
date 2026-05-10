@@ -1,323 +1,266 @@
 ---
-name: "Homelab Monitoring & Healthcheck Enhancement"
-date: "2026-05-09"
-status: "draft"
-author: "George Courtsunis + Hermes"
+status: draft
+last_modified: 2026-05-09
 ---
 
-# Homelab Monitoring & Healthcheck Enhancement
+# Monitoring Coverage & Signal Routing
 
 ## Overview
 
-Extend the existing kube-prometheus-stack monitoring to provide full observability across all 21 production apps, add a healthcheck Deployment for cluster-level synthetic metrics, and configure Alertmanager-to-Signal routing for on-call notifications. The current stack is well-architected but has two gaps: 18 apps lack ServiceMonitors (invisible to Prometheus), and there are no cluster healthcheck metrics or Signal alert routing beyond what Hermes uses.
+Close two specific gaps in the existing kube-prometheus-stack deployment:
 
-This plan covers ServiceMonitors for all apps, a healthcheck Deployment, Alertmanager Signal routing, and new Grafana dashboards — all delivered via Flux GitOps.
+1. **ServiceMonitor coverage** — most workload apps that could expose `/metrics` aren't scraped. One existing SM (authelia) is also missing the release label that makes Prometheus discover it.
+2. **Critical-alert routing to Signal** — Alertmanager currently routes every alert to a `null` receiver. Wire `severity=critical` alerts through the existing signal-cli bridge.
 
-**Why now:** The homelab has grown to 21 production apps. Without ServiceMonitors, most apps are invisible to Prometheus — CrashLoopBackOff on a non-monitored app would only be caught by the generic K8s alert (which fires on any namespace). The healthcheck metrics will give a single-pane view of cluster synthetic health.
+This plan **does not** add new dashboards or a custom healthcheck exporter — see [Out of scope](#out-of-scope-deliberately) for why.
 
-## Requirements
+## Relationship to prior plans
 
-### Functional
-- All 21 production apps are scraped by Prometheus via ServiceMonitors
-- Healthcheck metrics are exposed and visible in Grafana
-- Critical alerts (node NotReady, CrashLoopBackOff, PVC > 90%, Flux reconciliation failure, BGP session down) route to Signal
-- Warning alerts (CPU > 90%, OOMKilled, DaemonSet not ready, CNPG degraded) log to Loki and show in Grafana
-- Informational alerts (weekly health digest) are emailed
+- `docs/plans/2026-02-21-app-health-dashboards-plan.md` — `status: complete`. Generic Application Health dashboard is deployed.
+- `docs/plans/2026-02-21-cluster-health-dashboards-plan.md` — `status: complete`. Cluster Overview, Node Details, Storage & CSI, Networking & Gateway, and Control Plane dashboards are deployed.
 
-### Non-functional
-- All changes via Flux GitOps — no manual `kubectl`
-- High-priority apps scraped at 15s, normal apps at 30s
-- Healthcheck Deployment runs lightweight Python script, exposes `/metrics` on port 9100
-- Signal integration reuses existing signal-bridge HTTP API (port 8080)
-- New ServiceMonitors follow the existing pattern (`apps/base/<app>/servicemonitor.yaml`)
-- New Grafana dashboards follow the existing pattern (`infra/configs/dashboards/<name>-cm.yaml`)
-- PrometheusRules follow the existing pattern (`infra/configs/alerts/prometheus-rules.yaml`)
+This plan does not supersede or extend either. Dashboard work is intentionally out of scope.
 
-### Priority tiers for scrape intervals
-- **High (15s):** openwebui, homeassistant, hermes, signal-cli, golinks, immich, jellyfin
-- **Normal (30s):** adguard, audiobookshelf, authelia, excalidraw, hermes-callee, homepage, linkding, mealie, memos, navidrome, overture, snapcast, vitals, synology-iscsi-monitor
+## Ground truth (verified against `origin/master` at 2026-05-09)
 
-## Architecture
+### Apps in `apps/production/kustomization.yaml` (25 entries)
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    Flux Kustomization                         │
-│  infra/ → controllers/kube-prometheus-stack/ (HelmRelease)   │
-│  infra/ → configs/servicemonitors/ (new: SM CRs)             │
-│  infra/ → configs/dashboards/ (new dashboard ConfigMaps)     │
-│  apps/production/ → base/*/servicemonitor.yaml (new)         │
-└──────────────────┬───────────────────────────────────────────┘
-                   │
-                   ▼
-┌──────────────────────────────────────────────────────────────┐
-│                      Cluster                                 │
-│                                                              │
-│  ┌─────────────┐   ┌─────────────────┐   ┌───────────────┐  │
-│  │ Healthcheck  │   │  kube-prometheus│   │  App Pods     │  │
-│  │ Deployment   │──▶│  -stack         │   │  (21 apps)    │  │
-│  │              │   │  Prometheus     │   │               │  │
-│  │ /metrics     │   │  Grafana        │   │ ServiceMonitor│  │
-│  │ :9100        │   │  Alertmanager   │   │  (15s/30s)    │  │
-│  └─────────────┘   │                 │   └───────┬───────┘  │
-│                    └────────┬────────┘           │          │
-│                             │                    │          │
-│                    ┌────────▼────────┐   ┌───────▼───────┐  │
-│                    │  Loki           │   │  signal-bridge│  │
-│                    │  Promtail       │   │  :8080        │  │
-│                    └─────────────────┘   │  /v1/send     │  │
-│                                          └───────┬───────┘  │
-│                                                  │          │
-└──────────────────────────────────────────────────┼──────────┘
-                                                   │
-                                          ┌──────▼───────┐
-                                          │  signal-cli   │
-                                          │  (JSON-RPC)   │
-                                          │  :7583        │
-                                          └──────────────┘
-```
+- **Workload apps (23):** `adguard`, `audiobookshelf`, `authelia`, `cloudflare-tunnel`, `excalidraw`, `golinks`, `hermes`, `hermes-callee`, `homeassistant`, `homepage`, `immich`, `jellyfin`, `linkding`, `mealie`, `memos`, `navidrome`, `openwebui`, `overture`, `signal-cli`, `snapcast`, `synology-iscsi-monitor`, `truenas-iscsi-monitor`, `vitals`.
+- **Kustomize aggregator entries excluded from SM scope (2):** `certificates`, `external-services`. These are infra resource bundles, not workloads.
 
-### Data flow
-1. **Scrape:** Prometheus scrapes all 21 apps via ServiceMonitors + healthcheck Deployment + built-in exporters (node-exporter, kube-state-metrics, cAdvisor)
-2. **Rules:** PrometheusRule alerts fire on thresholds (existing custom rules + new healthcheck rules)
-3. **Alertmanager:** Routes alerts to receivers based on severity (Signal for critical, Loki for warning, null for info)
-4. **Signal bridge:** Alertmanager HTTP webhook → signal-bridge → signal-cli → Signal message
-5. **Dashboards:** Grafana visualizes metrics from Prometheus + healthcheck metrics
+### Existing ServiceMonitors on `origin/master` (4)
 
-## Implementation Plan
+| File | Has `release: kube-prometheus-stack` label? | Notes |
+|------|---------------------------------------------|-------|
+| `apps/base/authelia/servicemonitor.yaml` | **No** — broken discovery | Likely not scraped today; see §1.2 |
+| `apps/base/signal-cli/servicemonitor.yaml` | (verify) | |
+| `apps/base/synology-iscsi-monitor/servicemonitor.yaml` | Yes | 60s interval, namespaceSelector set |
+| `apps/base/truenas-iscsi-monitor/servicemonitor.yaml` | Yes | |
 
-### Phase 1: ServiceMonitors for all 18 apps without them
+### SM discovery mechanic
 
-**Goal:** Create ServiceMonitors for all 21 production apps. Three already exist (authelia, signal-cli, synology-iscsi-monitor). 18 need to be created.
+`infra/controllers/kube-prometheus-stack/values.yaml:4146` sets `serviceMonitorSelectorNilUsesHelmValues: true` and the explicit `serviceMonitorSelector: {}` is empty. Combined, this means Prometheus selects ServiceMonitors whose `release` label matches the Helm release name — **`release: kube-prometheus-stack` is required**. SMs without it are silently ignored.
 
-**Pattern:** Follow existing convention — each `apps/base/<app>/servicemonitor.yaml` is referenced by the production Kustomization via `apps/base/<app>/kustomization.yaml`.
+### Alertmanager config
 
-**Tasks:**
+Already in Git at `infra/controllers/kube-prometheus-stack/values.yaml:508–547`. Current routing: every alert → receiver `null`; one explicit route for `Watchdog` → `null`. No webhook receivers configured. There is no out-of-Git ConfigMap to discover.
 
-1. **Audit each app's service to determine metrics endpoint**
-   - Inspect each app's `service.yaml` and `deployment.yaml` in `apps/base/<app>/` to find the port name and targetPort that exposes metrics
-   - Many apps don't expose metrics (immich, jellyfin, navidrome, audiobookshelf, snapcast) — create ServiceMonitors anyway for readiness/liveness probe visibility, note that they won't produce application-level metrics
-   - Document findings in PR description
+### kube-state-metrics
 
-2. **Create ServiceMonitors in `apps/base/<app>/servicemonitor.yaml`**
-   - For high-priority apps: `interval: 15s`
-   - For normal-priority apps: `interval: 30s`
-   - Label with `scrape-priority: high` or `scrape-priority: normal` for dashboard filtering
-   - 14 high-priority ServiceMonitors, 4 normal-priority ServiceMonitors
+Deployed (`infra/controllers/kube-prometheus-stack/values.yaml`: `kubeStateMetrics: true`). Emits `kube_pod_status_ready`, `kube_node_status_condition`, `kubelet_volume_stats_used_bytes`/`_capacity_bytes`, `kube_deployment_status_replicas_available`, etc. Anything we'd want from a hand-rolled "healthcheck exporter" for pod/node/PVC state is already there.
 
-**Files to create (18 ServiceMonitors):**
-```
-apps/base/adguard/servicemonitor.yaml                    (normal)
-apps/base/audiobookshelf/servicemonitor.yaml              (normal)
-apps/base/excalidraw/servicemonitor.yaml                  (normal)
-apps/base/golinks/servicemonitor.yaml                     (high)
-apps/base/hermes/servicemonitor.yaml                      (high)
-apps/base/hermes-callee/servicemonitor.yaml               (high)
-apps/base/homeassistant/servicemonitor.yaml               (high)
-apps/base/homepage/servicemonitor.yaml                    (high)
-apps/base/immich/servicemonitor.yaml                      (high)
-apps/base/jellyfin/servicemonitor.yaml                    (high)
-apps/base/linkding/servicemonitor.yaml                    (normal)
-apps/base/mealie/servicemonitor.yaml                      (normal)
-apps/base/memos/servicemonitor.yaml                       (high)
-apps/base/navidrome/servicemonitor.yaml                   (high)
-apps/base/openwebui/servicemonitor.yaml                   (high)
-apps/base/overture/servicemonitor.yaml                    (high)
-apps/base/snapcast/servicemonitor.yaml                    (normal)
-apps/base/vitals/servicemonitor.yaml                      (high)
-```
+## Phase 1 — ServiceMonitor coverage
 
-**Template:**
+### 1.1 Audit (must precede §1.3)
+
+For each of the 23 workload apps, determine whether the running image exposes a Prometheus `/metrics` endpoint and on what port. Record findings in the PR description as a table:
+
+| app | exposes-metrics | port name | port number | sample metric | source |
+|-----|-----------------|-----------|-------------|---------------|--------|
+
+The rule: **only create an SM for an app that actually exposes `/metrics`.** Pod readiness, restart counts, and uptime for apps without `/metrics` are already covered by kube-state-metrics. Adding an SM that scrapes a 404 produces permanent `up=0` noise and false alerts.
+
+Best-effort triage (must verify image-by-image — do not skip):
+
+- **Likely yes:** `hermes`, `hermes-callee`, `golinks` (verify), `authelia` (existing SM), `signal-cli` (existing SM), `synology-iscsi-monitor` (existing), `truenas-iscsi-monitor` (existing), `overture` (verify), `vitals` (small custom exporter — verify).
+- **Conditional / requires upstream config flag or sidecar:** `homeassistant` (Prometheus integration must be enabled in `configuration.yaml`), `jellyfin` (community plugin only), `immich` (no native endpoint).
+- **Likely no:** `navidrome`, `audiobookshelf`, `snapcast`, `mealie`, `linkding`, `memos`, `homepage`, `excalidraw`, `adguard`, `openwebui` (verify), `cloudflare-tunnel`.
+
+The audit determines the actual count of new SMs. Do not commit to "N apps need SMs" until §1.1 is done.
+
+### 1.2 Fix existing SMs
+
+- `apps/base/authelia/servicemonitor.yaml`: add `release: kube-prometheus-stack` to `metadata.labels`. Verify discovery before/after with `kubectl get servicemonitor -A -l release=kube-prometheus-stack` and the Prometheus targets page.
+- `apps/base/signal-cli/servicemonitor.yaml`: confirm the label is present; add if missing.
+
+### 1.3 Create new SMs (count from §1.1 audit)
+
+Canonical template. The `release` label is **required**:
+
 ```yaml
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: <app-name>
+  name: <app>
   namespace: <namespace>
   labels:
-    app: <app-name>
+    app: <app>
     release: kube-prometheus-stack
-    scrape-priority: <high|normal>
 spec:
   selector:
     matchLabels:
-      app: <app-name>
+      app: <app>
   endpoints:
     - port: <metrics-port-name>
       path: /metrics
-      interval: <15s|30s>
+      interval: 30s
       scrapeTimeout: 10s
 ```
 
-3. **Verify Prometheus discovers new ServiceMonitors**
-   - After Flux applies, check Prometheus target discovery (`/targets` in Grafana)
-   - Confirm all 21 apps appear as targets
+Use a uniform `interval: 30s` until a measured reason exists to vary. The existing synology-iscsi-monitor SM at 60s stays as-is — it's tuned for that exporter's scrape cost. The `scrape-priority` label introduced in earlier drafts is dropped: there is no Grafana variable that consumes it, and label proliferation without a consumer is a maintenance liability. Reintroduce only with a concrete dashboard query that uses it.
 
-### Phase 2: Healthcheck Deployment
+### 1.4 Wiring
 
-**Goal:** A lightweight Deployment that runs periodic cluster health checks and exposes synthetic metrics to Prometheus.
+For each new SM, add `- servicemonitor.yaml` to `apps/base/<app>/kustomization.yaml`. Then `kustomize build apps/production/<app>` must pass before pushing.
 
-**Rationale for Deployment over CronJob:** CronJobs are ephemeral and can't be scraped by Prometheus. A Deployment runs continuously, exposes `/metrics` on port 9100, and can be scraped at the same intervals as other apps.
+### 1.5 Verify
 
-**Architecture:**
-- Single Python container (or Go if preferred) with two processes:
-  1. Healthcheck loop: runs every 60s, checks pod readiness, PVC usage, node status
-  2. Metrics server: exposes `/metrics` on port 9100, updated by the healthcheck loop
-- ServiceMonitors scrape the `/metrics` endpoint
-- Prometheus records the metrics as time-series
+- `kubectl get servicemonitor -A -l release=kube-prometheus-stack` lists the expected count.
+- Prometheus targets page (Grafana → Explore → Prometheus datasource → `up{}`) shows each SM's target as UP.
+- No `up=0` for any new SM. A persistent `up=0` means the audit in §1.1 was wrong for that app — remove the SM rather than chase the 404.
 
-**Healthcheck checks:**
-1. **Pod readiness** — `healthcheck_pod_ready{namespace, pod} = 0|1`
-2. **PVC usage** — `healthcheck_pvc_usage_percent{namespace, pvc} = float`
-3. **Node status** — `healthcheck_node_ready{node} = 0|1`
-4. **Flux reconciliation** — `healthcheck_flux_reconciliation{kind, name, status} = 0|1`
-5. **App uptime** — `healthcheck_app_uptime_seconds{namespace, app} = float`
+## Phase 2 — Critical-alert routing to Signal
 
-**Tasks:**
+### 2.1 Pin down the bridge API
 
-1. **Create deployment manifest** — `infra/controllers/healthcheck/deployment.yaml`
-   - Single container with Python image (e.g., `python:3.12-slim`)
-   - Resource limits: 50m CPU, 128Mi memory
-   - ServiceAccount with read-only access to pods, nodes, pvcs (namespaced)
-   - ConfigMap with healthcheck configuration (check intervals, namespaces to monitor)
+Inspect the running signal bridge container to confirm:
 
-2. **Create healthcheck Python script** — `infra/controllers/healthcheck/healthcheck.py`
-   - Uses `kubernetes` Python client to read pod/node/PVC status
-   - Exposes `/metrics` via `prometheus_client` library
-   - Runs checks every 60s
+- The image is `bbernhard/signal-cli-rest-api` or a custom hermes bridge.
+- The exact endpoint shape (`bbernhard` exposes `/v2/send` with JSON `{number, recipients[], message}`).
+- The in-cluster Service DNS name (likely `signal-cli-rest-api.signal-cli.svc.cluster.local`).
+- Whether auth is required (in-cluster traffic is typically open).
 
-3. **Create Service and ServiceMonitor** — `infra/controllers/healthcheck/service.yaml`, `infra/controllers/healthcheck/servicemonitor.yaml`
-   - Service on port 9100 (http)
-   - ServiceMonitor scraping `/metrics` at 30s interval
+Source: read `apps/base/signal-cli/deployment.yaml` and the upstream image docs. Hermes already calls this endpoint — its source is the authoritative reference.
 
-4. **Create namespace** — `infra/controllers/healthcheck/namespace.yaml` (new `healthcheck` namespace)
+### 2.2 Pick routing strategy
 
-5. **Create HelmRelease for Flux** — `infra/controllers/healthcheck/release.yaml`
-   - Or use kustomize if the healthcheck is simpler than a Helm chart
+**Option A — direct Alertmanager webhook to signal-cli-rest-api.** Tempting but does not work cleanly: Alertmanager's webhook payload is `{alerts: [{labels, annotations, status, …}, …]}`, while signal-cli-rest-api expects `{number, recipients, message}`. Alertmanager `webhook_configs` has no body-templating field — only the URL. A direct POST will fail or render an unreadable payload.
 
-6. **Verify healthcheck metrics are visible in Prometheus**
-   - Check `/metrics` endpoint in Grafana
-   - Verify `healthcheck_pod_ready`, `healthcheck_pvc_usage_percent` etc. are recorded
+**Option B (chosen) — small relay.** A ~50-line Go or Python service receiving Alertmanager webhooks, formatting one Signal message per firing alert (grouped by `alertname` + `namespace`), and POSTing to signal-cli-rest-api. Deploy alongside signal-cli in the same namespace, reusing its credentials secret.
 
-### Phase 3: Alertmanager Signal Routing
+Files to create:
 
-**Goal:** Configure Alertmanager to route critical alerts to Signal via the existing signal-bridge.
+```
+apps/base/alertmanager-signal-relay/
+├── kustomization.yaml
+├── deployment.yaml         # single container, /alert POST endpoint, /metrics endpoint
+├── service.yaml            # ClusterIP :8080
+├── servicemonitor.yaml     # so the relay's own delivery counters are scraped
+└── README.md
+apps/production/alertmanager-signal-relay/
+└── kustomization.yaml
+```
 
-**Current state:** Signal is already wired — Hermes agents communicate via signal-bridge (port 8080, JSON-RPC on 7583). The `/v1/send` endpoint (or similar) exists and is used by Hermes.
+The relay exposes `alertmanager_signal_relay_messages_sent_total` and `_failed_total` counters. We alert on `_failed_total > 0` to avoid silent swallowing of critical alerts (see §2.5).
 
-**Tasks:**
+### 2.3 Update values.yaml
 
-1. **Determine signal-bridge alert endpoint**
-   - Confirm the exact HTTP endpoint that signal-bridge uses for sending messages
-   - This is used by Hermes already — check the Hermes deployment or source code for the API format
-   - Expected format: `POST http://signal-bridge.signal-cli.svc.cluster.local:8080/v1/send` with JSON body containing `phone` and `message`
-   - **DEPENDENCY:** Need Hermes signal-bridge API format (ask user or check hermes deployment)
+Replace the `config:` block at `infra/controllers/kube-prometheus-stack/values.yaml:508`:
 
-2. **Create Alertmanager receiver config**
-   - Add a `signal` receiver to the Alertmanager config
-   - Use a `webhook` receiver that POSTs to signal-bridge
-   - Configure the message template for Signal (compact format suitable for chat)
+```yaml
+config:
+  global:
+    resolve_timeout: 5m
+  inhibit_rules:
+    # …existing inhibit rules unchanged…
+  route:
+    group_by: ['namespace', 'alertname']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 12h
+    receiver: 'null'
+    routes:
+      - receiver: 'null'
+        matchers:
+          - alertname = "Watchdog"
+      - receiver: 'signal-critical'
+        matchers:
+          - severity = "critical"
+        continue: false
+  receivers:
+    - name: 'null'
+    - name: 'signal-critical'
+      webhook_configs:
+        - url: http://alertmanager-signal-relay.signal-cli.svc.cluster.local:8080/alert
+          send_resolved: true
+  templates:
+    - '/etc/alertmanager/config/*.tmpl'
+```
 
-3. **Create webhook relay (if needed)**
-   - If signal-bridge doesn't have a direct Alertmanager-compatible webhook endpoint, create a small relay
-   - Options:
-     a. Small Go/Python service in-cluster that converts Alertmanager webhook to signal-bridge API call
-     b. Use Alertmanager's `url` field to POST directly to signal-bridge if it accepts the format
-   - Deploy via `infra/controllers/` (or add as sidecar to signal-bridge if feasible)
+### 2.4 Test
 
-4. **Update Alertmanager routing**
-   - Critical alerts → Signal receiver
-   - Warning alerts → Loki (already via default route)
-   - Info alerts → null (email digest handled separately)
+1. Lower the threshold on an existing alert rule to force a critical fire (or pick one already firing — query `ALERTS{severity="critical",alertstate="firing"}`).
+2. Confirm the Signal message arrives within 5 minutes.
+3. Restore the threshold; confirm the resolved message arrives.
 
-5. **Test end-to-end alert flow**
-   - Trigger a test alert (e.g., set a Deployment to CrashLoopBackOff)
-   - Verify Signal message is received
-   - Verify warning alerts appear in Grafana
+### 2.5 Self-monitoring (mandatory)
 
-### Phase 4: Grafana Dashboards
+Add to `infra/configs/alerts/prometheus-rules.yaml`:
 
-**Goal:** Add new Grafana dashboards for healthcheck metrics and app-level overview.
+```yaml
+- alert: AlertmanagerSignalRelayFailing
+  expr: increase(alertmanager_signal_relay_messages_failed_total[5m]) > 0
+  for: 5m
+  labels:
+    severity: critical
+  annotations:
+    summary: "Signal alert relay failing — critical alerts may be silently dropped"
+```
 
-**Tasks:**
+Without this, a relay outage swallows every critical alert and we'd never know.
 
-1. **Cluster health dashboard** — `infra/configs/dashboards/cluster-health-cm.yaml`
-   - Panels for: pod readiness summary, PVC usage heatmap, node status, Flux reconciliation status
-   - Uses healthcheck metrics as primary data source
-   - Follows existing ConfigMap pattern with `grafana_dashboard: "1"` label
+## Phase 3 — PrometheusRules for Flux reconciliation
 
-2. **App health dashboard** — `infra/configs/dashboards/app-health-cm.yaml`
-   - Enhanced version of existing `application-health-cm.yaml`
-   - Add scrape-priority-based filtering
-   - Show all 21 apps in a single view
+Pre-flight: confirm `gotk_reconcile_condition` is being scraped. The Flux controllers expose Prometheus metrics on port 8080. If `up{job=~".*flux.*"}` returns nothing, add a ServiceMonitor for the Flux controllers under `infra/controllers/flux-system/` first; otherwise the rules below evaluate to `vector()` and never fire.
 
-3. **Alert summary dashboard** — `infra/configs/dashboards/alerts-cm.yaml`
-   - Active alerts panel (from Alertmanager API)
-   - Alert history (from Prometheus)
-   - Signal delivery status (if relay is used)
+Add to `infra/configs/alerts/prometheus-rules.yaml`:
 
-### Phase 5: New Prometheus Rules
+```yaml
+- alert: FluxKustomizationNotReady
+  expr: max by (name, namespace) (gotk_reconcile_condition{type="Ready",status="False",kind="Kustomization"}) == 1
+  for: 15m
+  labels:
+    severity: critical
+  annotations:
+    summary: "Flux Kustomization {{ $labels.namespace }}/{{ $labels.name }} not ready"
 
-**Goal:** Add healthcheck-specific alerting rules and Flux reconciliation failure rules.
+- alert: FluxHelmReleaseNotReady
+  expr: max by (name, namespace) (gotk_reconcile_condition{type="Ready",status="False",kind="HelmRelease"}) == 1
+  for: 15m
+  labels:
+    severity: critical
+  annotations:
+    summary: "Flux HelmRelease {{ $labels.namespace }}/{{ $labels.name }} not ready"
 
-**Tasks:**
+- alert: FluxGitRepositoryNotReady
+  expr: max by (name, namespace) (gotk_reconcile_condition{type="Ready",status="False",kind="GitRepository"}) == 1
+  for: 15m
+  labels:
+    severity: critical
+  annotations:
+    summary: "Flux GitRepository {{ $labels.namespace }}/{{ $labels.name }} not ready"
+```
 
-1. **Healthcheck alerting rules** — extend `infra/configs/alerts/prometheus-rules.yaml`
-   - `HealthcheckPodNotReady` — fires when healthcheck reports pod not ready for > 5m
-   - `HealthcheckPVCHighUsage` — fires when PVC usage > 90%
-   - `HealthcheckFluxReconciliationFailed` — fires when Flux reconciliation has failed for > 15m
+The 15m `for` window suppresses noise from transient reconciliation failures during the very rollouts that touch these rules.
 
-2. **Flux reconciliation rules** — add Flux-specific alerting
-   - `FluxKustomizationFailed` — Kustomization status is NotReady
-   - `FluxHelmReleaseFailed` — HelmRelease status is NotReady
-   - `FluxSyncFailed` — Git repository sync has failed
+## Risks
 
-3. **Recorded metrics for healthcheck** — add recording rules for common queries
-   - `healthcheck:pod_ready_ratio` — ratio of ready pods to total pods per namespace
-   - `healthcheck:pvc_usage_max` — max PVC usage percentage across all PVCs
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| Adding `release` label to authelia SM begins firing alerts that were silently suppressed before | Medium | Low | Add the SM fix in its own commit; observe one hour before adding any new rules. |
+| Relay outage silently drops critical alerts | Medium | High | `AlertmanagerSignalRelayFailing` rule (§2.5). |
+| Flux rules fire during this PR's own rollout | Medium | Medium | `for: 15m` window already mitigates; merge rules after relay is verified. |
+| `up=0` from an SM whose target lacks `/metrics` | Medium | Low | §1.5 explicitly checks; remove SM rather than chase. |
 
-## Risk Analysis
+## Rollback
 
-| Risk | Probability | Impact | Mitigation |
-|------|-------------|--------|------------|
-| ServiceMonitor targets produce too many low-value metrics (noise) | Medium | Low | Add `scrape-priority` labels, filter in Grafana. Review metrics after 1 week, disable low-value ones. |
-| Healthcheck Python script has resource issues | Low | Low | Set CPU/memory limits (50m/128Mi). Test with k6 or similar before deploying. |
-| Signal webhook relay introduces latency | Medium | Medium | Use direct signal-bridge API if possible. Add timeout (5s). Log delivery failures. |
-| Alertmanager config change breaks existing alerts | Low | High | Keep existing config intact, only add new receivers/routes. Test in staging first. |
-| Flux reconciliation fails due to new resources | Low | Medium | New resources are in separate directories. Flux should handle them independently. Monitor Flux status after deploy. |
-| Grafana dashboard ConfigMaps conflict with existing | Low | Low | Follow existing naming convention (`<name>-cm.yaml`). Use distinct panel IDs. |
+Each phase is independently revertable. Default Kustomization interval is **10 minutes** (`clusters/melodic-muse/apps-production.yaml`, `clusters/melodic-muse/infra.yaml`). To force immediately:
 
-## Success Criteria
+- §1 SMs: `git revert <commit>`; `flux reconcile kustomization apps-production -n flux-system`.
+- §2 values.yaml + relay: `git revert`; `flux reconcile helmrelease kube-prometheus-stack -n monitoring` and `flux reconcile kustomization apps-production -n flux-system`.
+- §3 rules: `git revert`; Prometheus reloads via the operator within ~1 minute, no manual flux reconcile required.
 
-All criteria must be verifiable via the cluster (no subjective assessments):
+## Success criteria
 
-1. **All 21 apps appear in Prometheus targets** — `up{job=~"kubernetes-pods.*"}` returns 21+ results (including healthcheck)
-2. **Healthcheck metrics are visible** — `healthcheck_pod_ready` metric is present in Prometheus with 21+ series
-3. **Critical alerts route to Signal** — trigger a CrashLoopBackOff test, receive a Signal message within 10 minutes
-4. **Grafana cluster health dashboard loads** — open the new dashboard, see pod readiness, PVC usage, and node status panels
-5. **No existing alerts break** — confirm existing alerts (CNPG, node filesystem, BGP) still fire correctly
-6. **Flux reconciles all new resources** — `flux get kustomizations` shows all green after apply
+- Each app the §1.1 audit identifies as exposing `/metrics` has a discovered SM; `up{job=~"<app>.*"} == 1` on the Prometheus targets page.
+- `kubectl get servicemonitor -A -l release=kube-prometheus-stack` returns the expected count (4 existing + N from audit).
+- A test `severity=critical` alert delivers a Signal message within 5 minutes; `_resolved` follows when the threshold is restored.
+- `alertmanager_signal_relay_messages_failed_total` stays at 0 over a 24h window after the rollout.
+- `flux get kustomizations -A` is green for every Kustomization touched.
 
-## Dependencies
+## Out of scope (deliberately)
 
-1. **Signal-bridge API format** — Need to confirm the exact HTTP endpoint and JSON format that signal-bridge uses for sending messages (HERMES_ALLOWED_ACCOUNTS env var suggests Hermes knows this)
-2. **Hermes source code** — Check how Hermes sends messages via signal-bridge to understand the API
-3. **App metrics endpoints** — Need to inspect each app's deployment to find the correct metrics port (some apps may not expose metrics at all)
-4. **Existing ConfigMap** — The Alertmanager config lives in `kube-prometheus-stack-helm-values` ConfigMap in the cluster, not in Git. Need to either move it to Git or create it as a managed resource.
-
-## Rollback Plan
-
-1. **ServiceMonitors rollback** — Delete the ServiceMonitor YAML files from `apps/base/<app>/`. Flux will delete the ServiceMonitor CRs automatically. No impact on apps.
-2. **Healthcheck rollback** — Delete `infra/controllers/healthcheck/` directory. Flux will delete the Deployment, Service, and ServiceMonitor. No impact on other resources.
-3. **Alertmanager rollback** — Revert the Alertmanager config change (remove the signal receiver and route). Alertmanager will reload config automatically.
-4. **Dashboard rollback** — Delete the dashboard ConfigMaps from `infra/configs/dashboards/`. Grafana will remove them.
-5. **PrometheusRules rollback** — Revert changes to `infra/configs/alerts/prometheus-rules.yaml`. Prometheus will reload rules automatically.
-
-**Full rollback:** Delete the PR branch and revert all commits. Flux will reconcile back to the previous state within 120 minutes (HelmRelease interval).
-
-## Future Considerations
-
-1. **Prometheus pushgateway** — If we need CronJobs to push metrics in the future (e.g., for batch jobs), consider deploying pushgateway. For now, the Deployment pattern is simpler.
-2. **Thanos** — If long-term metrics retention is needed (current PVC is ephemeral-ish), consider adding Thanos for object store-backed retention.
-3. **Multi-cluster** — If homelab expands to multiple clusters, consider a federated Prometheus setup or VictoriaMetrics.
-4. **Log-based alerting** — Currently alerts are metric-driven. Consider adding log-based alerts from Loki (e.g., error rate spikes in app logs).
-5. **Runbook automation** — Add runbook URLs to alert annotations that trigger self-healing actions (e.g., restart a stuck pod).
+- **New Grafana dashboards.** Already covered and complete in `2026-02-21-app-health-dashboards-plan.md` and `2026-02-21-cluster-health-dashboards-plan.md`.
+- **Custom healthcheck exporter.** kube-state-metrics already emits pod readiness, node status, and PVC capacity. Black-box HTTP probing of app endpoints, if later wanted, is `prometheus-blackbox-exporter` (a kube-prometheus-stack subchart) — separate, smaller plan.
+- **Loki-based log alerting.** Separate initiative.
+- **Multi-cluster federation, Thanos, pushgateway.** Premature for a 6-node single-cluster homelab.

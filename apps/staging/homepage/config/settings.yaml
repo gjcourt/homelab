@@ -1,0 +1,23 @@
+title: BurntBytes Staging
+description: Staging Environment
+headerStyle: clean
+layout:
+  Media:
+    style: column
+    rows: 8
+  Tools:
+    style: column
+    rows: 8
+  Infrastructure:
+    style: column
+    rows: 8
+  Monitoring:
+    style: column
+    rows: 8
+background:
+  image: https://images.unsplash.com/photo-1502790671504-542ad42d5189?auto=format&fit=crop&w=2560&q=80
+  blur: sm
+  opacity: 50
+cardBlur: md
+theme: dark
+color: slate

@@ -1,0 +1,15 @@
+- Developer:
+    - homelab:
+        - abbr: HL
+          href: https://github.com/gjcourt/homelab
+    - brainstorm:
+        - abbr: BS
+          href: https://github.com/gjcourt/brainstorm
+
+- Reference:
+    - Kubernetes Docs:
+        - abbr: K8s
+          href: https://kubernetes.io/docs/
+    - Cilium Docs:
+        - abbr: CIL
+          href: https://docs.cilium.io/

@@ -1,0 +1,33 @@
+- Developer:
+    - homelab:
+        - abbr: HL
+          href: https://github.com/gjcourt/homelab
+    - brainstorm:
+        - abbr: BS
+          href: https://github.com/gjcourt/brainstorm
+    - learning:
+        - abbr: LR
+          href: https://github.com/gjcourt/learning
+    - GitHub Inbox:
+        - abbr: GHI
+          href: https://github.com/notifications
+    - ghcr.io:
+        - abbr: GCR
+          href: https://github.com/orgs/gjcourt/packages
+
+- Reference:
+    - Kubernetes Docs:
+        - abbr: K8S
+          href: https://kubernetes.io/docs/
+    - Cilium Docs:
+        - abbr: CIL
+          href: https://docs.cilium.io/
+    - Flux Docs:
+        - abbr: FLX
+          href: https://fluxcd.io/flux/
+    - CNPG Docs:
+        - abbr: CNP
+          href: https://cloudnative-pg.io/documentation/
+    - Renovate:
+        - abbr: REN
+          href: https://developer.mend.io/github/gjcourt

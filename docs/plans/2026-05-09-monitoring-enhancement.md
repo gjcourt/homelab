@@ -33,7 +33,7 @@ This plan does not supersede or extend either. Dashboard work is intentionally o
 | File | Has `release: kube-prometheus-stack` label? | Notes |
 |------|---------------------------------------------|-------|
 | `apps/base/authelia/servicemonitor.yaml` | **No** — broken discovery | Likely not scraped today; see §1.2 |
-| `apps/base/signal-cli/servicemonitor.yaml` | (verify) | |
+| `apps/base/signal-cli/servicemonitor.yaml` | **No** — broken discovery | Same fix as authelia; see §1.2 |
 | `apps/base/synology-iscsi-monitor/servicemonitor.yaml` | Yes | 60s interval, namespaceSelector set |
 | `apps/base/truenas-iscsi-monitor/servicemonitor.yaml` | Yes | |
 
@@ -73,7 +73,7 @@ The audit determines the actual count of new SMs. Do not commit to "N apps need 
 ### 1.2 Fix existing SMs
 
 - `apps/base/authelia/servicemonitor.yaml`: add `release: kube-prometheus-stack` to `metadata.labels`. Verify discovery before/after with `kubectl get servicemonitor -A -l release=kube-prometheus-stack` and the Prometheus targets page.
-- `apps/base/signal-cli/servicemonitor.yaml`: confirm the label is present; add if missing.
+- `apps/base/signal-cli/servicemonitor.yaml`: same fix — `metadata.labels` currently has only `{app: signal-cli}`. Add `release: kube-prometheus-stack`.
 
 ### 1.3 Create new SMs (count from §1.1 audit)
 
@@ -194,7 +194,11 @@ After editing, `git diff infra/controllers/kube-prometheus-stack/values.yaml` sh
 1. Confirm the relay's metrics are exposed:
    ```bash
    kubectl -n monitoring port-forward svc/alertmanager-signal-relay 8080:8080 &
+   PF=$!
+   trap 'kill $PF 2>/dev/null' EXIT
+   sleep 1
    curl -s localhost:8080/metrics | grep -E '^alertmanager_signal_relay_messages_(sent|failed)_total'
+   kill $PF; trap - EXIT
    ```
    Both metric families must appear (even with value `0`). If either is missing, the relay was implemented incorrectly — the §2.5 self-monitoring rule depends on these names.
 2. Lower the threshold on an existing alert rule to force a critical fire (or pick one already firing — query `ALERTS{severity="critical",alertstate="firing"}`).
@@ -271,8 +275,8 @@ The 15m `for` window suppresses noise from transient reconciliation failures dur
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| Adding `release` label to authelia SM begins firing alerts that were silently suppressed before | Medium | Low | Add the SM fix in its own commit; observe one hour before adding any new rules. |
-| Relay outage silently drops critical alerts | Medium | High | `AlertmanagerSignalRelayFailing` rule (§2.5). |
+| Adding `release` label to authelia or signal-cli SM begins firing alerts that were silently suppressed before | Medium | Low | Land each SM label fix in its own commit; observe for one hour before adding any new rules. |
+| Relay outage silently drops critical alerts | Medium | High | Both `AlertmanagerSignalRelayFailing` (delivery errors) and `AlertmanagerSignalRelayDown` (`up == 0`) rules in §2.5. |
 | Flux rules fire during this PR's own rollout | Medium | Medium | `for: 15m` window already mitigates; merge rules after relay is verified. |
 | `up=0` from an SM whose target lacks `/metrics` | Medium | Low | §1.5 explicitly checks; remove SM rather than chase. |
 

@@ -127,7 +127,10 @@
         icon: mdi-dns
         href: https://vpn.burntbytes.com
         description: DNS updater for vpn.burntbytes.com
-        siteMonitor: https://vpn.burntbytes.com
+        # No siteMonitor: pingo is a CronJob (DNS updater for vpn.burntbytes.com),
+        # not an HTTP service — there is no HTTPRoute for vpn.burntbytes.com,
+        # so any probe returns 404 from the gateway. The href stays clickable
+        # for the operator; the dashboard simply omits the status dot.
 
 - Monitoring:
     - Cluster Resources:

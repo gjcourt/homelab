@@ -60,11 +60,11 @@ For each of the 23 workload apps, determine whether the running image exposes a 
 
 The rule: **only create an SM for an app that actually exposes `/metrics`.** Pod readiness, restart counts, and uptime for apps without `/metrics` are already covered by kube-state-metrics. Adding an SM that scrapes a 404 produces permanent `up=0` noise and false alerts.
 
-Best-effort triage (must verify image-by-image — do not skip):
+**Hints, not the audit result — verify each before drawing conclusions.** The grouping below is a starting point from documentation review; upstream behavior may have changed.
 
-- **Likely yes:** `hermes`, `hermes-callee`, `golinks` (verify), `authelia` (existing SM), `signal-cli` (existing SM), `synology-iscsi-monitor` (existing), `truenas-iscsi-monitor` (existing), `overture` (verify), `vitals` (small custom exporter — verify).
-- **Conditional / requires upstream config flag or sidecar:** `homeassistant` (Prometheus integration must be enabled in `configuration.yaml`), `jellyfin` (community plugin only), `immich` (no native endpoint).
-- **Likely no:** `navidrome`, `audiobookshelf`, `snapcast`, `mealie`, `linkding`, `memos`, `homepage`, `excalidraw`, `adguard`, `openwebui` (verify), `cloudflare-tunnel`.
+- _Hints toward yes:_ `hermes`, `hermes-callee`, `golinks`, `authelia` (SM exists), `signal-cli` (SM exists), `synology-iscsi-monitor` (SM exists), `truenas-iscsi-monitor` (SM exists), `overture`, `vitals`.
+- _Hints toward conditional (upstream config flag or sidecar):_ `homeassistant` (Prometheus integration must be enabled in `configuration.yaml`), `jellyfin` (community plugin only), `immich` (no native endpoint).
+- _Hints toward no:_ `navidrome`, `audiobookshelf`, `snapcast`, `mealie`, `linkding`, `memos`, `homepage`, `excalidraw`, `adguard`, `openwebui`, `cloudflare-tunnel`.
 
 The audit determines the actual count of new SMs. Do not commit to "N apps need SMs" until §1.1 is done.
 
@@ -126,56 +126,65 @@ Source: read `apps/base/signal-cli/deployment.yaml` and the upstream image docs.
 
 **Option A — direct Alertmanager webhook to signal-cli-rest-api.** Tempting but does not work cleanly: Alertmanager's webhook payload is `{alerts: [{labels, annotations, status, …}, …]}`, while signal-cli-rest-api expects `{number, recipients, message}`. Alertmanager `webhook_configs` has no body-templating field — only the URL. A direct POST will fail or render an unreadable payload.
 
-**Option B (chosen) — small relay.** A ~50-line Go or Python service receiving Alertmanager webhooks, formatting one Signal message per firing alert (grouped by `alertname` + `namespace`), and POSTing to signal-cli-rest-api. Deploy alongside signal-cli in the same namespace, reusing its credentials secret.
+**Option B (chosen) — small relay.** A ~50-line Python service (mirroring the `apps/base/synology-iscsi-monitor/script-cm.yaml` pattern: ConfigMap-embedded script, `prometheus_client` for metrics, plain `http.server` or `aiohttp` for the webhook handler). It receives Alertmanager webhooks, formats one Signal message per firing alert (grouped by `alertname` + `namespace`), and POSTs to signal-cli-rest-api.
+
+**Placement:** `infra/controllers/alertmanager-signal-relay/` in the existing `monitoring` namespace, colocated with kube-prometheus-stack/Alertmanager. Rationale: this is alerting plumbing, not a user-facing workload — it belongs with the monitoring stack, not under `apps/`. No HelmRelease (custom code, not an upstream chart); plain Kustomize.
+
+**No staging overlay** — singleton relay, follows the synology-iscsi-monitor pattern. Production-only.
 
 Files to create:
 
 ```
-apps/base/alertmanager-signal-relay/
+infra/controllers/alertmanager-signal-relay/
 ├── kustomization.yaml
 ├── deployment.yaml         # single container, /alert POST endpoint, /metrics endpoint
-├── service.yaml            # ClusterIP :8080
+├── service.yaml            # ClusterIP :8080 in namespace monitoring
 ├── servicemonitor.yaml     # so the relay's own delivery counters are scraped
+├── script-cm.yaml          # embedded Python relay script
 └── README.md
-apps/production/alertmanager-signal-relay/
-└── kustomization.yaml
 ```
+
+Then add `- alertmanager-signal-relay` to `infra/controllers/kustomization.yaml`.
+
+**Configuration** (env vars, no secrets — the bridge holds the Signal credentials, the relay only needs the bridge URL):
+
+- `SIGNAL_BRIDGE_URL` — `http://signal-cli-rest-api.signal-cli.svc.cluster.local:<port>/v2/send` (port from §2.1).
+- `SIGNAL_RECIPIENT_NUMBER` — destination phone number, sourced from a non-secret ConfigMap value or hardcoded in the manifest (it's a phone number, not a credential).
+- `SIGNAL_FROM_NUMBER` — sender, same source.
+
+**Webhook URL** for Alertmanager (used in §2.3): `http://alertmanager-signal-relay.monitoring.svc.cluster.local:8080/alert`.
 
 The relay exposes `alertmanager_signal_relay_messages_sent_total` and `_failed_total` counters. We alert on `_failed_total > 0` to avoid silent swallowing of critical alerts (see §2.5).
 
 ### 2.3 Update values.yaml
 
-Replace the `config:` block at `infra/controllers/kube-prometheus-stack/values.yaml:508`:
+Edit `infra/controllers/kube-prometheus-stack/values.yaml` (the `alertmanager.config:` block starts at line 508; the `inhibit_rules` and `templates` sections **must remain intact** — only modify `route:` and `receivers:`).
 
-```yaml
-config:
-  global:
-    resolve_timeout: 5m
-  inhibit_rules:
-    # …existing inhibit rules unchanged…
-  route:
-    group_by: ['namespace', 'alertname']
-    group_wait: 30s
-    group_interval: 5m
-    repeat_interval: 12h
-    receiver: 'null'
-    routes:
-      - receiver: 'null'
-        matchers:
-          - alertname = "Watchdog"
-      - receiver: 'signal-critical'
-        matchers:
-          - severity = "critical"
-        continue: false
-  receivers:
-    - name: 'null'
-    - name: 'signal-critical'
-      webhook_configs:
-        - url: http://alertmanager-signal-relay.signal-cli.svc.cluster.local:8080/alert
-          send_resolved: true
-  templates:
-    - '/etc/alertmanager/config/*.tmpl'
-```
+**Diff-style instruction (do not replace the whole `config:` block):**
+
+1. **Update `config.route.group_by`** from `['namespace']` to `['namespace', 'alertname']` (line 537).
+
+2. **Add a new route** under `config.route.routes:` (before the closing of `routes:`, after the existing Watchdog entry around line 543):
+
+   ```yaml
+         - receiver: 'signal-critical'
+           matchers:
+             - severity = "critical"
+           continue: false
+   ```
+
+3. **Add a new receiver** under `config.receivers:` (after the existing `- name: 'null'` at line 545):
+
+   ```yaml
+       - name: 'signal-critical'
+         webhook_configs:
+           - url: http://alertmanager-signal-relay.monitoring.svc.cluster.local:8080/alert
+             send_resolved: true
+   ```
+
+4. **Do not touch** `inhibit_rules:` (lines 511–533) or `templates:` (line 547). They stay as-is.
+
+After editing, the diff against `origin/master` should be limited to the four small edits above. Run `git diff infra/controllers/kube-prometheus-stack/values.yaml` to confirm the inhibit rules are unchanged.
 
 ### 2.4 Test
 
@@ -201,7 +210,15 @@ Without this, a relay outage swallows every critical alert and we'd never know.
 
 ## Phase 3 — PrometheusRules for Flux reconciliation
 
-Pre-flight: confirm `gotk_reconcile_condition` is being scraped. The Flux controllers expose Prometheus metrics on port 8080. If `up{job=~".*flux.*"}` returns nothing, add a ServiceMonitor for the Flux controllers under `infra/controllers/flux-system/` first; otherwise the rules below evaluate to `vector()` and never fire.
+### 3.1 Pre-flight: confirm Flux metrics are scraped
+
+The rules below depend on `gotk_reconcile_condition`, emitted by the Flux controllers. Before writing the rules:
+
+1. Query Prometheus: `up{job=~".*flux.*"}` and `count(gotk_reconcile_condition)`.
+2. If both return data, proceed to §3.2.
+3. If either is empty, add a ServiceMonitor for the Flux controllers (under `infra/controllers/flux-system/` or wherever Flux is deployed in this repo). The Flux controllers conventionally expose metrics on port 8080, but verify against the actual Service spec before assuming. Without this scrape coverage, the rules below evaluate to `vector()` and never fire.
+
+### 3.2 Add the rules
 
 Add to `infra/configs/alerts/prometheus-rules.yaml`:
 

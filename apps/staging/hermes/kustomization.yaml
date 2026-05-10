@@ -26,49 +26,15 @@ patches:
       - op: replace
         path: /data/SIGNAL_HTTP_URL
         value: http://signal-cli-bridge.signal-cli.svc.cluster.local:8080
-  # Tighter checkpoint retention to keep the smaller staging PVC in check
-  - target:
-      kind: ConfigMap
-      name: hermes-config-yaml
-    patch: |
-      - op: replace
-        path: /data/config.yaml
-        value: |
-          model:
-            default: Qwen3.6-35B-A3B
-            provider: custom
-            base_url: http://10.42.2.10:8000/v1
-          providers: {}
-          fallback_providers: []
-          toolsets:
-            - hermes-signal
-            - file
-            - web
-          agent:
-            max_turns: 90
-            gateway_timeout: 1800
-            restart_drain_timeout: 60
-            api_max_retries: 3
-            tool_use_enforcement: auto
-            reasoning_effort: medium
-            verbose: true
-          checkpoints:
-            enabled: true
-            max_snapshots: 5
-            auto_prune: true
-            retention_days: 3
-            delete_orphans: true
-            min_interval_hours: 24
-          prompt_caching:
-            cache_ttl: 5m
-          display:
-            personality: helpful
-            streaming: true
-          code_execution:
-            mode: project
-            max_tool_calls: 50
-            timeout: 300
-          logging:
-            level: DEBUG
-            max_size_mb: 5
-            backup_count: 3
+
+# Tighter checkpoint retention + DEBUG logging to keep the smaller staging PVC
+# in check and surface bot behaviour while iterating. Merged on top of base's
+# config.yaml via configMapGenerator behavior: merge — the file is the full
+# staging config (configMapGenerator merges at the data-key level, not within
+# a YAML document, so the whole file is replaced for this key).
+configMapGenerator:
+  - name: hermes-config-yaml
+    namespace: hermes
+    behavior: merge
+    files:
+      - config/config.yaml

@@ -64,11 +64,11 @@ curl -I http://localhost:8080/decks/financial  # 200, SPA fallback
 
 ## 9. Troubleshooting
 
-- **Page doesn't load externally**: check the `HTTPRoute` is bound to `flashcards.burntbytes.com` and Cloudflare Access has an application configured for the hostname.
+- **Page doesn't load externally**: check the `HTTPRoute` is bound to `flashcards.burntbytes.com` and Cloudflare Access has an application configured for the hostname. Staging (`flashcards.stage.burntbytes.com`) is reached via the same wildcard Access policy as other `*.stage.burntbytes.com` apps; if the staging host 403s on first hit, confirm the wildcard policy is in place rather than treating it as an app-level bug.
 - **Page doesn't load internally (LAN)**: AdGuard/Pihole wildcard `*.burntbytes.com` should resolve to the cluster gateway IP. Verify with `dig flashcards.burntbytes.com`.
 - **`/healthz` 200 but `/` returns 500**: nginx config issue (e.g. missing `root` directive). Check `kubectl logs` for "rewrite or internal redirection cycle".
 - **Image pull failure**: `ghcr-secret` is per-namespace and SOPS-encrypted. Re-encrypted by `flux-system-sops` at sync time; if missing, copy from another `gjcourt/*` app's base manifest.
 
 ## 10. Image bumps
 
-CI (`.github/workflows/image.yml` in `gjcourt/flashcards`) tags as `YYYY-MM-DD` and `latest` on push to `main`. Renovate updates the digest in `apps/base/flashcards/deployment.yaml` automatically.
+CI (`.github/workflows/image.yml` in `gjcourt/flashcards`) tags as `YYYY-MM-DD` (then `YYYY-MM-DD-N` for subsequent same-day builds) and `latest` on push to `main`. The tag in `apps/base/flashcards/deployment.yaml` is bumped manually via PR — same workflow as every other `gjcourt/*` app in this repo. Per `AGENTS.md`, the new tag must be strictly greater than the currently deployed one.

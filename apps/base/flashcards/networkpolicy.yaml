@@ -27,7 +27,10 @@ spec:
               protocol: TCP
   egress:
     # DNS only — nginx logs resolve hostnames; the app itself is local-first
-    # and never hits the network.
+    # and never hits the network. Reply traffic to the Gateway proxy is
+    # carried by Cilium conntrack on the established ingress flow, so no
+    # symmetric egress rule for `host`/`remote-node`/`ingress` is needed.
+    # Same pattern as `apps/base/excalidraw/networkpolicy.yaml`.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: kube-system

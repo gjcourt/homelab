@@ -31,7 +31,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: flashcards
-          image: ghcr.io/gjcourt/flashcards:2026-05-10
+          image: ghcr.io/gjcourt/flashcards:2026-05-10-9164c02
           ports:
             - containerPort: 8080
           resources:

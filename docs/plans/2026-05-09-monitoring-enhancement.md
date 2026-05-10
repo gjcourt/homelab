@@ -127,9 +127,9 @@ Action: read the gjcourt/signal-bridge image source (or its README) to record th
 
 ### 2.2 Pick routing strategy
 
-**Option A — direct Alertmanager webhook to signal-cli-rest-api.** Tempting but does not work cleanly: Alertmanager's webhook payload is `{alerts: [{labels, annotations, status, …}, …]}`, while signal-cli-rest-api expects `{number, recipients, message}`. Alertmanager `webhook_configs` has no body-templating field — only the URL. A direct POST will fail or render an unreadable payload.
+**Option A — direct Alertmanager webhook to signal-cli-bridge.** Doesn't work, regardless of bridge contract: Alertmanager `webhook_configs` posts a fixed `{alerts: [{labels, annotations, status, …}, …]}` JSON body to the configured URL, with **no body-templating field**. Whatever shape signal-cli-bridge accepts, Alertmanager won't produce it directly. A relay is required to translate the payload.
 
-**Option B (chosen) — small relay.** A ~50-line Python service mirroring the *script structure* of `apps/base/synology-iscsi-monitor/script-cm.yaml` — ConfigMap-embedded script, `prometheus_client` for metrics, plain `http.server` or `aiohttp` for the webhook handler. Placement differs from synology-iscsi-monitor (relay is alerting infrastructure, not a workload). It receives Alertmanager webhooks, formats one Signal message per firing alert (grouped by `alertname` + `namespace`), and POSTs to signal-cli-rest-api.
+**Option B (chosen) — small relay.** A ~50-line Python service mirroring the *script structure* of `apps/base/synology-iscsi-monitor/script-cm.yaml` — ConfigMap-embedded script, `prometheus_client` for metrics, plain `http.server` or `aiohttp` for the webhook handler. Placement differs from synology-iscsi-monitor (relay is alerting infrastructure, not a workload). It receives Alertmanager webhooks, formats one Signal message per firing alert (grouped by `alertname` + `namespace`), and POSTs to signal-cli-bridge.
 
 **Placement:** `infra/controllers/alertmanager-signal-relay/` in the existing `monitoring` namespace, colocated with kube-prometheus-stack/Alertmanager. Rationale: this is alerting plumbing, not a user-facing workload — it belongs with the monitoring stack, not under `apps/`. No HelmRelease (custom code, not an upstream chart); plain Kustomize.
 
@@ -157,7 +157,7 @@ Then add `- alertmanager-signal-relay` to `infra/controllers/kustomization.yaml`
 
 **Webhook URL** for Alertmanager (used in §2.3): `http://alertmanager-signal-relay.monitoring.svc.cluster.local:8080/alert`.
 
-The relay exposes `alertmanager_signal_relay_messages_sent_total` and `_failed_total` counters. We alert on `_failed_total > 0` to avoid silent swallowing of critical alerts (see §2.5).
+The relay exposes `alertmanager_signal_relay_messages_sent_total` and `_failed_total` counters and is itself scraped via the SM above. §2.5 alerts on **both** `_failed_total > 0` (delivery errors while the relay is up) and `up == 0` (relay pod gone), so neither failure mode silently swallows critical alerts.
 
 ### 2.3 Update values.yaml
 

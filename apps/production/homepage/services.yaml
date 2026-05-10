@@ -41,10 +41,10 @@
         href: https://chat.burntbytes.com
         description: AI chat interface (frontend for vLLM)
         siteMonitor: https://chat.burntbytes.com
-    - vLLM:
-        icon: vllm.png
+    - Hestia:
+        icon: truenas-scale.png
         href: https://hestia.burntbytes.com
-        description: LLM inference server (Qwen3 on RTX 4090)
+        description: TrueNAS GPU server (vLLM, signal-cli, RTX 4090)
         siteMonitor: https://hestia.burntbytes.com
     - Overture:
         icon: mdi-rss

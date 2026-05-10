@@ -1,0 +1,151 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netscope-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  netscope.json: |
+    {
+      "title": "Netscope (eBPF Network Traffic)",
+      "uid": "netscope-overview",
+      "tags": ["homelab", "netscope", "ebpf"],
+      "schemaVersion": 38,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "timepicker": {},
+      "panels": [
+        {
+          "id": 1,
+          "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+          "type": "stat",
+          "title": "Nodes Reporting",
+          "description": "Count of netscope-agent scrape targets currently up. Should equal the number of nodes in the cluster (6); a smaller number means at least one DaemonSet pod is unhealthy or has lost its scrape endpoint.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "count(up{job=\"netscope-agent\"} == 1)",
+              "legendFormat": "up"
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "red" },
+                { "value": 1, "color": "yellow" },
+                { "value": 6, "color": "green" }
+              ]
+            }
+          }
+        },
+        {
+          "id": 2,
+          "gridPos": { "x": 6, "y": 0, "w": 9, "h": 4 },
+          "type": "stat",
+          "title": "Cluster Ingress Rate (B/s)",
+          "description": "sum(rate(netscope_rx_bytes_total[5m])) — total bytes/sec received at tcx ingress across every node's primary interface. Sanity check that all DaemonSet pods are publishing data.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(netscope_rx_bytes_total[5m]))",
+              "legendFormat": "cluster B/s"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps"
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "value"
+          }
+        },
+        {
+          "id": 3,
+          "gridPos": { "x": 15, "y": 0, "w": 9, "h": 4 },
+          "type": "stat",
+          "title": "Per-Node Scrape Status",
+          "description": "up{job=\"netscope-agent\"} broken out per node. A 0 here means Prometheus has lost a scrape target — investigate before trusting traffic graphs.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "up{job=\"netscope-agent\"}",
+              "legendFormat": "{{nodename}}"
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "" },
+            "colorMode": "background",
+            "textMode": "value_and_name",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": null, "color": "red" },
+                { "value": 1, "color": "green" }
+              ]
+            }
+          }
+        },
+        {
+          "id": 10,
+          "gridPos": { "x": 0, "y": 4, "w": 24, "h": 10 },
+          "type": "timeseries",
+          "title": "Per-Node Receive Rate (B/s)",
+          "description": "rate(netscope_rx_bytes_total[5m]) by nodename — bytes/sec at tcx ingress on each node's primary interface. The headline panel: one line per node, gaps indicate scrape loss, sustained spikes indicate a noisy node.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (nodename) (rate(netscope_rx_bytes_total[5m]))",
+              "legendFormat": "{{nodename}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "fillOpacity": 10
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "id": 11,
+          "gridPos": { "x": 0, "y": 14, "w": 24, "h": 8 },
+          "type": "timeseries",
+          "title": "Total Cluster Ingress Rate (B/s)",
+          "description": "sum(rate(netscope_rx_bytes_total[5m])) — single line view of cluster-wide ingress, useful for capacity-planning.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(netscope_rx_bytes_total[5m]))",
+              "legendFormat": "cluster"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "Bps",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "fillOpacity": 20
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "single" }
+          }
+        }
+      ]
+    }

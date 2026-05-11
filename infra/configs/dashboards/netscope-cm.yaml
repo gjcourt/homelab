@@ -146,6 +146,146 @@ data:
             "legend": { "displayMode": "list", "placement": "bottom" },
             "tooltip": { "mode": "single" }
           }
+        },
+        {
+          "id": 19,
+          "gridPos": { "x": 0, "y": 22, "w": 24, "h": 1 },
+          "type": "row",
+          "title": "Phase 2 — TCP depth signals",
+          "collapsed": false,
+          "panels": []
+        },
+        {
+          "id": 20,
+          "gridPos": { "x": 0, "y": 23, "w": 15, "h": 10 },
+          "type": "timeseries",
+          "title": "TCP Retransmit Rate per Node",
+          "description": "rate(netscope_tcp_retransmits_total[5m]) by nodename — TCP retransmit events/sec per node, sampled by the eBPF probe. Headline reliability signal: sustained non-zero on a worker indicates either local NIC trouble or a noisy peer; control-plane nodes typically run a low background rate from kube-apiserver traffic.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (nodename) (rate(netscope_tcp_retransmits_total[5m]))",
+              "legendFormat": "{{nodename}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "ops",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "fillOpacity": 10
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "id": 21,
+          "gridPos": { "x": 15, "y": 23, "w": 9, "h": 10 },
+          "type": "stat",
+          "title": "Cluster Retransmits (24h)",
+          "description": "sum(increase(netscope_tcp_retransmits_total[24h])) — total retransmits cluster-wide over the last 24 hours. Sits next to the per-node rate panel as a quick at-a-glance regression check.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(netscope_tcp_retransmits_total[24h]))",
+              "legendFormat": "retransmits"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "green" },
+                  { "value": 200000, "color": "yellow" },
+                  { "value": 500000, "color": "red" }
+                ]
+              }
+            }
+          },
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "value"
+          }
+        },
+        {
+          "id": 22,
+          "gridPos": { "x": 0, "y": 33, "w": 24, "h": 10 },
+          "type": "timeseries",
+          "title": "TCP Smoothed RTT Percentiles",
+          "description": "histogram_quantile over netscope_tcp_srtt_microseconds_bucket aggregated cluster-wide. p50 tracks typical pod-to-pod RTT (expect ~2ms on-cluster), p99 captures the off-cluster tail. Bucket boundaries are seconds (Prometheus convention); the eBPF collector converts from µs before bucketing.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.50, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le))",
+              "legendFormat": "p50"
+            },
+            {
+              "refId": "B",
+              "expr": "histogram_quantile(0.95, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le))",
+              "legendFormat": "p95"
+            },
+            {
+              "refId": "C",
+              "expr": "histogram_quantile(0.99, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le))",
+              "legendFormat": "p99"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "fillOpacity": 5
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "id": 23,
+          "gridPos": { "x": 0, "y": 43, "w": 24, "h": 12 },
+          "type": "heatmap",
+          "title": "TCP Smoothed RTT Distribution",
+          "description": "sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le) — cumulative-bucket heatmap of SRTT samples cluster-wide. The percentile panel shows trend, this panel shows shape: a clean horizontal band means stable latency; a vertical smear means new tail behavior. Y-axis is seconds on a log scale because buckets span ~1µs to ~8s.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le)",
+              "legendFormat": "{{le}}",
+              "format": "heatmap"
+            }
+          ],
+          "options": {
+            "calculate": false,
+            "yAxis": {
+              "unit": "s",
+              "axisLabel": "SRTT",
+              "scale": { "type": "log", "log": 2 }
+            },
+            "color": { "mode": "scheme", "scheme": "Spectral", "steps": 64, "reverse": true },
+            "cellGap": 1,
+            "tooltip": { "show": true, "yHistogram": true },
+            "legend": { "show": true }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "scaleDistribution": { "type": "log", "log": 2 },
+                "hideFrom": { "tooltip": false, "viz": false, "legend": false }
+              }
+            }
+          }
         }
       ]
     }

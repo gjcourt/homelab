@@ -128,7 +128,7 @@ All metrics are labeled with `nodename` (promoted from `__meta_kubernetes_pod_no
 ## 7. Monitoring & Alerting
 - **Metrics**: scraped every 30s via `ServiceMonitor` (`release: kube-prometheus-stack`). The headless Service backs per-host endpoints.
 - **Dashboard**: https://grafana.burntbytes.com/d/netscope-overview — overview, retransmits, SRTT heatmap, DNS latency heatmap.
-- **Alerts**: `PrometheusRule` lives in `infra/configs/prometheus/netscope-rules.yaml` (added in a parallel PR — see PRs labeled `feat/netscope-alerts`). Alerts cover at minimum:
+- **Alerts**: `PrometheusRule` lives in `apps/base/netscope/prometheus-rule.yaml` (per-app pattern matching `truenas-iscsi-monitor` / `synology-iscsi-monitor`). The staging overlay rewrites it into the `netscope-stage` namespace. Alerts cover at minimum:
   - `NetscopeAgentDown` — fewer than 6 scrape targets `up` for 5 minutes
   - `NetscopeTCPRetransmitSpike` — sustained per-node retransmit rate above baseline
   - `NetscopeDNSLatencyHigh` — DNS p99 latency exceeds threshold

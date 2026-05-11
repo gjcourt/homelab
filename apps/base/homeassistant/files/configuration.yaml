@@ -30,25 +30,25 @@ frontend:
 input_number:
   hall_bathroom_fan_minutes:
     name: Hall Bathroom Fan Timer
-    min: 5
-    max: 120
-    step: 5
+    min: 4
+    max: 45
+    step: 1
     initial: 30
     unit_of_measurement: min
     mode: slider
   master_bathroom_fan_minutes:
     name: Master Bathroom Fan Timer
-    min: 5
-    max: 120
-    step: 5
+    min: 4
+    max: 45
+    step: 1
     initial: 30
     unit_of_measurement: min
     mode: slider
   powder_bathroom_fan_minutes:
     name: Powder Bathroom Fan Timer
-    min: 5
-    max: 120
-    step: 5
+    min: 4
+    max: 45
+    step: 1
     initial: 30
     unit_of_measurement: min
     mode: slider

@@ -31,7 +31,7 @@ The historical `docs/apps/`, `docs/guides/`, `docs/incidents/`, and `docs/infra/
 
 ### Per-app runbooks
 
-See [`operations/apps/`](operations/apps/) — Adguard, Audiobookshelf, Authelia, Excalidraw, Golinks, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Snapcast, Vitals.
+See [`operations/apps/`](operations/apps/) — Adguard, Audiobookshelf, Authelia, Excalidraw, Flashcards, Golinks, Hermes, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Netscope, Snapcast, Vitals.
 
 ### Infrastructure component reference
 

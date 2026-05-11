@@ -94,14 +94,18 @@ spec:
         # high enough to notice on interactive workloads. 2s sustained for 10m
         # is a real DNS problem (CoreDNS pod under pressure, upstream resolver
         # flaking, NetworkPolicy regression).
+        #
+        # The histogram metric is named *_microseconds_bucket for historical
+        # reasons, but the agent emits `le` boundaries in seconds (Prometheus
+        # convention). Threshold is therefore expressed in seconds, not µs.
         - alert: NetscopeDNSLatencyHigh
           expr: >
-            histogram_quantile(0.99, sum by (le) (rate(netscope_dns_query_microseconds_bucket[5m]))) > 2000000
+            histogram_quantile(0.99, sum by (le) (rate(netscope_dns_query_microseconds_bucket[5m]))) > 2
           for: 10m
           labels:
             severity: warning
           annotations:
-            summary: "DNS query p99 latency > 2s ({{ $value | humanize }}µs)"
+            summary: "DNS query p99 latency > 2s ({{ $value | humanizeDuration }})"
             description: >
-              Cluster-wide p99 DNS query latency observed by netscope is {{ $value | humanize }}µs for 10+ minutes (threshold: 2,000,000µs = 2s). Validation baseline was ~840,000µs. Check CoreDNS pod health, upstream resolvers, and any recent NetworkPolicy changes affecting egress to kube-dns.
+              Cluster-wide p99 DNS query latency observed by netscope is {{ $value | humanizeDuration }} for 10+ minutes (threshold: 2s). Validation baseline was ~0.84s. Check CoreDNS pod health, upstream resolvers, and any recent NetworkPolicy changes affecting egress to kube-dns.
             runbook_url: https://github.com/gjcourt/homelab/blob/master/docs/operations/apps/netscope.md#9-troubleshooting

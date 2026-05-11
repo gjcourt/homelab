@@ -198,20 +198,20 @@ data:
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "short"
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "green" },
+                  { "value": 200000, "color": "yellow" },
+                  { "value": 500000, "color": "red" }
+                ]
+              }
             }
           },
           "options": {
             "reduceOptions": { "calcs": ["lastNotNull"] },
-            "colorMode": "value",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "value": null, "color": "green" },
-                { "value": 1000, "color": "yellow" },
-                { "value": 10000, "color": "red" }
-              ]
-            }
+            "colorMode": "value"
           }
         },
         {

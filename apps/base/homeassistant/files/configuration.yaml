@@ -79,7 +79,7 @@ input_number:
     # cap. See the "Nightlight" automations in automations.yaml.
     name: Nightlight Random Offset (max)
     min: 0
-    max: 120
+    max: 60
     step: 5
     initial: 30
     unit_of_measurement: min

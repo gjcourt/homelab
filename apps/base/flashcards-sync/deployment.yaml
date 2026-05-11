@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flashcards-sync
+  namespace: flashcards
+  labels:
+    app: flashcards-sync
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: flashcards-sync
+  template:
+    metadata:
+      labels:
+        app: flashcards-sync
+    spec:
+      serviceAccountName: flashcards-sync
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-secret
+      securityContext:
+        # Dockerfile bakes uid 1001; match it so the container's runtime
+        # paths are owned correctly under readOnlyRootFilesystem.
+        runAsNonRoot: true
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: flashcards-sync
+          # SHA-pinned tag forces a pull on first deploy. Bump to the
+          # daily YYYY-MM-DD tag once the first deploy is verified.
+          image: ghcr.io/gjcourt/flashcards-sync:2026-05-11-ce20fd1
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: flashcards-db-credentials
+                  key: password
+            - name: DB_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: flashcards-sync-container-env
+                  key: DB_HOST
+            - name: DATABASE_URL
+              value: "postgres://app:$(DB_PASSWORD)@$(DB_HOST):5432/app?sslmode=disable"
+          envFrom:
+            - configMapRef:
+                name: flashcards-sync-container-env
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          # Probe pattern per docs/operations/2026-05-02-adding-an-app.md:
+          # readiness HTTP-tight on /healthz, liveness tcpSocket-loose so
+          # the two can't co-restart the pod off a single flap.
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

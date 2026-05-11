@@ -9,6 +9,7 @@
 - [audiobookshelf](base/audiobookshelf/)
 - [authelia](base/authelia/)
 - [excalidraw](base/excalidraw/)
+- [flashcards-sync](base/flashcards-sync/)
 - [flashcards](base/flashcards/)
 - [golinks](base/golinks/)
 - [hermes-callee](base/hermes-callee/)

@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: flashcards-stage
+resources:
+  - ../../base/flashcards-sync/
+  - configmap.yaml
+  - database.yaml
+  - objectstore.yaml
+  - scheduledbackup.yaml
+  - secret-aws-creds.yaml
+  # See `secret-db-credentials.yaml.example` — operator encrypts then
+  # uncomments the line below.
+  # - secret-db-credentials.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false

@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Note: this base intentionally does NOT include `namespace.yaml` or
+# `secret-ghcr.yaml`. The flashcards-sync service runs in the same namespace
+# as the flashcards web app (`flashcards-prod` / `flashcards-stage`) and
+# reuses its `ghcr-secret` (same name, same SOPS recipients). Including
+# duplicates here would collide when Flux builds `apps/production` because
+# both `flashcards/` and `flashcards-sync/` are sibling kustomizations
+# under the same parent.
+resources:
+  - deployment.yaml
+  - networkpolicy.yaml
+  - pdb.yaml
+  - service.yaml
+  - serviceaccount.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: flashcards-sync
+      app.kubernetes.io/component: sync
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux

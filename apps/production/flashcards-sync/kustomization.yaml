@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: flashcards-prod
+resources:
+  - ../../base/flashcards-sync/
+  - configmap.yaml
+  - database.yaml
+  - objectstore.yaml
+  - scheduledbackup.yaml
+  - secret-aws-creds.yaml
+  # The operator must encrypt `secret-db-credentials.yaml.example` →
+  # `secret-db-credentials.yaml` (see the template's header for steps) and
+  # then uncomment the line below. Until that's done, the CNPG Cluster
+  # cannot bootstrap because `bootstrap.initdb.secret` points at a Secret
+  # that doesn't exist.
+  # - secret-db-credentials.yaml
+
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false

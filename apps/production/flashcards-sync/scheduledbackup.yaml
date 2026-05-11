@@ -1,0 +1,15 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: flashcards-db-production-cnpg-v1-backup
+  namespace: flashcards-prod
+spec:
+  cluster:
+    name: flashcards-db-production-cnpg-v1
+  # Daily at 02:00 UTC; offset from overture's 02:00 by running a few
+  # minutes later if both clusters land on the same node.
+  schedule: "0 5 2 * * *"
+  backupOwnerReference: self
+  method: plugin
+  pluginConfiguration:
+    name: barman-cloud.cloudnative-pg.io

@@ -9,6 +9,7 @@ resources:
   - excalidraw
   - external-services
   - flashcards
+  - flashcards-sync
   - golinks
   - hermes
   - hermes-callee

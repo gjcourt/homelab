@@ -128,11 +128,13 @@ All metrics are labeled with `nodename` (promoted from `__meta_kubernetes_pod_no
 ## 7. Monitoring & Alerting
 - **Metrics**: scraped every 30s via `ServiceMonitor` (`release: kube-prometheus-stack`). The headless Service backs per-host endpoints.
 - **Dashboard**: https://grafana.burntbytes.com/d/netscope-overview — overview, retransmits, SRTT heatmap, DNS latency heatmap.
-- **Alerts**: `PrometheusRule` lives in `apps/base/netscope/prometheus-rule.yaml` (per-app pattern matching `truenas-iscsi-monitor` / `synology-iscsi-monitor`). The staging overlay rewrites it into the `netscope-stage` namespace. Alerts cover at minimum:
-  - `NetscopeAgentDown` — fewer than 6 scrape targets `up` for 5 minutes
-  - `NetscopeTCPRetransmitSpike` — sustained per-node retransmit rate above baseline
-  - `NetscopeDNSLatencyHigh` — DNS p99 latency exceeds threshold
-  - Each alert sets `runbook_url` to the troubleshooting section of this document.
+- **Alerts**: `PrometheusRule` lives in `apps/base/netscope/prometheus-rule.yaml` (per-app pattern matching `truenas-iscsi-monitor` / `synology-iscsi-monitor`). The staging overlay rewrites it into the `netscope-stage` namespace. Alerts shipped (group `netscope-agent` for reachability, `netscope-network` for signal health):
+  - `NetscopeAgentDown` (warning) — per-target `up == 0` for 5m. Fires once per unreachable node.
+  - `NetscopeMetricsAbsent` (critical) — `absent(netscope_rx_bytes_total)` for 10m. Cluster-wide kill switch — every pod gone or ServiceMonitor not discovering anything.
+  - `NetscopeAgentRestarts` (warning) — any container restart in a 15m window. eBPF attach failures usually crash the agent on startup, so a restart flap is meaningful.
+  - `NetscopeHighRetransmits` (warning) — per-node `rate(netscope_tcp_retransmits_total[5m]) > 5` for 15m. Baseline at PR time was 0.2–2.2/s; tune downward in `apps/base/netscope/prometheus-rule.yaml` if the floor drifts.
+  - `NetscopeDNSLatencyHigh` (warning) — cluster-wide DNS p99 > 2s for 10m. Validation baseline was ~0.84s.
+  - Each alert sets `runbook_url` to the `#9-troubleshooting` anchor of this document.
 - **Logs**: `kubectl logs -n netscope-stage ds/netscope-agent --all-pods=true --prefix=true | grep -E "attached|iface"` to confirm "attached tcx ingress" / "attached fentry ..." lines across all 6 pods. (Avoid bare `| head -N` here — `--all-pods=true` interleaves output, so a head slice can hide the node you care about.)
 
 ## 8. Disaster Recovery

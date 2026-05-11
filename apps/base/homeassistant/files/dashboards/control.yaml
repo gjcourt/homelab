@@ -102,6 +102,59 @@ views:
     column_span: 3
     cards:
     - type: heading
+      heading: Laundry Room Lights
+      heading_style: title
+    - type: markdown
+      content: '**How it works:** when either laundry room light turns on, a timer starts using the **Minutes** value. When the timer expires, both lights turn off. Turning both lights off manually before the timer expires cancels the timer.'
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Laundry Room
+      heading_style: title
+    - type: tile
+      entity: light.laundry_room_main_lights
+      name: Main Lights
+      color: amber
+      tap_action:
+        action: toggle
+    - type: tile
+      entity: light.laundry_room_cove
+      name: Cove
+      color: amber
+      tap_action:
+        action: toggle
+    - type: tile
+      entity: timer.laundry_room_light_timer
+      name: Timer
+    - type: tile
+      entity: input_number.laundry_room_light_minutes
+      name: Minutes
+      features_position: bottom
+      features:
+      - type: numeric-input
+    - type: button
+      name: Cancel Timer
+      icon: mdi:timer-off
+      tap_action:
+        action: call-service
+        service: timer.cancel
+        data:
+          entity_id: timer.laundry_room_light_timer
+    - type: button
+      name: Turn Off Both
+      icon: mdi:lightbulb-off
+      tap_action:
+        action: call-service
+        service: light.turn_off
+        target:
+          entity_id:
+          - light.laundry_room_main_lights
+          - light.laundry_room_cove
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
       heading: Nightlight
       heading_style: title
     - type: markdown

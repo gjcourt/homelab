@@ -1,0 +1,111 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: netscope-alerts
+  namespace: netscope
+  labels:
+    # kube-prometheus-stack's Prometheus instance discovers PrometheusRules by
+    # this label (ruleSelector / ruleNamespaceSelector). The staging overlay
+    # rewrites this resource's namespace to netscope-stage, matching the
+    # ServiceMonitor next door.
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: netscope
+    app.kubernetes.io/component: agent
+spec:
+  groups:
+    # -------------------------------------------------------------------------
+    # netscope agent reachability
+    #
+    # The DaemonSet is scheduled on every node (3 CP + 3 worker, tolerations:
+    # Exists). The ServiceMonitor scrapes every pod's /metrics on port 9101
+    # every 30s. Healthy steady state is 6/6 targets up; any pod whose `up`
+    # series flips to 0 is unreachable from Prometheus.
+    # -------------------------------------------------------------------------
+    - name: netscope-agent
+      rules:
+        - alert: NetscopeAgentDown
+          expr: up{job="netscope-agent"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "netscope agent on {{ $labels.nodename }} is unreachable"
+            description: >
+              Prometheus has been unable to scrape the netscope agent on node {{ $labels.nodename }} (namespace {{ $labels.namespace }}) for 5+ minutes. The pod is down, the /metrics endpoint is failing, or hostNetwork port 9101 is blocked. Check: kubectl -n {{ $labels.namespace }} get pods -l app.kubernetes.io/name=netscope -o wide
+            runbook_url: https://github.com/gjcourt/homelab/blob/master/docs/operations/apps/netscope.md#9-troubleshooting
+
+        # absent() fires if no series with the metric name exists anywhere — i.e.
+        # every netscope pod stopped scraping (or never started). Complements
+        # NetscopeAgentDown which is per-target; this is the cluster-wide
+        # "metrics pipeline broken" signal.
+        - alert: NetscopeMetricsAbsent
+          expr: absent(netscope_rx_bytes_total)
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "netscope metrics absent cluster-wide"
+            description: >
+              No `netscope_rx_bytes_total` series has been observed by Prometheus for 10+ minutes. Either every DaemonSet pod is down or the ServiceMonitor is no longer discovering targets. Check: kubectl -n netscope-stage get servicemonitor,pods
+            runbook_url: https://github.com/gjcourt/homelab/blob/master/docs/operations/apps/netscope.md#9-troubleshooting
+
+        # eBPF agents that fail to attach typically crash on startup; alert on
+        # any restart within a 15m window so a soak-killing flap is surfaced
+        # rather than masked by Kubernetes' backoff.
+        - alert: NetscopeAgentRestarts
+          expr: >
+            increase(kube_pod_container_status_restarts_total{namespace=~"netscope.*",pod=~"netscope-agent.*"}[15m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "netscope agent pod {{ $labels.pod }} restarted"
+            description: >
+              netscope-agent pod {{ $labels.pod }} in namespace {{ $labels.namespace }} restarted {{ $value }} time(s) in the last 15 minutes. eBPF attach failures usually manifest as startup crashes — soak validity is in question. Check: kubectl -n {{ $labels.namespace }} logs {{ $labels.pod }} --previous
+            runbook_url: https://github.com/gjcourt/homelab/blob/master/docs/operations/apps/netscope.md#9-troubleshooting
+
+    # -------------------------------------------------------------------------
+    # Network health signals
+    #
+    # These are informational rather than infrastructure-critical: netscope
+    # exists to surface network anomalies, so the alerts here fire on the
+    # things netscope was built to detect.
+    # -------------------------------------------------------------------------
+    - name: netscope-network
+      rules:
+        # TCP retransmit rate per node. Observed baseline at PR time was
+        # ~0.2–2.2/s across nodes (worker peaks ~2/s, CP nodes <0.5/s; Cilium
+        # control traffic and Talos node-to-node chatter dominate). 5/s
+        # sustained for 15m is well above the observed peak and indicates a
+        # real connectivity problem (link flap, congestion, peer MTU
+        # mismatch). Tune downward if normal drift falls, or raise to ~8/s
+        # if the floor creeps up — see infra/configs/alerts/ history.
+        - alert: NetscopeHighRetransmits
+          expr: sum by (nodename) (rate(netscope_tcp_retransmits_total[5m])) > 5
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High TCP retransmit rate on {{ $labels.nodename }} ({{ $value | humanize }}/s)"
+            description: >
+              Node {{ $labels.nodename }} has sustained TCP retransmits at {{ $value | humanize }}/s for 15+ minutes (threshold: 5/s). Observed baseline is ~0.2–2.2/s. Investigate link health, switch port errors, or a noisy workload generating retransmits. Cross-reference: netscope_tcp_srtt_microseconds for the same node.
+            runbook_url: https://github.com/gjcourt/homelab/blob/master/docs/operations/apps/netscope.md#9-troubleshooting
+
+        # DNS query p99 latency. Observed validation p99 was ~0.84s — already
+        # high enough to notice on interactive workloads. 2s sustained for 10m
+        # is a real DNS problem (CoreDNS pod under pressure, upstream resolver
+        # flaking, NetworkPolicy regression).
+        #
+        # The histogram metric is named *_microseconds_bucket for historical
+        # reasons, but the agent emits `le` boundaries in seconds (Prometheus
+        # convention). Threshold is therefore expressed in seconds, not µs.
+        - alert: NetscopeDNSLatencyHigh
+          expr: >
+            histogram_quantile(0.99, sum by (le) (rate(netscope_dns_query_microseconds_bucket[5m]))) > 2
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "DNS query p99 latency > 2s ({{ $value | humanizeDuration }})"
+            description: >
+              Cluster-wide p99 DNS query latency observed by netscope is {{ $value | humanizeDuration }} for 10+ minutes (threshold: 2s). Validation baseline was ~0.84s. Check CoreDNS pod health, upstream resolvers, and any recent NetworkPolicy changes affecting egress to kube-dns.
+            runbook_url: https://github.com/gjcourt/homelab/blob/master/docs/operations/apps/netscope.md#9-troubleshooting

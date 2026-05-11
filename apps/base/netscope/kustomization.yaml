@@ -6,6 +6,7 @@ resources:
   - daemonset.yaml
   - service.yaml
   - servicemonitor.yaml
+  - prometheus-rule.yaml
 labels:
   - includeSelectors: false
     pairs:

@@ -133,7 +133,7 @@ All metrics are labeled with `nodename` (promoted from `__meta_kubernetes_pod_no
   - `NetscopeTCPRetransmitSpike` — sustained per-node retransmit rate above baseline
   - `NetscopeDNSLatencyHigh` — DNS p99 latency exceeds threshold
   - Each alert sets `runbook_url` to the troubleshooting section of this document.
-- **Logs**: `kubectl logs -n netscope-stage ds/netscope-agent --all-pods=true --prefix=true | head -100`. Useful at startup to confirm "attached tcx ingress" / "attached fentry ..." lines.
+- **Logs**: `kubectl logs -n netscope-stage ds/netscope-agent --all-pods=true --prefix=true | grep -E "attached|iface"` to confirm "attached tcx ingress" / "attached fentry ..." lines across all 6 pods. (Avoid bare `| head -N` here — `--all-pods=true` interleaves output, so a head slice can hide the node you care about.)
 
 ## 8. Disaster Recovery
 There is no data to restore — the agent is stateless. Recovery means getting the DaemonSet back to healthy.

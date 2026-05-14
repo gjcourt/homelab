@@ -46,6 +46,10 @@ If the runner is offline or the change targets the runner itself:
 
 Plan: [`docs/plans/2026-05-02-hestia-gha-runner.md`](../../docs/plans/2026-05-02-hestia-gha-runner.md).
 
+## Operations notes
+
+- [`app.update` does not recreate a crashlooping container](../../docs/operations/2026-05-14-truenas-app-update-quirk.md) — fix-up PRs to a broken app may return `SUCCESS` without taking effect; workaround is an explicit `app.stop` / `app.start`.
+
 ## ZFS datasets
 
 Operator-owned datasets (survive App deletion):

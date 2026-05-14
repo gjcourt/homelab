@@ -30,6 +30,7 @@ on:
         options:
           - all
           - llama-cpp
+          - thermalscope
       dry_run:
         description: 'Connect, query, and diff without calling app.update'
         required: false
@@ -49,6 +50,8 @@ jobs:
         include:
           - name: llama-cpp
             file: hosts/hestia/llms/docker-compose-llama-cpp.yml
+          - name: thermalscope
+            file: hosts/hestia/monitoring/docker-compose.yml
     steps:
       - name: Checkout
         uses: actions/checkout@v4

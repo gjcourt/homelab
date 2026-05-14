@@ -5,6 +5,7 @@ resources:
   - ../../base/homepage/
   - httproute.yaml
   - rbac.yaml
+  - secret-adguard.yaml
   - secret-synology.yaml
 
 labels:

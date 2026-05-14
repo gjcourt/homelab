@@ -1,0 +1,25 @@
+# thermalscope — Prometheus thermal/GPU exporter for hestia.
+#
+# Reads /sys/class/hwmon (CPU k10temp Tctl/Tccd + 9 NVMe drives) and runs
+# nvidia-smi for GPU temp/power/utilization/fan/clock. Exposes :9102/metrics
+# on the host network. Source: github.com/gjcourt/thermalscope.
+#
+# Image is pinned to an explicit short-SHA tag per the homelab image
+# discipline rule. To roll forward, build a new tag in thermalscope and bump
+# the value below — never use :main or :latest here.
+#
+# No healthcheck is declared because the runtime image
+# (gcr.io/distroless/static-debian12) has no shell and no curl/wget — any
+# CMD-SHELL test would always fail. Prometheus's up{job="thermalscope"}
+# scrape success is the real health signal.
+services:
+  thermalscope:
+    image: ghcr.io/gjcourt/thermalscope:d470623
+    container_name: thermalscope
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    volumes:
+      - /sys/class/hwmon:/sys/class/hwmon:ro
+      - /sys/class/thermal:/sys/class/thermal:ro
+      - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro

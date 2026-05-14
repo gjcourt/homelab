@@ -5,13 +5,25 @@ default_config:
 frontend:
   themes: !include_dir_merge_named themes
 
-# Lovelace runs in storage mode (the default). All dashboards (Map, Floor Plan,
-# Switchboard, Control) are registered in /config/.storage/lovelace_dashboards
-# and edited via the HA UI's Lovelace editor. We do not register any YAML-mode
-# dashboards from this file: HA's slug validator hard-rejects single-word slugs
-# like `control` / `switchboard`, and `mode: yaml` in the storage registry is
-# silently ignored (HA always uses LovelaceStorage for storage-registered
-# dashboards regardless of the `mode` field).
+# Lovelace dashboards. Default + Map / Floor Plan / Switchboard stay
+# UI-managed (storage mode). Only the Control dashboard is migrated to
+# YAML mode here — its source-of-truth lives at files/dashboards/control.yaml
+# and is bundled into the homeassistant-config ConfigMap by the
+# configMapGenerator. Edits go through PRs.
+#
+# Note: HA's lovelace.dashboards schema rejects single-word slug keys
+# (must contain a hyphen). We use `home-control` as the slug — the
+# dashboard renders with the configured `title:` ("Control") regardless
+# of the slug, only the URL path (/home-control) reflects the slug.
+lovelace:
+  mode: storage           # default + other dashboards stay UI-managed
+  dashboards:
+    home-control:
+      mode: yaml
+      filename: dashboards/control.yaml
+      title: Control
+      icon: mdi:view-dashboard
+      show_in_sidebar: true
 
 # Auto-off helpers. Each has:
 #   timer.<name>_timer       — counts down once triggered
@@ -30,25 +42,25 @@ frontend:
 input_number:
   hall_bathroom_fan_minutes:
     name: Hall Bathroom Fan Timer
-    min: 5
-    max: 120
-    step: 5
+    min: 4
+    max: 45
+    step: 1
     initial: 30
     unit_of_measurement: min
     mode: slider
   master_bathroom_fan_minutes:
     name: Master Bathroom Fan Timer
-    min: 5
-    max: 120
-    step: 5
+    min: 4
+    max: 45
+    step: 1
     initial: 30
     unit_of_measurement: min
     mode: slider
   powder_bathroom_fan_minutes:
     name: Powder Bathroom Fan Timer
-    min: 5
-    max: 120
-    step: 5
+    min: 4
+    max: 45
+    step: 1
     initial: 30
     unit_of_measurement: min
     mode: slider
@@ -61,13 +73,29 @@ input_number:
     unit_of_measurement: "%"
     mode: slider
   nightlight_random_offset:
-    name: Nightlight Random Offset
+    # Max jitter (in minutes) applied to the configured turn-off time.
+    # The actual jitter for today is picked at midnight and stored in
+    # `nightlight_offset_today` below — this entry is just the user-facing
+    # cap. See the "Nightlight" automations in automations.yaml.
+    name: Nightlight Random Offset (max)
     min: 0
-    max: 120
+    max: 60
     step: 5
     initial: 30
     unit_of_measurement: min
     mode: slider
+  nightlight_offset_today:
+    # Today's actual jitter, in minutes. Written at midnight by the
+    # "Nightlight — pick today's random offset" automation; read by the
+    # `sensor.nightlight_turnoff_time` template. Defaults to 0 on cold
+    # start; the homeassistant-start priming automation re-rolls it.
+    name: Nightlight Offset (today)
+    min: 0
+    max: 120
+    step: 1
+    initial: 0
+    unit_of_measurement: min
+    mode: box
   laundry_room_light_minutes:
     name: Laundry Room Light Timer
     min: 5
@@ -106,14 +134,15 @@ input_datetime:
     has_time: true
     initial: "23:00"
 
-# Nightlight template sensors
+# Nightlight template sensor — turn-off time = base time + today's offset.
+# Today's offset is held in input_number.nightlight_offset_today (single
+# source of truth; written at midnight by the priming automation). The
+# previous design had a template `sensor.nightlight_random_offset` that
+# read input_number.nightlight_random_offset.max (the *schema* max, always
+# 120) and produced a non-random `day_of_year % 121` value — and the
+# midnight automation simultaneously corrupted the user's max setting by
+# writing a random into the state. Both have been retired.
 template:
-  - sensor:
-      - name: "Nightlight Random Offset"
-        unique_id: nightlight_random_offset
-        state: >
-          {{ (now().strftime('%j') | int) % (state_attr('input_number.nightlight_random_offset', 'max') | default(120) | int + 1) }}
-
   - sensor:
       - name: "Nightlight Turn Off Time"
         unique_id: nightlight_turnoff_time
@@ -128,6 +157,6 @@ template:
             {# timestamp is SECONDS since midnight (verified live: 23:00 → 82800) #}
             {% set base_minutes = (ts | int) // 60 %}
           {% endif %}
-          {% set offset = states('sensor.nightlight_random_offset') | int(0) %}
+          {% set offset = states('input_number.nightlight_offset_today') | int(0) %}
           {% set total_minutes = (base_minutes + offset) % 1440 %}
           {{ '%02d:%02d' | format(total_minutes // 60, total_minutes % 60) }}

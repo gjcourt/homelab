@@ -35,11 +35,12 @@ spec:
         - operator: Exists
       containers:
         - name: agent
-          image: "ghcr.io/gjcourt/netscope:a4982ac@sha256:f838246a72add4bfb0fd1463f3bf8c93f65e8a49117950f4989e3baf93c1bc03"
+          image: "ghcr.io/gjcourt/netscope:2e20747@sha256:75d159d39a7e4498c537bd2e6739d4f722f63c880ab6bb91e8fd372d9ab6ce36"
           imagePullPolicy: IfNotPresent
-          env:
-            - name: NETSCOPE_IFACE
-              value: "eno1"
+          # NETSCOPE_IFACE intentionally unset — the agent discovers the
+          # IPv4 default-route interface at startup from /proc/net/route.
+          # Set explicitly here (e.g. value: "eno1") to pin to a specific
+          # NIC and skip discovery.
           ports:
             - name: metrics
               containerPort: 9101

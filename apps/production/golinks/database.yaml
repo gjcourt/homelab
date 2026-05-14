@@ -14,22 +14,23 @@ spec:
       policy-type: "database"
   monitoring:
     enablePodMonitor: true
-  # Cross-cluster anti-affinity: prefer nodes that aren't already running
-  # other CNPG postgres pods (label `policy-type: database`, inherited by
-  # every CNPG pod via inheritedMetadata.labels). This is additive to the
-  # CNPG-default intra-cluster anti-affinity (weight=100, spreads this
-  # cluster's 3 replicas across nodes via kubernetes.io/hostname).
-  # Weight 50 keeps the in-cluster spread dominant; this is a soft tiebreaker
-  # to smooth concentration across the ~11 CNPG clusters in the homelab.
-  affinity:
-    additionalPodAntiAffinity:
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 50
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                policy-type: database
-            topologyKey: kubernetes.io/hostname
+  # Cross-cluster spread: balance CNPG postgres pods (label
+  # `policy-type: database`, inherited by every CNPG pod via
+  # inheritedMetadata.labels) across nodes. Unlike pod anti-affinity (which
+  # is binary per term — a node either has a matching pod or it doesn't, so
+  # offers no spreading signal once every node has at least one), topology
+  # spread constraints count pods and enforce `maxSkew`. With ~33 CNPG pods
+  # across 6 nodes, the scheduler aims for 5-6 per node. `ScheduleAnyway`
+  # keeps it a soft preference so pods don't go Pending when perfect spread
+  # isn't possible. This is additive to the CNPG-default intra-cluster
+  # anti-affinity (spreads this cluster's own 3 replicas across nodes).
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          policy-type: database
   storage:
     # Actual usage: ~488Mi; target = 20% headroom → 1Gi.
     # Requires cluster recreation (CNPG cannot shrink PVCs in-place).

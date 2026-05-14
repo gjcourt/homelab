@@ -37,12 +37,6 @@ spec:
   # Prefer high-airflow worker nodes (cpu-tier=high). See production
   # database.yaml for rationale. Soft preference — 3 replicas across 2
   # labeled nodes means one replica lands elsewhere, which is fine.
-  #
-  # additionalPodAntiAffinity adds cross-cluster spread: prefer nodes that
-  # aren't already running other CNPG postgres pods (label
-  # `policy-type: database`). Weight 50 keeps the in-cluster anti-affinity
-  # (CNPG default weight=100) dominant. See
-  # apps/production/golinks/database.yaml for full rationale.
   affinity:
     nodeAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -53,14 +47,16 @@ spec:
                 operator: In
                 values:
                   - high
-    additionalPodAntiAffinity:
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 50
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                policy-type: database
-            topologyKey: kubernetes.io/hostname
+  # Cross-cluster spread: see apps/production/golinks/database.yaml for
+  # full rationale. Soft (ScheduleAnyway) balance of CNPG postgres pods
+  # across nodes via topologySpreadConstraints.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          policy-type: database
 
   postgresql:
     shared_preload_libraries:

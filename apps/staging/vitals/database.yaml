@@ -14,18 +14,16 @@ spec:
       policy-type: "database"
   monitoring:
     enablePodMonitor: true
-  # Cross-cluster anti-affinity: see apps/production/golinks/database.yaml
-  # for full rationale. Soft (weight=50) preference to land new pods on
-  # nodes that don't already host other CNPG postgres pods.
-  affinity:
-    additionalPodAntiAffinity:
-      preferredDuringSchedulingIgnoredDuringExecution:
-        - weight: 50
-          podAffinityTerm:
-            labelSelector:
-              matchLabels:
-                policy-type: database
-            topologyKey: kubernetes.io/hostname
+  # Cross-cluster spread: see apps/production/golinks/database.yaml for
+  # full rationale. Soft (ScheduleAnyway) balance of CNPG postgres pods
+  # across nodes via topologySpreadConstraints.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          policy-type: database
   storage:
     size: 2Gi
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).

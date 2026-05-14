@@ -1,0 +1,46 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: thermalscope-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: thermalscope
+      rules:
+        - alert: ThermalScopeScraperDown
+          expr: up{job="thermalscope"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "thermalscope exporter on hestia is not reachable"
+            description: "No metrics have been scraped from hestia:9102 for 5 minutes."
+
+        - alert: HestiaCPUTemperatureHigh
+          expr: thermalscope_cpu_temperature_celsius{instance="hestia", sensor="Tctl"} > 85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "hestia CPU temperature is high"
+            description: "Tctl is {{ $value }}°C (threshold 85°C)."
+
+        - alert: HestiaNVMeTemperatureHigh
+          expr: thermalscope_nvme_temperature_celsius{instance="hestia"} > 65
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "hestia NVMe {{ $labels.device }} temperature is high"
+            description: "{{ $labels.device }} is {{ $value }}°C (threshold 65°C)."
+
+        - alert: HestiaGPUTemperatureHigh
+          expr: thermalscope_gpu_temperature_celsius{instance="hestia"} > 83
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "hestia GPU {{ $labels.gpu }} temperature is high"
+            description: "GPU {{ $labels.gpu }} ({{ $labels.name }}) is {{ $value }}°C (threshold 83°C)."

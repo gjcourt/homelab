@@ -1,0 +1,17 @@
+services:
+  thermalscope:
+    image: ghcr.io/gjcourt/thermalscope:main
+    container_name: thermalscope
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    volumes:
+      - /sys/class/hwmon:/sys/class/hwmon:ro
+      - /sys/class/thermal:/sys/class/thermal:ro
+      - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9102/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

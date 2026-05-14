@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: hestia-thermalscope
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  staticConfigs:
+    - targets:
+        - 10.42.2.10:9102
+      labels:
+        instance: hestia
+        job: thermalscope
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
+  metricsPath: /metrics

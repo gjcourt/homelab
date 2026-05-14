@@ -43,11 +43,11 @@ data:
           "gridPos": {"h": 6, "w": 12, "x": 0, "y": 1},
           "id": 20,
           "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
             "orientation": "auto",
             "colorMode": "background",
             "graphMode": "area",
-            "textMode": "auto"
+            "textMode": "value_and_name"
           },
           "targets": [
             {
@@ -80,11 +80,11 @@ data:
           "gridPos": {"h": 6, "w": 12, "x": 12, "y": 1},
           "id": 21,
           "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
             "orientation": "auto",
             "colorMode": "background",
             "graphMode": "area",
-            "textMode": "auto"
+            "textMode": "value_and_name"
           },
           "targets": [
             {

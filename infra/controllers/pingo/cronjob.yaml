@@ -15,6 +15,9 @@ spec:
           labels:
             app.kubernetes.io/name: pingo
         spec:
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
           containers:
             - name: pingo
               image: ghcr.io/gjcourt/pingo:2026-02-25

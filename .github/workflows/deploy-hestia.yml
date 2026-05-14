@@ -30,6 +30,8 @@ on:
         options:
           - all
           - llama-cpp
+          - thermalscope
+          - ipmi-exporter
       dry_run:
         description: 'Connect, query, and diff without calling app.update'
         required: false
@@ -49,6 +51,10 @@ jobs:
         include:
           - name: llama-cpp
             file: hosts/hestia/llms/docker-compose-llama-cpp.yml
+          - name: thermalscope
+            file: hosts/hestia/monitoring/docker-compose.yml
+          - name: ipmi-exporter
+            file: hosts/hestia/monitoring/docker-compose-ipmi-exporter.yml
     steps:
       - name: Checkout
         uses: actions/checkout@v4

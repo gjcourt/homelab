@@ -14,6 +14,16 @@ spec:
       policy-type: "database"
   monitoring:
     enablePodMonitor: true
+  # Cross-cluster spread: see apps/production/golinks/database.yaml for
+  # full rationale. Soft (ScheduleAnyway) balance of CNPG postgres pods
+  # across nodes via topologySpreadConstraints.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          policy-type: database
   storage:
     size: 2Gi
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).

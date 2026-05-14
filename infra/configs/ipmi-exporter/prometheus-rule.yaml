@@ -1,0 +1,33 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ipmi-exporter-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: ipmi-exporter
+      rules:
+        - alert: IPMIScraperDown
+          expr: up{job="ipmi-exporter"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ipmi-exporter on hestia is not reachable"
+            description: "No metrics have been scraped from hestia:9290 for 5 minutes."
+
+        # Fan stall: BMC reports a fan at <200 RPM. We only alert on fans
+        # whose state is "ok" (sensor present & reading) to avoid firing
+        # on unpopulated fan headers, which the exporter exposes as 0.
+        # The `state` label is ipmi-exporter's name for the SDR
+        # availability flag — "0" = nominal/ok.
+        - alert: IPMIFanStalled
+          expr: ipmi_fan_speed_rpm{job="ipmi-exporter"} < 200 and ipmi_fan_speed_state{job="ipmi-exporter"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "hestia chassis fan {{ $labels.name }} stalled"
+            description: "{{ $labels.name }} is reading {{ $value }} RPM (threshold 200)."

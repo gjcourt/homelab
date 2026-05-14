@@ -1,0 +1,23 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: hestia-thermalscope
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  staticConfigs:
+    - targets:
+        - 10.42.2.10:9102
+      labels:
+        instance: hestia
+  # Force the job label to "thermalscope" so the PrometheusRule alerts
+  # (which match on job="thermalscope") align with the scraped series —
+  # the operator otherwise auto-names the job
+  # "scrapeConfig/monitoring/hestia-thermalscope".
+  relabelings:
+    - targetLabel: job
+      replacement: thermalscope
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
+  metricsPath: /metrics

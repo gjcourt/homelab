@@ -1,0 +1,68 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: thermalscope-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: thermalscope
+      rules:
+        - alert: ThermalScopeScraperDown
+          expr: up{job="thermalscope"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "thermalscope exporter on {{ $labels.instance }} is not reachable"
+            description: "No metrics have been scraped from thermalscope on {{ $labels.instance }} for 5 minutes."
+
+        # Fires per-instance when CPU Tctl exceeds 85°C across any rack
+        # host (hestia + all Talos nodes). 85°C matches AMD's typical
+        # Ryzen/EPYC Tctl warning threshold and is a sane shared default.
+        - alert: ThermalScopeCPUTemperatureHigh
+          expr: thermalscope_cpu_temperature_celsius{sensor="Tctl"} > 85
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CPU temperature on {{ $labels.instance }} is high"
+            description: "Tctl on {{ $labels.instance }} is {{ $value }}°C (threshold 85°C)."
+
+        # Fires per-instance per-device when the Composite NVMe sensor
+        # exceeds 65°C. Restricted to sensor="Composite" (the SMART
+        # rollup) to avoid double-firing on Sensor1/Sensor2 which read
+        # identical values per drive. 65°C is conservative; throttling
+        # typically kicks in around 70-75°C.
+        - alert: ThermalScopeNVMeTemperatureHigh
+          expr: thermalscope_nvme_temperature_celsius{sensor="Composite"} > 65
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} is hot"
+            description: "{{ $labels.device }} (Composite) on {{ $labels.instance }} is {{ $value }}°C (threshold 65°C)."
+
+        # Scoped to hestia because 83°C is the NVIDIA RTX 4090 thermal
+        # warning threshold. AMD iGPUs run hotter by design — see
+        # ThermalScopeAMDGPUTemperatureHigh below.
+        - alert: ThermalScopeNVIDIAGPUTemperatureHigh
+          expr: thermalscope_gpu_temperature_celsius{instance="hestia"} > 83
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "hestia NVIDIA GPU {{ $labels.gpu }} temperature is high"
+            description: "NVIDIA GPU {{ $labels.gpu }} ({{ $labels.name }}) on hestia is {{ $value }}°C (threshold 83°C — NVIDIA RTX 4090 limit)."
+
+        # AMD iGPU thermal headroom is generous (Tjmax ~100°C for most
+        # Ryzen APUs). Only fire on genuinely concerning numbers.
+        - alert: ThermalScopeAMDGPUTemperatureHigh
+          expr: thermalscope_amdgpu_temperature_celsius > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "AMD iGPU on {{ $labels.instance }} is hot"
+            description: "amdgpu {{ $labels.sensor }} on {{ $labels.instance }} is {{ $value }}°C (threshold 90°C)."

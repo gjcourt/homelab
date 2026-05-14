@@ -9,3 +9,4 @@ resources:
   - node-details-cm.yaml
   - overture-cm.yaml
   - storage-csi-cm.yaml
+  - thermalscope-cm.yaml

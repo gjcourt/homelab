@@ -5,13 +5,25 @@ default_config:
 frontend:
   themes: !include_dir_merge_named themes
 
-# Lovelace runs in storage mode (the default). All dashboards (Map, Floor Plan,
-# Switchboard, Control) are registered in /config/.storage/lovelace_dashboards
-# and edited via the HA UI's Lovelace editor. We do not register any YAML-mode
-# dashboards from this file: HA's slug validator hard-rejects single-word slugs
-# like `control` / `switchboard`, and `mode: yaml` in the storage registry is
-# silently ignored (HA always uses LovelaceStorage for storage-registered
-# dashboards regardless of the `mode` field).
+# Lovelace dashboards. Default + Map / Floor Plan / Switchboard stay
+# UI-managed (storage mode). Only the Control dashboard is migrated to
+# YAML mode here — its source-of-truth lives at files/dashboards/control.yaml
+# and is bundled into the homeassistant-config ConfigMap by the
+# configMapGenerator. Edits go through PRs.
+#
+# Note: HA's lovelace.dashboards schema rejects single-word slug keys
+# (must contain a hyphen). We use `home-control` as the slug — the
+# dashboard renders with the configured `title:` ("Control") regardless
+# of the slug, only the URL path (/home-control) reflects the slug.
+lovelace:
+  mode: storage           # default + other dashboards stay UI-managed
+  dashboards:
+    home-control:
+      mode: yaml
+      filename: dashboards/control.yaml
+      title: Control
+      icon: mdi:view-dashboard
+      show_in_sidebar: true
 
 # Auto-off helpers. Each has:
 #   timer.<name>_timer       — counts down once triggered
@@ -30,25 +42,25 @@ frontend:
 input_number:
   hall_bathroom_fan_minutes:
     name: Hall Bathroom Fan Timer
-    min: 5
-    max: 120
-    step: 5
+    min: 4
+    max: 45
+    step: 1
     initial: 30
     unit_of_measurement: min
     mode: slider
   master_bathroom_fan_minutes:
     name: Master Bathroom Fan Timer
-    min: 5
-    max: 120
-    step: 5
+    min: 4
+    max: 45
+    step: 1
     initial: 30
     unit_of_measurement: min
     mode: slider
   powder_bathroom_fan_minutes:
     name: Powder Bathroom Fan Timer
-    min: 5
-    max: 120
-    step: 5
+    min: 4
+    max: 45
+    step: 1
     initial: 30
     unit_of_measurement: min
     mode: slider
@@ -67,7 +79,7 @@ input_number:
     # cap. See the "Nightlight" automations in automations.yaml.
     name: Nightlight Random Offset (max)
     min: 0
-    max: 120
+    max: 60
     step: 5
     initial: 30
     unit_of_measurement: min

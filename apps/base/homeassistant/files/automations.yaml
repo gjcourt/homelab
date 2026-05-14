@@ -108,7 +108,7 @@
 #   input_datetime.nightlight_turnoff_time   — base turnoff time (default 23:00)
 #
 # Template sensor:
-#   sensor.nightlight_turnoff_time           — base time + today's offset → HH:MM
+#   sensor.nightlight_turn_off_time           — base time + today's offset → HH:MM
 
 - alias: "Nightlight — turn on at sundown"
   description: "Turn on dining room chandelier components at sundown."
@@ -191,7 +191,7 @@
   trigger:
     - platform: template
       value_template: >
-        {{ now().strftime('%H:%M') == states('sensor.nightlight_turnoff_time') }}
+        {{ now().strftime('%H:%M') == states('sensor.nightlight_turn_off_time') }}
   condition:
     - condition: state
       entity_id: switch.dining_room_chandelier

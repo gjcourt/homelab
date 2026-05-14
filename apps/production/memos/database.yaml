@@ -19,6 +19,17 @@ spec:
   monitoring:
     enablePodMonitor: true
 
+  # Cross-cluster spread: see apps/production/golinks/database.yaml for
+  # full rationale. Soft (ScheduleAnyway) balance of CNPG postgres pods
+  # across nodes via topologySpreadConstraints.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          policy-type: database
+
   storage:
     # Actual usage: ~633Mi; target = 20% headroom → 1Gi.
     # Requires cluster recreation (CNPG cannot shrink PVCs in-place).

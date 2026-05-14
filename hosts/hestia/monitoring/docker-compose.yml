@@ -14,7 +14,7 @@
 # scrape success is the real health signal.
 services:
   thermalscope:
-    image: ghcr.io/gjcourt/thermalscope:21e45e9
+    image: ghcr.io/gjcourt/thermalscope:37e615a
     container_name: thermalscope
     restart: unless-stopped
     privileged: true

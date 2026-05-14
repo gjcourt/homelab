@@ -24,6 +24,19 @@ spec:
   # keeps it a soft preference so pods don't go Pending when perfect spread
   # isn't possible. This is additive to the CNPG-default intra-cluster
   # anti-affinity (spreads this cluster's own 3 replicas across nodes).
+  #
+  # Observed behavior (2026-05-14 rebalance attempt): this constraint does
+  # NOT reactively rebalance already-placed pods. Rolling restarts of every
+  # CNPG cluster (kubectl cnpg restart) and explicit delete-and-recreate
+  # both left the distribution byte-for-byte unchanged at 10/10/8/4/2/2.
+  # Pods went through the default scheduler (not nodeName-pinned), but
+  # `ScheduleAnyway` lost to other scoring factors — probably some mix of
+  # the intra-cluster anti-affinity (weight 100), the iSCSI CSI driver's
+  # volume-locality hints, and the BalancedAllocation plugin. Kept here as
+  # a hint for future pod creations (new clusters, scale-ups). When a
+  # specific pod actually needs to move now, use explicit `nodeAffinity`
+  # (see apps/production/immich/database.yaml for the cpu-tier=high
+  # pattern that did successfully steer immich-prod onto cool nodes).
   topologySpreadConstraints:
     - maxSkew: 1
       topologyKey: kubernetes.io/hostname

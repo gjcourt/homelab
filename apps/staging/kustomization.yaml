@@ -23,5 +23,4 @@ resources:
   - openwebui
   - signal-cli
   - snapcast
-  - thermalscope
   - vitals

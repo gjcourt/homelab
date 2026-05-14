@@ -34,6 +34,20 @@ spec:
       memory: "4Gi"
       cpu: "2000m"
 
+  # Prefer high-airflow worker nodes (cpu-tier=high). See production
+  # database.yaml for rationale. Soft preference — 3 replicas across 2
+  # labeled nodes means one replica lands elsewhere, which is fine.
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: homelab.gjcourt.dev/cpu-tier
+                operator: In
+                values:
+                  - high
+
   postgresql:
     shared_preload_libraries:
       - "vectors.so"

@@ -24,6 +24,20 @@ spec:
     spec:
       serviceAccountName: immich
       automountServiceAccountToken: false
+      # Prefer the high-airflow worker nodes (labeled cpu-tier=high) so
+      # the CPU-heavy server doesn't bake the warmer control-plane nodes.
+      # Soft preference — scheduler falls back to any node if the labeled
+      # ones are unavailable (drain, NotReady, etc.).
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: homelab.gjcourt.dev/cpu-tier
+                    operator: In
+                    values:
+                      - high
       securityContext:
         seccompProfile:
           type: RuntimeDefault
@@ -92,6 +106,16 @@ spec:
     spec:
       serviceAccountName: immich
       automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: homelab.gjcourt.dev/cpu-tier
+                    operator: In
+                    values:
+                      - high
       securityContext:
         seccompProfile:
           type: RuntimeDefault
@@ -163,6 +187,16 @@ spec:
     spec:
       serviceAccountName: immich
       automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: homelab.gjcourt.dev/cpu-tier
+                    operator: In
+                    values:
+                      - high
       securityContext:
         runAsNonRoot: true
         runAsUser: 999

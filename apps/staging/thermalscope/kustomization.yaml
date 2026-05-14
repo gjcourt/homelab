@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: thermalscope-stage
+resources:
+  - ../../base/thermalscope/
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+
+patches:
+  # Rename the Namespace resource itself to match `namespace:` above.
+  - target:
+      kind: Namespace
+      name: thermalscope
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: thermalscope-stage

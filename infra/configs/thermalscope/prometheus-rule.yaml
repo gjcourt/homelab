@@ -15,32 +15,52 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "thermalscope exporter on hestia is not reachable"
-            description: "No metrics have been scraped from hestia:9102 for 5 minutes."
+            summary: "thermalscope exporter on {{ $labels.instance }} is not reachable"
+            description: "No metrics have been scraped from thermalscope on {{ $labels.instance }} for 5 minutes."
 
-        - alert: HestiaCPUTemperatureHigh
-          expr: thermalscope_cpu_temperature_celsius{instance="hestia", sensor="Tctl"} > 85
+        # Fires per-instance when CPU Tctl exceeds 85°C across any rack
+        # host (hestia + all Talos nodes). 85°C matches AMD's typical
+        # Ryzen/EPYC Tctl warning threshold and is a sane shared default.
+        - alert: ThermalScopeCPUTemperatureHigh
+          expr: thermalscope_cpu_temperature_celsius{sensor="Tctl"} > 85
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: "hestia CPU temperature is high"
-            description: "Tctl is {{ $value }}°C (threshold 85°C)."
+            summary: "CPU temperature on {{ $labels.instance }} is high"
+            description: "Tctl on {{ $labels.instance }} is {{ $value }}°C (threshold 85°C)."
 
-        - alert: HestiaNVMeTemperatureHigh
-          expr: thermalscope_nvme_temperature_celsius{instance="hestia"} > 65
+        # Fires per-instance per-device when any NVMe sensor exceeds 65°C.
+        # 65°C is conservative for consumer/datacenter NVMe; throttling
+        # typically kicks in around 70-75°C.
+        - alert: ThermalScopeNVMeTemperatureHigh
+          expr: thermalscope_nvme_temperature_celsius > 65
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: "hestia NVMe {{ $labels.device }} temperature is high"
-            description: "{{ $labels.device }} is {{ $value }}°C (threshold 65°C)."
+            summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} is hot"
+            description: "{{ $labels.device }} ({{ $labels.sensor }}) on {{ $labels.instance }} is {{ $value }}°C (threshold 65°C)."
 
+        # Scoped to hestia because 83°C is the NVIDIA RTX 4090 thermal
+        # warning threshold. AMD iGPUs run hotter by design — see
+        # ThermalScopeAMDGPUTemperatureHigh below.
         - alert: HestiaGPUTemperatureHigh
           expr: thermalscope_gpu_temperature_celsius{instance="hestia"} > 83
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: "hestia GPU {{ $labels.gpu }} temperature is high"
-            description: "GPU {{ $labels.gpu }} ({{ $labels.name }}) is {{ $value }}°C (threshold 83°C)."
+            summary: "hestia NVIDIA GPU {{ $labels.gpu }} temperature is high"
+            description: "NVIDIA GPU {{ $labels.gpu }} ({{ $labels.name }}) on hestia is {{ $value }}°C (threshold 83°C — NVIDIA RTX 4090 limit)."
+
+        # AMD iGPU thermal headroom is generous (Tjmax ~100°C for most
+        # Ryzen APUs). Only fire on genuinely concerning numbers.
+        - alert: ThermalScopeAMDGPUTemperatureHigh
+          expr: thermalscope_amdgpu_temperature_celsius > 90
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "AMD iGPU on {{ $labels.instance }} is hot"
+            description: "amdgpu {{ $labels.sensor }} on {{ $labels.instance }} is {{ $value }}°C (threshold 90°C)."

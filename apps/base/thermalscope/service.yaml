@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: thermalscope-agent
+  namespace: thermalscope
+  labels:
+    app.kubernetes.io/name: thermalscope
+    app.kubernetes.io/component: agent
+spec:
+  type: ClusterIP
+  # Headless: Endpoints carry the host IPs (the agent runs hostNetwork)
+  # rather than ephemeral pod IPs, which is what we want for per-node
+  # scrape targets. ServiceMonitor below scrapes via these Endpoints.
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: thermalscope
+    app.kubernetes.io/component: agent
+  ports:
+    - name: metrics
+      port: 9102
+      targetPort: metrics
+      protocol: TCP

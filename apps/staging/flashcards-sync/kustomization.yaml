@@ -8,9 +8,7 @@ resources:
   - objectstore.yaml
   - scheduledbackup.yaml
   - secret-aws-creds.yaml
-  # See `secret-db-credentials.yaml.example` — operator encrypts then
-  # uncomments the line below.
-  # - secret-db-credentials.yaml
+  - secret-db-credentials.yaml
 
 labels:
   - pairs:

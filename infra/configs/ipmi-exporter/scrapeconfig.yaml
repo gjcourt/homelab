@@ -1,0 +1,23 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: hestia-ipmi-exporter
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  staticConfigs:
+    - targets:
+        - 10.42.2.10:9290
+      labels:
+        instance: hestia
+  # Force the job label to "ipmi-exporter" so PrometheusRule alerts
+  # (which match on job="ipmi-exporter") align with the scraped series —
+  # the operator otherwise auto-names the job
+  # "scrapeConfig/monitoring/hestia-ipmi-exporter".
+  relabelings:
+    - targetLabel: job
+      replacement: ipmi-exporter
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
+  metricsPath: /metrics

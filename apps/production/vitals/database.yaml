@@ -14,6 +14,18 @@ spec:
       policy-type: "database"
   monitoring:
     enablePodMonitor: true
+  # Cross-cluster anti-affinity: see apps/production/golinks/database.yaml
+  # for full rationale. Soft (weight=50) preference to land new pods on
+  # nodes that don't already host other CNPG postgres pods.
+  affinity:
+    additionalPodAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 50
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                policy-type: database
+            topologyKey: kubernetes.io/hostname
   storage:
     # Actual usage: ~178Mi; minimum LUN size on Synology iSCSI is 1Gi.
     # Requires cluster recreation (CNPG cannot shrink PVCs in-place).

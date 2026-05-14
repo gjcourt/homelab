@@ -333,8 +333,13 @@ data:
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_collector_up{instance=\"hestia\"}",
-              "legendFormat": "{{subsystem}}"
+              "expr": "thermalscope_hwmon_up{instance=\"hestia\"}",
+              "legendFormat": "hwmon"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_gpu_up{instance=\"hestia\"}",
+              "legendFormat": "gpu"
             }
           ],
           "title": "Collector Status",

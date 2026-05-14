@@ -34,10 +34,11 @@ spec:
       containers:
         - name: agent
           # Pin to a digest per the homelab image-discipline rule. Tag
-          # `d470623` is the current thermalscope main SHA (May 2026).
-          # A follow-up PR will bump to the SHA that adds amdgpu chip
-          # support once that lands in thermalscope.
-          image: "ghcr.io/gjcourt/thermalscope:d470623@sha256:af1c2d64a54ffb4168ab8424a704a3b9b49efe8d1b4cdb9f4f64f18cdd70b0c3"
+          # `88170e1` is the thermalscope main SHA that adds amdgpu
+          # hwmon chip handling (thermalscope PR #3), exposing
+          # `thermalscope_amdgpu_temperature_celsius` on nodes with
+          # an AMD GPU present.
+          image: "ghcr.io/gjcourt/thermalscope:88170e1@sha256:df4839459c785db2e4988521be3448dc10a3a4baa0645bea93f8d3c777db11fe"
           imagePullPolicy: IfNotPresent
           ports:
             - name: metrics

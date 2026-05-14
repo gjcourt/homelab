@@ -3,7 +3,7 @@
 # Reads /dev/ipmi0 (in-band BMC, ASRock Rack) and exposes :9290/metrics on
 # the host network. No credentials needed — the host owns the BMC, so the
 # IPMI device file is the auth boundary. The exporter speaks to the BMC
-# via OpenIPMI; ipmitool / freeipmi are bundled in the upstream image.
+# via freeipmi; the upstream image bundles ipmitool / freeipmi binaries.
 #
 # Why this exists: hwmon on hestia only surfaces CPU (k10temp), NVMe, and
 # GPU temps — no chassis fan tach inputs. The BMC SDR has FAN1_1..FAN5_1
@@ -17,6 +17,16 @@
 # privileged=true + the /dev/ipmi0 device map are both required:
 # OpenIPMI's ioctl on the device node needs CAP_SYS_RAWIO, which the
 # device map alone does not grant inside a non-privileged container.
+#
+# Why inline `configs:` instead of a bind-mounted file:
+# TrueNAS Custom Apps take *only* the compose YAML — they don't sync
+# co-located files from the repo onto the host. A relative bind mount
+# (e.g. `./ipmi-exporter-config.yml:/config/ipmi.yml`) resolves to a
+# path Docker has to auto-create, which it creates as an empty
+# directory — and the exporter crashloops with "is a directory". The
+# top-level `configs:` block embeds the YAML in the compose itself,
+# keeping the deployment self-contained. Verified on PR #669's first
+# deploy attempt.
 services:
   ipmi-exporter:
     image: prometheuscommunity/ipmi-exporter:v1.10.1
@@ -29,5 +39,25 @@ services:
     command:
       - --config.file=/config/ipmi.yml
       - --web.listen-address=:9290
-    volumes:
-      - ./ipmi-exporter-config.yml:/config/ipmi.yml:ro
+    configs:
+      - source: ipmi-exporter-config
+        target: /config/ipmi.yml
+
+configs:
+  ipmi-exporter-config:
+    # Default module: ipmi/dcmi/bmc/chassis collectors. `sel` (System
+    # Event Log) is deliberately omitted — on a healthy host it adds
+    # latency for zero useful series and risks log floods after a fault.
+    # exclude_sensor_ids is empty on first deploy so we can see which
+    # "No Reading" sensors (FAN6_1, FAN_PSU1/2, PSU IOUT) actually emit
+    # metrics vs. get silently dropped by the exporter. Tune later if
+    # the noise floor is too high.
+    content: |
+      modules:
+        default:
+          collectors:
+            - ipmi
+            - dcmi
+            - bmc
+            - chassis
+          exclude_sensor_ids: []

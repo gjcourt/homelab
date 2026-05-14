@@ -18,6 +18,87 @@ data:
         {
           "collapsed": false,
           "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+          "id": 99,
+          "title": "Overview",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 75},
+                  {"color": "red", "value": 85}
+                ]
+              },
+              "unit": "celsius",
+              "min": 0,
+              "max": 100
+            }
+          },
+          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 1},
+          "id": 20,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"}",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "title": "CPU Tctl per host",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 55},
+                  {"color": "red", "value": 65}
+                ]
+              },
+              "unit": "celsius",
+              "min": 0,
+              "max": 90
+            }
+          },
+          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 1},
+          "id": 21,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "max by (instance) (thermalscope_nvme_temperature_celsius{instance=~\"$instance\"})",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "title": "NVMe max per host",
+          "type": "stat"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 7},
           "id": 100,
           "title": "CPU",
           "type": "row"
@@ -39,14 +120,14 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 1},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
           "id": 1,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_cpu_temperature_celsius{instance=\"hestia\", sensor=\"Tctl\"}",
-              "legendFormat": "Tctl (control)"
+              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"}",
+              "legendFormat": "{{instance}} Tctl"
             }
           ],
           "title": "CPU Control Temperature (Tctl)",
@@ -61,14 +142,14 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
           "id": 2,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_cpu_temperature_celsius{instance=\"hestia\", sensor=~\"Tccd.*\"}",
-              "legendFormat": "{{sensor}}"
+              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=~\"Tccd.*\"}",
+              "legendFormat": "{{instance}} {{sensor}}"
             }
           ],
           "title": "CPU Die Temperatures (Tccd1–4)",
@@ -76,7 +157,7 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 16},
           "id": 101,
           "title": "NVMe Drives",
           "type": "row"
@@ -98,14 +179,14 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 10},
+          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 17},
           "id": 3,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "right"}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_temperature_celsius{instance=\"hestia\", sensor=\"Composite\"}",
-              "legendFormat": "{{device}}"
+              "expr": "thermalscope_nvme_temperature_celsius{instance=~\"$instance\", sensor=\"Composite\"}",
+              "legendFormat": "{{instance}} {{device}}"
             }
           ],
           "title": "NVMe Drive Temperatures",
@@ -129,14 +210,14 @@ data:
               "max": 90
             }
           },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 10},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 17},
           "id": 4,
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "displayMode": "gradient"},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_temperature_celsius{instance=\"hestia\", sensor=\"Composite\"}",
-              "legendFormat": "{{device}}"
+              "expr": "thermalscope_nvme_temperature_celsius{instance=~\"$instance\", sensor=\"Composite\"}",
+              "legendFormat": "{{instance}} {{device}}"
             }
           ],
           "title": "NVMe Current Temps",
@@ -144,9 +225,9 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 18},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 25},
           "id": 102,
-          "title": "GPU Thermals & Power",
+          "title": "NVIDIA GPU Thermals & Power (hestia)",
           "type": "row"
         },
         {
@@ -166,17 +247,17 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 19},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 26},
           "id": 5,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_temperature_celsius{instance=\"hestia\"}",
-              "legendFormat": "GPU {{gpu}}"
+              "expr": "thermalscope_gpu_temperature_celsius{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} GPU {{gpu}}"
             }
           ],
-          "title": "GPU Temperature",
+          "title": "NVIDIA GPU Temperature",
           "type": "timeseries"
         },
         {
@@ -189,17 +270,17 @@ data:
               "max": 500
             }
           },
-          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 19},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 26},
           "id": 6,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_power_draw_watts{instance=\"hestia\"}",
-              "legendFormat": "GPU {{gpu}}"
+              "expr": "thermalscope_gpu_power_draw_watts{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} GPU {{gpu}}"
             }
           ],
-          "title": "GPU Power Draw",
+          "title": "NVIDIA GPU Power Draw",
           "type": "timeseries"
         },
         {
@@ -213,24 +294,24 @@ data:
               "max": 1
             }
           },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 19},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 26},
           "id": 7,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_fan_speed_ratio{instance=\"hestia\"}",
-              "legendFormat": "GPU {{gpu}} fan"
+              "expr": "thermalscope_gpu_fan_speed_ratio{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} GPU {{gpu}} fan"
             }
           ],
-          "title": "GPU Fan Speed",
+          "title": "NVIDIA GPU Fan Speed",
           "type": "timeseries"
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 27},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 34},
           "id": 103,
-          "title": "GPU Utilization & Clock",
+          "title": "NVIDIA GPU Utilization & Clock (hestia)",
           "type": "row"
         },
         {
@@ -244,17 +325,17 @@ data:
               "max": 1
             }
           },
-          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 28},
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 35},
           "id": 8,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_sm_utilization_ratio{instance=\"hestia\"}",
-              "legendFormat": "GPU {{gpu}} SM"
+              "expr": "thermalscope_gpu_sm_utilization_ratio{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} GPU {{gpu}} SM"
             }
           ],
-          "title": "GPU SM Utilization",
+          "title": "NVIDIA GPU SM Utilization",
           "type": "timeseries"
         },
         {
@@ -268,17 +349,17 @@ data:
               "max": 1
             }
           },
-          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 28},
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 35},
           "id": 9,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_memory_utilization_ratio{instance=\"hestia\"}",
-              "legendFormat": "GPU {{gpu}} memory"
+              "expr": "thermalscope_gpu_memory_utilization_ratio{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} GPU {{gpu}} memory"
             }
           ],
-          "title": "GPU Memory Utilization",
+          "title": "NVIDIA GPU Memory Utilization",
           "type": "timeseries"
         },
         {
@@ -290,22 +371,59 @@ data:
               "unit": "mhz"
             }
           },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 28},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 35},
           "id": 10,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_sm_clock_hz{instance=\"hestia\"} / 1e6",
-              "legendFormat": "GPU {{gpu}}"
+              "expr": "thermalscope_gpu_sm_clock_hz{instance=~\"$instance\"} / 1e6",
+              "legendFormat": "{{instance}} GPU {{gpu}}"
             }
           ],
-          "title": "GPU SM Clock",
+          "title": "NVIDIA GPU SM Clock",
           "type": "timeseries"
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 36},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 43},
+          "id": 105,
+          "title": "AMD iGPU Thermals (Talos APUs)",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "spanNulls": false},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 80},
+                  {"color": "red", "value": 90}
+                ]
+              },
+              "unit": "celsius"
+            }
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 44},
+          "id": 13,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_amdgpu_temperature_celsius{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} {{sensor}}"
+            }
+          ],
+          "title": "AMD iGPU Temperature",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 52},
           "id": 104,
           "title": "Collector Health",
           "type": "row"
@@ -327,19 +445,19 @@ data:
               ]
             }
           },
-          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 37},
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 53},
           "id": 11,
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "colorMode": "background"},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_hwmon_up{instance=\"hestia\"}",
-              "legendFormat": "hwmon"
+              "expr": "thermalscope_hwmon_up{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} hwmon"
             },
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_up{instance=\"hestia\"}",
-              "legendFormat": "gpu"
+              "expr": "thermalscope_gpu_up{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} gpu"
             }
           ],
           "title": "Collector Status",
@@ -354,23 +472,83 @@ data:
               "unit": "s"
             }
           },
-          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 37},
+          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 53},
           "id": 12,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "scrape_duration_seconds{job=\"thermalscope\", instance=\"hestia\"}",
-              "legendFormat": "scrape duration"
+              "expr": "scrape_duration_seconds{job=\"thermalscope\", instance=~\"$instance\"}",
+              "legendFormat": "{{instance}}"
             }
           ],
           "title": "Scrape Duration",
           "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 57},
+          "id": 106,
+          "title": "Chassis Fans (hestia)",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "spanNulls": false},
+              "unit": "rotrpm"
+            }
+          },
+          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 58},
+          "id": 14,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "right"}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "ipmi_fan_speed_rpm{instance=\"hestia\"}",
+              "legendFormat": "{{name}}"
+            }
+          ],
+          "title": "Chassis Fan RPM",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "orange", "value": 200},
+                  {"color": "green", "value": 500}
+                ]
+              },
+              "unit": "rotrpm",
+              "min": 0,
+              "max": 8000
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 58},
+          "id": 15,
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "displayMode": "gradient"},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "ipmi_fan_speed_rpm{instance=\"hestia\"}",
+              "legendFormat": "{{name}}"
+            }
+          ],
+          "title": "Current Fan RPM",
+          "type": "bargauge"
         }
       ],
       "refresh": "30s",
       "schemaVersion": 39,
-      "tags": ["hestia", "thermals", "gpu"],
+      "tags": ["rack", "thermals", "gpu"],
       "templating": {
         "list": [
           {
@@ -383,13 +561,33 @@ data:
             "refresh": 1,
             "type": "datasource",
             "label": "Datasource"
+          },
+          {
+            "current": {"selected": true, "text": "All", "value": "$__all"},
+            "datasource": {"type": "prometheus", "uid": "${datasource}"},
+            "definition": "label_values(thermalscope_hwmon_up, instance)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Instance",
+            "multi": true,
+            "name": "instance",
+            "options": [],
+            "query": {
+              "query": "label_values(thermalscope_hwmon_up, instance)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
           }
         ]
       },
       "time": {"from": "now-3h", "to": "now"},
       "timepicker": {},
       "timezone": "browser",
-      "title": "ThermalScope — Hestia",
+      "title": "ThermalScope — Rack",
       "uid": null,
-      "version": 1
+      "version": 2
     }

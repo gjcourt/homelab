@@ -65,6 +65,13 @@ spec:
   # postgres replicas with the immich-server pods and keep heat off the
   # warmer control-plane nodes. Soft preference — falls back to other
   # nodes when needed (drain, NotReady, replica count > labeled nodes).
+  #
+  # additionalPodAntiAffinity adds cross-cluster spread: prefer nodes that
+  # aren't already running other CNPG postgres pods (label
+  # `policy-type: database`, inherited from inheritedMetadata). Weight 50
+  # keeps the CNPG-default intra-cluster anti-affinity (weight=100,
+  # spreading these 3 replicas across distinct nodes) dominant. See
+  # apps/production/golinks/database.yaml for full rationale.
   affinity:
     nodeAffinity:
       preferredDuringSchedulingIgnoredDuringExecution:
@@ -75,3 +82,11 @@ spec:
                 operator: In
                 values:
                   - high
+    additionalPodAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 50
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                policy-type: database
+            topologyKey: kubernetes.io/hostname

@@ -19,6 +19,19 @@ spec:
   monitoring:
     enablePodMonitor: true
 
+  # Cross-cluster anti-affinity: see apps/production/golinks/database.yaml
+  # for full rationale. Soft (weight=50) preference to land new pods on
+  # nodes that don't already host other CNPG postgres pods.
+  affinity:
+    additionalPodAntiAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 50
+          podAffinityTerm:
+            labelSelector:
+              matchLabels:
+                policy-type: database
+            topologyKey: kubernetes.io/hostname
+
   storage:
     size: 2Gi
 

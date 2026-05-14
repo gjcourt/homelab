@@ -30,17 +30,19 @@ spec:
             summary: "CPU temperature on {{ $labels.instance }} is high"
             description: "Tctl on {{ $labels.instance }} is {{ $value }}°C (threshold 85°C)."
 
-        # Fires per-instance per-device when any NVMe sensor exceeds 65°C.
-        # 65°C is conservative for consumer/datacenter NVMe; throttling
+        # Fires per-instance per-device when the Composite NVMe sensor
+        # exceeds 65°C. Restricted to sensor="Composite" (the SMART
+        # rollup) to avoid double-firing on Sensor1/Sensor2 which read
+        # identical values per drive. 65°C is conservative; throttling
         # typically kicks in around 70-75°C.
         - alert: ThermalScopeNVMeTemperatureHigh
-          expr: thermalscope_nvme_temperature_celsius > 65
+          expr: thermalscope_nvme_temperature_celsius{sensor="Composite"} > 65
           for: 5m
           labels:
             severity: warning
           annotations:
             summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} is hot"
-            description: "{{ $labels.device }} ({{ $labels.sensor }}) on {{ $labels.instance }} is {{ $value }}°C (threshold 65°C)."
+            description: "{{ $labels.device }} (Composite) on {{ $labels.instance }} is {{ $value }}°C (threshold 65°C)."
 
         # Scoped to hestia because 83°C is the NVIDIA RTX 4090 thermal
         # warning threshold. AMD iGPUs run hotter by design — see

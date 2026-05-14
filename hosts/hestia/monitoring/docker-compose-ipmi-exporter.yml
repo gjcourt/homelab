@@ -18,6 +18,15 @@
 # OpenIPMI's ioctl on the device node needs CAP_SYS_RAWIO, which the
 # device map alone does not grant inside a non-privileged container.
 #
+# user: "0:0" is also required. The upstream image runs as `nobody`
+# (uid 65534), but /dev/ipmi0 on the host is mode 600 root:root — so
+# the unprivileged user can't open it even inside a privileged
+# container. Running as root inside the container is fine because the
+# container is already privileged; the security boundary is the IPMI
+# device file and the in-band BMC, not the container's user. Without
+# this, freeipmi binaries fail with "permission denied" trying to
+# exec ipmi-sensors / ipmi-dcmi / bmc-info.
+#
 # Why inline `configs:` instead of a bind-mounted file:
 # TrueNAS Custom Apps take *only* the compose YAML — they don't sync
 # co-located files from the repo onto the host. A relative bind mount
@@ -33,6 +42,7 @@ services:
     container_name: ipmi-exporter
     restart: unless-stopped
     privileged: true
+    user: "0:0"
     network_mode: host
     devices:
       - /dev/ipmi0:/dev/ipmi0

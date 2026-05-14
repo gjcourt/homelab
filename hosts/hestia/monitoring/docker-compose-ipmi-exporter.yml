@@ -1,0 +1,33 @@
+# prometheus-ipmi-exporter for hestia.
+#
+# Reads /dev/ipmi0 (in-band BMC, ASRock Rack) and exposes :9290/metrics on
+# the host network. No credentials needed — the host owns the BMC, so the
+# IPMI device file is the auth boundary. The exporter speaks to the BMC
+# via OpenIPMI; ipmitool / freeipmi are bundled in the upstream image.
+#
+# Why this exists: hwmon on hestia only surfaces CPU (k10temp), NVMe, and
+# GPU temps — no chassis fan tach inputs. The BMC SDR has FAN1_1..FAN5_1
+# (1000-1400 RPM at idle), CPU/inlet/DDR5/M.2 temps, and PSU current
+# placeholders. ipmi-exporter is the only practical way to surface those
+# series to Prometheus on this hardware.
+#
+# Image is pinned to an explicit upstream release tag per the homelab
+# image discipline rule. Bump deliberately; never use :latest or :main.
+#
+# privileged=true + the /dev/ipmi0 device map are both required:
+# OpenIPMI's ioctl on the device node needs CAP_SYS_RAWIO, which the
+# device map alone does not grant inside a non-privileged container.
+services:
+  ipmi-exporter:
+    image: prometheuscommunity/ipmi-exporter:v1.10.1
+    container_name: ipmi-exporter
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    devices:
+      - /dev/ipmi0:/dev/ipmi0
+    command:
+      - --config.file=/config/ipmi.yml
+      - --web.listen-address=:9290
+    volumes:
+      - ./ipmi-exporter-config.yml:/config/ipmi.yml:ro

@@ -1,0 +1,20 @@
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: flashcards-db-staging-cnpg-v1-backup
+  namespace: flashcards-stage
+spec:
+  configuration:
+    destinationPath: s3://gjcourt-homelab-backup/staging/flashcards-sync
+    s3Credentials:
+      accessKeyId:
+        name: flashcards-sync-aws-creds-secret
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: flashcards-sync-aws-creds-secret
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: 14d

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flashcards-sync
+  namespace: flashcards
+  labels:
+    app: flashcards-sync
+spec:
+  type: ClusterIP
+  selector:
+    app: flashcards-sync
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: 8080

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flashcards-sync-container-env
+  namespace: flashcards-prod
+  labels:
+    app: flashcards-sync
+    env: production
+data:
+  PORT: "8080"
+  LOG_LEVEL: "info"
+  NODE_ENV: "production"
+  AUTH_MODE: "single-user"
+  SINGLE_USER_ID: "george"
+  DB_HOST: flashcards-db-production-cnpg-v1-rw.flashcards-prod.svc.cluster.local

@@ -61,15 +61,17 @@ sudo ./run.sh 6dimm
 
 ## Aggregate
 
-Run from the repo root so the output path is unambiguous:
+`run.sh` prints the exact JSONL path it produced at the end of each run — copy those into the command below. Run from the repo root so the output path is unambiguous:
 
 ```bash
 cd ~/src/homelab
 python3 hosts/hestia/bench/memory/aggregate.py \
-    "${RESULTS_DIR:-/mnt/tank/bench/memory}/results-6dimm-<ts>.jsonl" \
-    "${RESULTS_DIR:-/mnt/tank/bench/memory}/results-8dimm-<ts>.jsonl" \
+    "${RESULTS_DIR:-/mnt/tank/bench/memory}/6dimm-<ts>.jsonl" \
+    "${RESULTS_DIR:-/mnt/tank/bench/memory}/8dimm-<ts>.jsonl" \
     --out docs/research/2026-05-15-hestia-memory-bandwidth.md
 ```
+
+Filenames are `<label>-<utc-ts>.jsonl` (e.g. `6dimm-2026-05-15T14-23-45Z.jsonl`) — the label is what you passed to `run.sh`, the timestamp is when the run started.
 
 Diff the two JSONLs into a single markdown comparison under `docs/research/`. The aggregate script computes Δ% on STREAM Triad, idle latency delta, and a small loaded-latency table.
 

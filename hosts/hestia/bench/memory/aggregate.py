@@ -381,8 +381,11 @@ def render(path_a: Path, path_b: Path) -> str:
     # Triad stddev / mean, as a sanity check on variance. Anything > 2% is
     # noise-floor noise and shouldn't be trusted; flag with ⚠.
     def stddev_pct(values: list[float]) -> Optional[float]:
+        # Matches median_and_stdev(): a single sample has zero spread.
+        # Returning 0.0 rather than None keeps the run-quality table aligned
+        # with the STREAM table (which renders "value ± 0.0" for n=1).
         if len(values) < 2:
-            return None
+            return 0.0 if values else None
         m = statistics.mean(values)
         if m == 0:
             return None

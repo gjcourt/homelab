@@ -128,7 +128,6 @@ if command -v cpupower >/dev/null 2>&1; then
         # nullglob: if cpufreq isn't present, expand to nothing instead of
         # silently iterating over the literal glob string.
         shopt -s nullglob
-        shopt -s nullglob
         for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
             [[ -w "$f" ]] && echo performance > "$f"
         done
@@ -136,9 +135,11 @@ if command -v cpupower >/dev/null 2>&1; then
     }
 else
     echo "warning: cpupower not installed; using sysfs fallback" >&2
+    shopt -s nullglob
     for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
         [[ -w "$f" ]] && echo performance > "$f"
     done
+    shopt -u nullglob
 fi
 
 echo "info: enabling transparent hugepages (always/always)" >&2

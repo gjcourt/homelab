@@ -654,7 +654,7 @@ data:
             },
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "count(unpoller_device_temperature_celsius{type=~\"udm|uxg\"} > 75) or vector(0)",
+              "expr": "count(unpoller_device_temperature_celsius{type=~\"udm|uxg|ucg|ugw\"} > 75) or vector(0)",
               "legendFormat": "Gateways overheating"
             }
           ],

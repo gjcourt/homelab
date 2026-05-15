@@ -34,6 +34,11 @@ spec:
   values:
     image:
       repository: docker.io/golift/unifi-poller
+      # v2.9.2 (the chart's appVersion default) does not have API key
+      # auth — APIKey was added to the Controller struct in the v3.x
+      # line. Override to v3.2.0 (latest stable as of 2026-05-12) so
+      # UP_UNIFI_DEFAULT_API_KEY env-var injection actually works.
+      tag: v3.2.0
       pullPolicy: IfNotPresent
 
     replicas: 1

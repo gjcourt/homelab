@@ -9,3 +9,4 @@ resources:
   - ipmi-exporter
   - network-policies
   - thermalscope
+  - unpoller

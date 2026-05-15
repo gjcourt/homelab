@@ -544,11 +544,127 @@ data:
           ],
           "title": "Current Fan RPM",
           "type": "bargauge"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 66},
+          "id": 200,
+          "title": "UniFi Thermals",
+          "type": "row"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Per-device board temperature for all UniFi devices reported by unpoller. One line per (device, sensor).",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 60},
+                  {"color": "red", "value": 70}
+                ]
+              }
+            }
+          },
+          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 67},
+          "id": 201,
+          "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": true}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "unpoller_device_temperature_celsius",
+              "legendFormat": "{{name}} {{temp_area}}"
+            }
+          ],
+          "title": "UniFi Device Temperatures",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Current board temperature per UniFi PoE switch (type=usw). Cell turns red >=65°C — see UniFiPoESwitchTempHigh alert.",
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 55},
+                  {"color": "red", "value": 65}
+                ]
+              },
+              "min": 0,
+              "max": 100
+            }
+          },
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 67},
+          "id": 202,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "unpoller_device_temperature_celsius{type=\"usw\",temp_area=\"general\"}",
+              "legendFormat": "{{name}}"
+            }
+          ],
+          "title": "PoE Switch Temperatures",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Number of UniFi devices currently exceeding their type-specific overheating threshold. Mirrors the UniFiDeviceOverheating alert.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "red", "value": 1}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 24, "x": 0, "y": 75},
+          "id": 203,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "count(unpoller_device_temperature_celsius{type=\"usw\",temp_area=\"general\"} > 70) or vector(0)",
+              "legendFormat": "Switches overheating"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "count(unpoller_device_temperature_celsius{type=~\"udm|uxg\"} > 75) or vector(0)",
+              "legendFormat": "Gateways overheating"
+            }
+          ],
+          "title": "Overheating Devices",
+          "type": "stat"
         }
       ],
       "refresh": "30s",
       "schemaVersion": 39,
-      "tags": ["rack", "thermals", "gpu"],
+      "tags": ["rack", "thermals", "gpu", "unifi"],
       "templating": {
         "list": [
           {

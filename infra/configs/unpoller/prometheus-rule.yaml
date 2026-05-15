@@ -23,20 +23,37 @@ spec:
         # PoE switch (USW) board temperature. unpoller exports
         # `unpoller_device_temperature_celsius` with labels:
         #   {type, site_name, name, source, temp_area, temp_type, tag}
-        # For switches `type="usw"`; we additionally guard on
-        # `temp_area="general"` so we only alert on the board sensor
-        # (not SFP module temperatures, which are also exported under
-        # `unpoller_usw_sfp_temperature`).
+        # For the USWED42 (rack switch) at firmware 7.4.1.16850, the
+        # actual labels observed are:
+        #   type="usw", temp_area="", temp_type="general", tag="board"
+        # NOTE: "general" lives on `temp_type`, NOT `temp_area`. The
+        # previous version of this rule filtered on temp_area="general"
+        # and silently never matched. Filter on type="usw" only — the
+        # switch emits exactly one temperature series, so additional
+        # qualifiers aren't needed.
         # 65°C is conservative for unifi PoE switches (most are rated
-        # for 0-45°C ambient).
+        # for 0–45°C ambient).
         - alert: UniFiPoESwitchTempHigh
-          expr: unpoller_device_temperature_celsius{type="usw",temp_area="general"} > 65
+          expr: unpoller_device_temperature_celsius{type="usw"} > 65
           for: 10m
           labels:
             severity: warning
           annotations:
             summary: "UniFi switch {{ $labels.name }} is hot"
-            description: "PoE switch {{ $labels.name }} board temperature is {{ $value }}°C (threshold 65°C)."
+            description: "PoE switch {{ $labels.name }} temperature is {{ $value }}°C (threshold 65°C)."
+
+        # Switch cooling escalation — fires when the switch's internal
+        # fan controller has ramped fan_level to ≥80 (UniFi exposes a
+        # 0–100 fan level; >=80 indicates sustained thermal stress
+        # regardless of what the board sensor currently reads).
+        - alert: UniFiSwitchFanHigh
+          expr: unpoller_device_fan_level{type="usw"} >= 80
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "UniFi switch {{ $labels.name }} fan is ramped up"
+            description: "Fan level for {{ $labels.name }} is {{ $value }} (threshold 80) — the switch is working hard to stay cool."
 
         # UCG-Fiber / UDM gateway temperature. Type-label coverage
         # widened to `udm|uxg|ucg|ugw` because unpoller's promunifi

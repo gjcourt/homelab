@@ -614,7 +614,7 @@ data:
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "unpoller_device_temperature_celsius{type=\"usw\",temp_area=\"general\"}",
+              "expr": "unpoller_device_temperature_celsius{type=\"usw\"}",
               "legendFormat": "{{name}}"
             }
           ],
@@ -649,7 +649,7 @@ data:
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "count(unpoller_device_temperature_celsius{type=\"usw\",temp_area=\"general\"} > 70) or vector(0)",
+              "expr": "count(unpoller_device_temperature_celsius{type=\"usw\"} > 70) or vector(0)",
               "legendFormat": "Switches overheating"
             },
             {

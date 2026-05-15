@@ -50,32 +50,36 @@ spec:
       limits:
         memory: 256Mi
 
-    # Inject the UniFi API key via the cnfg ENV mechanism. Unpoller calls
-    # cnfg.UnmarshalENV(i, "UP") which uses xml struct tags as path
-    # components separated by underscores. The relevant struct chain is:
+    # Inject UniFi credentials via env vars. unpoller's cnfg layer maps
+    # `[unifi.defaults]` TOML keys to UP_UNIFI_DEFAULT_<KEY> env vars.
     #
-    #   InputUnifi  xml:"unifi"
-    #     Config.Default (Controller) xml:"default"
-    #       Controller.APIKey         xml:"api_key"
+    # Originally tried API-key auth (UP_UNIFI_DEFAULT_API_KEY) but the
+    # local UCG-Fiber console doesn't expose a "create local API key"
+    # surface in its UI (only the unifi.ui.com cloud account exposes
+    # an `api-keys` page, and those keys have no authority on the
+    # local controller — verified by 401 at /proxy/network/status).
     #
-    # Therefore the env var name is UP_UNIFI_DEFAULT_API_KEY.
-    # Source: github.com/unpoller/unpoller/pkg/inputunifi/input.go
+    # Falling back to user/pass auth against a local read-only admin
+    # account (Settings → Control Plane → Admins & Users → Create
+    # New Admin → "Restrict to local access only" → role: View Only).
     envVariables:
-      - name: UP_UNIFI_DEFAULT_API_KEY
+      - name: UP_UNIFI_DEFAULT_USER
         valueFrom:
           secretKeyRef:
             name: unpoller-unifi-creds
-            key: api_key
+            key: user
+      - name: UP_UNIFI_DEFAULT_PASS
+        valueFrom:
+          secretKeyRef:
+            name: unpoller-unifi-creds
+            key: pass
 
     unpoller:
-      # TOML config baked into the chart-managed Secret. The api_key is
-      # intentionally absent here — it comes from the envVariables block
-      # above (env wins over file in cnfg). User/pass are left empty so
-      # unpoller falls into the "APIKey != ''" branch in input.go and
-      # skips user/pass auth entirely.
+      # TOML config baked into the chart-managed Secret. user/pass are
+      # intentionally absent here — they come from envVariables above.
       config: |
         # Unpoller primary config (managed by Flux HelmRelease).
-        # api_key is injected via UP_UNIFI_DEFAULT_API_KEY env var.
+        # user/pass injected via UP_UNIFI_DEFAULT_USER / _PASS env vars.
         [poller]
           debug = false
           quiet = false
@@ -105,7 +109,9 @@ spec:
 
         [unifi.defaults]
           url = "https://10.42.1.1"
-          # user/pass intentionally empty — API key auth via env var
+          # user/pass intentionally empty — injected via env vars
+          # (UP_UNIFI_DEFAULT_USER / UP_UNIFI_DEFAULT_PASS); the
+          # cnfg layer fills these at runtime.
           user = ""
           pass = ""
           sites = ["all"]

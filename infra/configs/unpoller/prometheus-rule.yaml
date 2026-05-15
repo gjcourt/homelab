@@ -38,11 +38,16 @@ spec:
             summary: "UniFi switch {{ $labels.name }} is hot"
             description: "PoE switch {{ $labels.name }} board temperature is {{ $value }}°C (threshold 65°C)."
 
-        # UCG-Fiber / UDM gateway temperature. unpoller models the UCG
-        # as a UDM-type device (`type="udm"`); temperatures are
-        # exported per-sensor.
+        # UCG-Fiber / UDM gateway temperature. Type-label coverage
+        # widened to `udm|uxg|ucg|ugw` because unpoller's promunifi
+        # source explicitly handles udm/usw/uap/usg but is ambiguous
+        # about UCG-Fiber — it may emit as `udm` (UDM-style) or as one
+        # of `ucg`/`ugw` depending on chart/exporter version. Broader
+        # regex avoids silent alert failure if the actual label differs
+        # from `udm`. Verify against live metrics on first scrape and
+        # tighten if reality differs.
         - alert: UniFiGatewayTempHigh
-          expr: unpoller_device_temperature_celsius{type=~"udm|uxg"} > 70
+          expr: unpoller_device_temperature_celsius{type=~"udm|uxg|ucg|ugw"} > 70
           for: 10m
           labels:
             severity: warning
@@ -60,7 +65,7 @@ spec:
           expr: |
             (unpoller_device_temperature_celsius{type="usw",temp_area="general"} > 70)
             or
-            (unpoller_device_temperature_celsius{type=~"udm|uxg"} > 75)
+            (unpoller_device_temperature_celsius{type=~"udm|uxg|ucg|ugw"} > 75)
           for: 5m
           labels:
             severity: critical

@@ -19,11 +19,12 @@ data:
           "collapsed": false,
           "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
           "id": 99,
-          "title": "Overview",
+          "title": "Overview — at-a-glance thermals",
           "type": "row"
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Per-host CPU control temperature (Tctl). Orange ≥75°C, red ≥85°C.",
           "fieldConfig": {
             "defaults": {
               "color": {"mode": "thresholds"},
@@ -40,7 +41,7 @@ data:
               "max": 100
             }
           },
-          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 1},
+          "gridPos": {"h": 5, "w": 6, "x": 0, "y": 1},
           "id": 20,
           "options": {
             "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
@@ -61,6 +62,7 @@ data:
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Hottest NVMe Composite sensor per host. Orange ≥55°C, red ≥65°C.",
           "fieldConfig": {
             "defaults": {
               "color": {"mode": "thresholds"},
@@ -77,7 +79,7 @@ data:
               "max": 90
             }
           },
-          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 1},
+          "gridPos": {"h": 5, "w": 6, "x": 6, "y": 1},
           "id": 21,
           "options": {
             "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
@@ -97,8 +99,124 @@ data:
           "type": "stat"
         },
         {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "UniFi gateway (UDM/UXG/UCG/UGW) board temperature. Orange ≥60°C, red ≥70°C.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 60},
+                  {"color": "red", "value": 70}
+                ]
+              },
+              "unit": "celsius",
+              "min": 0,
+              "max": 100
+            }
+          },
+          "gridPos": {"h": 5, "w": 6, "x": 12, "y": 1},
+          "id": 22,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "max by (name) (unpoller_device_temperature_celsius{type=~\"udm|uxg|ucg|ugw\"})",
+              "legendFormat": "{{name}}"
+            }
+          ],
+          "title": "UniFi gateway temp",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "UniFi PoE switch (type=usw) board temperature. Orange ≥50°C, red ≥65°C.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 50},
+                  {"color": "red", "value": 65}
+                ]
+              },
+              "unit": "celsius",
+              "min": 0,
+              "max": 100
+            }
+          },
+          "gridPos": {"h": 5, "w": 6, "x": 18, "y": 1},
+          "id": 23,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "unpoller_device_temperature_celsius{type=\"usw\"}",
+              "legendFormat": "{{name}}"
+            }
+          ],
+          "title": "UniFi switch temp",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Number of UniFi devices currently exceeding their type-specific overheating threshold. Mirrors the UniFiDeviceOverheating alert.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "red", "value": 1}
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 3, "w": 24, "x": 0, "y": 6},
+          "id": 203,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "count(unpoller_device_temperature_celsius{type=\"usw\"} > 70) or vector(0)",
+              "legendFormat": "Switches overheating"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "count(unpoller_device_temperature_celsius{type=~\"udm|uxg|ucg|ugw\"} > 75) or vector(0)",
+              "legendFormat": "Gateways overheating"
+            }
+          ],
+          "title": "Overheating Devices",
+          "type": "stat"
+        },
+        {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 7},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
           "id": 100,
           "title": "CPU",
           "type": "row"
@@ -120,7 +238,7 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10},
           "id": 1,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
@@ -142,7 +260,7 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10},
           "id": 2,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
@@ -157,7 +275,7 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 16},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 18},
           "id": 101,
           "title": "NVMe Drives",
           "type": "row"
@@ -179,7 +297,7 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 17},
+          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 19},
           "id": 3,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "right"}},
           "targets": [
@@ -210,7 +328,7 @@ data:
               "max": 90
             }
           },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 17},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 19},
           "id": 4,
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "displayMode": "gradient"},
           "targets": [
@@ -225,269 +343,107 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 25},
-          "id": 102,
-          "title": "NVIDIA GPU Thermals & Power (hestia)",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 27},
+          "id": 200,
+          "title": "UniFi Thermals",
           "type": "row"
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Per-device board temperature for all UniFi devices reported by unpoller. One line per (device, sensor).",
           "fieldConfig": {
             "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
+              "unit": "celsius",
+              "min": 0,
+              "max": 100,
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
                   {"color": "green", "value": null},
-                  {"color": "orange", "value": 75},
-                  {"color": "red", "value": 83}
+                  {"color": "orange", "value": 60},
+                  {"color": "red", "value": 70}
                 ]
-              },
-              "unit": "celsius"
+              }
             }
           },
-          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 26},
-          "id": 5,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 28},
+          "id": 201,
+          "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": true}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_temperature_celsius{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} GPU {{gpu}}"
+              "expr": "unpoller_device_temperature_celsius",
+              "legendFormat": "{{name}} {{temp_area}}"
             }
           ],
-          "title": "NVIDIA GPU Temperature",
+          "title": "UniFi Device Temperatures",
           "type": "timeseries"
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Current board temperature per UniFi PoE switch (type=usw). Cell turns red ≥65°C — see UniFiPoESwitchTempHigh alert.",
           "fieldConfig": {
             "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "unit": "watt",
-              "max": 500
-            }
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 26},
-          "id": 6,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_power_draw_watts{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} GPU {{gpu}}"
-            }
-          ],
-          "title": "NVIDIA GPU Power Draw",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "unit": "percentunit",
-              "min": 0,
-              "max": 1
-            }
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 26},
-          "id": 7,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_fan_speed_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} GPU {{gpu}} fan"
-            }
-          ],
-          "title": "NVIDIA GPU Fan Speed",
-          "type": "timeseries"
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 34},
-          "id": 103,
-          "title": "NVIDIA GPU Utilization & Clock (hestia)",
-          "type": "row"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "unit": "percentunit",
-              "min": 0,
-              "max": 1
-            }
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 35},
-          "id": 8,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_sm_utilization_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} GPU {{gpu}} SM"
-            }
-          ],
-          "title": "NVIDIA GPU SM Utilization",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "unit": "percentunit",
-              "min": 0,
-              "max": 1
-            }
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 35},
-          "id": 9,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_memory_utilization_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} GPU {{gpu}} memory"
-            }
-          ],
-          "title": "NVIDIA GPU Memory Utilization",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "unit": "mhz"
-            }
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 35},
-          "id": 10,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_sm_clock_hz{instance=~\"$instance\"} / 1e6",
-              "legendFormat": "{{instance}} GPU {{gpu}}"
-            }
-          ],
-          "title": "NVIDIA GPU SM Clock",
-          "type": "timeseries"
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 43},
-          "id": 105,
-          "title": "AMD iGPU Thermals (Talos APUs)",
-          "type": "row"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 80},
-                  {"color": "red", "value": 90}
-                ]
-              },
-              "unit": "celsius"
-            }
-          },
-          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 44},
-          "id": 13,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_amdgpu_temperature_celsius{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{sensor}}"
-            }
-          ],
-          "title": "AMD iGPU Temperature",
-          "type": "timeseries"
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 52},
-          "id": 104,
-          "title": "Collector Health",
-          "type": "row"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
+              "unit": "celsius",
               "color": {"mode": "thresholds"},
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "red", "value": null},
-                  {"color": "green", "value": 1}
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 50},
+                  {"color": "red", "value": 65}
                 ]
               },
-              "mappings": [
-                {"options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}, "type": "value"}
-              ]
+              "min": 0,
+              "max": 100
             }
           },
-          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 53},
-          "id": 11,
-          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "colorMode": "background"},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 28},
+          "id": 202,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "background",
+            "graphMode": "area",
+            "textMode": "value_and_name"
+          },
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_hwmon_up{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} hwmon"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_up{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} gpu"
+              "expr": "unpoller_device_temperature_celsius{type=\"usw\"}",
+              "legendFormat": "{{name}}"
             }
           ],
-          "title": "Collector Status",
+          "title": "PoE Switch Temperatures",
           "type": "stat"
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "UniFi PoE switch fan level (0–4 typical). High sustained levels indicate elevated chassis heat.",
           "fieldConfig": {
             "defaults": {
               "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 1, "spanNulls": false},
-              "unit": "s"
+              "custom": {"lineWidth": 2, "spanNulls": false},
+              "unit": "short",
+              "min": 0
             }
           },
-          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 53},
-          "id": 12,
+          "gridPos": {"h": 6, "w": 24, "x": 0, "y": 36},
+          "id": 204,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "scrape_duration_seconds{job=\"thermalscope\", instance=~\"$instance\"}",
-              "legendFormat": "{{instance}}"
+              "expr": "unpoller_device_fan_level{type=\"usw\"}",
+              "legendFormat": "{{name}} fan level"
             }
           ],
-          "title": "Scrape Duration",
+          "title": "PoE Switch Fan Level",
           "type": "timeseries"
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 57},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 42},
           "id": 106,
           "title": "Chassis Fans (hestia)",
           "type": "row"
@@ -501,7 +457,7 @@ data:
               "unit": "rotrpm"
             }
           },
-          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 58},
+          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 43},
           "id": 14,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "right"}},
           "targets": [
@@ -532,7 +488,7 @@ data:
               "max": 8000
             }
           },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 58},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 43},
           "id": 15,
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "displayMode": "gradient"},
           "targets": [
@@ -547,119 +503,271 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 66},
-          "id": 200,
-          "title": "UniFi Thermals",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 51},
+          "id": 105,
+          "title": "AMD iGPU Thermals (Talos APUs)",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null},
+                      {"color": "orange", "value": 80},
+                      {"color": "red", "value": 90}
+                    ]
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 52},
+              "id": 13,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_amdgpu_temperature_celsius{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} {{sensor}}"
+                }
+              ],
+              "title": "AMD iGPU Temperature",
+              "type": "timeseries"
+            }
+          ]
+        },
+        {
+          "collapsed": true,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 60},
+          "id": 102,
+          "title": "NVIDIA GPU Thermals & Power (hestia) — collapsed; expand when GPUs in use",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null},
+                      {"color": "orange", "value": 75},
+                      {"color": "red", "value": 83}
+                    ]
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 52},
+              "id": 5,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_temperature_celsius{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}}"
+                }
+              ],
+              "title": "NVIDIA GPU Temperature",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "watt",
+                  "max": 500
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 52},
+              "id": 6,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_power_draw_watts{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}}"
+                }
+              ],
+              "title": "NVIDIA GPU Power Draw",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "percentunit",
+                  "min": 0,
+                  "max": 1
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 52},
+              "id": 7,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_fan_speed_ratio{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}} fan"
+                }
+              ],
+              "title": "NVIDIA GPU Fan Speed",
+              "type": "timeseries"
+            }
+          ]
+        },
+        {
+          "collapsed": true,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 52},
+          "id": 103,
+          "title": "NVIDIA GPU Utilization & Clock (hestia) — collapsed",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "percentunit",
+                  "min": 0,
+                  "max": 1
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 53},
+              "id": 8,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_sm_utilization_ratio{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}} SM"
+                }
+              ],
+              "title": "NVIDIA GPU SM Utilization",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "percentunit",
+                  "min": 0,
+                  "max": 1
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 53},
+              "id": 9,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_memory_utilization_ratio{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}} memory"
+                }
+              ],
+              "title": "NVIDIA GPU Memory Utilization",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "mhz"
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 53},
+              "id": 10,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_sm_clock_hz{instance=~\"$instance\"} / 1e6",
+                  "legendFormat": "{{instance}} GPU {{gpu}}"
+                }
+              ],
+              "title": "NVIDIA GPU SM Clock",
+              "type": "timeseries"
+            }
+          ]
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 54},
+          "id": 104,
+          "title": "Collector Health",
           "type": "row"
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Per-device board temperature for all UniFi devices reported by unpoller. One line per (device, sensor).",
-          "fieldConfig": {
-            "defaults": {
-              "unit": "celsius",
-              "min": 0,
-              "max": 100,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 60},
-                  {"color": "red", "value": 70}
-                ]
-              }
-            }
-          },
-          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 67},
-          "id": 201,
-          "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": true}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "unpoller_device_temperature_celsius",
-              "legendFormat": "{{name}} {{temp_area}}"
-            }
-          ],
-          "title": "UniFi Device Temperatures",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Current board temperature per UniFi PoE switch (type=usw). Cell turns red >=65°C — see UniFiPoESwitchTempHigh alert.",
-          "fieldConfig": {
-            "defaults": {
-              "unit": "celsius",
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 55},
-                  {"color": "red", "value": 65}
-                ]
-              },
-              "min": 0,
-              "max": 100
-            }
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 67},
-          "id": 202,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "auto",
-            "colorMode": "background",
-            "graphMode": "area",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "unpoller_device_temperature_celsius{type=\"usw\"}",
-              "legendFormat": "{{name}}"
-            }
-          ],
-          "title": "PoE Switch Temperatures",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Number of UniFi devices currently exceeding their type-specific overheating threshold. Mirrors the UniFiDeviceOverheating alert.",
           "fieldConfig": {
             "defaults": {
               "color": {"mode": "thresholds"},
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "red", "value": 1}
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 1}
                 ]
               },
-              "unit": "short"
+              "mappings": [
+                {"options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}, "type": "value"}
+              ]
             }
           },
-          "gridPos": {"h": 4, "w": 24, "x": 0, "y": 75},
-          "id": 203,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "auto",
-            "colorMode": "background",
-            "graphMode": "none",
-            "textMode": "value_and_name"
-          },
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 55},
+          "id": 11,
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "colorMode": "background"},
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "count(unpoller_device_temperature_celsius{type=\"usw\"} > 70) or vector(0)",
-              "legendFormat": "Switches overheating"
+              "expr": "thermalscope_hwmon_up{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} hwmon"
             },
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "count(unpoller_device_temperature_celsius{type=~\"udm|uxg|ucg|ugw\"} > 75) or vector(0)",
-              "legendFormat": "Gateways overheating"
+              "expr": "thermalscope_gpu_up{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} gpu"
             }
           ],
-          "title": "Overheating Devices",
+          "title": "Collector Status",
           "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 1, "spanNulls": false},
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 55},
+          "id": 12,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "scrape_duration_seconds{job=\"thermalscope\", instance=~\"$instance\"}",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "title": "Scrape Duration",
+          "type": "timeseries"
         }
       ],
       "refresh": "30s",
@@ -705,5 +813,5 @@ data:
       "timezone": "browser",
       "title": "ThermalScope — Rack",
       "uid": null,
-      "version": 2
+      "version": 3
     }

@@ -1,0 +1,120 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: unpoller
+  namespace: monitoring
+
+spec:
+  interval: 30m
+
+  chart:
+    spec:
+      chart: unpoller
+      # Pinned to the latest published version of the mvisonneau/unpoller chart
+      # (appVersion v2.9.2). See: https://github.com/mvisonneau/helm-charts/tree/main/charts/unpoller
+      # Bumping the chart version is a deliberate PR — Renovate should
+      # propose the bump rather than us drifting silently.
+      version: "0.1.0"
+      sourceRef:
+        kind: HelmRepository
+        name: unpoller
+        namespace: monitoring
+      interval: 12h
+
+  install:
+    timeout: 10m
+    remediation:
+      retries: 3
+
+  upgrade:
+    timeout: 10m
+    remediation:
+      retries: 3
+
+  values:
+    image:
+      repository: docker.io/golift/unifi-poller
+      pullPolicy: IfNotPresent
+
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+
+    # Inject the UniFi API key via the cnfg ENV mechanism. Unpoller calls
+    # cnfg.UnmarshalENV(i, "UP") which uses xml struct tags as path
+    # components separated by underscores. The relevant struct chain is:
+    #
+    #   InputUnifi  xml:"unifi"
+    #     Config.Default (Controller) xml:"default"
+    #       Controller.APIKey         xml:"api_key"
+    #
+    # Therefore the env var name is UP_UNIFI_DEFAULT_API_KEY.
+    # Source: github.com/unpoller/unpoller/pkg/inputunifi/input.go
+    envVariables:
+      - name: UP_UNIFI_DEFAULT_API_KEY
+        valueFrom:
+          secretKeyRef:
+            name: unpoller-unifi-creds
+            key: api_key
+
+    unpoller:
+      # TOML config baked into the chart-managed Secret. The api_key is
+      # intentionally absent here — it comes from the envVariables block
+      # above (env wins over file in cnfg). User/pass are left empty so
+      # unpoller falls into the "APIKey != ''" branch in input.go and
+      # skips user/pass auth entirely.
+      config: |
+        # Unpoller primary config (managed by Flux HelmRelease).
+        # api_key is injected via UP_UNIFI_DEFAULT_API_KEY env var.
+        [poller]
+          debug = false
+          quiet = false
+          plugins = []
+
+        [prometheus]
+          disable = false
+          http_listen = "0.0.0.0:9130"
+          report_errors = false
+          dead_ports = false
+
+        [influxdb]
+          disable = true
+
+        [loki]
+          disable = true
+          url = ""
+
+        [datadog]
+          disable = true
+
+        [webserver]
+          enable = false
+
+        [unifi]
+          dynamic = false
+
+        [unifi.defaults]
+          url = "https://10.42.1.1"
+          # user/pass intentionally empty — API key auth via env var
+          user = ""
+          pass = ""
+          sites = ["all"]
+          save_sites = true
+          # UCG-Fiber ships a self-signed cert
+          verify_ssl = false
+          save_ids = false
+          save_events = false
+          save_alarms = false
+          save_anomalies = false
+          save_dpi = false
+          save_rogue = false
+          hash_pii = false
+
+    # The chart does not ship a Service. We add one in
+    # service.yaml (this directory); scrape wiring lives in
+    # infra/configs/unpoller/servicemonitor.yaml.

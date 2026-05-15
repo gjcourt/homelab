@@ -1,0 +1,74 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: unpoller-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: unpoller
+      rules:
+        # Scraper liveness. The ServiceMonitor in this directory force-
+        # labels its job as "unpoller" via relabelings.
+        - alert: UnpollerScraperDown
+          expr: up{job="unpoller"} == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "unpoller exporter is down"
+            description: "Prometheus has not been able to scrape unpoller for 10 minutes — UniFi device metrics are stale."
+
+        # PoE switch (USW) board temperature. unpoller exports
+        # `unpoller_device_temperature_celsius` with labels:
+        #   {type, site_name, name, source, temp_area, temp_type, tag}
+        # For switches `type="usw"`; we additionally guard on
+        # `temp_area="general"` so we only alert on the board sensor
+        # (not SFP module temperatures, which are also exported under
+        # `unpoller_usw_sfp_temperature`).
+        # 65°C is conservative for unifi PoE switches (most are rated
+        # for 0-45°C ambient).
+        - alert: UniFiPoESwitchTempHigh
+          expr: unpoller_device_temperature_celsius{type="usw",temp_area="general"} > 65
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "UniFi switch {{ $labels.name }} is hot"
+            description: "PoE switch {{ $labels.name }} board temperature is {{ $value }}°C (threshold 65°C)."
+
+        # UCG-Fiber / UDM gateway temperature. Type-label coverage
+        # widened to `udm|uxg|ucg|ugw` because unpoller's promunifi
+        # source explicitly handles udm/usw/uap/usg but is ambiguous
+        # about UCG-Fiber — it may emit as `udm` (UDM-style) or as one
+        # of `ucg`/`ugw` depending on chart/exporter version. Broader
+        # regex avoids silent alert failure if the actual label differs
+        # from `udm`. Verify against live metrics on first scrape and
+        # tighten if reality differs.
+        - alert: UniFiGatewayTempHigh
+          expr: unpoller_device_temperature_celsius{type=~"udm|uxg|ucg|ugw"} > 70
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "UniFi gateway {{ $labels.name }} is hot"
+            description: "Gateway {{ $labels.name }} sensor {{ $labels.temp_area }} ({{ $labels.temp_type }}) is {{ $value }}°C (threshold 70°C)."
+
+        # Synthetic "overheating" indicator — fires when any UniFi
+        # device exceeds its type-specific hot threshold (PoE switch
+        # 70°C / gateway 75°C). This is the rolled-up alert linked
+        # from the dashboard's Overheating indicator panel.
+        # NOTE: there is no native `unifi_device_overheating` metric
+        # in promunifi — this is a derived signal.
+        - alert: UniFiDeviceOverheating
+          expr: |
+            (unpoller_device_temperature_celsius{type="usw",temp_area="general"} > 70)
+            or
+            (unpoller_device_temperature_celsius{type=~"udm|uxg|ucg|ugw"} > 75)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "UniFi device {{ $labels.name }} is overheating"
+            description: "{{ $labels.name }} ({{ $labels.type }}) at {{ $value }}°C exceeds the overheating threshold."

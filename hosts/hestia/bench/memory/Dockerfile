@@ -17,7 +17,10 @@
 #   # TODO operator: pin SHA after first build, e.g.
 #   #   sha256sum stream.c => <hex>
 
-FROM debian:bookworm-slim
+# Pinned by digest for reproducibility — refresh with:
+#   docker buildx imagetools inspect debian:bookworm-slim --raw \
+#     | python3 -c 'import hashlib,sys; print("sha256:"+hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
+FROM debian:bookworm-slim@sha256:67b30a61dc87758f0caf819646104f29ecbda97d920aaf5edc834128ac8493d3
 
 ARG DEBIAN_FRONTEND=noninteractive
 
@@ -64,15 +67,11 @@ RUN set -eux; \
 # Intel MLC (Memory Latency Checker)
 # ----------------------------------------------------------------------------
 # Operator must place mlc_v3.11a.tgz in the build context. Intel's EULA
-# prevents an automated download.
+# prevents an automated download. Missing-file failure surfaces as a
+# COPY error from Docker; see README "Troubleshooting" for the download URL.
+#   https://www.intel.com/content/www/us/en/download/736633/intel-memory-latency-checker-intel-mlc.html
 COPY mlc_v3.11a.tgz /tmp/mlc_v3.11a.tgz
 RUN set -eux; \
-    if [ ! -f /tmp/mlc_v3.11a.tgz ]; then \
-        echo "ERROR: mlc_v3.11a.tgz not found in build context."; \
-        echo "Download from https://www.intel.com/content/www/us/en/download/736633/intel-memory-latency-checker-intel-mlc.html"; \
-        echo "and place it next to this Dockerfile, then rebuild."; \
-        exit 1; \
-    fi; \
     mkdir -p /opt/mlc; \
     tar -xzf /tmp/mlc_v3.11a.tgz -C /opt/mlc; \
     if [ ! -x /opt/mlc/Linux/mlc ]; then \

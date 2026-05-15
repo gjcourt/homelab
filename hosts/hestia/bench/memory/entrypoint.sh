@@ -23,6 +23,9 @@ LABEL="$1"
 # ----------------------------------------------------------------------------
 # Output setup
 # ----------------------------------------------------------------------------
+# Two formats on purpose:
+#   - TS uses dashes (path-safe; colons break Windows + several CLI tools).
+#   - TS_ISO is strict ISO 8601 with colons (for the JSONL `ts` field).
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 TS_ISO="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 START_EPOCH="$(date -u +%s)"
@@ -79,6 +82,8 @@ emit "{\"event\":\"meta\",\"label\":\"$(esc_field "$LABEL")\",\"ts\":\"${TS_ISO}
 # ----------------------------------------------------------------------------
 # STREAM
 # ----------------------------------------------------------------------------
+STREAM_FAILURES=0
+
 run_stream() {
     local run_idx="$1"
     local tmp
@@ -88,7 +93,15 @@ run_stream() {
          OMP_PLACES=cores \
          numactl --cpunodebind=0 --membind=0 /usr/local/bin/stream > "$tmp" 2>&1; then
         warn "STREAM run ${run_idx} failed (exit $?)"
+        # Emit null events for all 4 kernels so the JSONL is complete and the
+        # aggregator can surface the partial-failure clearly, then mark this
+        # run as failed for the post-loop exit check.
+        local k
+        for k in Copy Scale Add Triad; do
+            emit "{\"event\":\"stream_run\",\"run\":${run_idx},\"kernel\":\"${k}\",\"rate_mb_per_s\":null,\"avg_time_s\":null,\"min_time_s\":null,\"max_time_s\":null}"
+        done
         rm -f "$tmp"
+        STREAM_FAILURES=$(( STREAM_FAILURES + 1 ))
         return 0
     fi
 
@@ -123,6 +136,14 @@ for i in 1 2 3 4 5; do
         sleep 5
     fi
 done
+
+# More than half the STREAM runs failing means the bandwidth tables are
+# unusable; fail loudly so the operator re-runs instead of aggregating noise.
+if [[ "$STREAM_FAILURES" -ge 3 ]]; then
+    warn "STREAM failed in $STREAM_FAILURES/5 runs; aborting before MLC"
+    emit "{\"event\":\"done\",\"ts\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"duration_s\":$(( $(date -u +%s) - START_EPOCH )),\"status\":\"stream_failed\"}"
+    exit 70
+fi
 
 # ----------------------------------------------------------------------------
 # Intel MLC

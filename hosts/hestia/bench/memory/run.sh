@@ -107,9 +107,13 @@ restore_governor() {
     if command -v cpupower >/dev/null 2>&1; then
         cpupower frequency-set -g "$target" >/dev/null 2>&1 || true
     else
+        # nullglob: if cpufreq isn't present, expand to nothing instead of
+        # silently iterating over the literal glob string.
+        shopt -s nullglob
         for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
             [[ -w "$f" ]] && echo "$target" > "$f" 2>/dev/null || true
         done
+        shopt -u nullglob
     fi
 }
 trap restore_governor EXIT
@@ -121,9 +125,14 @@ echo "info: setting CPU governor to performance" >&2
 if command -v cpupower >/dev/null 2>&1; then
     cpupower frequency-set -g performance >/dev/null 2>&1 || {
         echo "warning: cpupower failed; falling back to sysfs writes" >&2
+        # nullglob: if cpufreq isn't present, expand to nothing instead of
+        # silently iterating over the literal glob string.
+        shopt -s nullglob
+        shopt -s nullglob
         for f in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
             [[ -w "$f" ]] && echo performance > "$f"
         done
+        shopt -u nullglob
     }
 else
     echo "warning: cpupower not installed; using sysfs fallback" >&2

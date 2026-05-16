@@ -55,6 +55,18 @@ if [[ "${EUID}" -ne 0 ]]; then
     exit 77
 fi
 
+# Refuse to silently auto-create a phantom path. If the parent doesn't exist,
+# the operator probably forgot to pass `RESULTS_DIR=...` through sudo and we
+# would otherwise create the default path under the root filesystem, masking
+# the bug. (Hit this once: sudo stripped RESULTS_DIR, the default
+# /mnt/tank/... was used, docker auto-created the dir on the root fs.)
+results_parent="$(dirname "${RESULTS_DIR}")"
+if [[ ! -d "${results_parent}" ]]; then
+    echo "error: parent of RESULTS_DIR does not exist: ${results_parent}" >&2
+    echo "  RESULTS_DIR=${RESULTS_DIR}" >&2
+    echo "  hint: pass it through sudo as 'sudo RESULTS_DIR=<path> bash ./run.sh ...'" >&2
+    exit 78
+fi
 mkdir -p "${RESULTS_DIR}"
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 PREFLIGHT="${RESULTS_DIR}/${LABEL}-${TS}.preflight.json"
@@ -98,7 +110,13 @@ if [[ -r /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor ]]; then
     PRIOR_GOV="$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || true)"
 fi
 
-restore_governor() {
+PRIOR_HUGEPAGES=""
+if [[ -r /proc/sys/vm/nr_hugepages ]]; then
+    PRIOR_HUGEPAGES="$(cat /proc/sys/vm/nr_hugepages 2>/dev/null || true)"
+fi
+
+restore_host() {
+    # Governor
     local target="${PRIOR_GOV:-ondemand}"
     if [[ -z "$target" ]]; then
         target="ondemand"
@@ -115,8 +133,13 @@ restore_governor() {
         done
         shopt -u nullglob
     fi
+    # Hugepages
+    if [[ -n "$PRIOR_HUGEPAGES" && -w /proc/sys/vm/nr_hugepages ]]; then
+        echo "info: restoring nr_hugepages to ${PRIOR_HUGEPAGES}" >&2
+        echo "$PRIOR_HUGEPAGES" > /proc/sys/vm/nr_hugepages 2>/dev/null || true
+    fi
 }
-trap restore_governor EXIT
+trap restore_host EXIT
 
 # ----------------------------------------------------------------------------
 # Apply host controls
@@ -151,6 +174,25 @@ echo "info: enabling transparent hugepages (always/always)" >&2
 echo "info: dropping page caches" >&2
 sync
 [[ -w /proc/sys/vm/drop_caches ]] && echo 3 > /proc/sys/vm/drop_caches || true
+
+# MLC requires explicit 2MB hugepage reservation (separate from THP — these
+# come from a fixed pool). Intel's docs: "1000 pages per NUMA node minimum."
+# We reserve 2048 × num_nodes = 4 GB per node, leaving headroom over MLC's
+# minimum. Restored to the prior value on EXIT via restore_host().
+num_nodes="$(numactl --hardware 2>/dev/null | awk '/^available:/ {print $2; exit}')"
+num_nodes="${num_nodes:-1}"
+nr_hugepages_needed=$(( num_nodes * 2048 ))
+echo "info: reserving ${nr_hugepages_needed} 2 MB hugepages for MLC (numa_nodes=${num_nodes})" >&2
+if [[ -w /proc/sys/vm/nr_hugepages ]]; then
+    echo "$nr_hugepages_needed" > /proc/sys/vm/nr_hugepages
+    granted="$(awk '/^HugePages_Total:/ {print $2; exit}' /proc/meminfo 2>/dev/null || echo 0)"
+    if [[ "$granted" -lt "$nr_hugepages_needed" ]]; then
+        echo "warning: requested ${nr_hugepages_needed} hugepages but kernel granted ${granted}" >&2
+        echo "warning: MLC may still work if granted >= 1000 per node; otherwise free memory and retry" >&2
+    fi
+else
+    echo "warning: /proc/sys/vm/nr_hugepages not writable; MLC will likely fail" >&2
+fi
 
 # ----------------------------------------------------------------------------
 # Preflight snapshot

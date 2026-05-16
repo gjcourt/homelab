@@ -87,8 +87,17 @@ jobs:
                   print(f"skip (runner self-deploy): {path}", file=sys.stderr)
                   continue
 
-              with open(path) as f:
-                  doc = yaml.safe_load(f) or {}
+              try:
+                  with open(path) as f:
+                      doc = yaml.safe_load(f) or {}
+              except yaml.YAMLError as e:
+                  # GHA already marks the step red on non-zero exit (which then
+                  # blocks `apply` via the implicit needs-succeeded gate), but
+                  # a plain traceback is operator-hostile. Surface the file +
+                  # YAML error inline before exiting.
+                  print(f"FAIL (yaml parse error): {path}", file=sys.stderr)
+                  print(f"  {e}", file=sys.stderr)
+                  sys.exit(1)
 
               deploy_meta = doc.get("x-deploy") or {}
               archived = deploy_meta.get("archived")

@@ -1,3 +1,10 @@
+x-deploy:
+  # Archived 2026-05-16 — GPUs removed from hestia. nvtop has nothing to
+  # report. Flip `archived: false` to re-activate when GPUs return.
+  archived: true
+  archived-at: 2026-05-16
+  archived-reason: GPUs sold from hestia
+
 services:
   nvtop:
     image: onmoon/nvtop

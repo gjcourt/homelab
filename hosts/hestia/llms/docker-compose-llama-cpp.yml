@@ -11,6 +11,14 @@
 #   medium-workload TTFT 0.071 s, decode 173.9 t/s, VRAM peak 22.3 GiB
 # vLLM v0.20.1 measurement on the same model family beats this:
 #   TTFT 0.090 s, decode 194.3 t/s, plus 626 t/s aggregate at concurrency 8.
+x-deploy:
+  # Archived 2026-05-16 — GPUs removed from hestia. Already retired in favour
+  # of vLLM in May 2026, but the compose stayed in the matrix as a fallback.
+  # Now fully decommissioned; flip `archived: false` to re-activate.
+  archived: true
+  archived-at: 2026-05-16
+  archived-reason: GPUs sold from hestia
+
 services:
   llama:
     image: ghcr.io/gjcourt/llama-cpp-bench:2026-05-04

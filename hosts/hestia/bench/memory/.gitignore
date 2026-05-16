@@ -1,0 +1,13 @@
+# Operator drops the Intel MLC tarball here before docker build.
+# Binary, Intel-licensed — must never be committed.
+mlc_*.tgz
+mlc_*.tar.gz
+
+# Python bytecode if aggregate.py runs locally.
+__pycache__/
+*.pyc
+
+# Stray benchmark output if anyone runs the harness from this dir
+# instead of $RESULTS_DIR.
+results-*.jsonl
+*.preflight.json

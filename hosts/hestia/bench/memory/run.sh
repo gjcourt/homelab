@@ -179,8 +179,14 @@ sync
 # come from a fixed pool). Intel's docs: "1000 pages per NUMA node minimum."
 # We reserve 2048 × num_nodes = 4 GB per node, leaving headroom over MLC's
 # minimum. Restored to the prior value on EXIT via restore_host().
-num_nodes="$(numactl --hardware 2>/dev/null | awk '/^available:/ {print $2; exit}')"
-num_nodes="${num_nodes:-1}"
+# Count NUMA nodes via sysfs (numactl is only installed inside the container,
+# not on the TrueNAS host; using it here would tank the script under
+# `set -euo pipefail` when the binary is missing).
+shopt -s nullglob
+_node_dirs=(/sys/devices/system/node/node[0-9]*)
+shopt -u nullglob
+num_nodes=${#_node_dirs[@]}
+[[ "$num_nodes" -lt 1 ]] && num_nodes=1
 nr_hugepages_needed=$(( num_nodes * 2048 ))
 echo "info: reserving ${nr_hugepages_needed} 2 MB hugepages for MLC (numa_nodes=${num_nodes})" >&2
 if [[ -w /proc/sys/vm/nr_hugepages ]]; then

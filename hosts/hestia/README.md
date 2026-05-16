@@ -31,7 +31,23 @@ edits to `hosts/hestia/<app>/docker-compose*.yml` are applied automatically:
 4. The self-hosted runner on hestia executes [`scripts/truenas-update-app.sh`](../../scripts/truenas-update-app.sh), which calls TrueNAS's WebSocket `app.update` API with the new compose. The corresponding container restarts.
 5. Verify via the workflow run in GitHub Actions and `docker ps` on hestia.
 
-**Adding a new app**: drop `hosts/hestia/<new-app>/docker-compose.yml` in this tree, then add a matrix entry in `.github/workflows/deploy-hestia.yml` whose `name:` matches the Custom App name in SCALE UI exactly. The first deploy of a brand-new app still needs the operator to paste the compose into SCALE UI once (chicken-and-egg — the runner can't create an app that doesn't yet exist, only update one). Subsequent edits flow through the runner.
+**Adding a new app**: drop `hosts/hestia/<new-app>/docker-compose-<new-app>.yml` in this tree — no workflow edit needed. The `discover` job in `.github/workflows/deploy-hestia.yml` enumerates `hosts/hestia/**/docker-compose*.yml` on every run and derives the SCALE app name from the filename suffix (`docker-compose-foo.yml` → `foo`). The first deploy of a brand-new app still needs the operator to paste the compose into SCALE UI once (chicken-and-egg — the runner can't create an app that doesn't yet exist, only update one). Subsequent edits flow through the runner automatically.
+
+**Optional `x-deploy:` block** (docker-compose extension key — compose itself ignores `x-*` keys) lets a compose file control deploy behavior:
+
+```yaml
+x-deploy:
+  archived: true              # bool — must be a YAML true/false, not a string. Skips deploy.
+  archived-at: 2026-05-16     # for posterity; surfaced in the workflow run log
+  archived-reason: GPUs sold from hestia
+  name: thermalscope          # optional — override the filename-derived app name
+                              # (needed when the file is plain docker-compose.yml)
+
+services:
+  ...
+```
+
+Toggle `archived: true` ↔ `false` to deactivate / re-activate an app without removing the compose file from the repo.
 
 **Excluded from the workflow**: the runner itself (`actions-runner/`). A compose change that recreates the runner's own container would kill the workflow mid-flight. Runner upgrades stay manual.
 

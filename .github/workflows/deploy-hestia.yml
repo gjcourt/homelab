@@ -91,10 +91,21 @@ jobs:
                   doc = yaml.safe_load(f) or {}
 
               deploy_meta = doc.get("x-deploy") or {}
-              if deploy_meta.get("archived"):
+              archived = deploy_meta.get("archived")
+              # Strict `is True` so a string "false" (common YAML mistake — quoted
+              # bools become strings, and any non-empty string is truthy) doesn't
+              # silently skip an app. We require a YAML bool `true`.
+              if archived is True:
                   reason = deploy_meta.get("archived-reason", "no reason given")
                   print(f"skip (archived): {path}  reason={reason}", file=sys.stderr)
                   continue
+              if archived is not None and archived is not False:
+                  print(
+                      f"FAIL (bad x-deploy.archived value): {path}  got={archived!r}; "
+                      "must be a YAML bool (true / false), not a string or number.",
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
 
               fname = os.path.basename(path)
               if fname.startswith("docker-compose-") and fname.endswith(".yml"):

@@ -66,19 +66,19 @@ RUN set -eux; \
 # ----------------------------------------------------------------------------
 # Intel MLC (Memory Latency Checker)
 # ----------------------------------------------------------------------------
-# Operator must place mlc_v3.11a.tgz in the build context. Intel's EULA
+# Operator must place mlc_v3.12.tgz in the build context. Intel's EULA
 # prevents an automated download. Missing-file failure surfaces as a
 # COPY error from Docker; see README "Troubleshooting" for the download URL.
 #   https://www.intel.com/content/www/us/en/download/736633/intel-memory-latency-checker-intel-mlc.html
-COPY mlc_v3.11a.tgz /tmp/mlc_v3.11a.tgz
+COPY mlc_v3.12.tgz /tmp/mlc_v3.12.tgz
 RUN set -eux; \
     mkdir -p /opt/mlc; \
-    tar -xzf /tmp/mlc_v3.11a.tgz -C /opt/mlc; \
+    tar -xzf /tmp/mlc_v3.12.tgz -C /opt/mlc; \
     if [ ! -x /opt/mlc/Linux/mlc ]; then \
         chmod +x /opt/mlc/Linux/mlc || true; \
     fi; \
     ln -sf /opt/mlc/Linux/mlc /usr/local/bin/mlc; \
-    rm -f /tmp/mlc_v3.11a.tgz
+    rm -f /tmp/mlc_v3.12.tgz
 
 # ----------------------------------------------------------------------------
 # Entrypoint

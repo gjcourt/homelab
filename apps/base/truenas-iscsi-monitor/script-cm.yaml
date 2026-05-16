@@ -1,0 +1,269 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: truenas-iscsi-exporter-script
+  namespace: truenas-iscsi-monitor
+data:
+  exporter.py: |
+    """TrueNAS iSCSI Prometheus exporter.
+
+    Connects to TrueNAS over WebSocket JSON-RPC (wss://<host>/api/current)
+    using an API key, queries iSCSI targets, extents, and zvol sizes, then
+    joins each extent back to a Kubernetes PersistentVolume's claimRef
+    via the in-cluster API to derive {namespace, pvc, app, environment}
+    labels.
+
+    Why a join: democratic-csi (the TrueNAS CSI driver) leaves the iSCSI
+    extent comment field empty, unlike the Synology CSI driver which
+    writes "<namespace>/<pvc>" into the LUN description. The only PV
+    identifier in the TrueNAS extent is the name pattern
+    "csi-pvc-<UUID>-k8s"; we strip the prefix/suffix and look the PV up
+    by name.
+    """
+
+    import json
+    import os
+    import re
+    import ssl
+    import sys
+    import time
+
+    from kubernetes import client, config
+    from prometheus_client import Counter, Gauge, start_http_server
+    from websockets.sync.client import connect as ws_connect
+
+    TRUENAS_HOST = os.environ.get("TRUENAS_HOST", "10.42.2.10")
+    TRUENAS_API_KEY = os.environ.get("TRUENAS_API_KEY", "")
+    POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "60"))
+
+    # --- Aggregate metrics (mirroring synology_iscsi_*_count) ---
+    ISCSI_TARGET_COUNT = Gauge(
+        "truenas_iscsi_target_count",
+        "Number of iSCSI targets configured on TrueNAS",
+    )
+    ISCSI_EXTENT_COUNT = Gauge(
+        "truenas_iscsi_extent_count",
+        "Number of iSCSI extents (LUNs) configured on TrueNAS",
+    )
+
+    # --- Per-extent metrics ---
+    # Two size series: provisioned (zvol volsize) and used (zfs used).
+    # Synology only had one because its LUNs are file-backed; TrueNAS
+    # zvols are thin-provisioned, so the two diverge meaningfully.
+    ISCSI_EXTENT_SIZE = Gauge(
+        "truenas_iscsi_extent_size_bytes",
+        "Provisioned size (zvol volsize) of each iSCSI extent in bytes",
+        ["app", "environment", "namespace", "pvc"],
+    )
+    ISCSI_EXTENT_USED = Gauge(
+        "truenas_iscsi_extent_used_bytes",
+        "Actual used (zvol used) bytes of each iSCSI extent",
+        ["app", "environment", "namespace", "pvc"],
+    )
+
+    # --- Health metrics ---
+    UNMATCHED_EXTENTS = Counter(
+        "truenas_iscsi_unmatched_extents_total",
+        "Extents whose name did not match the csi-pvc-<UUID>-k8s pattern. "
+        "If this climbs, democratic-csi changed its naming template and "
+        "the exporter regex needs updating.",
+    )
+    SCRAPE_ERRORS = Counter(
+        "truenas_iscsi_scrape_errors_total",
+        "Total errors during a scrape cycle (any exception).",
+    )
+    LAST_SCRAPE_SUCCESS_TIMESTAMP = Gauge(
+        "truenas_iscsi_last_scrape_success_timestamp_seconds",
+        "Unix timestamp of the last successful scrape.",
+    )
+
+    # democratic-csi names extents like "csi-pvc-<UUID>-k8s".
+    # Stripping prefix/suffix yields the PV name "pvc-<UUID>".
+    EXTENT_NAME_RE = re.compile(r"^csi-(pvc-[0-9a-f-]+)-k8s$")
+
+
+    def _derive_env_and_app(namespace):
+        """Mirror synology-iscsi-monitor's namespace -> (env, app) heuristic.
+
+        ``<app>-stage``  -> (staging, <app>)
+        ``<app>-prod``   -> (production, <app>)
+        anything else    -> (infra, <namespace>)
+        """
+        if namespace.endswith("-stage"):
+            return "staging", namespace[: -len("-stage")]
+        if namespace.endswith("-prod"):
+            return "production", namespace[: -len("-prod")]
+        return "infra", namespace
+
+
+    class TruenasClient:
+        """Minimal JSON-RPC over WebSocket client for TrueNAS 26.x.
+
+        TrueNAS 26.x removed REST; all operations go through wss://. The
+        session is short-lived (~one round-trip per scrape, one auth +
+        three queries), so we reconnect each cycle rather than hold a
+        long-lived socket.
+        """
+
+        def __init__(self, host, api_key):
+            self.url = f"wss://{host}/api/current"
+            self.api_key = api_key
+            # TrueNAS uses a self-signed cert for its IP-based endpoint;
+            # the API key is the auth boundary, not TLS verification.
+            self._ssl = ssl.create_default_context()
+            self._ssl.check_hostname = False
+            self._ssl.verify_mode = ssl.CERT_NONE
+            self._next_id = 0
+
+        def _rpc(self, ws, method, params=None):
+            self._next_id += 1
+            req = {
+                "jsonrpc": "2.0",
+                "id": self._next_id,
+                "method": method,
+                "params": params or [],
+            }
+            ws.send(json.dumps(req))
+            resp = json.loads(ws.recv())
+            if "error" in resp and resp["error"]:
+                raise RuntimeError(f"{method} failed: {resp['error']}")
+            return resp.get("result")
+
+        def fetch_iscsi_state(self):
+            """Single round-trip: auth, then targets, extents, zvols."""
+            with ws_connect(self.url, ssl_context=self._ssl) as ws:
+                auth_ok = self._rpc(ws, "auth.login_with_api_key", [self.api_key])
+                if not auth_ok:
+                    raise RuntimeError("auth.login_with_api_key returned false")
+                targets = self._rpc(ws, "iscsi.target.query", [[]])
+                extents = self._rpc(ws, "iscsi.extent.query", [[]])
+                zvols = self._rpc(
+                    ws,
+                    "pool.dataset.query",
+                    [[["type", "=", "VOLUME"]]],
+                )
+                return targets, extents, zvols
+
+
+    def _build_pv_index(v1):
+        """Return a dict pv_name -> claim_ref for all democratic-csi PVs.
+
+        We don't filter by storage class here; any PV whose name starts
+        with 'pvc-' is a candidate, and the join is gated by an exact
+        match against the extent-name-derived PV name.
+        """
+        index = {}
+        for pv in v1.list_persistent_volume().items:
+            name = pv.metadata.name
+            cref = pv.spec.claim_ref
+            if name and cref and name.startswith("pvc-"):
+                index[name] = cref
+        return index
+
+
+    def _build_zvol_size_index(zvols):
+        """Index {pool-relative-path -> (volsize_bytes, used_bytes)}.
+
+        TrueNAS pool.dataset.query returns 'name' as the pool-relative
+        path (e.g. 'main/k8s/iscsi/pvc-<UUID>'). The iSCSI extent's
+        'path' field has a 'zvol/' prefix on the same value.
+        """
+        idx = {}
+        for z in zvols:
+            name = z.get("name", "")
+            volsize = (z.get("volsize") or {}).get("parsed", 0)
+            used = (z.get("used") or {}).get("parsed", 0)
+            try:
+                volsize = int(volsize)
+                used = int(used)
+            except (TypeError, ValueError):
+                volsize, used = 0, 0
+            idx[name] = (volsize, used)
+        return idx
+
+
+    def collect(tn, v1):
+        """Run a single collection cycle."""
+        try:
+            targets, extents, zvols = tn.fetch_iscsi_state()
+        except Exception as e:
+            SCRAPE_ERRORS.inc()
+            print(f"[ERROR] TrueNAS fetch failed: {e}", file=sys.stderr)
+            return
+
+        try:
+            pvs = _build_pv_index(v1)
+        except Exception as e:
+            SCRAPE_ERRORS.inc()
+            print(f"[ERROR] K8s PV list failed: {e}", file=sys.stderr)
+            return
+
+        zvol_idx = _build_zvol_size_index(zvols)
+
+        # Drop stale label sets so removed PVCs don't linger.
+        ISCSI_EXTENT_SIZE._metrics.clear()
+        ISCSI_EXTENT_USED._metrics.clear()
+
+        labeled = 0
+        for ex in extents:
+            name = ex.get("name", "")
+            m = EXTENT_NAME_RE.match(name)
+            if not m:
+                UNMATCHED_EXTENTS.inc()
+                print(f"[WARN] extent {name!r} did not match expected pattern", file=sys.stderr)
+                continue
+
+            pv_name = m.group(1)
+            cref = pvs.get(pv_name)
+            if cref is None:
+                # Extent exists on TrueNAS but no matching PV in K8s.
+                # Could be mid-deletion; not fatal, but worth a one-line log.
+                print(f"[INFO] extent {name!r} has no matching PV in cluster", file=sys.stderr)
+                continue
+
+            # extent.path looks like 'zvol/main/k8s/iscsi/pvc-<UUID>'
+            # zvol name is 'main/k8s/iscsi/pvc-<UUID>'
+            ex_path = (ex.get("path") or "").lstrip("/")
+            if ex_path.startswith("zvol/"):
+                ex_path = ex_path[len("zvol/") :]
+            volsize, used = zvol_idx.get(ex_path, (0, 0))
+
+            ns = cref.namespace or ""
+            pvc = cref.name or ""
+            environment, app = _derive_env_and_app(ns)
+
+            ISCSI_EXTENT_SIZE.labels(
+                app=app, environment=environment, namespace=ns, pvc=pvc
+            ).set(volsize)
+            ISCSI_EXTENT_USED.labels(
+                app=app, environment=environment, namespace=ns, pvc=pvc
+            ).set(used)
+            labeled += 1
+
+        ISCSI_TARGET_COUNT.set(len(targets))
+        ISCSI_EXTENT_COUNT.set(len(extents))
+        LAST_SCRAPE_SUCCESS_TIMESTAMP.set(time.time())
+        print(
+            f"Metrics updated: targets={len(targets)} extents={len(extents)} "
+            f"labeled={labeled}"
+        )
+
+
+    def main():
+        if not TRUENAS_API_KEY:
+            print("[FATAL] TRUENAS_API_KEY env var is empty", file=sys.stderr)
+            sys.exit(1)
+
+        config.load_incluster_config()
+        v1 = client.CoreV1Api()
+        tn = TruenasClient(TRUENAS_HOST, TRUENAS_API_KEY)
+
+        print(f"Starting TrueNAS iSCSI exporter on :8000 (target {TRUENAS_HOST})")
+        start_http_server(8000)
+        while True:
+            collect(tn, v1)
+            time.sleep(POLL_INTERVAL)
+
+
+    if __name__ == "__main__":
+        main()

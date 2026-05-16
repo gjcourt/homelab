@@ -1,0 +1,11 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: flashcards-sync
+  namespace: flashcards
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: flashcards-sync

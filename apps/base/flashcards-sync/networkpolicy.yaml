@@ -1,0 +1,46 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: flashcards-sync
+  namespace: flashcards
+  labels:
+    app.kubernetes.io/name: flashcards-sync
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: |
+    Sync service for the flashcards web app. Gateway ingress on 8080
+    (via the path-based HTTPRoute /api/*); egress to DNS + the CNPG
+    Postgres cluster on 5432.
+  endpointSelector:
+    matchLabels:
+      app: flashcards-sync
+  ingress:
+    # Cluster gateway proxy ingress. host + remote-node + ingress are all
+    # required — see feedback memory `feedback_cilium_gateway_netpol`.
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/podRole: instance
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP

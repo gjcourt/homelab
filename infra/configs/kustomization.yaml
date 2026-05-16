@@ -6,4 +6,7 @@ resources:
   - cilium
   - dashboards
   - gateway
+  - ipmi-exporter
   - network-policies
+  - thermalscope
+  - unpoller

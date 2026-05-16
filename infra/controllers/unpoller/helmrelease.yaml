@@ -1,0 +1,131 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: unpoller
+  namespace: monitoring
+
+spec:
+  interval: 30m
+
+  chart:
+    spec:
+      chart: unpoller
+      # Pinned to the latest published version of the mvisonneau/unpoller chart
+      # (appVersion v2.9.2). See: https://github.com/mvisonneau/helm-charts/tree/main/charts/unpoller
+      # Bumping the chart version is a deliberate PR — Renovate should
+      # propose the bump rather than us drifting silently.
+      version: "0.1.0"
+      sourceRef:
+        kind: HelmRepository
+        name: unpoller
+        namespace: monitoring
+      interval: 12h
+
+  install:
+    timeout: 10m
+    remediation:
+      retries: 3
+
+  upgrade:
+    timeout: 10m
+    remediation:
+      retries: 3
+
+  values:
+    image:
+      repository: docker.io/golift/unifi-poller
+      # v2.9.2 (the chart's appVersion default) does not have API key
+      # auth — APIKey was added to the Controller struct in the v3.x
+      # line. Override to v3.2.0 (latest stable as of 2026-05-12) so
+      # UP_UNIFI_DEFAULT_API_KEY env-var injection actually works.
+      tag: v3.2.0
+      pullPolicy: IfNotPresent
+
+    replicas: 1
+
+    resources:
+      requests:
+        cpu: 25m
+        memory: 64Mi
+      limits:
+        memory: 256Mi
+
+    # Inject UniFi credentials via env vars. unpoller's cnfg layer maps
+    # `[unifi.defaults]` TOML keys to UP_UNIFI_DEFAULT_<KEY> env vars.
+    #
+    # Originally tried API-key auth (UP_UNIFI_DEFAULT_API_KEY) but the
+    # local UCG-Fiber console doesn't expose a "create local API key"
+    # surface in its UI (only the unifi.ui.com cloud account exposes
+    # an `api-keys` page, and those keys have no authority on the
+    # local controller — verified by 401 at /proxy/network/status).
+    #
+    # Falling back to user/pass auth against a local read-only admin
+    # account (Settings → Control Plane → Admins & Users → Create
+    # New Admin → "Restrict to local access only" → role: View Only).
+    envVariables:
+      - name: UP_UNIFI_DEFAULT_USER
+        valueFrom:
+          secretKeyRef:
+            name: unpoller-unifi-creds
+            key: user
+      - name: UP_UNIFI_DEFAULT_PASS
+        valueFrom:
+          secretKeyRef:
+            name: unpoller-unifi-creds
+            key: pass
+
+    unpoller:
+      # TOML config baked into the chart-managed Secret. user/pass are
+      # intentionally absent here — they come from envVariables above.
+      config: |
+        # Unpoller primary config (managed by Flux HelmRelease).
+        # user/pass injected via UP_UNIFI_DEFAULT_USER / _PASS env vars.
+        [poller]
+          debug = false
+          quiet = false
+          plugins = []
+
+        [prometheus]
+          disable = false
+          http_listen = "0.0.0.0:9130"
+          report_errors = false
+          dead_ports = false
+
+        [influxdb]
+          disable = true
+
+        [loki]
+          disable = true
+          url = ""
+
+        [datadog]
+          disable = true
+
+        [webserver]
+          enable = false
+
+        [unifi]
+          dynamic = false
+
+        [unifi.defaults]
+          url = "https://10.42.1.1"
+          # user/pass intentionally empty — injected via env vars
+          # (UP_UNIFI_DEFAULT_USER / UP_UNIFI_DEFAULT_PASS); the
+          # cnfg layer fills these at runtime.
+          user = ""
+          pass = ""
+          sites = ["all"]
+          save_sites = true
+          # UCG-Fiber ships a self-signed cert
+          verify_ssl = false
+          save_ids = false
+          save_events = false
+          save_alarms = false
+          save_anomalies = false
+          save_dpi = false
+          save_rogue = false
+          hash_pii = false
+
+    # The chart does not ship a Service. We add one in
+    # service.yaml (this directory); scrape wiring lives in
+    # infra/configs/unpoller/servicemonitor.yaml.

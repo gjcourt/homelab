@@ -1,15 +1,61 @@
+---
+# Production compose for the hestia vllm SCALE app.
+#
+# Promoted from the experiments plan
+# (docs/plans/2026-05-07-vllm-frontier-model-experiments.md) — Phase 6 v2 winner,
+# extended to 160K context (revised 2026-05-09 after operator clarified
+# minimum-context requirement at ~150K tokens).
+#
+# Headline numbers (medium workload, 5 runs each):
+#   decode 194.3 t/s   (vs llama.cpp prod baseline 173.9 t/s, +12%)
+#   TTFT   0.090 s     (vs 0.071 s — within 20 ms)
+#   8-concurrent aggregate: 626 t/s
+#   30-min soak: 1463 reqs, 0 errors, 0 MiB VRAM drift (run at 32K config;
+#                                                       160K config inherits
+#                                                       the same stability profile)
+#   long-context: 138,388 tokens prefill in 18.98 s, end-to-end recall confirmed
+#
+# vLLM reports GPU KV cache pool: 1,780,261 tokens, max concurrency 10.87×
+# at the full 163,840-token request size. max-num-seqs is 4 to leave
+# explicit headroom; could be raised to 8 if hermes load grows (cache
+# math supports it, just not yet retested).
+#
+# Image is pinned to v0.20.1 — do NOT use :latest. SCALE doesn't auto-refresh.
+#
+# Full results: docs/research/2026-05-07-vllm-frontier-experiments.md
+#
+# To deploy this compose: paste into the vllm SCALE app's custom_compose_config
+# via midclt or the Apps UI. The llama-cpp SCALE app must be stopped first
+# (port 8000 conflict).
+x-deploy:
+  # Archived 2026-05-16 — both RTX 4090s removed from hestia. The vLLM
+  # SCALE app has been deleted via `midclt call app.delete vllm`. This
+  # compose remains in place for fast re-activation if GPUs return: flip
+  # `archived: false` and the deploy workflow will pick it up again.
+  archived: true
+  archived-at: 2026-05-16
+  archived-reason: GPUs sold from hestia
+
 services:
   vllm:
     command:
       - '-c'
       - >-
         echo "=== START $(date) ===" >> /root/.cache/huggingface/vllm.log 2>&1;
-        exec vllm serve Qwen/Qwen3.5-27B-GPTQ-Int4 --served-model-name
-        qwen3.5-27b --host 0.0.0.0 --port 8000 --quantization gptq
-        --dtype float16 --gpu-memory-utilization 0.75 --max-model-len 16384
-        --enable-chunked-prefill --max-num-seqs 4 --enforce-eager --enable-auto-tool-choice
-        --tool-call-parser hermes --trust-remote-code >>
-        /root/.cache/huggingface/vllm.log 2>&1
+        exec vllm serve cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit
+        --served-model-name qwen3.6-35b-a3b-awq
+        --host 0.0.0.0 --port 8000
+        --tensor-parallel-size 2
+        --dtype auto
+        --gpu-memory-utilization 0.92
+        --max-model-len 163840
+        --kv-cache-dtype fp8
+        --enable-chunked-prefill
+        --max-num-seqs 4
+        --enable-auto-tool-choice
+        --tool-call-parser qwen3_xml
+        --trust-remote-code
+        >> /root/.cache/huggingface/vllm.log 2>&1
     container_name: vllm
     deploy:
       resources:
@@ -31,14 +77,14 @@ services:
     healthcheck:
       interval: 30s
       retries: 5
-      start_period: 600s
+      start_period: 900s
       test:
         - CMD
         - curl
         - '-f'
         - http://localhost:8000/health
       timeout: 10s
-    image: vllm/vllm-openai:latest
+    image: vllm/vllm-openai:v0.20.2
     ipc: host
     ports:
       - '8000:8000'

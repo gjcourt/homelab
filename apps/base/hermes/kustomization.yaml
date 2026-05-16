@@ -15,3 +15,8 @@ labels:
       app.kubernetes.io/component: bot
       app.kubernetes.io/part-of: homelab
       app.kubernetes.io/managed-by: flux
+configMapGenerator:
+  - name: hermes-config-yaml
+    namespace: hermes
+    files:
+      - config/config.yaml

@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: thermalscope
+  labels:
+    app: thermalscope
+    # thermalscope runs hostNetwork and mounts hostPath sysfs paths
+    # (/sys/class/hwmon, /sys/class/thermal). PSA baseline forbids
+    # hostNetwork; restricted additionally forbids hostPath volumes and
+    # runAsNonRoot=false. We need root for hwmon sysfs reads, so
+    # privileged is the required level.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

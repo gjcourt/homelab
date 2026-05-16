@@ -24,12 +24,26 @@ spec:
     spec:
       serviceAccountName: immich
       automountServiceAccountToken: false
+      # Prefer the high-airflow worker nodes (labeled cpu-tier=high) so
+      # the CPU-heavy server doesn't bake the warmer control-plane nodes.
+      # Soft preference — scheduler falls back to any node if the labeled
+      # ones are unavailable (drain, NotReady, etc.).
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: homelab.gjcourt.dev/cpu-tier
+                    operator: In
+                    values:
+                      - high
       securityContext:
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: immich-server
-          image: ghcr.io/immich-app/immich-server@sha256:8ac5a6d471fbb6fcfec6bc34854dd5a947c1795547f0d9345d9bf1803d1209e3
+          image: ghcr.io/immich-app/immich-server:v2.7.5@sha256:c15bff75068effb03f4355997d03dc7e0fc58720c2b54ad6f7f10d1bc57efaa5
           ports:
             - name: http
               containerPort: 2283
@@ -92,12 +106,22 @@ spec:
     spec:
       serviceAccountName: immich
       automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: homelab.gjcourt.dev/cpu-tier
+                    operator: In
+                    values:
+                      - high
       securityContext:
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: immich-machine-learning
-          image: ghcr.io/immich-app/immich-machine-learning@sha256:531d2bccbe20d0412496e36455715a18d692911eca5e2ee37d32e1e4f50e14bb
+          image: ghcr.io/immich-app/immich-machine-learning:v2.7.5@sha256:a2501141440f10516d329fdfba2c68082e19eb9ba6016c061ac80d23beadf7f3
           ports:
             - name: http
               containerPort: 3003
@@ -163,6 +187,16 @@ spec:
     spec:
       serviceAccountName: immich
       automountServiceAccountToken: false
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: homelab.gjcourt.dev/cpu-tier
+                    operator: In
+                    values:
+                      - high
       securityContext:
         runAsNonRoot: true
         runAsUser: 999
@@ -172,7 +206,7 @@ spec:
       containers:
         - name: redis
           # redis 8-alpine
-          image: redis@sha256:832d7785830f3f4b559300e6191fc914b15642c1935252338825cf4332200148
+          image: redis@sha256:0c341492924cad6f5483f9133e43bd6c51ecdecbcadfac5b51657393b6a7936c
           args:
             - "--save"
             - ""
@@ -180,6 +214,20 @@ spec:
             - name: redis
               containerPort: 6379
               protocol: TCP
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
               cpu: 5m

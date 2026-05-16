@@ -1,0 +1,45 @@
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: flashcards-http
+  namespace: flashcards-prod
+spec:
+  hostnames:
+    - flashcards.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: flashcards-https
+  namespace: flashcards-prod
+spec:
+  hostnames:
+    - flashcards.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: https
+  # Rules are evaluated specific-first by Cilium HTTPRoute matching:
+  # `/api/*` is forwarded to the flashcards-sync service (same namespace,
+  # no ReferenceGrant needed); everything else hits the static web app.
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+      backendRefs:
+        - name: flashcards-sync
+          port: 8080
+    - backendRefs:
+        - name: flashcards
+          port: 8080

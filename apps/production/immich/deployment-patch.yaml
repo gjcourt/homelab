@@ -151,7 +151,12 @@ spec:
           - 109 # render group
       containers:
         - name: immich-machine-learning
-          image: ghcr.io/immich-app/immich-machine-learning@sha256:35b56970279afa31009822609f03fc892effe0107fdb796e5dae57979dc3267c
+          # Per-arch (linux/amd64) digest of :v2.7.5; this overrides the base
+          # multi-arch index pin so the GPU-accelerated build runs in production.
+          # When bumping: update both the tag and the digest from
+          # `docker manifest inspect ghcr.io/immich-app/immich-machine-learning:vX.Y.Z`
+          # → pick the linux/amd64 entry's digest.
+          image: ghcr.io/immich-app/immich-machine-learning:v2.7.5@sha256:a2501141440f10516d329fdfba2c68082e19eb9ba6016c061ac80d23beadf7f3
           securityContext:
             privileged: true
           env:

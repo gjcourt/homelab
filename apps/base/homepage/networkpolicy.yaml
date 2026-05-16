@@ -8,11 +8,22 @@ metadata:
     app.kubernetes.io/name: homepage
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Gateway ingress on 3000; egress DNS + Kubernetes API for cluster widgets.
+  description: >-
+    Gateway ingress on 3000; egress for DNS, Kubernetes API, in-cluster widget
+    Services (AdGuard admin, Prometheus), and HTTP/HTTPS to the world for the
+    Synology DSM widget (10.42.2.11:5001), HifiBerry siteMonitor probes (LAN
+    IPs), gateway VIP siteMonitor probes (*.burntbytes.com → 10.42.2.40+
+    LoadBalancer IPs), and the Unsplash background image. The previous selector
+    (`app: homepage`) matched zero pods — homepage's pods are labelled
+    `app.kubernetes.io/name: homepage`.
   endpointSelector:
     matchLabels:
-      app: homepage
+      app.kubernetes.io/name: homepage
   ingress:
+    # Cilium Envoy (Gateway API) binds upstream sockets to a dedicated proxy IP
+    # that Cilium marks as reserved identity 8 ("ingress"). Same-node connections
+    # arrive as "host"; cross-node VXLAN connections arrive as "remote-node".
+    # All three are required. Kubelet probes are auto-exempted.
     - fromEntities:
         - host
         - remote-node
@@ -22,6 +33,7 @@ spec:
             - port: "3000"
               protocol: TCP
   egress:
+    # DNS resolution via CoreDNS.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: kube-system
@@ -40,4 +52,54 @@ spec:
             - port: "443"
               protocol: TCP
             - port: "6443"
+              protocol: TCP
+    # AdGuard widget — cluster-internal admin Service in adguard-prod.
+    # Two Cilium gotchas in one rule:
+    #   1) The adguard-admin Service exposes 8080, but its targetPort is the
+    #      `http` named port → AdGuard pod port 80. Cilium evaluates egress
+    #      after DNAT, so the policy must match the post-DNAT pod port (80),
+    #      not the Service port (8080).
+    #   2) Cilium only promotes a subset of pod labels into its policy-visible
+    #      identity (notably the `app.kubernetes.io/*` prefix). It does NOT
+    #      promote `statefulset.kubernetes.io/pod-name`. A previous version of
+    #      this rule used that label (mirroring the adguard-admin Service's
+    #      pod selector) and matched zero identities — Hubble showed
+    #      `policy-verdict:none EGRESS DENIED`. Use `app.kubernetes.io/name`
+    #      instead; that broadens to all adguard pods (adguard-0 + adguard-1),
+    #      but the Service itself still routes only to adguard-0.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: adguard-prod
+            app.kubernetes.io/name: adguard
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # Prometheus widget (Cluster Resources) — kube-prometheus-stack-prometheus
+    # in the monitoring namespace, port 9090.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    # World egress on HTTP/HTTPS covers:
+    #   - Synology DSM widget on the LAN (10.42.2.11:5001 — see port rule below).
+    #   - HifiBerry siteMonitor probes (http://10.42.2.38, http://10.42.2.39).
+    #   - Gateway VIP siteMonitor probes (*.burntbytes.com → 10.42.2.40+ LB pool).
+    #   - Cloudflare-tunnel-fronted hostnames (e.g. https://hestia.burntbytes.com).
+    #   - Unsplash background image (https://images.unsplash.com).
+    # FQDN restriction would add DNS-policy complexity for a public dashboard
+    # whose tile list changes; egress to ports 80/443/5001 is the pragmatic scope.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+            - port: "5001"
               protocol: TCP

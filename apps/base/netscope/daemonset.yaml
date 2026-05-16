@@ -1,0 +1,111 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: netscope-agent
+  namespace: netscope
+  labels:
+    app.kubernetes.io/name: netscope
+    app.kubernetes.io/component: agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: netscope
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: netscope
+        app.kubernetes.io/component: agent
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9101"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: netscope-agent
+      hostNetwork: true
+      hostPID: false
+      dnsPolicy: ClusterFirstWithHostNet
+      # Intentional: schedule on every node including control-plane.
+      # Network observability is most useful when it covers all 6 nodes
+      # (3 CP + 3 worker). The agent footprint is small (~50m CPU / 64Mi
+      # memory request) and CP nodes route a non-trivial share of cluster
+      # traffic (Cilium VXLAN, control-plane API). Revisit if CP capacity
+      # becomes tight.
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: agent
+          image: "ghcr.io/gjcourt/netscope:2e20747@sha256:75d159d39a7e4498c537bd2e6739d4f722f63c880ab6bb91e8fd372d9ab6ce36"
+          imagePullPolicy: IfNotPresent
+          # NETSCOPE_IFACE intentionally unset — the agent discovers the
+          # IPv4 default-route interface at startup from /proc/net/route.
+          # Set explicitly here (e.g. value: "eno1") to pin to a specific
+          # NIC and skip discovery.
+          ports:
+            - name: metrics
+              containerPort: 9101
+              hostPort: 9101
+              protocol: TCP
+          securityContext:
+            privileged: false
+            # runAsUser: 0 — eBPF tcx attach + BPF_PROG_GET_NEXT_ID
+            # discovery require UID 0; non-root would need ambient
+            # capabilities support which Talos doesn't expose.
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            # readOnlyRootFilesystem deferred: the upstream agent
+            # is a scratch-image Go binary and likely tolerates it,
+            # but unverified — flip after first prod soak.
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              add:
+                - BPF
+                - PERFMON
+                - NET_ADMIN
+                # SYS_ADMIN is required for bpf(BPF_PROG_GET_NEXT_ID),
+                # which the agent uses at startup to discover Cilium's
+                # ingress program for tcx anchor placement.
+                - SYS_ADMIN
+              drop:
+                - ALL
+          volumeMounts:
+            - name: bpffs
+              mountPath: /sys/fs/bpf
+              mountPropagation: HostToContainer
+            - name: btf
+              mountPath: /sys/kernel/btf
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9101
+              host: 127.0.0.1
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9101
+              host: 127.0.0.1
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+      volumes:
+        - name: bpffs
+          hostPath:
+            path: /sys/fs/bpf
+            type: Directory
+        - name: btf
+          hostPath:
+            path: /sys/kernel/btf
+            type: Directory

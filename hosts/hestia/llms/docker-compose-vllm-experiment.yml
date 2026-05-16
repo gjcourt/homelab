@@ -1,0 +1,107 @@
+---
+# Variant compose for the vLLM frontier-model experiments plan
+# (see docs/plans/2026-05-07-vllm-frontier-model-experiments.md — STATUS: COMPLETE).
+#
+# Plan executed 2026-05-09. Phase 6 v2 winner promoted to the production
+# compose at hosts/hestia/llms/docker-compose-vllm.yml (now running with
+# 160K context per operator clarification).
+#
+# THIS FILE IS THE FROZEN PHASE 6 V2 RECORD AT 32K CONTEXT — kept verbatim
+# as the historical artifact of the experiment that won. The 160K-context
+# variant is in the prod compose, NOT here.
+#
+# This file will be rewritten if a new phase opens (e.g., the documented-but-
+# not-deployed vision phase, or a re-test of v0.20.0 blockers on a future
+# vLLM major release).
+#
+# Current contents: PHASE 6 v2 + vLLM v0.20.1 (32K context, original promotion config).
+#
+#   model:        cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit (~22 GB AWQ-INT4 MoE,
+#                                                    Qwen3_5MoeForConditionalGeneration)
+#   parallelism:  TP=2 across both GPUs (model doesn't fit single-GPU)
+#   image pin:    vllm/vllm-openai:v0.20.1   <-- explicit, NOT :latest
+#   purpose:      direct A/B vs production llama.cpp on the same model
+#                 family. Result: vLLM beats llama.cpp by ~12% on single-
+#                 stream decode (193 vs 174 t/s) and 4× under concurrent
+#                 load (625.8 t/s aggregate at concurrency 8).
+#                 Soak (30 min, 1463 reqs, 0 errors, 0 MiB VRAM drift): pass.
+#
+# Iteration log for each phase lives in docs/research/2026-05-07-vllm-frontier-experiments.md.
+#
+# The vllm SCALE app's custom_compose_config mirrors this file. To deploy:
+#   midclt call app.update vllm '{"custom_compose_config": <THIS FILE AS JSON>}'
+#   midclt call app.redeploy vllm   # prefer over app.start; avoids stuck DEPLOYING states
+#
+# Production llama-cpp on the same port 8000 must be stopped first.
+x-deploy:
+  # Archived 2026-05-16 — GPUs removed from hestia. Experiments compose is
+  # kept in place so future vLLM frontier-model tuning can resume by
+  # flipping `archived: false` once GPUs are back.
+  archived: true
+  archived-at: 2026-05-16
+  archived-reason: GPUs sold from hestia
+
+services:
+  vllm:
+    command:
+      - '-c'
+      - >-
+        echo "=== START $(date) [PHASE 6 v2 + vllm v0.20.1: 35B-A3B-AWQ / TP=2] ===" >>
+        /root/.cache/huggingface/vllm.log 2>&1;
+        exec vllm serve cyankiwi/Qwen3.6-35B-A3B-AWQ-4bit
+        --served-model-name qwen3.6-35b-a3b-awq
+        --host 0.0.0.0 --port 8000
+        --tensor-parallel-size 2
+        --dtype auto
+        --gpu-memory-utilization 0.90
+        --max-model-len 32768
+        --kv-cache-dtype fp8
+        --enable-chunked-prefill
+        --max-num-seqs 8
+        --enable-auto-tool-choice
+        --tool-call-parser hermes
+        --trust-remote-code
+        >> /root/.cache/huggingface/vllm.log 2>&1
+    container_name: vllm
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities:
+                - gpu
+                - utility
+              count: all
+              driver: nvidia
+    entrypoint:
+      - /bin/bash
+    environment:
+      HUGGING_FACE_HUB_TOKEN: ""  # set in SCALE UI env-var section (masked); do not commit a real token here
+      NCCL_P2P_DISABLE: '1'
+      OMP_NUM_THREADS: '8'
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      TOKENIZERS_PARALLELISM: 'false'
+    healthcheck:
+      interval: 30s
+      retries: 5
+      start_period: 900s
+      test:
+        - CMD
+        - curl
+        - '-f'
+        - http://localhost:8000/health
+      timeout: 10s
+    image: vllm/vllm-openai:v0.20.2
+    ipc: host
+    ports:
+      - '8000:8000'
+    restart: unless-stopped
+    shm_size: 16gb
+    ulimits:
+      memlock:
+        hard: -1
+        soft: -1
+      stack:
+        hard: 67108864
+        soft: 67108864
+    volumes:
+      - /mnt/main/ai/models:/root/.cache/huggingface

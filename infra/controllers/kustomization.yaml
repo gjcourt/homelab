@@ -9,11 +9,12 @@ resources:
   - kube-prometheus-stack
   - loki
   - mosquitto
-  # - pingo
+  - pingo
   - promtail
   - renovate
   - renovate-automerge
   - snapshot
   - synology-csi
+  - unpoller
   - vector
   - zigbee2mqtt

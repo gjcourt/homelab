@@ -6,7 +6,10 @@ metadata:
   labels:
     app: signal-cli
 spec:
-  replicas: 1
+  # Disabled 2026-05-10: signal-cli's only consumer was hermes, which is
+  # itself disabled following the hestia GPU removal. Restore replicas to
+  # 1 if any new Signal-bound workload needs the bridge.
+  replicas: 0
   revisionHistoryLimit: 5
   strategy:
     type: Recreate
@@ -46,6 +49,17 @@ spec:
             periodSeconds: 5
             timeoutSeconds: 3
             failureThreshold: 10
+          # A JVM OOM that kills the daemon-listener thread leaves the process
+          # alive but no longer accepting on 7583, so without a liveness probe
+          # the pod stays Running indefinitely while signal-bridge crashloops
+          # against a dead 127.0.0.1:7583. Force a restart on probe failure.
+          livenessProbe:
+            tcpSocket:
+              port: json-rpc
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
           env:
             # Default JVM MaxRAMPercentage (~25%) caps the heap far below the
             # cgroup limit, so the container shows free RAM while the JVM

@@ -61,3 +61,27 @@ spec:
     limits:
       memory: "4Gi"
       cpu: "2000m"
+  # Prefer high-airflow worker nodes (cpu-tier=high) to co-locate the
+  # postgres replicas with the immich-server pods and keep heat off the
+  # warmer control-plane nodes. Soft preference — falls back to other
+  # nodes when needed (drain, NotReady, replica count > labeled nodes).
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          preference:
+            matchExpressions:
+              - key: homelab.gjcourt.dev/cpu-tier
+                operator: In
+                values:
+                  - high
+  # Cross-cluster spread: see apps/production/golinks/database.yaml for
+  # full rationale. Soft (ScheduleAnyway) balance of CNPG postgres pods
+  # across nodes via topologySpreadConstraints.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          policy-type: database

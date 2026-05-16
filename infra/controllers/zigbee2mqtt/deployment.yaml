@@ -28,7 +28,7 @@ spec:
               mountPath: /app/data
       containers:
         - name: zigbee2mqtt
-          image: koenkk/zigbee2mqtt@sha256:e9279e580bb25c512cf6e54c36e215a5cbd2881d1f201cf2a8213a97b14be3d2
+          image: koenkk/zigbee2mqtt@sha256:67c26dcf8346aced02fe1380a6afd1b57268bcef10faae3f6057c13d5d3dfa80
           ports:
             - containerPort: 8080
               name: http
@@ -38,6 +38,25 @@ spec:
           env:
             - name: ZIGBEE2MQTT_DATA
               value: /app/data
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Liveness uses a TCP probe so a UI hiccup doesn't co-restart with
+          # readiness. zigbee2mqtt has no documented /healthz endpoint — the
+          # frontend serves the SPA on /, which is fine for readiness but
+          # not a strong "process alive" signal on its own.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
           volumeMounts:
             - name: data
               mountPath: /app/data

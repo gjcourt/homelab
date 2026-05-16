@@ -17,19 +17,31 @@ spec:
     spec:
       containers:
         - name: cloudflared
-          image: cloudflare/cloudflared@sha256:6b599ca3e974349ead3286d178da61d291961182ec3fe9c505e1dd02c8ac31b0
+          image: cloudflare/cloudflared@sha256:59bab8d3aceec09bf6bdb07d6beca0225ca5cd7ab79436a87ea97978fe1dc4f9
           args:
             - tunnel
             - --config
             - /etc/cloudflared/config/config.yaml
             - run
-          livenessProbe:
+          # cloudflared's /ready returns 200 only when the tunnel is connected,
+          # so it's a readiness signal, not a crash signal. Liveness gets a TCP
+          # probe on the same metrics port — it answers "is the process alive"
+          # without flapping when the tunnel briefly reconnects.
+          readinessProbe:
             httpGet:
               path: /ready
               port: 2000
-            failureThreshold: 1
-            initialDelaySeconds: 10
+            initialDelaySeconds: 5
             periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: 2000
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
               cpu: 10m

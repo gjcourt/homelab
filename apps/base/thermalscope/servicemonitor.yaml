@@ -1,0 +1,49 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: thermalscope-agent
+  namespace: thermalscope
+  labels:
+    # kube-prometheus-stack's Prometheus instance selects ServiceMonitors
+    # by helm-default release label (serviceMonitorSelectorNilUsesHelmValues=true,
+    # serviceMonitorSelector={}). Without this label our SM is invisible to it.
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: thermalscope
+    app.kubernetes.io/component: agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thermalscope
+      app.kubernetes.io/component: agent
+  # No namespaceSelector — defaults to the SM's own namespace, which is
+  # exactly the per-environment scope we want (the staging overlay
+  # rewrites this SM's namespace to thermalscope-stage).
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      relabelings:
+        # Promote the pod's node name to `instance` so each Talos node
+        # appears as a distinct Prometheus target (e.g.
+        # instance="talos-ykb-uir"). The existing hestia ScrapeConfig
+        # sets instance="hestia"; together they make
+        # up{job="thermalscope"} cover 7 targets — hestia plus the 6
+        # cluster nodes — each with a unique `instance` label.
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: instance
+          action: replace
+        # Force `job=thermalscope` so the existing PrometheusRule
+        # alerts (which match on job="thermalscope") fire for the
+        # DaemonSet targets too. Without this, prometheus-operator
+        # auto-derives a job name from the ServiceMonitor metadata
+        # (e.g. "thermalscope/thermalscope-agent") which would not
+        # match the alerts.
+        - targetLabel: job
+          replacement: thermalscope
+      metricRelabelings:
+        # Drop the per-pod label: under hostNetwork the pod identity is
+        # the node, and pod names churn on restart, adding cardinality
+        # without signal.
+        - action: labeldrop
+          regex: pod

@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: thermalscope-agent
+  namespace: thermalscope
+  labels:
+    app.kubernetes.io/name: thermalscope
+    app.kubernetes.io/component: agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thermalscope
+      app.kubernetes.io/component: agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: thermalscope
+        app.kubernetes.io/component: agent
+    spec:
+      serviceAccountName: thermalscope-agent
+      hostNetwork: true
+      hostPID: false
+      dnsPolicy: ClusterFirstWithHostNet
+      # Intentional: schedule on every node including control-plane.
+      # Thermal observability is most useful when it covers all 6 nodes
+      # (3 CP + 3 worker). The agent footprint is tiny (10m CPU /
+      # 16Mi memory request) and the CP nodes have CPU/NVMe sensors that
+      # we want visible. Talos CP nodes carry the standard
+      # `node-role.kubernetes.io/control-plane:NoSchedule` taint; the
+      # `operator: Exists` toleration with no key matches every taint,
+      # which is what we want.
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: agent
+          # Pin to a digest per the homelab image-discipline rule. Tag
+          # `88170e1` is the thermalscope main SHA that adds amdgpu
+          # hwmon chip handling (thermalscope PR #3), exposing
+          # `thermalscope_amdgpu_temperature_celsius` on nodes with
+          # an AMD GPU present.
+          image: "ghcr.io/gjcourt/thermalscope:88170e1@sha256:df4839459c785db2e4988521be3448dc10a3a4baa0645bea93f8d3c777db11fe"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9102
+              hostPort: 9102
+              protocol: TCP
+          securityContext:
+            privileged: false
+            # runAsUser: 0 — hwmon sysfs entries (tempN_input etc.) are
+            # readable as root without any added capabilities. Non-root
+            # would work for most sensors but is unreliable across
+            # vendors, so we keep root and drop ALL caps.
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL
+              # No `add:` block — unlike netscope, thermalscope does not
+              # use BPF/PERFMON/NET_ADMIN/SYS_ADMIN; hwmon is plain
+              # sysfs reads.
+          volumeMounts:
+            - name: hwmon
+              mountPath: /sys/class/hwmon
+              readOnly: true
+            - name: thermal
+              mountPath: /sys/class/thermal
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9102
+              host: 127.0.0.1
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # No livenessProbe: per AGENTS.md health-probes guidance, a
+          # livenessProbe is only added when it has a signal distinct
+          # from readiness. thermalscope is a stateless Go HTTP server
+          # — if /healthz stops responding, readiness recovery is
+          # sufficient (kubelet stops routing scrapes, Prometheus
+          # `up{job="thermalscope"}` alert fires). A liveness restart
+          # would not unstick anything readiness wouldn't.
+      volumes:
+        - name: hwmon
+          hostPath:
+            path: /sys/class/hwmon
+            type: Directory
+        - name: thermal
+          hostPath:
+            path: /sys/class/thermal
+            type: Directory

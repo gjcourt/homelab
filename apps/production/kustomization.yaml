@@ -8,6 +8,8 @@ resources:
   - cloudflare-tunnel
   - excalidraw
   - external-services
+  - flashcards
+  - flashcards-sync
   - golinks
   - hermes
   - hermes-callee
@@ -24,4 +26,6 @@ resources:
   - signal-cli
   - snapcast
   - synology-iscsi-monitor
+  - thermalscope
+  - truenas-iscsi-monitor
   - vitals

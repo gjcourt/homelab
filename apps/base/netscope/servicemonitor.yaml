@@ -1,0 +1,41 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: netscope-agent
+  namespace: netscope
+  labels:
+    # kube-prometheus-stack's Prometheus instance selects ServiceMonitors
+    # by helm-default release label (serviceMonitorSelectorNilUsesHelmValues=true,
+    # serviceMonitorSelector={}). Without this label our SM is invisible to it.
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: netscope
+    app.kubernetes.io/component: agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: netscope
+      app.kubernetes.io/component: agent
+  # No namespaceSelector — defaults to the SM's own namespace, which is
+  # exactly the per-environment scope we want (the staging overlay
+  # rewrites this SM's namespace to netscope-stage).
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      # Per-node DaemonSet: promote the pod's node name to a `nodename`
+      # label so dashboards can group by node without joining through
+      # kube_pod_info. Matches the pattern established by
+      # kube-prometheus-stack's kubelet scrape (see
+      # infra/controllers/kube-prometheus-stack/values.yaml — "Add
+      # nodename label", taken from Talos discussion #7214).
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: nodename
+          action: replace
+      # Drop the per-pod label: under hostNetwork the pod identity is
+      # the node, and pod names churn on restart, adding cardinality
+      # without signal.
+      metricRelabelings:
+        - action: labeldrop
+          regex: pod

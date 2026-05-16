@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: unpoller
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: unpoller
+    app.kubernetes.io/component: unifi-exporter
+spec:
+  type: ClusterIP
+  selector:
+    # Matches the labels the visonneau/unpoller chart's deployment.yaml
+    # applies to pods. See:
+    # github.com/mvisonneau/helm-charts/blob/main/charts/unpoller/templates/deployment.yaml
+    app.kubernetes.io/name: unpoller
+    app.kubernetes.io/instance: unpoller
+  ports:
+    - name: metrics
+      port: 9130
+      targetPort: 9130
+      protocol: TCP

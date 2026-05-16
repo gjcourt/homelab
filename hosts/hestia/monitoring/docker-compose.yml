@@ -12,6 +12,18 @@
 # (gcr.io/distroless/static-debian12) has no shell and no curl/wget — any
 # CMD-SHELL test would always fail. Prometheus's up{job="thermalscope"}
 # scrape success is the real health signal.
+x-deploy:
+  # Filename is `docker-compose.yml` (no app suffix), so the deploy
+  # workflow's default name would be the parent dir ("monitoring").
+  # Override explicitly to match the actual SCALE app name.
+  name: thermalscope
+  # Archived 2026-05-16 — thermalscope mounts /usr/bin/nvidia-smi from the
+  # host to scrape GPU temp/power; with GPUs removed, the binary is gone and
+  # the container will crash-loop. Flip `archived: false` once GPUs return.
+  archived: true
+  archived-at: 2026-05-16
+  archived-reason: GPUs sold from hestia (nvidia-smi unavailable)
+
 services:
   thermalscope:
     image: ghcr.io/gjcourt/thermalscope:d470623

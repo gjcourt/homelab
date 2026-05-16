@@ -27,6 +27,15 @@
 # To deploy this compose: paste into the vllm SCALE app's custom_compose_config
 # via midclt or the Apps UI. The llama-cpp SCALE app must be stopped first
 # (port 8000 conflict).
+x-deploy:
+  # Archived 2026-05-16 — both RTX 4090s removed from hestia. The vLLM
+  # SCALE app has been deleted via `midclt call app.delete vllm`. This
+  # compose remains in place for fast re-activation if GPUs return: flip
+  # `archived: false` and the deploy workflow will pick it up again.
+  archived: true
+  archived-at: 2026-05-16
+  archived-reason: GPUs sold from hestia
+
 services:
   vllm:
     command:

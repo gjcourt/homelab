@@ -2,16 +2,32 @@ name: Deploy hestia Custom Apps
 
 # Push-based auto-deploy of TrueNAS Custom App compose files.
 #
-# When `hosts/hestia/<app>/docker-compose*.yml` changes on master, the matching
-# matrix entry runs on the self-hosted runner on hestia and applies the new
-# compose to the TrueNAS Apps subsystem via the WebSocket API.
+# When `hosts/hestia/<dir>/docker-compose*.yml` changes on master, the
+# `discover` job enumerates every compose file under `hosts/hestia/**/` and
+# emits a matrix of non-archived apps. Each matrix entry runs on the
+# self-hosted runner on hestia and applies the compose to the TrueNAS Apps
+# subsystem via the WebSocket API.
 #
-# Adding a new app: add a matrix entry and ensure `<app-name>` matches the
-# Custom App name in SCALE UI exactly.
+# Per-file opt-out: add a top-level `x-deploy.archived: true` block to the
+# compose file. `x-*` keys are docker-compose extensions — compose itself
+# ignores them; only this workflow reads them. Example:
 #
-# Excluded: actions-runner itself (chicken-and-egg — the runner can't reliably
-# deploy a compose change that recreates its own container). Runner upgrades
-# stay manual.
+#     x-deploy:
+#       archived: true
+#       archived-at: 2026-05-16
+#       archived-reason: GPUs sold from hestia
+#       # name: foo  # optional override; defaults to derive-from-filename
+#
+#     services:
+#       ...
+#
+# App name derivation: `docker-compose-<name>.yml` → `<name>` (e.g.
+# `docker-compose-llama-cpp.yml` → `llama-cpp`). For a plain `docker-compose.yml`,
+# the parent directory name is used. Override with `x-deploy.name`.
+#
+# Excluded unconditionally: `hosts/hestia/actions-runner/` (chicken-and-egg —
+# the runner can't reliably deploy a compose change that recreates its own
+# container). Runner upgrades stay manual.
 #
 # See: docs/plans/2026-05-02-hestia-gha-runner.md
 
@@ -20,18 +36,15 @@ on:
     branches: [master]
     paths:
       - 'hosts/hestia/**/docker-compose*.yml'
+      - '.github/workflows/deploy-hestia.yml'
+      - 'scripts/truenas-update-app.sh'
   workflow_dispatch:
     inputs:
       app:
-        description: 'Which app to redeploy (matches matrix entry name)'
+        description: 'Which app to redeploy (empty / "all" = every non-archived app)'
         required: false
-        type: choice
+        type: string
         default: all
-        options:
-          - all
-          - llama-cpp
-          - thermalscope
-          - ipmi-exporter
       dry_run:
         description: 'Connect, query, and diff without calling app.update'
         required: false
@@ -43,18 +56,78 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      count: ${{ steps.gen.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enumerate non-archived compose files
+        id: gen
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import glob
+          import json
+          import os
+          import sys
+
+          try:
+              import yaml
+          except ImportError:
+              os.system("pip install --quiet pyyaml >&2")
+              import yaml
+
+          entries = []
+          for path in sorted(glob.glob("hosts/hestia/**/docker-compose*.yml", recursive=True)):
+              # actions-runner deploys itself — exclude unconditionally.
+              if path.startswith("hosts/hestia/actions-runner/"):
+                  print(f"skip (runner self-deploy): {path}", file=sys.stderr)
+                  continue
+
+              with open(path) as f:
+                  doc = yaml.safe_load(f) or {}
+
+              deploy_meta = doc.get("x-deploy") or {}
+              if deploy_meta.get("archived"):
+                  reason = deploy_meta.get("archived-reason", "no reason given")
+                  print(f"skip (archived): {path}  reason={reason}", file=sys.stderr)
+                  continue
+
+              fname = os.path.basename(path)
+              if fname.startswith("docker-compose-") and fname.endswith(".yml"):
+                  default_name = fname[len("docker-compose-"):-len(".yml")]
+              else:
+                  default_name = os.path.basename(os.path.dirname(path))
+              name = deploy_meta.get("name") or default_name
+
+              entries.append({"name": name, "file": path})
+              print(f"include: name={name}  file={path}", file=sys.stderr)
+
+          matrix = {"include": entries}
+          print(f"matrix={json.dumps(matrix)}")
+          print(f"count={len(entries)}")
+          PY
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Discovered apps"
+            echo ""
+            echo "- Count: \`${{ steps.gen.outputs.count }}\`"
+            echo "- Matrix: \`${{ steps.gen.outputs.matrix }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   apply:
+    needs: discover
+    if: needs.discover.outputs.count != '0'
     runs-on: [self-hosted, hestia]
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - name: llama-cpp
-            file: hosts/hestia/llms/docker-compose-llama-cpp.yml
-          - name: thermalscope
-            file: hosts/hestia/monitoring/docker-compose.yml
-          - name: ipmi-exporter
-            file: hosts/hestia/monitoring/docker-compose-ipmi-exporter.yml
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,6 +135,7 @@ jobs:
       - name: Skip if workflow_dispatch targeted a different app
         if: |
           github.event_name == 'workflow_dispatch' &&
+          inputs.app != '' &&
           inputs.app != 'all' &&
           inputs.app != matrix.name
         run: |

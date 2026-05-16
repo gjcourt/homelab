@@ -33,6 +33,14 @@
 #   midclt call app.redeploy vllm   # prefer over app.start; avoids stuck DEPLOYING states
 #
 # Production llama-cpp on the same port 8000 must be stopped first.
+x-deploy:
+  # Archived 2026-05-16 — GPUs removed from hestia. Experiments compose is
+  # kept in place so future vLLM frontier-model tuning can resume by
+  # flipping `archived: false` once GPUs are back.
+  archived: true
+  archived-at: 2026-05-16
+  archived-reason: GPUs sold from hestia
+
 services:
   vllm:
     command:

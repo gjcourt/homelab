@@ -51,7 +51,7 @@ on a worker node.
 | Detailed Cilium config reference (Helm values, BGP CRDs)? | [../../reference/cilium.md](../../reference/cilium.md) |
 | Why does the current state look like this — what migrations happened? | [../../plans/](../../plans/) (search for `network`, `bgp`, `migration`) |
 
-## Top-level invariants (as of 2026-05-06)
+## Top-level invariants (as of 2026-05-17)
 
 These are facts that should hold true in steady state. Violations indicate a
 bug or incomplete migration.

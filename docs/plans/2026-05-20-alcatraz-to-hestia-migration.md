@@ -1,6 +1,6 @@
 ---
-status: planned
-last_modified: 2026-05-20
+status: in-progress
+last_modified: 2026-05-21
 ---
 
 # Migrate non-image data: alcatraz → hestia (+ photo backup)
@@ -189,6 +189,74 @@ After all 73 PVCs have migrated and all NFS PVs have repointed:
 3. **Remove the alcatraz DSM tile** from homepage (`apps/production/homepage/services.yaml`).
 4. **Update `docs/architecture/networking/README.md`**: alcatraz is no longer a block-storage backend, just the photo library + NFS source. The "Synology iSCSI" cross-service dependency in `AGENTS.md` is now stale and should be removed.
 5. **Update `~/.claude/HOMELAB.md`**: alcatraz role description.
+
+### Phase 1.4 — Migrate qBittorrent off alcatraz onto hestia
+
+Independent of the in-cluster Kubernetes data migration, qBittorrent currently runs **on alcatraz** (Synology, as a Container Manager / Docker container) and is the consumer of the only documented WAN port-forward exception (TCP+UDP 9854 → 10.42.2.11; see `docs/architecture/networking/README.md` invariant 3 and PR #710). After this phase, qBittorrent runs as a **TrueNAS SCALE Custom App** on hestia, the port-forward repoints to 10.42.2.10, and alcatraz is left with only the Synology Photos library + 5 TiB NFS export.
+
+Motivation:
+- Consolidates the alcatraz dependency exception: today the perimeter forward exists *because* alcatraz hosts qBit; moving qBit to hestia means the alcatraz host has zero inbound exposure (it only serves NFS to LAN).
+- Aligns with the "TrueNAS Custom Apps preferred" convention for hestia services (compose YAML in repo at `hosts/hestia/qbittorrent/`, operator copy/pastes into TrueNAS UI).
+- Puts qBit alongside the Jellyfin media datasets created in Phase 1.0 — the qBit "Downloads" path can write directly into `main/media/movies` / `main/media/tv-shows`, eliminating the cross-host SMB/SCP hop that exists today for "snatched torrent → Jellyfin library."
+- Reduces alcatraz responsibilities to a single role (photo NAS), simplifying the Phase 2 backup story.
+
+**Steps:**
+
+1. **Datasets on hestia (operator, TrueNAS UI):**
+   - `main/apps/qbittorrent/config` (quota 5 GiB, lz4, `recordsize=128K`) — settings + .fastresume state
+   - `main/apps/qbittorrent/downloads-incomplete` (quota 50 GiB, lz4, `recordsize=1M`) — in-progress downloads (separate from media datasets to avoid Jellyfin scanning partial files)
+   - The completed-download target reuses `main/media/movies` / `main/media/tv-shows` / etc. that Phase 1.0 already created.
+
+2. **Compose YAML in repo** at `hosts/hestia/qbittorrent/docker-compose.yaml` (the canonical source; operator copies to TrueNAS Custom App UI):
+   - Image: `lscr.io/linuxserver/qbittorrent:5.x` (pinned digest)
+   - Web UI: `0.0.0.0:8090`
+   - Peer port: `9854` (TCP + UDP, host-port mapped so it's visible to the LAN)
+   - Mounts: `config` → `/config`, `downloads-incomplete` → `/downloads-incomplete`, the four media datasets read-write under `/downloads/{movies,tv-shows,tv-anime,music}`
+   - `PUID`/`PGID` aligned with the dataset ACLs
+
+3. **Migrate config + seed state (one-time, with brief downtime):**
+   - Pause qBit on alcatraz (Web UI → "Pause all").
+   - Copy the entire alcatraz qBit data directory (typically `/volume1/docker/qbittorrent/config/qBittorrent/`) including `BT_backup/` (.fastresume + .torrent) and the SQLite DB to `main/apps/qbittorrent/config/` on hestia. Use rsync over SSH.
+   - **Critical**: also copy the actual downloaded payloads to the same paths the new qBit will look for them. If existing alcatraz paths were `/downloads/movies/X.mkv`, the new hestia container needs them at `/downloads/movies/X.mkv` (which maps to `main/media/movies/X.mkv`). The `.fastresume` files have absolute paths baked in — if the paths don't match exactly, qBit will mark torrents as "Missing files" and lose the seed history.
+
+4. **Cutover:**
+   - Stop qBit on alcatraz.
+   - Start the hestia Custom App.
+   - Verify Web UI at `http://10.42.2.10:8090/` (LAN access).
+   - Verify all torrents transition from "Stalled UP" → either Seeding/Stalled with the new port (no "Missing files" errors).
+
+5. **UniFi port-forward repoint:**
+   - Update the existing 9854 TCP+UDP forward rule: change the "Forward IP" from `10.42.2.11` to `10.42.2.10`. Keep port (9854), name, protocol.
+   - Verify externally with yougetsignal: `9854 TCP/UDP` open on `67.180.218.139` → resolves to hestia.
+   - Verify qBit's connection-status flips to `connected` (green firewall icon).
+
+6. **Update docs:**
+   - `docs/architecture/networking/README.md` (invariant 3 exception): change `alcatraz (Synology NAS, 10.42.2.11)` → `hestia (TrueNAS, 10.42.2.10)` in the qBittorrent port-forward exception paragraph.
+   - `docs/operations/apps/jellyfin-library-picks.md` references — none direct, but the user-facing context shifts.
+   - Add a runbook section to (new) `docs/operations/apps/qbittorrent.md`.
+
+7. **Decommission qBit on alcatraz:**
+   - Stop the Container Manager / Docker container.
+   - Delete the container + its docker-compose file (keep the data dir on alcatraz for 7 days as rollback; then `rm -rf /volume1/docker/qbittorrent/`).
+
+**Risks:**
+
+| Risk | Mitigation |
+|---|---|
+| Path mismatch between alcatraz and hestia destroys seed history (`.fastresume` has absolute paths) | Pre-cutover dry-run: copy one torrent's payload, start qBit pointing at the new path, verify it loads as Seeding before bulk-copying |
+| Cutover window with no qBit available leaves PTP ratio without a seeder | Pause qBit on alcatraz (don't stop) during config copy; only kill the alcatraz container *after* hestia qBit is verified working |
+| Brief port-forward gap (UniFi rule update is atomic, but the new instance must be listening first) | Bring up hestia qBit before changing the UniFi rule; double-listen for ~30 seconds is harmless |
+| Downloaded media access by Jellyfin breaks if directory layout changes | Media datasets already exist with the canonical layout from Phase 1.0; qBit's `/downloads/` mapping mirrors that layout one-to-one |
+
+**Success criteria:**
+- [ ] qBit Web UI reachable at `http://10.42.2.10:8090/` from LAN
+- [ ] All previously-snatched torrents show as Seeding (not "Missing files")
+- [ ] External port check (`yougetsignal`) returns "open" for `9854` against the WAN IP, routed to hestia
+- [ ] qBit `connection_status` API returns `connected`
+- [ ] Alcatraz has zero open inbound ports from the UCG-Fiber perimeter
+- [ ] Jellyfin still successfully imports newly-completed torrents
+
+This phase can be executed independently of the in-cluster migration (it touches different infrastructure: TrueNAS Custom Apps + UniFi config, not Kubernetes manifests). Recommended ordering: do it after Phase 1.2 completes (production iSCSI is fully on hestia), so all the hestia ZFS pool stress-testing has happened before qBit's I/O pattern lands on it.
 
 ---
 

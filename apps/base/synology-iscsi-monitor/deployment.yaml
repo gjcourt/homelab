@@ -32,7 +32,7 @@ spec:
       containers:
         - name: exporter
           # python 3.14-slim
-          image: python@sha256:3c737d592b9e137029b9f3fd3bfc50d0de7f41c3334f4212db563ff9eaa1f856
+          image: python@sha256:6928095b5c67225857e608dd95271a81e8bb134e4bf7e7c305a9cdc2502a1d06
           command: ["/bin/sh", "-c"]
           args:
             - |

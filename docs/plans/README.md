@@ -45,6 +45,7 @@ Sorted by filing date (newest first).
 
 | File | Status | Description |
 | :--- | :--- | :--- |
+| [2026-05-20-alcatraz-to-hestia-migration.md](2026-05-20-alcatraz-to-hestia-migration.md) | `planned` | Migrate all non-photo data (~870 GiB iSCSI + 3 TiB NFS media) off alcatraz onto hestia ZFS; Phase 2 adds rsync+ZFS-snapshot backup of the 5 TiB photo library |
 | [2026-05-09-vllm-vision-sidecar.md](2026-05-09-vllm-vision-sidecar.md) | `abandoned` | Sidecar built and stability-tested (co-tenancy soak passed, 0 errors); reverted on quality — Qwen3-VL-2B-FP8 scored 47% on real eBay photos vs 70% target |
 | [2026-05-07-hestia-p2p-enablement.md](2026-05-07-hestia-p2p-enablement.md) | `abandoned` | Sub-plan: enable GPU P2P on hestia (blocked: 3-slot 4090s can't physically swap to PCIE1+PCIE3 in current chassis) |
 | [2026-05-07-vllm-frontier-model-experiments.md](2026-05-07-vllm-frontier-model-experiments.md) | `complete` | Stability-first vLLM experiments on hestia (2× 4090, no P2P) — winner: Qwen3.6-35B-A3B-AWQ TP=2, 194 t/s, beats prior llama.cpp prod |

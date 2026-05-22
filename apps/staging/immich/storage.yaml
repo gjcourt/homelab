@@ -8,6 +8,7 @@ metadata:
     app: immich
     env: staging
 spec:
+  storageClassName: truenas-iscsi
   accessModes:
     - ReadWriteOnce
   resources:

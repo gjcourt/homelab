@@ -109,7 +109,7 @@ spec:
         name: config
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: synology-iscsi
+        storageClassName: truenas-iscsi
         resources:
           requests:
             storage: 5Gi
@@ -117,7 +117,7 @@ spec:
         name: work
       spec:
         accessModes: ["ReadWriteOnce"]
-        storageClassName: synology-iscsi
+        storageClassName: truenas-iscsi
         resources:
           requests:
             storage: 5Gi

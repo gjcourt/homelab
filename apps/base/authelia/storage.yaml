@@ -6,6 +6,7 @@ metadata:
   labels:
     app: authelia
 spec:
+  storageClassName: truenas-iscsi
   accessModes:
     - ReadWriteOnce
   resources:

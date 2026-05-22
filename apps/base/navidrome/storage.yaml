@@ -6,6 +6,7 @@ metadata:
   labels:
     app: navidrome
 spec:
+  storageClassName: truenas-iscsi
   accessModes:
     - ReadWriteOnce
   resources:

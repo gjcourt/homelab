@@ -90,7 +90,7 @@ services:
         - '-f'
         - http://localhost:8000/health
       timeout: 10s
-    image: vllm/vllm-openai:v0.20.2
+    image: vllm/vllm-openai:v0.21.0
     ipc: host
     ports:
       - '8000:8000'

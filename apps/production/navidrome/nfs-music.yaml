@@ -30,8 +30,8 @@ spec:
     - retrans=2
     - nolock
   nfs:
-    server: 10.42.2.11
-    path: /volume1/family/audio/music
+    server: 10.42.2.10
+    path: /mnt/main/media/music
     readOnly: true
 ---
 apiVersion: v1

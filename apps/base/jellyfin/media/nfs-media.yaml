@@ -14,8 +14,8 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 10.42.2.11
-    path: /volume1/family/video/movies
+    server: 10.42.2.10
+    path: /mnt/main/media/movies
     readOnly: true
   mountOptions:
     - nfsvers=3
@@ -57,8 +57,8 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 10.42.2.11
-    path: /volume1/family/video/tv-shows
+    server: 10.42.2.10
+    path: /mnt/main/media/tv-shows
     readOnly: true
   mountOptions:
     - nfsvers=3
@@ -100,8 +100,8 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 10.42.2.11
-    path: /volume1/family/video/tv-anime
+    server: 10.42.2.10
+    path: /mnt/main/media/tv-anime
     readOnly: true
   mountOptions:
     - nfsvers=3

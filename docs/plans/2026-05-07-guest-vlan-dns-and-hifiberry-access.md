@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-05-07
+last_modified: 2026-05-23
 ---
 
 # Guest VLAN DNS Recovery + HifiBerry Speaker Access
@@ -250,6 +250,39 @@ UniFi UI: **Settings → Networks → "Multicast DNS"** (location varies by firm
 - Disable the `Guest → HifiBerry speakers` policy. Speakers immediately drop off the Guest VLAN.
 - (If C.3 was applied) disable the mDNS reflector for the Guest network if it caused unexpected service advertisements.
 
+### C.4 Cilium NetworkPolicy — no change required (but verify)
+
+The Snapcast pod sits behind a `CiliumNetworkPolicy`
+(`apps/base/snapcast/networkpolicy.yaml`). Cilium SNATs external
+traffic to a node IP before the pod sees it, which means `fromCIDR:
+10.42.6.0/24` (Guest VLAN) would silently never match. PR #494 already
+addressed this by using `fromEntities: world` for ingress on ports
+`1704`/`1705`/`1780`, so **Guest traffic that's permitted by the UniFi
+firewall in C.1 will be accepted by the cluster CNP without further
+changes**.
+
+Two implications:
+
+1. The boundary for "who can hit Snapcast" is the UniFi firewall —
+   not the CNP. The plan must keep the UniFi policy narrow (specific
+   Guest network as source, specific ports as dest) because the CNP
+   no longer reduces blast radius for LAN-sourced traffic.
+2. If a future hardening pass attempts to re-tighten the CNP to a
+   CIDR list, it will break LAN snapclients. See
+   `feedback_cilium_lb_snat_pattern.md` (memory) and the PR #494
+   commit message for the rationale.
+
+HifiBerry speakers `10.42.2.38` / `.39` are not Kubernetes
+endpoints — they sit on the LAN and have no CNP at all, so this
+section only applies to the Snapcast control surface
+(`10.42.2.37:1780/1705`).
+
+**Verify** after C.1 + C.2 lands: from a Guest-connected device,
+`nc -zv 10.42.2.37 1780` should succeed and the Snapcast Web UI
+should load in a browser. If it fails despite the UniFi rule being
+on, inspect the CNP — somebody may have reverted to a CIDR-based
+policy in the interim.
+
 ---
 
 ## Verification matrix (run end-to-end after each phase lands)
@@ -285,3 +318,49 @@ ssh root@10.42.2.1 'mongo --port 27117 --quiet ace --eval "db.firewall_policy.fi
 - **Per-device guest authentication / captive portal.** Current model is shared PSK on Chamber of Secrets. If you want per-guest credentials and time-bounded access, switch the network's `purpose` to `guest` and set up the UniFi guest portal — separate plan.
 - **Spotify Connect / DLNA from Guest VLAN.** If specific use cases beyond AirPlay/web come up, extend Phase C's port list.
 - **Replacing the Guest VLAN with a hardened IoT VLAN for HifiBerries.** Tracked separately in `docs/plans/2026-05-06-network-resilience-and-bgp-completion.md` Phase F.1.
+
+---
+
+## Cross-references
+
+- `docs/plans/2026-05-03-snapcast-hifiberry-rollout.md` — the server-side
+  rollout: how the Snapcast LB IP gets advertised on the LAN (Cilium
+  L2 announcements via `home-c-pool`), how the HifiBerries are wired
+  as snapclients, and the Phase 1 pin of `10.42.2.37` as the canonical
+  client target. This plan piggybacks on that LB IP for Snapcast
+  control access from the Guest VLAN.
+- `docs/plans/2026-03-14-navidrome-snapcast-mopidy.md` — the parallel
+  stream-sources plan; once Mopidy lands, guests with Snapcast Web
+  access can also drive Navidrome playback.
+- `apps/base/snapcast/networkpolicy.yaml` — the CNP that uses
+  `fromEntities: world` for ports 1704/1705/1780 (see Phase C.4).
+- `docs/architecture/networking/addressing.md` — VLAN map + DHCP
+  ranges; confirms Guest VLAN is `br6` / `10.42.6.0/24`, HifiBerries
+  on `10.42.2.0/24` Lab VLAN.
+
+---
+
+## Open items to resolve mid-execution
+
+- **Pinned Snapcast LB IP**: this plan assumes `10.42.2.37` as the
+  Snapcast control surface address. The snapcast-hifiberry-rollout
+  plan's Phase 1 pins this via
+  `lbipam.cilium.io/ips`. Confirm the actually-assigned IP with
+  `kubectl get svc -n snapcast-prod snapcast -o wide` before
+  hard-coding it in the UniFi firewall policy in Phase C.1. If
+  rollout-Phase-1 hasn't merged yet, the IP can drift on cluster
+  rebuild and the UniFi policy will silently start denying traffic.
+- **AdGuard service IPs (`10.42.2.43` / `.45`)**: same risk. These
+  come from `home-c-pool` (cluster LB pool). If either gets re-IPed
+  during a cluster rebuild, Phase B's UniFi exception becomes a deny.
+  Pin them too, or add a documented step in the AdGuard runbook to
+  update this policy on IP change.
+- **mDNS reflector scope**: the UCG-Fiber's reflector advertises *all*
+  services it sees, not a subset. Enabling it for Guest may surface
+  Lab-VLAN devices (printers, NAS, HomeKit bridge) in iOS pickers
+  even though the firewall still blocks the underlying connections.
+  Cosmetic clutter, not a security hole — note in operator handoff.
+- **Logging volume**: Phase C.1 enables UniFi logging on the speaker
+  policy. With AirPlay's chatty TCP behaviour, this can flood the
+  UCGF event log. Plan to disable logging once Phase C is GO unless
+  active monitoring is needed.

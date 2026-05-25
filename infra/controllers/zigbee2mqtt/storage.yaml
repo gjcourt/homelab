@@ -6,6 +6,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: truenas-iscsi
   resources:
     requests:
       storage: 1Gi

@@ -28,6 +28,7 @@ spec:
     # Actual usage: ~178Mi; minimum LUN size on Synology iSCSI is 1Gi.
     # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
     size: 1Gi
+    storageClass: truenas-iscsi
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
   # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
   plugins:

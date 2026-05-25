@@ -21,6 +21,7 @@ spec:
     # Actual usage: ~994Mi; target = 20% headroom → 2Gi.
     # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
     size: 2Gi
+    storageClass: truenas-iscsi
   postgresql:
     shared_preload_libraries:
       - "vectors.so"

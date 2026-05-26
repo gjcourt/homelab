@@ -1,0 +1,41 @@
+# qBittorrent — P2P client on hestia for private-tracker downloads.
+#
+# Network: bridge with explicit port maps. NO VPN — private trackers only,
+# raw home WAN IP exposed to peers. Do not point this at public trackers
+# without first wrapping in gluetun + a port-forwarding VPN.
+#
+# Inbound port: the router (UCGF) must forward WAN tcp/udp 6881 →
+# 10.42.2.10:6881. Without that forward qBittorrent runs in passive mode
+# (downloads only, can't seed, slower swarm participation).
+#
+# Storage layout:
+#   /mnt/main/apps/qbittorrent/config   — qbit state (sqlite, .torrent files,
+#                                         settings, RSS feeds, categories)
+#   /mnt/main/downloads/incomplete      — in-progress .part files
+#   /mnt/main/downloads/complete        — finished torrents (operator moves
+#                                         to /mnt/main/media/{movies,tv-shows,
+#                                         tv-anime}/ when ready to expose
+#                                         to Jellyfin)
+#
+# Web UI: http://10.42.2.10:8080 — LAN-only. Default creds shown in container
+# startup logs (linuxserver image generates a random admin password on first
+# boot since 5.0; check `docker logs qbittorrent` after first start).
+
+services:
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:5.2.1@sha256:1784d5a65d08d01de308c7d87ff2c1dba328379e180eeca41cc6b96bdf6a0ffc
+    container_name: qbittorrent
+    restart: unless-stopped
+    environment:
+      - PUID=950      # truenas_admin
+      - PGID=950
+      - TZ=America/New_York
+      - WEBUI_PORT=8080
+      - TORRENTING_PORT=6881
+    volumes:
+      - /mnt/main/apps/qbittorrent/config:/config
+      - /mnt/main/downloads:/downloads
+    ports:
+      - "8080:8080"
+      - "6881:6881/tcp"
+      - "6881:6881/udp"

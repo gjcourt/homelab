@@ -25,7 +25,7 @@ spec:
         matchLabels:
           policy-type: database
   storage:
-    # Actual usage: ~178Mi; minimum LUN size on Synology iSCSI is 1Gi.
+    # Actual usage: ~178Mi; rounding to 1Gi for headroom.
     # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
     size: 1Gi
     storageClass: truenas-iscsi

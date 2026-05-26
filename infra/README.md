@@ -6,9 +6,11 @@ Cluster-level controllers and configuration managed by Flux.
 
 | Component | Description |
 |-----------|-------------|
+| barman-cloud | CNPG Barman Cloud plugin (S3 WAL/backup) |
 | cert-manager | TLS certificate automation |
 | cilium | CNI + Gateway API + LB IPAM |
 | cnpg | CloudNativePG operator (PostgreSQL) |
+| democratic-csi | TrueNAS iSCSI CSI driver |
 | kube-prometheus-stack | Prometheus + Grafana monitoring |
 | loki | Log aggregation |
 | promtail | Log shipping to Loki |
@@ -16,7 +18,6 @@ Cluster-level controllers and configuration managed by Flux.
 | pingo | DNS updater for vpn.burnbytes.com |
 | renovate | Dependency update bot |
 | snapshot | Volume snapshot controller |
-| synology-csi | Synology iSCSI CSI driver |
 | zigbee2mqtt | Zigbee bridge |
 
 ## Configs (`infra/configs/`)

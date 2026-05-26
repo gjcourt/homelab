@@ -203,3 +203,22 @@ spec:
             summary: "Cilium has {{ $value }} BGP peers down — ECMP halved or worse"
             description: >
               {{ $value }} BGP peers are not Established. ECMP path count per LB IP has dropped from 3 to ≤1; one more failure is a total outage. Investigate before traffic is affected.
+    # -------------------------------------------------------------------------
+    # Backups: alcatraz → hestia immich photos
+    #
+    # The /usr/local/bin/immich-photos-backup.sh cron on hestia writes
+    # `immich_photos_backup_last_success_seconds` to the node-exporter
+    # textfile collector at the end of every successful run. Daily runs hit
+    # at ~04:00; 36h tolerates one full missed window before alerting.
+    # -------------------------------------------------------------------------
+    - name: immich-photos-backup
+      rules:
+        - alert: ImmichPhotoBackupStale
+          expr: time() - immich_photos_backup_last_success_seconds > 36 * 3600
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Immich photo backup hasn't completed in >36h"
+            description: >
+              Last successful immich-photos-backup.sh run on hestia was {{ $value | humanizeDuration }} ago. Daily cron is at 04:00; >36h means at least one full day's backup was missed. Check /var/log/immich-photos-backup.log on hestia and verify the ssh key to alcatraz still works.

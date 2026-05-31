@@ -42,7 +42,20 @@ echo "=== $(date -u +%FT%TZ) START ==="
 # We point UserKnownHostsFile at a bind-mounted host path so the accepted
 # host key persists across container restarts (otherwise it lives only in
 # the container's writable layer and is lost on restart).
-if rsync -avh --delete \
+# Excludes:
+#   @eaDir         Synology indexer metadata + xattr backups
+#                  (@eaDir/<file>@SynoEAStream). Useless on hestia, bloats
+#                  the backup, and litters the tree with one dir per photo
+#                  dir. Synology recreates them on alcatraz as needed.
+#   .DS_Store      macOS Finder metadata; same deal.
+#   Thumbs.db      Windows thumbnail cache.
+# --delete-excluded ensures excludes also remove anything that landed in
+# the destination from earlier runs (e.g. the @eaDir noise transferred
+# before this exclude landed).
+if rsync -avh --delete --delete-excluded \
+    --exclude='@eaDir' \
+    --exclude='.DS_Store' \
+    --exclude='Thumbs.db' \
     --rsh="ssh -T -i ${SSH_KEY} \
            -o StrictHostKeyChecking=accept-new \
            -o UserKnownHostsFile=${KNOWN_HOSTS} \

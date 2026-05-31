@@ -32,6 +32,12 @@ services:
       # SSH identity — single-file bind mount keeps the key isolated from
       # whatever else may live in /root/.ssh on the host.
       - /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz:/root/.ssh/id_ed25519_alcatraz:ro
+      # Persisted known_hosts — script's ssh runs with
+      # StrictHostKeyChecking=accept-new + UserKnownHostsFile=/root/.ssh/known_hosts.
+      # Bind-mounting from host means a first-run acceptance survives
+      # container restarts. Operator must pre-create the file (touch is
+      # enough — accept-new will fill it in).
+      - /mnt/main/apps/immich-photos-backup/ssh/known_hosts:/root/.ssh/known_hosts
       # Backup destination: ZFS dataset with 8 TiB quota.
       - /mnt/main/backups/immich-photos:/mnt/main/backups/immich-photos
       # Prometheus textfile collector dir — script writes

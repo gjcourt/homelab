@@ -15,8 +15,9 @@
 
 set -euo pipefail
 
-SRC="truenas_admin@10.42.2.11:/volume1/family/images/photos/"
+SRC="truenas-backup@10.42.2.11:/volume1/family/images/photos/"
 DST="/mnt/main/backups/immich-photos/"
+SSH_KEY="/root/.ssh/id_ed25519_alcatraz"
 LOG="/var/log/immich-photos-backup.log"
 TEXTFILE_DIR="/var/lib/node-exporter/textfile"
 TEXTFILE="${TEXTFILE_DIR}/immich-backup.prom"
@@ -31,7 +32,7 @@ echo "=== $(date -u +%FT%TZ) START ==="
 # chacha20-poly1305 + no SSH compression matches the plan's high-throughput
 # configuration. --delete keeps the destination tight to the source.
 if rsync -avh --delete \
-    --rsh="ssh -T -c chacha20-poly1305@openssh.com -o Compression=no -x" \
+    --rsh="ssh -T -i ${SSH_KEY} -c chacha20-poly1305@openssh.com -o Compression=no -x" \
     --stats \
     "${SRC}" "${DST}"; then
   END_TS=$(date +%s)

@@ -59,16 +59,20 @@ tmux new -s immich-seed
 
 3. **SSH key from hestia → alcatraz:**
    ```bash
-   # On hestia:
-   sudo -u root ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519_alcatraz -N ""
+   # On hestia (as root or via sudo):
+   ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519_alcatraz -N "" -C "immich-photos-backup@hestia"
    cat /root/.ssh/id_ed25519_alcatraz.pub
-   # Add the public key to alcatraz's authorized_keys for DSM admin user
-   # (DSM → Control Panel → Terminal & SNMP → enable SSH → DSM admin keys).
-   # Optionally pin the key to rsync only with `command="rsync ..."` prefix.
-   #
-   # Then verify (from hestia):
-   ssh -i /root/.ssh/id_ed25519_alcatraz truenas_admin@10.42.2.11 'ls /volume1/family/images/photos | head'
    ```
+   Then on alcatraz (DSM):
+   - Create a dedicated user `truenas-backup` (administrator group so it's allowed to SSH).
+   - Enable User Home Service (Control Panel → User & Group → Advanced).
+   - Paste the pubkey into `/var/services/homes/truenas-backup/.ssh/authorized_keys` (file must be owned by `truenas-backup`, mode 600; parent `.ssh` owned by user, mode 700).
+   - Grant `truenas-backup` Read access on the `family` shared folder (Control Panel → Shared Folder → family → Edit → Permissions).
+   - Verify from hestia:
+     ```bash
+     ssh -i /root/.ssh/id_ed25519_alcatraz truenas-backup@10.42.2.11 'ls /volume1/family/images/photos | head'
+     ```
+   Optional hardening: prefix the key entry with `command="rsync --server ..."` to restrict it to rsync only.
 
 4. **node-exporter textfile collector** must be running on hestia with
    `--collector.textfile.directory=/var/lib/node-exporter/textfile`. The script

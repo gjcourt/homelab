@@ -1,0 +1,28 @@
+# thermalscope — hestia thermal + power telemetry agent.
+#
+# Image is built from https://github.com/gjcourt/thermalscope (Go agent,
+# distroless static base). Tags are git short SHAs from that repo; bump
+# the digest + tag here when a new agent build is published.
+#
+# Runs with host networking and CAP-PRIVILEGED because it reads:
+#   - /sys/class/hwmon          CPU + chassis sensors
+#   - /sys/class/thermal        thermal zones (per-core + package)
+#   - /usr/bin/nvidia-smi       (bind-mounted ro from host; legacy from
+#                               the 4090 era — leave in place; the
+#                               binary is a no-op without GPUs and
+#                               agent code already handles its absence)
+#
+# Metrics are exposed via host networking; Prometheus scrapes hestia
+# directly.
+
+services:
+  thermalscope:
+    image: ghcr.io/gjcourt/thermalscope:d470623@sha256:af1c2d64a54ffb4168ab8424a704a3b9b49efe8d1b4cdb9f4f64f18cdd70b0c3
+    container_name: thermalscope
+    network_mode: host
+    privileged: true
+    restart: unless-stopped
+    volumes:
+      - /sys/class/hwmon:/sys/class/hwmon:ro
+      - /sys/class/thermal:/sys/class/thermal:ro
+      - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro

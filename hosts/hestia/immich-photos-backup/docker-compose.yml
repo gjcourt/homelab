@@ -1,0 +1,40 @@
+# Daily rsync of /volume1/family/images/photos on alcatraz (Synology DSM,
+# 10.42.2.11) into the local ZFS dataset main/backups/immich-photos.
+#
+# Always-running container; busybox crond fires the script at 04:00 local
+# (TZ honored via the image's tzdata + the TZ env var below). Snapshots
+# are managed by a TrueNAS periodic-snapshot task on the dataset, not by
+# this stack.
+#
+# First-time setup:
+#   1. SSH key at /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz
+#      (private key, mode 600, owned by root). The matching public key
+#      lives in truenas-backup@10.42.2.11:~/.ssh/authorized_keys.
+#   2. ZFS dataset main/backups/immich-photos (created by midclt
+#      pool.dataset.create — see README for the exact command).
+#   3. node-exporter textfile collector at /var/lib/node-exporter/textfile
+#      so the Prometheus metric the script writes is scraped.
+#
+# After bootstrap, every change to images/immich-photos-backup/** triggers
+# build-immich-photos-backup.yml which publishes a new tag; bump the
+# digest below in a follow-up PR and deploy-hestia.yml auto-rolls.
+
+services:
+  immich-photos-backup:
+    image: ghcr.io/gjcourt/immich-photos-backup:latest
+    container_name: immich-photos-backup
+    restart: unless-stopped
+    environment:
+      # Cron's "0 4 * * *" entry only means "04:00 local" if crond reads TZ;
+      # alpine's tzdata package + this env var is what makes that work.
+      - TZ=America/New_York
+    volumes:
+      # SSH identity — single-file bind mount keeps the key isolated from
+      # whatever else may live in /root/.ssh on the host.
+      - /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz:/root/.ssh/id_ed25519_alcatraz:ro
+      # Backup destination: ZFS dataset with 8 TiB quota.
+      - /mnt/main/backups/immich-photos:/mnt/main/backups/immich-photos
+      # Prometheus textfile collector dir — script writes
+      # immich-backup.prom on each successful run for the
+      # ImmichPhotoBackupStale alert to key off of.
+      - /var/lib/node-exporter/textfile:/var/lib/node-exporter/textfile

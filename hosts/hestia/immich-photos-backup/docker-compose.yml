@@ -1,5 +1,7 @@
 # Daily rsync of /volume1/family/images/photos on alcatraz (Synology DSM,
-# 10.42.2.11) into the local ZFS dataset main/backups/immich-photos.
+# 10.42.2.11) into the local ZFS dataset main/family/images/photos.
+# (Renamed from main/backups/immich-photos in the 2026-06-01 hestia-SOT plan
+#  — see docs/plans/2026-06-01-hestia-photos-sot.md.)
 #
 # Always-running container; busybox crond fires the script at 04:00 local
 # (TZ honored via the image's tzdata + the TZ env var below). Snapshots
@@ -10,7 +12,7 @@
 #   1. SSH key at /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz
 #      (private key, mode 600, owned by root). The matching public key
 #      lives in truenas-backup@10.42.2.11:~/.ssh/authorized_keys.
-#   2. ZFS dataset main/backups/immich-photos (created by midclt
+#   2. ZFS dataset main/family/images/photos (created by midclt
 #      pool.dataset.create — see README for the exact command).
 #   3. node-exporter textfile collector at /var/lib/node-exporter/textfile
 #      so the Prometheus metric the script writes is scraped.
@@ -38,8 +40,11 @@ services:
       # container restarts. Operator must pre-create the file (touch is
       # enough — accept-new will fill it in).
       - /mnt/main/apps/immich-photos-backup/ssh/known_hosts:/root/.ssh/known_hosts
-      # Backup destination: ZFS dataset with 8 TiB quota.
-      - /mnt/main/backups/immich-photos:/mnt/main/backups/immich-photos
+      # Backup destination — bind-mounted the whole main/family parent so the
+      # same container can later extend to sync other family/ subdirs (audio,
+      # literature, documents, etc.) without a compose change. Today the script
+      # only writes to family/images/photos.
+      - /mnt/main/family:/mnt/main/family
       # Prometheus textfile collector dir — script writes
       # immich-backup.prom on each successful run for the
       # ImmichPhotoBackupStale alert to key off of.

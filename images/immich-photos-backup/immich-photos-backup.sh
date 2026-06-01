@@ -16,7 +16,7 @@
 set -euo pipefail
 
 SRC="truenas-backup@10.42.2.11:/volume1/family/images/photos/"
-DST="/mnt/main/backups/immich-photos/"
+DST="/mnt/main/family/images/photos/"
 SSH_KEY="/root/.ssh/id_ed25519_alcatraz"
 # Bind-mounted from host so first-run host-key acceptance survives
 # container restarts; see docker-compose.yml.

@@ -4,5 +4,19 @@
     "fileMatch": [
       "\\.yaml$"
     ]
-  }
+  },
+  "packageRules": [
+    {
+      "matchUpdateTypes": [
+        "digest",
+        "pin",
+        "patch",
+        "minor",
+        "major"
+      ],
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": false
+    }
+  ]
 }

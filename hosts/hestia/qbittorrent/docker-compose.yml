@@ -11,11 +11,17 @@
 # Storage layout:
 #   /mnt/main/apps/qbittorrent/config   — qbit state (sqlite, .torrent files,
 #                                         settings, RSS feeds, categories)
-#   /mnt/main/downloads/incomplete      — in-progress .part files
-#   /mnt/main/downloads/complete        — finished torrents (operator moves
-#                                         to /mnt/main/media/{movies,tv-shows,
-#                                         tv-anime}/ when ready to expose
-#                                         to Jellyfin)
+#   /mnt/main/media/movies              — downloads land directly in the
+#                                         Jellyfin movies library. This matches
+#                                         the alcatraz qbit layout so migrated
+#                                         .fastresume files resolve without
+#                                         path rewrites. Trade-off: qbit's
+#                                         "Delete torrent and files" will
+#                                         reach into the library — don't use
+#                                         that right-click option casually.
+#                                         (For staging-then-move workflow, use
+#                                         qbit Categories to set a per-category
+#                                         save path.)
 #
 # Web UI: http://10.42.2.10:8080 — LAN-only. Default creds shown in container
 # startup logs (linuxserver image generates a random admin password on first
@@ -34,7 +40,7 @@ services:
       - TORRENTING_PORT=6881
     volumes:
       - /mnt/main/apps/qbittorrent/config:/config
-      - /mnt/main/downloads:/downloads
+      - /mnt/main/media/movies:/downloads
     ports:
       - "8080:8080"
       - "6881:6881/tcp"

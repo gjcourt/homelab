@@ -1,12 +1,19 @@
 #!/bin/bash
 # Daily incremental backup of the Immich photo library from alcatraz → hestia.
 #
-# Pulls /volume1/family/images/photos on alcatraz (Synology NAS, 10.42.2.11)
-# into the local ZFS dataset main/backups/immich-photos. Snapshots are managed
-# by a TrueNAS periodic-snapshot task scheduled after this rsync completes.
+# Pulls per-user Photos dirs from alcatraz (Synology NAS, 10.42.2.11) into the
+# local ZFS dataset main/family/images/photos. Snapshots are managed by a
+# TrueNAS periodic-snapshot task scheduled after this rsync completes.
 #
-# Deployed manually to /usr/local/bin/immich-photos-backup.sh on hestia and
-# scheduled via cron at 04:00 daily (after CNPG S3 backups at 02:00).
+# Source-path note: on alcatraz, /volume1/family/images/photos/<user> is a
+# symlink into /volume1/homes/<user>/Photos (the real bytes live in each
+# user's home). truenas-backup has share-level read on family/ but per-file
+# ACLs from each user's Synology account deny file open via the family path —
+# so we sync from the homes path directly, mapping into the canonical hestia
+# layout family/images/photos/<user>/.
+#
+# Deployed as a TrueNAS Custom App; cron at 04:00 daily is fired by the
+# container's busybox crond (see hosts/hestia/immich-photos-backup/).
 #
 # Reports backup freshness to node-exporter's textfile collector at
 # /var/lib/node-exporter/textfile/immich-backup.prom so the
@@ -15,8 +22,8 @@
 
 set -euo pipefail
 
-SRC="truenas-backup@10.42.2.11:/volume1/family/images/photos/"
-DST="/mnt/main/family/images/photos/"
+USERS=(george mara)
+DST_BASE="/mnt/main/family/images/photos"
 SSH_KEY="/root/.ssh/id_ed25519_alcatraz"
 # Bind-mounted from host so first-run host-key acceptance survives
 # container restarts; see docker-compose.yml.
@@ -33,7 +40,7 @@ START_TS=$(date +%s)
 echo "=== $(date -u +%FT%TZ) START ==="
 
 # chacha20-poly1305 + no SSH compression matches the plan's high-throughput
-# configuration. --delete keeps the destination tight to the source.
+# configuration. --delete keeps each user's destination tight to its source.
 #
 # Host-key handling: when run from cron there's no stdin to answer a
 # `Are you sure you want to continue connecting?` prompt — without
@@ -42,6 +49,7 @@ echo "=== $(date -u +%FT%TZ) START ==="
 # We point UserKnownHostsFile at a bind-mounted host path so the accepted
 # host key persists across container restarts (otherwise it lives only in
 # the container's writable layer and is lost on restart).
+#
 # Excludes:
 #   @eaDir         Synology indexer metadata + xattr backups
 #                  (@eaDir/<file>@SynoEAStream). Useless on hestia, bloats
@@ -50,22 +58,36 @@ echo "=== $(date -u +%FT%TZ) START ==="
 #   .DS_Store      macOS Finder metadata; same deal.
 #   Thumbs.db      Windows thumbnail cache.
 # --delete-excluded ensures excludes also remove anything that landed in
-# the destination from earlier runs (e.g. the @eaDir noise transferred
-# before this exclude landed).
-if rsync -avh --delete --delete-excluded \
-    --exclude='@eaDir' \
-    --exclude='.DS_Store' \
-    --exclude='Thumbs.db' \
-    --rsh="ssh -T -i ${SSH_KEY} \
+# the destination from earlier runs.
+RSYNC_RSH="ssh -T -i ${SSH_KEY} \
            -o StrictHostKeyChecking=accept-new \
            -o UserKnownHostsFile=${KNOWN_HOSTS} \
-           -c chacha20-poly1305@openssh.com -o Compression=no -x" \
-    --stats \
-    "${SRC}" "${DST}"; then
-  END_TS=$(date +%s)
-  DURATION=$((END_TS - START_TS))
-  echo "=== $(date -u +%FT%TZ) END (success, ${DURATION}s) ==="
+           -c chacha20-poly1305@openssh.com -o Compression=no -x"
 
+FAILED=0
+for user in "${USERS[@]}"; do
+  src="truenas-backup@10.42.2.11:/volume1/homes/${user}/Photos/"
+  dst="${DST_BASE}/${user}/"
+  mkdir -p "${dst}"
+  echo "--- $(date -u +%FT%TZ) sync ${user}: ${src} -> ${dst} ---"
+  if ! rsync -avh --delete --delete-excluded \
+        --exclude='@eaDir' \
+        --exclude='.DS_Store' \
+        --exclude='Thumbs.db' \
+        --rsh="${RSYNC_RSH}" \
+        --stats \
+        "${src}" "${dst}"; then
+    rc=$?
+    echo "!!! ${user} rsync failed rc=${rc}"
+    FAILED=$((FAILED + 1))
+  fi
+done
+
+END_TS=$(date +%s)
+DURATION=$((END_TS - START_TS))
+
+if [[ ${FAILED} -eq 0 ]]; then
+  echo "=== $(date -u +%FT%TZ) END (success, ${DURATION}s) ==="
   cat > "${TEXTFILE}.tmp" <<EOF
 # HELP immich_photos_backup_last_success_seconds Unix timestamp of last successful immich photos rsync
 # TYPE immich_photos_backup_last_success_seconds gauge
@@ -77,9 +99,8 @@ EOF
   mv "${TEXTFILE}.tmp" "${TEXTFILE}"
   exit 0
 else
-  RC=$?
-  echo "=== $(date -u +%FT%TZ) END (FAILED rc=${RC}) ==="
+  echo "=== $(date -u +%FT%TZ) END (FAILED, ${FAILED} of ${#USERS[@]} users, ${DURATION}s) ==="
   # Intentionally do NOT touch the textfile metric on failure — the alert
   # rule keys off staleness of the last *successful* run.
-  exit "${RC}"
+  exit 1
 fi

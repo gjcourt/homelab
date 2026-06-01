@@ -1,13 +1,15 @@
 # immich-photos-backup
 
-Daily incremental backup of the Immich photo library (`/volume1/family/images/photos` on alcatraz, ~425 GB today, 5 TiB headroom) into the local ZFS dataset `main/backups/immich-photos`. Always-running container; in-container busybox `crond` fires the rsync at 04:00 local time.
+Daily incremental backup of the Immich photo library from alcatraz (Synology, 10.42.2.11) into the local ZFS dataset `main/family/images/photos`. Always-running container; in-container busybox `crond` fires the rsync at 04:00 local time.
+
+Sources are per-user `homes/<user>/Photos/` paths, not `family/images/photos/<user>/`. On the Synology side those family paths are symlinks into each user's home, with per-file ACLs that deny `truenas-backup` file open via the family path — so we sync from the homes path directly and re-map into the canonical hestia `family/images/photos/<user>/` layout.
 
 | Attribute | Value |
 |---|---|
 | Image | `ghcr.io/gjcourt/immich-photos-backup` (built from `images/immich-photos-backup/`) |
 | Schedule | `0 4 * * *` (after CNPG S3 backups at 02:00) |
-| Source | `truenas-backup@10.42.2.11:/volume1/family/images/photos/` |
-| Destination | `/mnt/main/backups/immich-photos/` (ZFS, 8 TiB quota, lz4, recordsize=1M, atime=off) |
+| Sources | `truenas-backup@10.42.2.11:/volume1/homes/{george,mara}/Photos/` |
+| Destinations | `/mnt/main/family/images/photos/{george,mara}/` (ZFS, lz4, recordsize=1M, atime=off) |
 | SSH key | `/mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz` (mode 600, root) |
 | Metric | `immich_photos_backup_last_success_seconds` via node-exporter textfile collector |
 | Alert | `ImmichPhotoBackupStale` (fires after >36h) |
@@ -17,11 +19,11 @@ Daily incremental backup of the Immich photo library (`/volume1/family/images/ph
 Run on hestia as root (TrueNAS Web UI → System Settings → Shell).
 
 ### 1. ZFS datasets + snapshot tasks
-Already created in an earlier session via midclt (`main/backups/immich-photos` exists; daily/14, weekly/8, monthly/12 snapshot tasks scheduled at 05:00/05:30/06:00 — staggered after the 04:00 rsync). To verify:
+The destination dataset is `main/family/images/photos` (renamed from `main/backups/immich-photos` in the 2026-06-01 hestia-SOT migration — see `docs/plans/2026-06-01-hestia-photos-sot.md`). Snapshot tasks (daily/14, weekly/8, monthly/12) run on the `main/family` parent. To verify:
 ```bash
-midclt call pool.dataset.query '[["id", "=", "main/backups/immich-photos"]]' \
-  | jq '.[0] | {compression: .compression.value, recordsize: .recordsize.value, atime: .atime.value, quota: .quota.value, mountpoint}'
-midclt call pool.snapshottask.query '[["dataset", "=", "main/backups/immich-photos"]]' \
+midclt call pool.dataset.query '[["id", "=", "main/family/images/photos"]]' \
+  | jq '.[0] | {compression: .compression.value, recordsize: .recordsize.value, atime: .atime.value, mountpoint}'
+midclt call pool.snapshottask.query '[["dataset", "=", "main/family"]]' \
   | jq '.[] | {lifetime_value, lifetime_unit, schedule: .schedule | "\(.hour):\(.minute) dow=\(.dow) dom=\(.dom)"}'
 ```
 
@@ -37,10 +39,10 @@ chmod 644 /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz.pub
 ```
 
 ### 3. SSH key on alcatraz (already done)
-The matching public key is in `truenas-backup@10.42.2.11:/var/services/homes/truenas-backup/.ssh/authorized_keys`. The `truenas-backup` user has Read access on the `family` shared folder. Verify with:
+The matching public key is in `truenas-backup@10.42.2.11:/var/services/homes/truenas-backup/.ssh/authorized_keys`. The `truenas-backup` user needs Read access on the `homes` shared folder and on each user's `Photos/` subtree (verify per-user — DSM file-level ACLs override share-level grants; if needed, in DSM Control Panel → Shared Folder → homes → Edit → Permissions → tick "Apply to this folder, sub-folders and files"). Verify access:
 ```bash
 ssh -i /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz \
-    truenas-backup@10.42.2.11 'ls /volume1/family/images/photos | head'
+    truenas-backup@10.42.2.11 'ls /volume1/homes/george/Photos | head; ls /volume1/homes/mara/Photos | head'
 ```
 
 ### 4. node-exporter textfile collector
@@ -69,5 +71,5 @@ To roll back: revert the digest in `docker-compose.yml` and merge; auto-deploy a
 
 - Container logs: `docker logs ix-immich-photos-backup-immich-photos-backup-1` (or via SCALE UI → Apps → immich-photos-backup → Logs)
 - Last successful run timestamp: `cat /var/lib/node-exporter/textfile/immich-backup.prom`
-- Snapshots: TrueNAS UI → Storage → Snapshots, filter by dataset `main/backups/immich-photos`
+- Snapshots: TrueNAS UI → Storage → Snapshots, filter by dataset `main/family`
 - Prometheus alert state: query `ALERTS{alertname="ImmichPhotoBackupStale"}`

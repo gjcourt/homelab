@@ -11,8 +11,7 @@
         "digest",
         "pin",
         "patch",
-        "minor",
-        "major"
+        "minor"
       ],
       "automerge": true,
       "automergeType": "pr",

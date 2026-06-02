@@ -8,7 +8,7 @@
 # Designed to run on hestia as a TrueNAS Custom App. Compose at
 # hosts/hestia/immich-photos-backup/docker-compose.yml.
 
-FROM alpine:3.20
+FROM alpine:3.23
 
 # Pinned package set:
 #   - rsync          — the transport

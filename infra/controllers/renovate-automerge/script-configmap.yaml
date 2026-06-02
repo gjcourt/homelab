@@ -122,27 +122,44 @@ data:
 
 
     def merge_pr(repo, pr):
-        """Returns (merged, rebased). When the merge fails with 405 (typically
-        because branch protection requires up-to-date branches), we attempt
-        update-branch so the next cron run can merge cleanly."""
+        """Returns (merged, rebased).
+
+        405 Method Not Allowed has two common causes that share the same
+        status code:
+          1. The repo's branch protection forbids the merge method we chose
+             (e.g. required_linear_history rejects 'merge' commits).
+          2. The PR is BEHIND and protection requires up-to-date branches.
+
+        So we try the merge methods in safest-first order — squash, rebase,
+        merge — and only after all three give 405 do we treat it as case 2
+        and trigger update-branch. CI re-runs on the new head; next cron
+        tick retries the merge.
+
+        Non-405 errors (409 conflict, 422 mergeability, etc.) won't be
+        helped by a different method, so we bail immediately."""
         number = pr["number"]
-        try:
-            gh(
-                f"/repos/{repo}/pulls/{number}/merge",
-                method="PUT",
-                body={"merge_method": "merge", "commit_title": pr["title"]},
-            )
-            return True, False
-        except urllib.error.HTTPError as exc:
-            print(f"    merge failed: {exc.code} {exc.reason}", flush=True)
-            # 405 Method Not Allowed is the GitHub response when branch
-            # protection requires the head be up-to-date and the PR is BEHIND.
-            # Trigger a rebase so the next run merges cleanly.
-            if exc.code == 405:
-                if update_branch(repo, pr):
-                    print(f"    -> rebased onto master; will retry next run", flush=True)
-                    return False, True
-            return False, False
+        last_405 = False
+        for method in ("squash", "rebase", "merge"):
+            body = {"merge_method": method}
+            if method in ("squash", "merge"):
+                body["commit_title"] = pr["title"]
+            try:
+                gh(f"/repos/{repo}/pulls/{number}/merge", method="PUT", body=body)
+                print(f"    -> merged via {method}", flush=True)
+                return True, False
+            except urllib.error.HTTPError as exc:
+                print(f"    merge_method={method} failed: {exc.code} {exc.reason}", flush=True)
+                last_405 = exc.code == 405
+                if not last_405:
+                    return False, False
+
+        # All three methods returned 405 — likely BEHIND master + branch
+        # protection requires up-to-date branches. Rebase and let the next
+        # cron run retry.
+        if last_405 and update_branch(repo, pr):
+            print(f"    -> rebased onto master; will retry next run", flush=True)
+            return False, True
+        return False, False
 
 
     def process_repo(repo):

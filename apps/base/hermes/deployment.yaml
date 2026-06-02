@@ -36,7 +36,7 @@ spec:
       containers:
         - name: hermes
           # nousresearch/hermes-agent:v2026.4.30 (linux/amd64)
-          image: nousresearch/hermes-agent@sha256:fdae1635dfb85e1903394977352a2ef1a3ad29efbae03c75b7850d6de4c69e59
+          image: nousresearch/hermes-agent@sha256:bf46079d6fa95b786836c26246c4973bcb505ba5507e9cd96988e742c32f1a53
           imagePullPolicy: IfNotPresent
           # Use `args` (not `command`) so the upstream entrypoint chain
           # (tini → uv venv → `hermes`) stays intact. Setting `command`

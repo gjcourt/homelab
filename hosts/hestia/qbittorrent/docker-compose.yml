@@ -29,7 +29,7 @@
 
 services:
   qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:5.2.1@sha256:715d2bfbcf1cd3d734cbbd4fbd599eb7ea0642eaa079a372dd0d343f59516700
+    image: lscr.io/linuxserver/qbittorrent:20.04.1@sha256:fc98c8af048936d0070dc5e5992feab08664f8a61a860d91be02f782f8721485
     container_name: qbittorrent
     restart: unless-stopped
     environment:

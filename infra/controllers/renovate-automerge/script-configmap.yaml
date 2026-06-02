@@ -7,7 +7,8 @@ data:
   automerge.py: |
     #!/usr/bin/env python3
     """
-    Renovate automerge: merges digest/patch-only Renovate PRs with passing CI.
+    Renovate automerge: merges digest/pin/patch/minor Renovate PRs with passing
+    CI. Major updates and PRs with mixed update types stay open for review.
     Covers all repos listed in GITHUB_REPOS (comma-separated).
     Non-safe PRs are reported by email to EMAIL_TO.
     """
@@ -69,7 +70,7 @@ data:
         )
         if types:
             kinds = {t.lower() for t in types}
-            if kinds <= {"patch", "digest", "pin", "pindigest"}:
+            if kinds <= {"patch", "digest", "pin", "pindigest", "minor"}:
                 return True, "update type: " + ", ".join(sorted(kinds))
             return False, "update type: " + ", ".join(sorted(kinds))
 
@@ -85,7 +86,7 @@ data:
             if a[0] != b[0]:
                 return False, f"major bump ({versions[0]} -> {versions[-1]})"
             if a[1] != b[1]:
-                return False, f"minor bump ({versions[0]} -> {versions[-1]})"
+                return True, f"minor bump ({versions[0]} -> {versions[-1]})"
             return True, f"patch bump ({versions[0]} -> {versions[-1]})"
 
         return False, "cannot determine update type"
@@ -108,7 +109,22 @@ data:
             return False
 
 
+    def update_branch(repo, pr):
+        """Tell GitHub to merge master into the PR branch, clearing BEHIND
+        state. CI re-runs on the new head; next cron tick picks the PR up."""
+        number = pr["number"]
+        try:
+            gh(f"/repos/{repo}/pulls/{number}/update-branch", method="PUT", body={})
+            return True
+        except urllib.error.HTTPError as exc:
+            print(f"    update-branch failed: {exc.code} {exc.reason}", flush=True)
+            return False
+
+
     def merge_pr(repo, pr):
+        """Returns (merged, rebased). When the merge fails with 405 (typically
+        because branch protection requires up-to-date branches), we attempt
+        update-branch so the next cron run can merge cleanly."""
         number = pr["number"]
         try:
             gh(
@@ -116,10 +132,17 @@ data:
                 method="PUT",
                 body={"merge_method": "merge", "commit_title": pr["title"]},
             )
-            return True
+            return True, False
         except urllib.error.HTTPError as exc:
             print(f"    merge failed: {exc.code} {exc.reason}", flush=True)
-            return False
+            # 405 Method Not Allowed is the GitHub response when branch
+            # protection requires the head be up-to-date and the PR is BEHIND.
+            # Trigger a rebase so the next run merges cleanly.
+            if exc.code == 405:
+                if update_branch(repo, pr):
+                    print(f"    -> rebased onto master; will retry next run", flush=True)
+                    return False, True
+            return False, False
 
 
     def process_repo(repo):
@@ -143,9 +166,12 @@ data:
                 held.append({"pr": pr, "reason": reason})
                 continue
 
-            if merge_pr(repo, pr):
+            ok, rebased = merge_pr(repo, pr)
+            if ok:
                 print(f"    -> merged", flush=True)
                 merged.append({"pr": pr, "reason": reason})
+            elif rebased:
+                held.append({"pr": pr, "reason": reason + " (behind master — rebased; will merge next run)"})
             else:
                 held.append({"pr": pr, "reason": reason + " (merge failed)"})
 

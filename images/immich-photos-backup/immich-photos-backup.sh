@@ -19,9 +19,11 @@
 # new file. The fix runs a recursive chmod on the source via --rsync-path
 # before each rsync. See docs in hosts/hestia/immich-photos-backup/README.md
 # (section "Sudoers entry on alcatraz") for the required NOPASSWD sudoers
-# entry on alcatraz — without it the chmod fails, rsync doesn't run, and
-# the run fails loudly (intentional — silent perm-denied was the original
-# bug).
+# entry on alcatraz — without it `sudo -n` fails immediately, rsync exits
+# with code 12 (protocol data stream error from remote command dying before
+# protocol start), the run is recorded FAILED in the log, and the metric
+# stays stale. Loud failure is intentional — silent perm-denied was the
+# original bug.
 #
 # Deployed as a TrueNAS Custom App; cron at 04:00 daily is fired by the
 # container's busybox crond (see hosts/hestia/immich-photos-backup/).
@@ -85,13 +87,19 @@ for user in "${USERS[@]}"; do
   # before rsync's own server-side invocation, fixing 0700 uploads in-place so
   # truenas-backup can read them. `&&` so a chmod failure aborts the run with
   # a clear remote-command-exited error rather than silently degrading.
-  remote_rsync="sudo /bin/chmod -R g+rX,o+rX /volume1/homes/${user}/Photos && rsync"
+  #
+  # `sudo -n` (non-interactive) is load-bearing: without it, an ssh session
+  # without a controlling tty will either fail with an opaque "no tty present"
+  # or hang trying to open /dev/tty if NOPASSWD isn't in effect — the inverse
+  # of the loud-failure mode we want. -n exits immediately with
+  # "sudo: a password is required", which surfaces in the cron log.
+  REMOTE_RSYNC="sudo -n /bin/chmod -R g+rX,o+rX /volume1/homes/${user}/Photos && rsync"
   if ! rsync -avh --delete --delete-excluded \
         --exclude='@eaDir' \
         --exclude='.DS_Store' \
         --exclude='Thumbs.db' \
         --rsh="${RSYNC_RSH}" \
-        --rsync-path="${remote_rsync}" \
+        --rsync-path="${REMOTE_RSYNC}" \
         --stats \
         "${src}" "${dst}"; then
     rc=$?

@@ -23,7 +23,7 @@
 
 services:
   immich-photos-backup:
-    image: ghcr.io/gjcourt/immich-photos-backup:2026-06-01@sha256:de2b01973ed3111dca56ef0af7bdd0f2f29df68db6c2213fedf31d3ea119fd86
+    image: ghcr.io/gjcourt/immich-photos-backup:2026-06-09@sha256:93a52aa278f27777b320a8b135d54474fd9059c363c7bb8439ff08505c5eb1b3
     container_name: immich-photos-backup
     restart: unless-stopped
     environment:

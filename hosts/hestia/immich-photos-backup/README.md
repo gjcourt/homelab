@@ -49,7 +49,7 @@ ssh -i /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz \
 
 Synology DSM Photos uploads new files with POSIX mode `0700`. The owning group is `users` (gid 100) — which `truenas-backup` is also in, so the group bit's `---` denies before POSIX falls through to "other". rsync hits `send_files Permission denied (13)` on every new file and the run fails partially-but-silently (zero bytes transferred for new content; no metric update; the `ImmichPhotoBackupStale` alert eventually fires).
 
-The script's per-user rsync runs a `sudo chmod -R g+rX,o+rX` on the source via rsync's `--rsync-path` before each transfer to fix this. That requires NOPASSWD sudo for `truenas-backup` on exactly that chmod:
+The script's per-user rsync runs a `sudo -n chmod -R g+rX,o+rX` on the source via rsync's `--rsync-path` before each transfer to fix this. That requires NOPASSWD sudo for `truenas-backup` on exactly that chmod (and no `requiretty` constraint — see Notes below):
 
 ```bash
 # As a DSM admin (currently: manager) on alcatraz:
@@ -78,6 +78,7 @@ Notes:
 - Commas inside the command args must be escaped (`g+rX\,o+rX`); unescaped commas separate multiple commands in sudoers.
 - Adding a third user (e.g. `kid1`) requires extending this file with another comma-separated command — same pattern.
 - DSM major-version upgrades may stomp on `/etc/sudoers.d/` entries. If a future DSM upgrade silently re-disables this, the next 04:00 cron will fail loudly: `sudo -n` exits immediately, `&&` short-circuits, rsync exits with code `12` (protocol data stream error). Re-add the file post-upgrade.
+- If a future DSM update sets `Defaults requiretty` in `/etc/sudoers`, NOPASSWD alone won't be enough — sudo will reject all non-tty invocations including this one. Confirm `sudo -l` from a non-interactive ssh continues to work after any DSM upgrade.
 
 Verify after install:
 ```bash

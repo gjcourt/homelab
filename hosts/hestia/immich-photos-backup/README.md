@@ -45,6 +45,34 @@ ssh -i /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz \
     truenas-backup@10.42.2.11 'ls /volume1/homes/george/Photos | head; ls /volume1/homes/mara/Photos | head'
 ```
 
+### 3a. Sudoers entry on alcatraz (one-time, required)
+
+Synology DSM Photos uploads new files with POSIX mode `0700`. The owning group is `users` (gid 100) — which `truenas-backup` is also in, so the group bit's `---` denies before POSIX falls through to "other". rsync hits `send_files Permission denied (13)` on every new file and the run fails partially-but-silently (zero bytes transferred for new content; no metric update; the `ImmichPhotoBackupStale` alert eventually fires).
+
+The script's per-user rsync runs a `sudo chmod -R g+rX,o+rX` on the source via rsync's `--rsync-path` before each transfer to fix this. That requires NOPASSWD sudo for `truenas-backup` on exactly that chmod:
+
+```bash
+# As a DSM admin (currently: manager) on alcatraz:
+sudo tee /etc/sudoers.d/immich-photos-backup <<'EOF'
+truenas-backup ALL=(root) NOPASSWD: /bin/chmod -R g+rX\,o+rX /volume1/homes/george/Photos, /bin/chmod -R g+rX\,o+rX /volume1/homes/mara/Photos
+EOF
+sudo chmod 0440 /etc/sudoers.d/immich-photos-backup
+sudo visudo -cf /etc/sudoers.d/immich-photos-backup   # syntax check
+```
+
+Notes:
+- Commas inside the command args must be escaped (`g+rX\,o+rX`); unescaped commas separate multiple commands in sudoers.
+- Adding a third user (e.g. `kid1`) requires extending this file with another comma-separated command — same pattern.
+- DSM major-version upgrades may stomp on `/etc/sudoers.d/` entries. If a future DSM upgrade silently re-disables this, the next 04:00 cron will fail loudly (chmod returns non-zero, `&&` aborts, rsync exits with `12` or `14`). Re-add the file post-upgrade.
+
+Verify after adding:
+```bash
+ssh -i /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz \
+    truenas-backup@10.42.2.11 \
+    'sudo -n /bin/chmod -R g+rX,o+rX /volume1/homes/george/Photos && echo ok'
+```
+Should print `ok` with no password prompt.
+
 ### 4. node-exporter textfile collector
 If not already running, node-exporter on hestia must be invoked with `--collector.textfile.directory=/var/lib/node-exporter/textfile`. The container writes `immich-backup.prom` there on each successful run, which Prometheus scrapes for the `ImmichPhotoBackupStale` alert in `infra/configs/alerts/prometheus-rules.yaml`.
 

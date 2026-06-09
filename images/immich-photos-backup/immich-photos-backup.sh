@@ -12,6 +12,19 @@
 # so we sync from the homes path directly, mapping into the canonical hestia
 # layout family/images/photos/<user>/.
 #
+# Mode-fix note: Synology DSM Photos uploads new files with POSIX mode 0700
+# (owner-only). truenas-backup is in gid=100(users), which matches the file
+# group, so POSIX checks the group bit (`---`) and denies before falling
+# through to "other" — rsync hits send_files Permission denied (13) on every
+# new file. The fix runs a recursive chmod on the source via --rsync-path
+# before each rsync. See docs in hosts/hestia/immich-photos-backup/README.md
+# (section "Sudoers entry on alcatraz") for the required NOPASSWD sudoers
+# entry on alcatraz — without it `sudo -n` fails immediately, rsync exits
+# with code 12 (protocol data stream error from remote command dying before
+# protocol start), the run is recorded FAILED in the log, and the metric
+# stays stale. Loud failure is intentional — silent perm-denied was the
+# original bug.
+#
 # Deployed as a TrueNAS Custom App; cron at 04:00 daily is fired by the
 # container's busybox crond (see hosts/hestia/immich-photos-backup/).
 #
@@ -70,11 +83,23 @@ for user in "${USERS[@]}"; do
   dst="${DST_BASE}/${user}/"
   mkdir -p "${dst}"
   echo "--- $(date -u +%FT%TZ) sync ${user}: ${src} -> ${dst} ---"
+  # See "Mode-fix note" in the header. The chmod runs on the remote (alcatraz)
+  # before rsync's own server-side invocation, fixing 0700 uploads in-place so
+  # truenas-backup can read them. `&&` so a chmod failure aborts the run with
+  # a clear remote-command-exited error rather than silently degrading.
+  #
+  # `sudo -n` (non-interactive) is load-bearing: without it, an ssh session
+  # without a controlling tty will either fail with an opaque "no tty present"
+  # or hang trying to open /dev/tty if NOPASSWD isn't in effect — the inverse
+  # of the loud-failure mode we want. -n exits immediately with
+  # "sudo: a password is required", which surfaces in the cron log.
+  REMOTE_RSYNC="sudo -n /bin/chmod -R g+rX,o+rX /volume1/homes/${user}/Photos && rsync"
   if ! rsync -avh --delete --delete-excluded \
         --exclude='@eaDir' \
         --exclude='.DS_Store' \
         --exclude='Thumbs.db' \
         --rsh="${RSYNC_RSH}" \
+        --rsync-path="${REMOTE_RSYNC}" \
         --stats \
         "${src}" "${dst}"; then
     rc=$?

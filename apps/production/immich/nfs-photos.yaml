@@ -1,4 +1,6 @@
-# Static PV for Synology NFS photos share (external library)
+# Static PV for the Immich external library NFS share.
+# Repointed alcatraz (10.42.2.11) -> hestia (10.42.2.10) in the 2026-06-01
+# hestia-SOT migration; see docs/plans/2026-06-01-hestia-photos-sot.md.
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -14,8 +16,8 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 10.42.2.11
-    path: /volume1/family/images/photos
+    server: 10.42.2.10
+    path: /mnt/main/family/images/photos
     readOnly: false
   mountOptions:
     - nfsvers=3

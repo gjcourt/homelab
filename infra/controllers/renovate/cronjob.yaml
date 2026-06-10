@@ -4,7 +4,7 @@ metadata:
   name: renovate
   namespace: renovate
 spec:
-  schedule: "@hourly"
+  schedule: "@daily"
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
@@ -12,7 +12,7 @@ spec:
         spec:
           containers:
             - name: renovate
-              image: renovate/renovate@sha256:64690503f0e4935e6e667b323bdcdc1996a2ad59b9bfa44d7ce6319758bc6ff8
+              image: renovate/renovate@sha256:087bab575172b1926bbc57124d988015d899b0a82d45028514377b10a392f69d
 
               args:
                 - gjcourt/homelab

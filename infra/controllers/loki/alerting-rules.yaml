@@ -52,4 +52,5 @@ data:
               description: >
                 Talos kernel logs contain iSCSI-related error messages. A PVC
                 may have lost its backing storage connection. Check
-                `talosctl dmesg` and verify iSCSI session state on the Synology.
+                `talosctl dmesg` and verify the iSCSI session against hestia
+                (10.42.2.10) via the TrueNAS shares UI.

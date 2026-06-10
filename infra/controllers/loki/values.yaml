@@ -54,7 +54,7 @@ singleBinary:
   replicas: 1
   persistence:
     enabled: true
-    storageClass: synology-iscsi
+    storageClass: truenas-iscsi
     size: 40Gi
   resources:
     limits:

@@ -10,8 +10,6 @@ spec:
         - name: homepage
           envFrom:
             - secretRef:
-                name: homepage-synology
-            - secretRef:
                 name: homepage-adguard
                 optional: true
           env:

@@ -1,0 +1,40 @@
+# P2 routes on the hidden hostname burntbytes-origin.burntbytes.com — a
+# subdomain already covered by the existing *.burntbytes.com wildcard cert and
+# the gateway's `http`/`https` wildcard listeners, so no shared-gateway change
+# is needed to validate the full path. P3 adds the apex (burntbytes.com)
+# hostname + dedicated apex listeners.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: burntbytes-http
+  namespace: burntbytes-prod
+spec:
+  hostnames:
+    - burntbytes-origin.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: burntbytes-https
+  namespace: burntbytes-prod
+spec:
+  hostnames:
+    - burntbytes-origin.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: burntbytes
+          port: 8080

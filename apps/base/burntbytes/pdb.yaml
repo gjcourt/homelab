@@ -1,0 +1,13 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: burntbytes
+  namespace: burntbytes
+spec:
+  # Two replicas; allow one to be evicted at a time so node drains can
+  # proceed while keeping the site up.
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: burntbytes

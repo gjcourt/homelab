@@ -34,5 +34,14 @@ data:
         originRequest:
           originServerName: overture.burntbytes.com
 
+      # burntbytes blog — hidden origin hostname for pre-cutover validation.
+      # Inert off-LAN until a Cloudflare DNS record points it at the tunnel;
+      # validated on-LAN via the *.burntbytes.com wildcard + AdGuard rewrite.
+      # The apex (burntbytes.com) entry is added in the apex-activation PR.
+      - hostname: burntbytes-origin.burntbytes.com
+        service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+        originRequest:
+          originServerName: burntbytes-origin.burntbytes.com
+
       # Catch-all returns 404
       - service: http_status:404

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: burntbytes
+  namespace: burntbytes
+  labels:
+    app: burntbytes
+spec:
+  type: ClusterIP
+  selector:
+    app: burntbytes
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: 8080

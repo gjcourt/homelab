@@ -8,6 +8,7 @@
 - [adguard](base/adguard/)
 - [audiobookshelf](base/audiobookshelf/)
 - [authelia](base/authelia/)
+- [burntbytes](base/burntbytes/)
 - [excalidraw](base/excalidraw/)
 - [flashcards-sync](base/flashcards-sync/)
 - [flashcards](base/flashcards/)
@@ -27,7 +28,7 @@
 - [overture](base/overture/)
 - [signal-cli](base/signal-cli/)
 - [snapcast](base/snapcast/)
-- [synology-iscsi-monitor](base/synology-iscsi-monitor/)
+- [thermalscope](base/thermalscope/)
 - [truenas-iscsi-monitor](base/truenas-iscsi-monitor/)
 - [vitals](base/vitals/)
 <!-- apps:list:end -->

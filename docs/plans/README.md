@@ -48,6 +48,9 @@ Use `YYYY-MM-DD` format. Update this field whenever the document is meaningfully
 | `superseded_by: docs/plans/<file>` | Required on `superseded` plans; points at the replacement. |
 
 When a plan's status changes, update `docs/STATUS.md` in the same PR.
+(The dashboard lands with Phase B of
+[2026-06-10-docs-reorg-status-dashboard.md](2026-06-10-docs-reorg-status-dashboard.md);
+until then this step is a no-op.)
 
 ## Document Index
 

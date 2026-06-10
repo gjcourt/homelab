@@ -162,6 +162,15 @@ func parsePlan(dir, name string) (plan, error) {
 	if p.Summary == "" {
 		return p, fmt.Errorf("%s: missing summary", name)
 	}
+	if p.Status == "superseded" && p.SupersededBy == "" {
+		return p, fmt.Errorf("%s: status superseded requires superseded_by", name)
+	}
+	if p.SupersededBy != "" {
+		target := strings.TrimPrefix(p.SupersededBy, "docs/plans/")
+		if _, err := os.Stat(filepath.Join(dir, target)); err != nil {
+			return p, fmt.Errorf("%s: superseded_by target %q not found", name, target)
+		}
+	}
 	return p, nil
 }
 

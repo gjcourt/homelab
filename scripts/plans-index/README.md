@@ -31,6 +31,8 @@ go run . -check   # validate only
 - Frontmatter exists with `status` ∈ planned | in-progress | complete |
   superseded | abandoned, a `YYYY-MM-DD` `last_modified`, and a non-empty
   `summary`.
+- `superseded` plans carry a `superseded_by`, and any `superseded_by` points
+  at a plan file that exists.
 - The generated index block in `README.md` matches frontmatter reality.
 
 Stdlib only; no dependencies.

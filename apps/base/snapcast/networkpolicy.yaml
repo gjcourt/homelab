@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: snapcast
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: LAN snapclients (world entity; SNAT prevents CIDR match) on 1704/1705/1780; egress DNS + Spotify HTTPS.
+  description: LAN snapclients (world entity; SNAT prevents CIDR match) on 1704/1705/1780 + MPD on 6600; egress DNS, Spotify HTTPS, and in-cluster Navidrome Subsonic (4533).
   endpointSelector:
     matchLabels:
       app: snapcast
@@ -29,6 +29,10 @@ spec:
               protocol: TCP
             - port: "1780"
               protocol: TCP
+            # MPD protocol — the mopidy sidecar serves LAN clients
+            # (Symfonium, MALP, ncmpcpp) on 6600 via the snapcast LB.
+            - port: "6600"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:
@@ -46,4 +50,14 @@ spec:
       toPorts:
         - ports:
             - port: "443"
+              protocol: TCP
+    # mopidy sidecar pulls the library from Navidrome's in-cluster Subsonic
+    # API (only the blog is exposed via the tunnel, so no hairpin).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: navidrome-prod
+            app: navidrome
+      toPorts:
+        - ports:
+            - port: "4533"
               protocol: TCP

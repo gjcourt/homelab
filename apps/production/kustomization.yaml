@@ -4,6 +4,7 @@ resources:
   - adguard
   - audiobookshelf
   - authelia
+  - burntbytes
   - certificates
   - cloudflare-tunnel
   - excalidraw

@@ -1,0 +1,43 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: burntbytes
+  namespace: burntbytes
+  labels:
+    app.kubernetes.io/name: burntbytes
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: |
+    Static Hugo blog served by nginx; no DB, no external calls. Gateway
+    ingress on 8080 only.
+  endpointSelector:
+    matchLabels:
+      app: burntbytes
+  ingress:
+    # Cluster gateway proxy ingress. host + remote-node + ingress are all
+    # required — see feedback memory `feedback_cilium_gateway_netpol`.
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS only — nginx resolves hostnames for logging; the app never makes
+    # outbound calls. Reply traffic to the Gateway proxy is carried by
+    # Cilium conntrack on the established ingress flow, so no symmetric
+    # egress rule for host/remote-node/ingress is needed. Same pattern as
+    # apps/base/flashcards/networkpolicy.yaml.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

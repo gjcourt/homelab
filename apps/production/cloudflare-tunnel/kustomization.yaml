@@ -4,5 +4,14 @@ namespace: cloudflare-tunnel
 resources:
   - namespace.yaml
   - deployment.yaml
-  - configmap.yaml
   - secret-tunnel-credentials.yaml
+
+# Generate the cloudflared ConfigMap with a content-hash name suffix so any
+# change to config.yaml (e.g. adding a tunnel ingress hostname) renames the
+# ConfigMap, which rewrites the Deployment's volume reference and forces Flux
+# to roll the pods. cloudflared does NOT hot-reload its ingress config, so
+# without this a config change silently requires a manual `rollout restart`.
+configMapGenerator:
+  - name: cloudflared
+    files:
+      - config.yaml

@@ -52,19 +52,30 @@ Synology DSM Photos uploads new files with POSIX mode `0700`. The owning group i
 The script's per-user rsync runs a `sudo -n chmod -R g+rX,o+rX` on the source via rsync's `--rsync-path` before each transfer to fix this. That requires NOPASSWD sudo for `truenas-backup` on exactly that chmod (and no `requiretty` constraint — see Notes below):
 
 ```bash
-# As a DSM admin (currently: manager) on alcatraz:
-# Write to /tmp first and validate BEFORE moving into sudoers.d/ — a
-# syntax error in any file under /etc/sudoers.d/ makes sudo refuse to
-# operate at all on most versions, which would lock the operator out
-# of fixing it.
+# As a DSM admin (currently: manager) on alcatraz.
+#
+# DSM doesn't ship `visudo`, so we can't pre-validate the file before
+# install. Mitigations:
+#   1. Quoted heredoc ('EOF') — no shell substitution can corrupt content.
+#   2. Post-install sanity check that sudo itself still works. If sanity
+#      fails, the recovery path is to delete /etc/sudoers.d/immich-photos-backup
+#      via DSM File Station (logged in as a DSM admin) — that skips sudo
+#      entirely and avoids the chicken-and-egg trap.
 cat > /tmp/immich-photos-backup.sudoers <<'EOF'
 truenas-backup ALL=(root) NOPASSWD: /bin/chmod -R g+rX\,o+rX /volume1/homes/george/Photos, /bin/chmod -R g+rX\,o+rX /volume1/homes/mara/Photos
 EOF
-sudo visudo -cf /tmp/immich-photos-backup.sudoers   # MUST pass before next step
 sudo install -m 0440 -o root -g root \
     /tmp/immich-photos-backup.sudoers \
     /etc/sudoers.d/immich-photos-backup
 rm /tmp/immich-photos-backup.sudoers
+
+# Sanity #1: sudo itself still works. If sudoers got corrupted by a typo,
+# sudo refuses to operate at all and this exits non-zero.
+sudo -n true && echo "sudo still functional"
+
+# Sanity #2: the new rule is visible to truenas-backup. The output
+# displays `\,` literally — that's sudo -l showing the escape, normal.
+sudo -l -U truenas-backup 2>&1 | grep -i chmod
 ```
 
 Sanity check the paths exist on your DSM (paths differ between Synology firmware versions):

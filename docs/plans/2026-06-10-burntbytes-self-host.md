@@ -1,7 +1,7 @@
 ---
-status: in-progress
+status: complete
 last_modified: 2026-06-10
-summary: "Self-host the burntbytes.com blog; hidden-origin live, apex + Cloudflare swing pending"
+summary: "burntbytes.com self-hosted on the cluster via Cloudflare tunnel; apex cutover live, GitHub Pages retired"
 ---
 
 # Self-host burntbytes.com on the Talos homelab
@@ -34,13 +34,39 @@ AdGuard wildcard rewrite. So:
   only be a single isolated revert (it cannot ride along with the app deploy).
 
 ```
-P0 (operator)   Lower apex Cloudflare TTL; capture tunnel UUID + original apex records
-P1 (source)     ✅ DONE — Dockerfile + nginx.conf + image.yml → ghcr image
-P2 (homelab)    App + hidden-hostname HTTPRoute + hidden tunnel entry (no gateway change)
-P3 (homelab)    Apex gateway listeners + apex hostname + apex tunnel entry (dark)
-P4 (Cloudflare) Apex DNS swing A → CNAME cfargotunnel (operator)
-P5 (cleanup)    Decommission Pages publish; runbook; plan → complete
+P1 (source)     ✅ Dockerfile + nginx.conf + image.yml → ghcr image (burntbytes #1)
+P2 (homelab)    ✅ App + hidden-hostname HTTPRoute + tunnel entry (#887)
+P3 (homelab)    ✅ Apex gateway listeners + apex hostname + apex tunnel entry (#888)
+P4 (Cloudflare) ✅ Apex route to the tunnel + Access removed (operator)
+P5 (cleanup)    ✅ Runbook (#890), source README (burntbytes #2), plan → complete
 ```
+
+## Outcome (2026-06-10)
+
+`https://burntbytes.com` is live, served from the cluster through the
+Cloudflare tunnel (visitor → CF edge → cloudflared → gateway → nginx). Verified
+public off-LAN: HTTP/2 200, Hugo content byte-identical to the in-cluster
+origin, Hugo `/404.html` on misses. GitHub Pages (`gjcourt.github.io`) is
+retired as the publish target but kept as a rollback parachute.
+
+### Gotchas hit during execution (worth remembering)
+
+- **Apex CNAME-to-`cfargotunnel` fails with Cloudflare error 1016.** A manually
+  created CNAME at the zone apex gets flattened, and `<uuid>.cfargotunnel.com`
+  has no public IP, so the tunnel route isn't registered. Fix:
+  `cloudflared tunnel route dns <tunnel> burntbytes.com` (registers the route
+  via the API). Subdomains don't hit this — only the apex.
+- **`cloudflared` does not hot-reload ingress on ConfigMap change.** After
+  editing `apps/production/cloudflare-tunnel/configmap.yaml`, the pods must be
+  restarted (`kubectl -n cloudflare-tunnel rollout restart deploy/cloudflared`)
+  — there's no config-hash annotation to auto-roll them. Follow-up: add one.
+- **A Cloudflare Access app was gating `burntbytes.com`** (and
+  `flashcards.burntbytes.com`) — a pre-existing Zero Trust login wall, deleted
+  during cutover so the public blog is reachable.
+- **Latent Hugo build breakage** surfaced on modern Hugo (0.163): the
+  `security.allowContent` default (0.158+) blocked the raw-HTML beerbuilder
+  lab, and `network-streamers.md` used a nonexistent `{{< fig >}}` shortcode.
+  Both fixed in burntbytes #1.
 
 ## P1 — source repo (DONE)
 

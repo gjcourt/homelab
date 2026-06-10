@@ -60,11 +60,10 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (8)
+### In progress (7)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-06-10-burntbytes-self-host.md](2026-06-10-burntbytes-self-host.md) | 2026-06-10 | Self-host the burntbytes.com blog; hidden-origin live, apex + Cloudflare swing pending |
 | [2026-06-01-hestia-photos-sot.md](2026-06-01-hestia-photos-sot.md) | 2026-06-10 | Make hestia the source of truth for family/ + homes/; repoint Immich NFS PV; alcatraz narrows to upload target |
 | [2026-05-20-alcatraz-to-hestia-migration.md](2026-05-20-alcatraz-to-hestia-migration.md) | 2026-05-21 | Migrate non-photo data (~870 GiB iSCSI + 3 TiB NFS media) off alcatraz onto hestia ZFS |
 | [2026-05-15-hestia-memory-benchmark.md](2026-05-15-hestia-memory-benchmark.md) | 2026-05-15 | STREAM + Intel MLC bandwidth benchmark: 6-DIMM baseline vs 8-DIMM comparison |
@@ -84,11 +83,12 @@ see `scripts/plans-index/`).
 | [2026-03-08-drawer-inserts.md](2026-03-08-drawer-inserts.md) | 2026-05-03 | Cardboard drawer insert design (75×32×12 cm) — physical project, no repo artifacts |
 | [2026-02-21-linkding-db-restore-plan.md](2026-02-21-linkding-db-restore-plan.md) | 2026-05-03 | Live DR drill: destroy and restore Linkding staging DB (never executed) |
 
-### Complete (14)
+### Complete (15)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
 | [2026-06-10-docs-reorg-status-dashboard.md](2026-06-10-docs-reorg-status-dashboard.md) | 2026-06-10 | Docs status legibility: plan frontmatter cleanup, generated index, STATUS.md dashboard, HOMELAB.md migration |
+| [2026-06-10-burntbytes-self-host.md](2026-06-10-burntbytes-self-host.md) | 2026-06-10 | burntbytes.com self-hosted on the cluster via Cloudflare tunnel; apex cutover live, GitHub Pages retired |
 | [2026-05-07-vllm-frontier-model-experiments.md](2026-05-07-vllm-frontier-model-experiments.md) | 2026-05-09 | Stability-first vLLM experiments on 2× 4090 — winner Qwen3.6-35B-A3B-AWQ TP=2 |
 | [2026-05-07-guest-vlan-dns-and-hifiberry-access.md](2026-05-07-guest-vlan-dns-and-hifiberry-access.md) | 2026-06-10 | Guest VLAN DNS + HifiBerry speaker access (firewall rules + mDNS reflector) |
 | [2026-05-04-phase2-5-completion.md](2026-05-04-phase2-5-completion.md) | 2026-06-10 | Close critique phases 2-5: probe coverage and liveness/readiness gaps (PRs A-D) |

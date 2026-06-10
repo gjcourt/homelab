@@ -1,7 +1,7 @@
 ---
-status: complete
+status: in-progress
 last_modified: 2026-06-10
-summary: "Navidrome → Mopidy → Snapcast → HifiBerry whole-house audio pipeline"
+summary: "Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master"
 ---
 
 # Navidrome → Mopidy → Snapcast → HifiBerry Integration Plan

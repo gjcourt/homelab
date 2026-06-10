@@ -37,6 +37,7 @@ Active plans (see [docs/plans/](plans/README.md) for the full status-grouped ind
 - [Hestia as photos source-of-truth](plans/2026-06-01-hestia-photos-sot.md) — Immich NFS PV repointed to hestia; soak/verification underway.
 - [burntbytes blog self-host](plans/2026-06-10-burntbytes-self-host.md) — hidden-origin live; apex listeners + Cloudflare DNS swing pending.
 - [Snapcast / HifiBerry rollout](plans/2026-05-03-snapcast-hifiberry-rollout.md) — server + LB IP live; per-device client setup remaining.
+- [Navidrome → Mopidy → Snapcast audio source](plans/2026-03-14-navidrome-snapcast-mopidy.md) — Mopidy sidecar in draft PR #426; not yet on master.
 - [Hestia memory benchmark](plans/2026-05-15-hestia-memory-benchmark.md) — 6-DIMM baseline captured; 8-DIMM comparison pending a physical DIMM swap.
 
 ## Next up
@@ -50,7 +51,7 @@ Planned, not yet started:
 
 ## Recently completed (last ~60 days)
 
-- Guest VLAN DNS + HifiBerry access · Mopidy/Navidrome/Snapcast audio pipeline · AdGuard HA + DNS rollout · Authelia SMTP notifier · hestia GHA auto-deploy runner · critique remediation phases 2–5.
+- Guest VLAN DNS + HifiBerry access · AdGuard HA + DNS rollout · Authelia SMTP notifier · hestia GHA auto-deploy runner · critique remediation phases 2–5.
 
 ## Known issues / blocked
 

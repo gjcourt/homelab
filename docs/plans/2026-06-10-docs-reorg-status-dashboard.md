@@ -1,5 +1,5 @@
 ---
-status: in-progress
+status: complete
 last_modified: 2026-06-10
 summary: "Docs status legibility: plan frontmatter cleanup, generated index, STATUS.md dashboard, HOMELAB.md migration"
 ---

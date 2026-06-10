@@ -1,0 +1,47 @@
+# Production tunnel configuration
+# Tunnel name should match the tunnel created in Cloudflare dashboard
+tunnel: production
+credentials-file: /etc/cloudflared/creds/credentials.json
+
+# Metrics endpoint for health checks
+metrics: 0.0.0.0:2000
+no-autoupdate: true
+
+# Route all traffic to the production gateway
+# The gateway handles routing based on hostname
+ingress:
+  # Authelia
+  - hostname: auth.burntbytes.com
+    service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+    originRequest:
+      originServerName: auth.burntbytes.com
+
+  # Linkding
+  - hostname: links.burntbytes.com
+    service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+    originRequest:
+      originServerName: links.burntbytes.com
+
+  # Overture
+  - hostname: overture.burntbytes.com
+    service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+    originRequest:
+      originServerName: overture.burntbytes.com
+
+  # burntbytes blog — hidden origin hostname for pre-cutover validation.
+  # Inert off-LAN until a Cloudflare DNS record points it at the tunnel;
+  # validated on-LAN via the *.burntbytes.com wildcard + AdGuard rewrite.
+  - hostname: burntbytes-origin.burntbytes.com
+    service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+    originRequest:
+      originServerName: burntbytes-origin.burntbytes.com
+
+  # burntbytes blog — apex. Inert until the Cloudflare apex DNS record is
+  # swung from GitHub Pages to <tunnel-uuid>.cfargotunnel.com (next phase).
+  - hostname: burntbytes.com
+    service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+    originRequest:
+      originServerName: burntbytes.com
+
+  # Catch-all returns 404
+  - service: http_status:404

@@ -244,7 +244,7 @@ def render(path_a: Path, path_b: Path) -> str:
         f"node{'s' if isinstance(numa, int) and numa != 1 else ''}, "
         f"{cores} physical cores)"
     )
-    out.append("**Tools:** STREAM (McCalpin, NTIMES=20), Intel MLC v3.11a")
+    out.append("**Tools:** STREAM (McCalpin, NTIMES=20), Intel MLC v3.12")
     out.append("")
 
     # ---------------- Headline ----------------

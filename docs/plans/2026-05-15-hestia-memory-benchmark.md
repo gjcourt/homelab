@@ -55,7 +55,7 @@ All paths relative to repo root.
 
 | Path | Purpose |
 |---|---|
-| [`hosts/hestia/bench/memory/Dockerfile`](../../hosts/hestia/bench/memory/Dockerfile) | Debian base + build-essential + numactl. Compiles STREAM from McCalpin source in-image. Expects `mlc_v3.11a.tgz` in build context. |
+| [`hosts/hestia/bench/memory/Dockerfile`](../../hosts/hestia/bench/memory/Dockerfile) | Debian base + build-essential + numactl. Compiles STREAM from McCalpin source in-image. Expects `mlc_v3.12.tgz` in build context. |
 | [`hosts/hestia/bench/memory/entrypoint.sh`](../../hosts/hestia/bench/memory/entrypoint.sh) | In-container runner. Executes STREAM N=5, then MLC's sub-benchmarks. Emits JSONL. |
 | [`hosts/hestia/bench/memory/run.sh`](../../hosts/hestia/bench/memory/run.sh) | Host wrapper. Pre-flight (governor, hugepages, drop_caches, vLLM-stop check, dmidecode snapshot), then `docker run`. |
 | [`hosts/hestia/bench/memory/aggregate.py`](../../hosts/hestia/bench/memory/aggregate.py) | Compares two JSONL files, emits markdown table (BW, latency, deltas, % change). Adapted from `scripts/llama-cpp-bench.py`. |
@@ -64,7 +64,7 @@ All paths relative to repo root.
 
 ## Execution procedure
 
-1. **Pre-flight** (one-time): operator downloads Intel MLC `mlc_v3.11a.tgz` from [Intel's MLC page](https://www.intel.com/content/www/us/en/developer/articles/tool/intelr-memory-latency-checker.html) (license acceptance required) and places it in `hosts/hestia/bench/memory/`. Verify SHA matches the download.
+1. **Pre-flight** (one-time): operator downloads Intel MLC `mlc_v3.12.tgz` from [Intel's MLC page](https://www.intel.com/content/www/us/en/developer/articles/tool/intelr-memory-latency-checker.html) (license acceptance required) and places it in `hosts/hestia/bench/memory/`. Verify SHA matches the download.
 2. **Build the image** on hestia: `docker build -t hestia-memory-bench:1 hosts/hestia/bench/memory/`.
 3. **Capture pre-state**: `dmidecode -t memory`, `lscpu`, BIOS-reported memory speed. `run.sh` writes this to `<RESULTS_DIR>/<label>-<ts>.preflight.json`.
 4. **Stop vLLM**: `midclt call app.stop vllm`. Wait for graceful shutdown, verify GPUs idle via `nvidia-smi`.

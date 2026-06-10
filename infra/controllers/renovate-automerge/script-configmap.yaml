@@ -7,7 +7,8 @@ data:
   automerge.py: |
     #!/usr/bin/env python3
     """
-    Renovate automerge: merges digest/patch-only Renovate PRs with passing CI.
+    Renovate automerge: merges digest/pin/patch/minor Renovate PRs with passing
+    CI. Major updates and PRs with mixed update types stay open for review.
     Covers all repos listed in GITHUB_REPOS (comma-separated).
     Non-safe PRs are reported by email to EMAIL_TO.
     """
@@ -69,7 +70,7 @@ data:
         )
         if types:
             kinds = {t.lower() for t in types}
-            if kinds <= {"patch", "digest", "pin", "pindigest"}:
+            if kinds <= {"patch", "digest", "pin", "pindigest", "minor"}:
                 return True, "update type: " + ", ".join(sorted(kinds))
             return False, "update type: " + ", ".join(sorted(kinds))
 
@@ -85,7 +86,7 @@ data:
             if a[0] != b[0]:
                 return False, f"major bump ({versions[0]} -> {versions[-1]})"
             if a[1] != b[1]:
-                return False, f"minor bump ({versions[0]} -> {versions[-1]})"
+                return True, f"minor bump ({versions[0]} -> {versions[-1]})"
             return True, f"patch bump ({versions[0]} -> {versions[-1]})"
 
         return False, "cannot determine update type"
@@ -108,18 +109,57 @@ data:
             return False
 
 
-    def merge_pr(repo, pr):
+    def update_branch(repo, pr):
+        """Tell GitHub to merge master into the PR branch, clearing BEHIND
+        state. CI re-runs on the new head; next cron tick picks the PR up."""
         number = pr["number"]
         try:
-            gh(
-                f"/repos/{repo}/pulls/{number}/merge",
-                method="PUT",
-                body={"merge_method": "merge", "commit_title": pr["title"]},
-            )
+            gh(f"/repos/{repo}/pulls/{number}/update-branch", method="PUT", body={})
             return True
         except urllib.error.HTTPError as exc:
-            print(f"    merge failed: {exc.code} {exc.reason}", flush=True)
+            print(f"    update-branch failed: {exc.code} {exc.reason}", flush=True)
             return False
+
+
+    def merge_pr(repo, pr):
+        """Returns (merged, rebased).
+
+        405 Method Not Allowed has two common causes that share the same
+        status code:
+          1. The repo's branch protection forbids the merge method we chose
+             (e.g. required_linear_history rejects 'merge' commits).
+          2. The PR is BEHIND and protection requires up-to-date branches.
+
+        So we try the merge methods in safest-first order — squash, rebase,
+        merge — and only after all three give 405 do we treat it as case 2
+        and trigger update-branch. CI re-runs on the new head; next cron
+        tick retries the merge.
+
+        Non-405 errors (409 conflict, 422 mergeability, etc.) won't be
+        helped by a different method, so we bail immediately."""
+        number = pr["number"]
+        last_405 = False
+        for method in ("squash", "rebase", "merge"):
+            body = {"merge_method": method}
+            if method in ("squash", "merge"):
+                body["commit_title"] = pr["title"]
+            try:
+                gh(f"/repos/{repo}/pulls/{number}/merge", method="PUT", body=body)
+                print(f"    -> merged via {method}", flush=True)
+                return True, False
+            except urllib.error.HTTPError as exc:
+                print(f"    merge_method={method} failed: {exc.code} {exc.reason}", flush=True)
+                last_405 = exc.code == 405
+                if not last_405:
+                    return False, False
+
+        # All three methods returned 405 — likely BEHIND master + branch
+        # protection requires up-to-date branches. Rebase and let the next
+        # cron run retry.
+        if last_405 and update_branch(repo, pr):
+            print(f"    -> rebased onto master; will retry next run", flush=True)
+            return False, True
+        return False, False
 
 
     def process_repo(repo):
@@ -143,9 +183,12 @@ data:
                 held.append({"pr": pr, "reason": reason})
                 continue
 
-            if merge_pr(repo, pr):
+            ok, rebased = merge_pr(repo, pr)
+            if ok:
                 print(f"    -> merged", flush=True)
                 merged.append({"pr": pr, "reason": reason})
+            elif rebased:
+                held.append({"pr": pr, "reason": reason + " (behind master — rebased; will merge next run)"})
             else:
                 held.append({"pr": pr, "reason": reason + " (merge failed)"})
 

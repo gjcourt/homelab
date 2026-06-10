@@ -24,6 +24,7 @@ spec:
 
   storage:
     # Expanded from 10Gi to 20Gi after filling up (pgdata ~9.5Gi as of 2026-04-17).
+    storageClass: truenas-iscsi
     size: 20Gi
 
   resources:

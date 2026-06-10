@@ -31,6 +31,7 @@ spec:
           policy-type: database
 
   storage:
+    storageClass: truenas-iscsi
     size: 2Gi
 
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).

@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: init-files
-          image: busybox@sha256:1487d0af5f52b4ba31c7e465126ee2123fe3f2305d638e7827681e7cf6c83d5e
+          image: busybox@sha256:fd8d9aa63ba2f0982b5304e1ee8d3b90a210bc1ffb5314d980eb6962f1a9715d
           # Write an empty YAML list for each include file if it doesn't already exist
           # or is empty (0 bytes). A bare touch creates a 0-byte file which HA refuses
           # to parse as a list, causing it to enter recovery mode and drop trusted_proxies.
@@ -58,7 +58,7 @@ spec:
             - name: config
               mountPath: /config
       containers:
-        - image: ghcr.io/home-assistant/home-assistant:2026.5.3@sha256:ff875078181a0383bf3fca9f061be12d6180896dbd531de04e094e25505b0bb9
+        - image: ghcr.io/home-assistant/home-assistant:2026.5.4@sha256:ceb1202133a5a036e8b03e20a10eb113186cc2f871968323c6fc6c3fc4205716
           name: homeassistant
           ports:
             - containerPort: 8123

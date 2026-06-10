@@ -4,6 +4,7 @@ metadata:
   name: homeassistant-config-pvc
   namespace: homeassistant
 spec:
+  storageClassName: truenas-iscsi
   accessModes:
     - ReadWriteOnce
   resources:

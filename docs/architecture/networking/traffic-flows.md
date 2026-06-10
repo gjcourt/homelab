@@ -155,8 +155,11 @@ this path.**
 
 ### Key properties
 
-- **No port-forward on UCGF.** Inbound from Internet is impossible at the
-  router; only the persistent outbound tunnel exists.
+- **No port-forward on UCGF for HTTP/HTTPS ingress.** Inbound web traffic
+  is impossible at the router; only the persistent outbound Cloudflare
+  tunnel carries it. (One narrow exception exists for the qBittorrent peer
+  port on alcatraz — see invariant 3 in [README.md](README.md). Not a
+  web-traffic path; doesn't affect the flows in this document.)
 - **Public DNS is Cloudflare-managed.** `burntbytes.com` zone records live
   in Cloudflare, mostly as CNAMEs to the tunnel.
 - **Internal split-horizon overrides public DNS for LAN clients.** AdGuard

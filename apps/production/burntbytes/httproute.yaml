@@ -1,8 +1,10 @@
-# P2 routes on the hidden hostname burntbytes-origin.burntbytes.com — a
-# subdomain already covered by the existing *.burntbytes.com wildcard cert and
-# the gateway's `http`/`https` wildcard listeners, so no shared-gateway change
-# is needed to validate the full path. P3 adds the apex (burntbytes.com)
-# hostname + dedicated apex listeners.
+# Serves both the apex (burntbytes.com, via the dedicated apex listeners) and
+# the hidden origin (burntbytes-origin.burntbytes.com, via the *.burntbytes.com
+# wildcard listeners). Each listener serves the intersection of its hostname
+# with this route's hostnames, so the apex listeners serve burntbytes.com and
+# the wildcard listeners serve burntbytes-origin. The origin hostname is kept
+# as a permanent smoke-test endpoint. DNS for the apex still points at GitHub
+# Pages until the Cloudflare cutover, so this is dark for off-LAN clients.
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
@@ -10,11 +12,15 @@ metadata:
   namespace: burntbytes-prod
 spec:
   hostnames:
+    - burntbytes.com
     - burntbytes-origin.burntbytes.com
   parentRefs:
     - name: app-gateway-production
       namespace: default
       sectionName: http
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http-apex
   rules:
     - filters:
         - type: RequestRedirect
@@ -29,11 +35,15 @@ metadata:
   namespace: burntbytes-prod
 spec:
   hostnames:
+    - burntbytes.com
     - burntbytes-origin.burntbytes.com
   parentRefs:
     - name: app-gateway-production
       namespace: default
       sectionName: https
+    - name: app-gateway-production
+      namespace: default
+      sectionName: https-apex
   rules:
     - backendRefs:
         - name: burntbytes

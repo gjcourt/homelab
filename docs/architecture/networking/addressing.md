@@ -73,8 +73,9 @@ ssh root@10.42.2.1 'cat /run/dnsmasq.dhcp.conf.d/* 2>/dev/null | grep "dhcp-host
 | IP | Device / Role | Notes |
 |---|---|---|
 | `10.42.2.1` | UCGF (router/gateway) | DHCP server, FRR for BGP (AS 65100), bridge `br2` |
-| `10.42.2.10` | hestia (TrueNAS GPU server) | LLM inference, Signal-CLI, iSCSI provider via `democratic-csi` |
+| `10.42.2.10` | hestia (TrueNAS storage + compute) | iSCSI/NFS provider via `democratic-csi`, GHA deploy runner, Immich photo-backup, qBittorrent. **No GPUs since 2026-05-16.** See [hosts/hestia/](../../../hosts/hestia/README.md). |
 | `10.42.2.11` | Synology NAS | iSCSI target backing CNPG PVCs (`csi.san.synology.com`) |
+| `10.42.2.13` | hestia IPMI (ASRock Rack BMC) | Out-of-band management; switch port 48, DHCP on the Lab VLAN |
 | `10.42.2.19` | Apple TV | Wired |
 | `10.42.2.20` | `talos-ykb-uir` (CP) | `k8sServiceHost` SPOF |
 | `10.42.2.21` | `talos-2mz-rfj` (CP) | |

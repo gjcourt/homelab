@@ -1,0 +1,59 @@
+# Status
+
+> **What this is.** A single-glance snapshot of the homelab: what's running,
+> what's in flight, what's next, and what's broken. Detail lives elsewhere —
+> this page links out. **Update this file in the same PR whenever** a plan's
+> status changes, an incident postmortem lands, or hardware/topology changes.
+>
+> Last updated: 2026-06-10
+
+## Cluster at a glance
+
+| | |
+|---|---|
+| Cluster | `melodic-muse` |
+| Nodes | 6 — 3 control-plane + 3 workers |
+| Platform | Talos v1.12.4 · Kubernetes v1.35.0 |
+| CNI / ingress | Cilium 1.19 (VXLAN) + Gateway API |
+| GitOps | Flux CD, reconciling from `master` |
+| Apps | ~14 self-hosted (see [apps/README.md](../apps/README.md)) |
+| LB advertisement | L2 announcements + BGP to the UCGF (AS 65010 ↔ 65100) |
+
+Full picture: [AGENTS.md](../AGENTS.md) · architecture in [docs/architecture/](architecture/README.md).
+
+## Hosts at a glance
+
+| Host | Role | Notes |
+|---|---|---|
+| 6× Talos nodes | Kubernetes cluster | `10.42.2.20–25` on the Lab VLAN |
+| hestia (`10.42.2.10`) | TrueNAS storage + compute | No GPUs since 2026-05-16. Runs the GHA deploy runner, Immich photo-backup rsync, qBittorrent, thermalscope telemetry, IPMI exporter. See [hosts/hestia/](../hosts/hestia/README.md). |
+| Synology / alcatraz (`10.42.2.11`) | Block + photo storage | iSCSI backing for CNPG PVCs; phone-photo upload target. Role narrowing — see the photos-SOT plan. |
+
+## In flight
+
+Active plans (see [docs/plans/](plans/README.md) for the full status-grouped index):
+
+- [Alcatraz → hestia migration](plans/2026-05-20-alcatraz-to-hestia-migration.md) — non-photo data off alcatraz onto hestia ZFS; Phase 1 mostly done, Phase 2 backup pipeline live.
+- [Hestia as photos source-of-truth](plans/2026-06-01-hestia-photos-sot.md) — Immich NFS PV repointed to hestia; soak/verification underway.
+- [burntbytes blog self-host](plans/2026-06-10-burntbytes-self-host.md) — hidden-origin live; apex listeners + Cloudflare DNS swing pending.
+- [Snapcast / HifiBerry rollout](plans/2026-05-03-snapcast-hifiberry-rollout.md) — server + LB IP live; per-device client setup remaining.
+- [Hestia memory benchmark](plans/2026-05-15-hestia-memory-benchmark.md) — 6-DIMM baseline captured; 8-DIMM comparison pending a physical DIMM swap.
+
+## Next up
+
+Planned, not yet started:
+
+- [Network resilience + BGP completion](plans/2026-05-06-network-resilience-and-bgp-completion.md) — the consolidated plan that supersedes the earlier BGP rollout.
+- [democratic-csi least-privilege key](plans/2026-05-09-democratic-csi-least-privilege-key.md).
+- [Monitoring enhancement](plans/2026-05-09-monitoring-enhancement.md) — ServiceMonitor coverage + critical-alert Signal routing.
+- [Immich pgvecto.rs → VectorChord](plans/2026-06-02-immich-vectorchord-migration.md).
+
+## Recently completed (last ~60 days)
+
+- Guest VLAN DNS + HifiBerry access · Mopidy/Navidrome/Snapcast audio pipeline · AdGuard HA + DNS rollout · Authelia SMTP notifier · hestia GHA auto-deploy runner · critique remediation phases 2–5.
+
+## Known issues / blocked
+
+- **No on-prem LLM inference.** The 2× RTX 4090 were sold 2026-05-16. `hermes` / `hermes-callee` (Signal bots) and `signal-cli` are deployed but **scaled to 0** — they have no model backend. The `llms/` and GPU-`monitoring/` Custom Apps on hestia are archived. Restoring inference needs new GPU hardware or a hosted-API backend. See [hermes runbook](operations/apps/hermes.md) and [plans/2026-05-02-hermes-bot-k8s.md](plans/2026-05-02-hermes-bot-k8s.md).
+- **CNPG WAL archiving** broken on several staging clusters (stale system-ID in S3) — base backups succeed, but no PITR until fixed.
+- **LB pool / Lab-VLAN `/24` sharing** is the root cause of the 2026-05-05 wired-device incident; the dedicated LB subnet migration is tracked in the network-resilience plan (Phase D).

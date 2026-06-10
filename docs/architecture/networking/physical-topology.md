@@ -47,7 +47,8 @@ last_modified: 2026-05-06
 
 | Device | IP | VLAN | Role |
 |---|---|---|---|
-| hestia (TrueNAS GPU server) | `10.42.2.10` | 2 | LLM inference (vLLM/llama.cpp), Signal-CLI bridge, iSCSI provider for non-Synology PVCs |
+| hestia (TrueNAS storage + compute) | `10.42.2.10` | 2 | iSCSI/NFS provider for non-Synology PVCs + photo library; GHA deploy runner, Immich photo-backup, qBittorrent. No GPUs since 2026-05-16. |
+| hestia IPMI (ASRock Rack BMC) | `10.42.2.13` | 2 | Out-of-band management; switch port 48 |
 | Synology NAS | `10.42.2.11` | 2 | iSCSI block storage backing CNPG PVCs; DSM at port 5000 |
 
 Both are kept on VLAN 2 with the cluster because they participate in iSCSI

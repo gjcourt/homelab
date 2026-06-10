@@ -64,7 +64,6 @@ see `scripts/plans-index/`).
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-06-10-docs-reorg-status-dashboard.md](2026-06-10-docs-reorg-status-dashboard.md) | 2026-06-10 | Docs status legibility: plan frontmatter cleanup, generated index, STATUS.md dashboard, HOMELAB.md migration |
 | [2026-06-10-burntbytes-self-host.md](2026-06-10-burntbytes-self-host.md) | 2026-06-10 | Self-host the burntbytes.com blog; hidden-origin live, apex + Cloudflare swing pending |
 | [2026-06-01-hestia-photos-sot.md](2026-06-01-hestia-photos-sot.md) | 2026-06-10 | Make hestia the source of truth for family/ + homes/; repoint Immich NFS PV; alcatraz narrows to upload target |
 | [2026-05-20-alcatraz-to-hestia-migration.md](2026-05-20-alcatraz-to-hestia-migration.md) | 2026-05-21 | Migrate non-photo data (~870 GiB iSCSI + 3 TiB NFS media) off alcatraz onto hestia ZFS |
@@ -72,6 +71,7 @@ see `scripts/plans-index/`).
 | [2026-05-03-snapcast-hifiberry-rollout.md](2026-05-03-snapcast-hifiberry-rollout.md) | 2026-06-10 | Wire kitchen + living-room HifiBerries as snapclients of the in-cluster snapserver |
 | [2026-05-02-hermes-bot-k8s.md](2026-05-02-hermes-bot-k8s.md) | 2026-06-10 | Hermes agent (Signal mode) on melodic-muse so the bot is laptop-independent — **blocked:** LLM backend gone (RTX 4090s sold 2026-05-16); deployment scaled to 0 |
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
+| [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
 ### Planned (6)
 
@@ -88,11 +88,11 @@ see `scripts/plans-index/`).
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-06-10-docs-reorg-status-dashboard.md](2026-06-10-docs-reorg-status-dashboard.md) | 2026-06-10 | Docs status legibility: plan frontmatter cleanup, generated index, STATUS.md dashboard, HOMELAB.md migration |
 | [2026-05-07-vllm-frontier-model-experiments.md](2026-05-07-vllm-frontier-model-experiments.md) | 2026-05-09 | Stability-first vLLM experiments on 2× 4090 — winner Qwen3.6-35B-A3B-AWQ TP=2 |
 | [2026-05-07-guest-vlan-dns-and-hifiberry-access.md](2026-05-07-guest-vlan-dns-and-hifiberry-access.md) | 2026-06-10 | Guest VLAN DNS + HifiBerry speaker access (firewall rules + mDNS reflector) |
 | [2026-05-04-phase2-5-completion.md](2026-05-04-phase2-5-completion.md) | 2026-06-10 | Close critique phases 2-5: probe coverage and liveness/readiness gaps (PRs A-D) |
 | [2026-05-02-hestia-gha-runner.md](2026-05-02-hestia-gha-runner.md) | 2026-06-10 | Self-hosted GHA runner on hestia for auto-deploy of Custom App compose changes |
-| [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry whole-house audio pipeline |
 | [2026-03-08-adguard-dns-rollout.md](2026-03-08-adguard-dns-rollout.md) | 2026-06-10 | Roll AdGuard Home out as the primary LAN DNS resolver |
 | [2026-02-28-network-migration-192-to-10-42-2.md](2026-02-28-network-migration-192-to-10-42-2.md) | 2026-03-06 | Migrate the LAN from 192.168.5.0/24 to 10.42.2.0/24 |
 | [2026-02-21-documentation-rewrite-plan.md](2026-02-21-documentation-rewrite-plan.md) | 2026-05-02 | Rewrite all app and infra documentation |

@@ -51,4 +51,33 @@ spec:
           selector:
             matchLabels:
               http-ingress: "true"
+    # Apex (bare burntbytes.com) for the self-hosted blog. The
+    # *.burntbytes.com wildcard above does NOT match the apex, so it needs
+    # its own listeners. The wildcard cert already SANs burntbytes.com, so
+    # the same secret terminates TLS here.
+    - name: http-apex
+      port: 80
+      protocol: HTTP
+      hostname: "burntbytes.com"
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              http-ingress: "true"
+    - name: https-apex
+      port: 443
+      protocol: HTTPS
+      hostname: "burntbytes.com"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: burntbytes-prod-wildcard-tls
+            namespace: security
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              http-ingress: "true"
 

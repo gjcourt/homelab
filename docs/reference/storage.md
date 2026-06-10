@@ -1,25 +1,25 @@
 # Storage
 
 ## 1. Overview
-Storage in the homelab is provided by a Synology NAS (`10.42.2.11`). The cluster uses the Synology CSI driver to dynamically provision both iSCSI LUNs (for block storage) and NFS shares (for shared file storage).
+Storage in the homelab is provided by a TrueNAS Scale server, `hestia` (`10.42.2.10`). The cluster uses the [democratic-csi](https://github.com/democratic-csi/democratic-csi) driver to dynamically provision iSCSI LUNs (for ReadWriteOnce block storage). NFS shares from `alcatraz` (`10.42.2.11`) back the Immich photo library and Jellyfin/Navidrome media libraries via static `PersistentVolume` manifests (ReadWriteMany / ReadOnlyMany).
 
 ## 2. Architecture
-The Synology CSI driver is deployed in the `synology-csi` namespace. It communicates with the Synology DSM API to create, delete, and manage storage volumes.
-- **iSCSI**: Used for high-performance, ReadWriteOnce (RWO) block storage (e.g., databases, application data).
-- **NFS**: Used for ReadWriteMany (RWX) shared file storage (e.g., media libraries).
+The democratic-csi driver is deployed in the `democratic-csi` namespace as a Helm chart. It speaks to the TrueNAS API to create, delete, snapshot, and manage iSCSI LUNs on the `main` ZFS pool.
+- **iSCSI** (truenas): RWO block storage for databases (CNPG), app config (`-data`/`-config` PVCs), and STS volumeClaimTemplates.
+- **NFS** (alcatraz): RWX/ROX shared file storage for the photo and media libraries. Mounted via static PVs declared in the app overlays (e.g. `apps/production/immich/nfs-photos.yaml`, `apps/base/jellyfin/media/nfs-media.yaml`).
 
 ## 3. URLs
-- **Synology DSM**: https://10.42.2.11:5001
+- **TrueNAS Scale (hestia)**: https://hestia.burntbytes.com (via Cloudflare Tunnel) or https://10.42.2.10 (LAN-direct)
 
 ## 4. Configuration
 - **Storage Classes**:
-  - `synology-iscsi` (Default): Persistent iSCSI storage (`ReclaimPolicy: Retain`).
-  - `synology-iscsi-ephemeral`: Ephemeral iSCSI storage (`ReclaimPolicy: Delete`).
-  - `synology-nfs`: NFS storage for shared media (`ReclaimPolicy: Retain`).
+  - `truenas-iscsi` (Default): Persistent iSCSI storage on the `main` pool (`ReclaimPolicy: Retain`).
+  - `truenas-iscsi-ssd`: iSCSI storage targeted at the SSD-backed dataset (`ReclaimPolicy: Retain`).
+  - `truenas-iscsi-ephemeral`: Ephemeral iSCSI storage (`ReclaimPolicy: Delete`).
 - **Volume Snapshot Classes**:
-  - `synology-iscsi-snapshot`: Used for taking snapshots of iSCSI volumes.
+  - Provided by democratic-csi; see `kubectl get volumesnapshotclasses`.
 - **Secrets**:
-  - `client-info-secret`: Contains the Synology DSM credentials (username/password) required by the CSI driver. Encrypted via SOPS.
+  - `democratic-csi` Helm values reference TrueNAS API credentials encrypted via SOPS in `infra/controllers/democratic-csi/`.
 
 ## 5. Usage Instructions
 To provision storage, create a `PersistentVolumeClaim` (PVC) referencing the desired `StorageClass`.
@@ -33,16 +33,18 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: synology-iscsi
+  storageClassName: truenas-iscsi
   resources:
     requests:
       storage: 10Gi
 ```
 
+For shared media NFS mounts, define a static `PersistentVolume` (see `apps/base/jellyfin/media/nfs-media.yaml` for the canonical pattern) and bind a `PersistentVolumeClaim` to it via `volumeName`.
+
 ## 6. Testing
 To verify the CSI driver is working:
 ```bash
-kubectl get pods -n synology-csi
+kubectl get pods -n democratic-csi
 kubectl get storageclasses
 ```
 Create a test PVC and verify it binds successfully:
@@ -51,24 +53,29 @@ kubectl get pvc example-pvc
 ```
 
 ## 7. Monitoring & Alerting
-- **Metrics**: The CSI driver exposes metrics related to volume provisioning and attachment.
+- **Metrics**: The democratic-csi controller exposes metrics related to volume provisioning and attachment.
 - **Logs**: Check the CSI controller and node plugin logs:
   ```bash
-  kubectl logs -n synology-csi deploy/synology-csi-controller
-  kubectl logs -n synology-csi ds/synology-csi-node
+  kubectl logs -n democratic-csi deploy/democratic-csi-controller
+  kubectl logs -n democratic-csi ds/democratic-csi-node
   ```
+- **TrueNAS dashboard**: `truenas-iscsi-monitor` (in `apps/base/truenas-iscsi-monitor/`) exports TrueNAS-side iSCSI metrics and target-count alerts to Prometheus.
 
 ## 8. Disaster Recovery
 - **Backup Strategy**:
-  - iSCSI LUNs are backed up using Synology Snapshot Replication or Hyper Backup on the NAS itself.
-  - Application-level backups (e.g., CNPG for Postgres) are preferred over raw block snapshots for databases.
+  - iSCSI LUNs sit on ZFS datasets that are snapshotted by TrueNAS's periodic-snapshot tasks.
+  - Application-level backups (e.g. CNPG → S3 via the Barman Cloud plugin) are preferred over raw block snapshots for databases.
+  - The Immich photo library is mirrored from alcatraz to hestia on a daily rsync schedule with ZFS snapshot retention (see `docs/plans/2026-05-20-alcatraz-to-hestia-migration.md` Phase 2).
 - **Restore Procedure**:
-  - Restore the LUN via Synology DSM.
-  - Recreate the PV/PVC in Kubernetes pointing to the restored LUN.
+  - For ZFS snapshot rollback: use TrueNAS UI or `zfs rollback <dataset>@<snap>`.
+  - To recover a destroyed PVC whose PV had `Retain`: clear the PV's `claimRef`, then create a new PVC with `volumeName` pointing to the PV (see `docs/operations/pv-retain-recovery.md` or memory `pv-retain-recovery-pattern`).
 
 ## 9. Troubleshooting
 - **PVC stuck in Pending**:
-  - Check the CSI controller logs for API errors (e.g., invalid credentials, target limits reached).
-  - Verify the Synology NAS is reachable from the cluster.
-- **iSCSI Zombie Targets**: The Synology NAS has a hard limit of 128 iSCSI targets. If this limit is reached, new PVCs cannot be provisioned. See `docs/operations/synology-iscsi-operations.md` for cleanup procedures.
-- **Volume Attachment Issues**: If a pod is stuck terminating and the volume cannot be detached, you may need to force delete the pod or manually disconnect the iSCSI session on the node.
+  - Check the democratic-csi controller logs for TrueNAS API errors.
+  - Verify hestia is reachable from the cluster (`kubectl run debug --image=alpine -- nc -vz 10.42.2.10 3260`).
+- **Volume Attachment Issues**: If a pod is stuck terminating and the volume cannot be detached, you may need to force-delete the pod or manually disconnect the iSCSI session on the Talos node.
+- **Flux SSA + `volumeName` immutability**: For statically-bound PVCs under Flux management, prefer `PV.claimRef` pre-binding over `PVC.spec.volumeName` — Flux's strategic-merge dry-run will otherwise try to unset `volumeName` and fail with "spec is immutable". See memory `flux-pvc-volumename-anti-pattern`.
+
+## 10. Historical context
+The cluster originally ran on Synology iSCSI (`10.42.2.11`, `synology-csi` driver). The full migration to TrueNAS/hestia happened in May 2026 and is documented in `docs/plans/2026-05-20-alcatraz-to-hestia-migration.md`. Alcatraz now serves only the photo NFS share and is the rsync source for the hestia photo-backup dataset.

@@ -33,6 +33,7 @@ spec:
   storage:
     # Actual usage: ~634Mi; target = 20% headroom → 1Gi.
     # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
+    storageClass: truenas-iscsi
     size: 1Gi
 
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).

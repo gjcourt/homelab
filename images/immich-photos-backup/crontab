@@ -1,0 +1,4 @@
+# Daily immich photo library rsync from alcatraz → hestia.
+# 04:00 local time (TZ env var honored via tzdata in the image).
+# Runs ~30-60 min for the current ~425 GB library over gigabit.
+0 4 * * * /usr/local/bin/immich-photos-backup.sh

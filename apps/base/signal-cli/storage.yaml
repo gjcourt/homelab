@@ -6,9 +6,9 @@ metadata:
   labels:
     app: signal-cli
 spec:
+  storageClassName: truenas-iscsi
   accessModes:
     - ReadWriteOnce
-  storageClassName: synology-iscsi
   resources:
     requests:
       storage: 1Gi

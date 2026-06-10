@@ -1,0 +1,51 @@
+# Daily rsync of /volume1/family/images/photos on alcatraz (Synology DSM,
+# 10.42.2.11) into the local ZFS dataset main/family/images/photos.
+# (Renamed from main/backups/immich-photos in the 2026-06-01 hestia-SOT plan
+#  — see docs/plans/2026-06-01-hestia-photos-sot.md.)
+#
+# Always-running container; busybox crond fires the script at 04:00 local
+# (TZ honored via the image's tzdata + the TZ env var below). Snapshots
+# are managed by a TrueNAS periodic-snapshot task on the dataset, not by
+# this stack.
+#
+# First-time setup:
+#   1. SSH key at /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz
+#      (private key, mode 600, owned by root). The matching public key
+#      lives in truenas-backup@10.42.2.11:~/.ssh/authorized_keys.
+#   2. ZFS dataset main/family/images/photos (created by midclt
+#      pool.dataset.create — see README for the exact command).
+#   3. node-exporter textfile collector at /var/lib/node-exporter/textfile
+#      so the Prometheus metric the script writes is scraped.
+#
+# After bootstrap, every change to images/immich-photos-backup/** triggers
+# build-immich-photos-backup.yml which publishes a new tag; bump the
+# digest below in a follow-up PR and deploy-hestia.yml auto-rolls.
+
+services:
+  immich-photos-backup:
+    image: ghcr.io/gjcourt/immich-photos-backup:2026-06-09@sha256:93a52aa278f27777b320a8b135d54474fd9059c363c7bb8439ff08505c5eb1b3
+    container_name: immich-photos-backup
+    restart: unless-stopped
+    environment:
+      # Cron's "0 4 * * *" entry only means "04:00 local" if crond reads TZ;
+      # alpine's tzdata package + this env var is what makes that work.
+      - TZ=America/New_York
+    volumes:
+      # SSH identity — single-file bind mount keeps the key isolated from
+      # whatever else may live in /root/.ssh on the host.
+      - /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz:/root/.ssh/id_ed25519_alcatraz:ro
+      # Persisted known_hosts — script's ssh runs with
+      # StrictHostKeyChecking=accept-new + UserKnownHostsFile=/root/.ssh/known_hosts.
+      # Bind-mounting from host means a first-run acceptance survives
+      # container restarts. Operator must pre-create the file (touch is
+      # enough — accept-new will fill it in).
+      - /mnt/main/apps/immich-photos-backup/ssh/known_hosts:/root/.ssh/known_hosts
+      # Backup destination — bind-mounted the whole main/family parent so the
+      # same container can later extend to sync other family/ subdirs (audio,
+      # literature, documents, etc.) without a compose change. Today the script
+      # only writes to family/images/photos.
+      - /mnt/main/family:/mnt/main/family
+      # Prometheus textfile collector dir — script writes
+      # immich-backup.prom on each successful run for the
+      # ImmichPhotoBackupStale alert to key off of.
+      - /var/lib/node-exporter/textfile:/var/lib/node-exporter/textfile

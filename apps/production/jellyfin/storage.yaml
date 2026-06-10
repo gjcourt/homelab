@@ -10,6 +10,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
+  storageClassName: truenas-iscsi
   resources:
     requests:
       # Actual usage: ~227Mi. Jellyfin 10.11+ requires 2GiB free in /config/data;
@@ -27,7 +28,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: synology-iscsi
+  storageClassName: truenas-iscsi
   resources:
     requests:
       # Actual usage: ~32Mi. Jellyfin 10.11+ requires 2GiB free in /cache;

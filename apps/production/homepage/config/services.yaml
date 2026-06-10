@@ -74,21 +74,6 @@
         siteMonitor: https://flashcards.burntbytes.com/healthz
 
 - Infrastructure:
-    - Synology NAS:
-        icon: synology-dsm.png
-        href: https://10.42.2.11:5001
-        description: Network storage
-        # DSM only exposes 5001 (HTTPS) to the homepage pod — port 5000
-        # (HTTP) is closed at the source and also outside the egress allowlist
-        # in the homepage CiliumNetworkPolicy, which made the previous
-        # `http://10.42.2.11:5000` siteMonitor return 500. Match the widget URL
-        # (5001) so both probes share one allowed flow.
-        siteMonitor: https://10.42.2.11:5001
-        widget:
-          type: diskstation
-          url: https://10.42.2.11:5001
-          username: "{{HOMEPAGE_VAR_SYNOLOGY_USER}}"
-          password: "{{HOMEPAGE_VAR_SYNOLOGY_PASS}}"
     - Hestia:
         icon: truenas-scale.png
         href: https://hestia.burntbytes.com

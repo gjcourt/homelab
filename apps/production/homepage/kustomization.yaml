@@ -6,7 +6,6 @@ resources:
   - httproute.yaml
   - rbac.yaml
   - secret-adguard.yaml
-  - secret-synology.yaml
 
 labels:
   - pairs:

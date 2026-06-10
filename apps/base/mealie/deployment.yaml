@@ -35,7 +35,7 @@ spec:
           type: RuntimeDefault
       containers:
         # mealie v3.16.0
-        - image: ghcr.io/mealie-recipes/mealie:v3.17.0@sha256:d570139f1891346131d02f8e4d1853100ae4846474958ca6c68cfe1648058467
+        - image: ghcr.io/mealie-recipes/mealie:v3.19.2@sha256:f68e959bf66f4f458893ea58facac71690fe6f2ac7a31466b5cecb41b4e99c02
           name: mealie
           ports:
             - containerPort: 9000

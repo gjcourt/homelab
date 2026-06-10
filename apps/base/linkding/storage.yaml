@@ -6,6 +6,7 @@ metadata:
   labels:
     app: linkding
 spec:
+  storageClassName: truenas-iscsi
   accessModes:
     - ReadWriteOnce
   resources:

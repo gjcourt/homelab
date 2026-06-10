@@ -1,0 +1,53 @@
+# qBittorrent — P2P client on hestia for private-tracker downloads.
+#
+# Network: bridge with explicit port maps. NO VPN — private trackers only,
+# raw home WAN IP exposed to peers. Do not point this at public trackers
+# without first wrapping in gluetun + a port-forwarding VPN.
+#
+# Inbound port: the router (UCGF) must forward WAN tcp/udp 6881 →
+# 10.42.2.10:6881. Without that forward qBittorrent runs in passive mode
+# (downloads only, can't seed, slower swarm participation).
+#
+# Storage layout:
+#   /mnt/main/apps/qbittorrent/config   — qbit state (sqlite, .torrent files,
+#                                         settings, RSS feeds, categories)
+#   /mnt/main/media/movies              — downloads land directly in the
+#                                         Jellyfin movies library. This matches
+#                                         the alcatraz qbit layout so migrated
+#                                         .fastresume files resolve without
+#                                         path rewrites. Trade-off: qbit's
+#                                         "Delete torrent and files" will
+#                                         reach into the library — don't use
+#                                         that right-click option casually.
+#                                         (For staging-then-move workflow, use
+#                                         qbit Categories to set a per-category
+#                                         save path.)
+#
+# Web UI: http://10.42.2.10:8080 — LAN-only. Default creds shown in container
+# startup logs (linuxserver image generates a random admin password on first
+# boot since 5.0; check `docker logs qbittorrent` after first start).
+
+services:
+  qbittorrent:
+    # Pin to the linuxserver 5.x version-tag family — that's the actively
+    # maintained qbit line. The earlier 20.04.x tag (briefly merged via
+    # #785) is the Ubuntu-20.04-base build, frozen on qbit 4.3.9. The
+    # version string "20.04.1" lexically looks newer than "5.2.1" but
+    # semantically refers to a different (older) qbit. This is the
+    # canonical example of the linuxserver tag-scheme trap.
+    image: lscr.io/linuxserver/qbittorrent:5.2.1@sha256:715d2bfbcf1cd3d734cbbd4fbd599eb7ea0642eaa079a372dd0d343f59516700
+    container_name: qbittorrent
+    restart: unless-stopped
+    environment:
+      - PUID=950      # truenas_admin
+      - PGID=950
+      - TZ=America/New_York
+      - WEBUI_PORT=8080
+      - TORRENTING_PORT=6881
+    volumes:
+      - /mnt/main/apps/qbittorrent/config:/config
+      - /mnt/main/media/movies:/downloads
+    ports:
+      - "8080:8080"
+      - "6881:6881/tcp"
+      - "6881:6881/udp"

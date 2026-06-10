@@ -14,7 +14,6 @@ resources:
   - renovate
   - renovate-automerge
   - snapshot
-  - synology-csi
   - unpoller
   - vector
   - zigbee2mqtt

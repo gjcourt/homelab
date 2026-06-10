@@ -31,7 +31,7 @@ the Lab VLAN — the source of the 2026-05-05 wired-device incident.
 Inside the cluster, Cilium runs as the CNI with VXLAN tunneling for
 pod-to-pod traffic, BGP for advertising LoadBalancer IPs to the UCGF, and
 L2 announcements for same-subnet ARP fallback. External traffic enters via
-Cloudflare Tunnel (no port-forwarding); internal traffic resolves through
+Cloudflare Tunnel (no port-forwarding by default, see invariant 3 for the one exception); internal traffic resolves through
 AdGuard (distributed via DHCP option 6 to every VLAN as
 `[10.42.2.43, 10.42.2.45]`), gets a wildcard-rewritten LB IP for
 `*.burntbytes.com`, and terminates TLS at a Cilium Gateway running Envoy
@@ -51,7 +51,7 @@ on a worker node.
 | Detailed Cilium config reference (Helm values, BGP CRDs)? | [../../reference/cilium.md](../../reference/cilium.md) |
 | Why does the current state look like this — what migrations happened? | [../../plans/](../../plans/) (search for `network`, `bgp`, `migration`) |
 
-## Top-level invariants (as of 2026-05-06)
+## Top-level invariants (as of 2026-05-17)
 
 These are facts that should hold true in steady state. Violations indicate a
 bug or incomplete migration.
@@ -62,10 +62,19 @@ bug or incomplete migration.
    Family, Guest, IoT) — see [addressing.md](addressing.md).
 2. **The cluster is on the Lab VLAN.** All 6 Talos nodes have IPs in
    `10.42.2.20–.25`. The UCGF gateway is `10.42.2.1`.
-3. **External traffic enters via Cloudflare Tunnel only.** No port-forwarding
-   on the UCGF; no router-side NAT for inbound. The tunnel
-   (`apps/base/cloudflare-tunnel/`) terminates inside the cluster and routes
-   to the production gateway.
+3. **External traffic enters via Cloudflare Tunnel only — with one documented
+   exception.** No general port-forwarding on the UCGF; no router-side NAT
+   for inbound HTTP/HTTPS. The tunnel (`apps/base/cloudflare-tunnel/`)
+   terminates inside the cluster and routes to the production gateway.
+
+   **Exception:** a single TCP+UDP port forward exists for the qBittorrent
+   peer port on the Synology NAS (`alcatraz`, `10.42.2.11`). BitTorrent
+   requires inbound peer connectivity to upload to firewalled peers and to
+   participate in DHT, and Cloudflare Tunnel cannot proxy non-HTTP traffic
+   on retail accounts. The forward is narrow (single port, single LAN
+   target) and the exposure is acknowledged: the WAN IP becomes visible to
+   every swarm peer, carrying DMCA-notice risk. Any additional port forwards
+   must be added to this list and justified here.
 4. **Internal hostnames resolve to LAN IPs via AdGuard split-horizon DNS.**
    `*.burntbytes.com` rewrites to a LB IP on the LAN; public Cloudflare DNS
    exists for some hosts but is overridden internally.
@@ -92,8 +101,9 @@ something we expect to defend by topology obscurity.
 
 What is in scope (i.e. what defends the network):
 
-- **Perimeter:** Cloudflare Tunnel handles all inbound (no port-forwarding,
-  no public LAN exposure). The UCGF firewall blocks unsolicited inbound.
+- **Perimeter:** Cloudflare Tunnel handles all inbound HTTP/HTTPS. The UCGF
+  firewall blocks unsolicited inbound except for the one documented port
+  forward (qBittorrent peer port → alcatraz; see invariant 3).
 - **Public services:** Authelia SSO + per-service authentication; TLS
   terminates at the Cilium gateway with cert-manager-issued certificates.
 - **Internal segmentation:** CiliumNetworkPolicy gates pod-to-pod traffic

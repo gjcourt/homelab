@@ -1,6 +1,7 @@
 ---
 status: complete
 last_modified: 2026-05-03
+summary: "Grafana cluster health dashboard suite"
 ---
 
 # Cluster Health Dashboards Plan

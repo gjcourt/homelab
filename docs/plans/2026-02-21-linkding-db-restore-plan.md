@@ -1,6 +1,7 @@
 ---
 status: planned
 last_modified: 2026-05-03
+summary: "Live DR drill: destroy and restore Linkding staging DB (never executed)"
 ---
 
 # Linkding Staging DB Restore Test Plan

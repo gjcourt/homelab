@@ -1,6 +1,7 @@
 ---
 status: abandoned
 last_modified: 2026-05-07
+summary: "Enable GPU P2P on hestia — blocked by 3-slot 4090 chassis constraints"
 ---
 
 # Hestia P2P enablement (sub-plan to vLLM frontier experiments)

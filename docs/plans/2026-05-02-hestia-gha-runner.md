@@ -1,6 +1,7 @@
 ---
-status: in-progress
-last_modified: 2026-05-03
+status: complete
+last_modified: 2026-06-10
+summary: "Self-hosted GHA runner on hestia for auto-deploy of Custom App compose changes"
 ---
 
 # Hestia self-hosted GHA runner — auto-deploy Custom App compose changes

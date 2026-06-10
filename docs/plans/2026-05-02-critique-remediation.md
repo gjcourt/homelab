@@ -1,6 +1,7 @@
 ---
 status: in-progress
 last_modified: 2026-05-04
+summary: "IaC hardening — close the 22 findings from the 2026-05-02 critique"
 ---
 
 # Critique Remediation Plan — IaC hardening for melodic-muse

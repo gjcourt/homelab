@@ -1,6 +1,7 @@
 ---
 status: planned
 last_modified: 2026-05-09
+summary: "Migrate democratic-csi to a least-privilege TrueNAS API key"
 ---
 
 # Democratic-CSI: Migrate from `truenas_admin` to a Least-Privilege Dedicated User

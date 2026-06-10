@@ -1,6 +1,7 @@
 ---
-status: in-progress
-last_modified: 2026-05-03
+status: complete
+last_modified: 2026-06-10
+summary: "Replace Authelia filesystem notifier with real SMTP (Gmail app password)"
 ---
 
 # Plan: Authelia SMTP notifier

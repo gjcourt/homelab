@@ -1,6 +1,7 @@
 ---
 status: planned
 last_modified: 2026-05-03
+summary: "Cardboard drawer insert design (75×32×12 cm) — physical project, no repo artifacts"
 ---
 
 # Drawer Insert Design — 75 × 32 × 12 cm

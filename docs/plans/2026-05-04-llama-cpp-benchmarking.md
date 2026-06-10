@@ -1,6 +1,7 @@
 ---
-status: planned
-last_modified: 2026-05-04
+status: abandoned
+last_modified: 2026-06-10
+summary: "Systematic llama.cpp benchmarking on hestia 4090s — moot after GPU sale"
 ---
 
 # Systematic llama.cpp benchmarking on hestia (RTX 4090)

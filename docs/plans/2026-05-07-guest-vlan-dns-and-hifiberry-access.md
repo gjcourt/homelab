@@ -1,6 +1,7 @@
 ---
 status: complete
 last_modified: 2026-06-10
+summary: "Guest VLAN DNS + HifiBerry speaker access (firewall rules + mDNS reflector)"
 ---
 
 # Guest VLAN DNS Recovery + HifiBerry Speaker Access

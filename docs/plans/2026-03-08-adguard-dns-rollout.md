@@ -1,6 +1,7 @@
 ---
-status: in-progress
-last_modified: 2026-05-03
+status: complete
+last_modified: 2026-06-10
+summary: "Roll AdGuard Home out as the primary LAN DNS resolver"
 ---
 
 # AdGuard DNS Rollout Plan

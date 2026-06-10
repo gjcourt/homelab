@@ -1,6 +1,7 @@
 ---
 status: complete
 last_modified: 2026-05-09
+summary: "Stability-first vLLM experiments on 2× 4090 — winner Qwen3.6-35B-A3B-AWQ TP=2"
 ---
 
 # Frontier-model experiments on hestia (2× RTX 4090) — stability first, perf second

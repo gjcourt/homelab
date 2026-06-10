@@ -1,6 +1,7 @@
 ---
 status: complete
 last_modified: 2026-05-03
+summary: "SSO rollout across all homelab apps"
 ---
 
 # Authelia SSO Rollout Plan

@@ -1,6 +1,7 @@
 ---
 status: planned
 last_modified: 2026-05-06
+summary: "Unified network resilience + BGP completion plan, phases A-F with GO gates"
 supersedes: docs/plans/2026-05-05-bgp-phase4-revision.md
 ---
 

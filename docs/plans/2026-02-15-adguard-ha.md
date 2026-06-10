@@ -1,6 +1,7 @@
 ---
-status: in-progress
-last_modified: 2026-05-03
+status: complete
+last_modified: 2026-06-10
+summary: "AdGuard Home high-availability: 2 replicas on distinct workers + config sync"
 ---
 
 # AdGuard Home — high availability

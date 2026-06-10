@@ -1,6 +1,7 @@
 ---
 status: complete
 last_modified: 2026-05-02
+summary: "Rewrite all app and infra documentation"
 ---
 
 # Documentation Rewrite Plan

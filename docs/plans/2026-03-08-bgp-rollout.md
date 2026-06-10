@@ -1,7 +1,9 @@
 ---
-status: partially-reverted
-last_modified: 2026-05-05
+status: superseded
+last_modified: 2026-06-10
 completed: 2026-05-05
+superseded_by: docs/plans/2026-05-06-network-resilience-and-bgp-completion.md
+summary: "L2 → BGP LoadBalancer advertisement with the UCGF; phases 1-3 live, phase 4 reverted"
 ---
 
 # BGP Rollout Plan — UniFi Cloud Gateway Fiber + Cilium

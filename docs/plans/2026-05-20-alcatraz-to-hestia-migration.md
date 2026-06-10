@@ -1,6 +1,7 @@
 ---
 status: in-progress
 last_modified: 2026-05-21
+summary: "Migrate non-photo data (~870 GiB iSCSI + 3 TiB NFS media) off alcatraz onto hestia ZFS"
 ---
 
 # Migrate non-image data: alcatraz → hestia (+ photo backup)

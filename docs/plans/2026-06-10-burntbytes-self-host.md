@@ -1,6 +1,7 @@
 ---
-status: in_progress
+status: in-progress
 last_modified: 2026-06-10
+summary: "Self-host the burntbytes.com blog; hidden-origin live, apex + Cloudflare swing pending"
 ---
 
 # Self-host burntbytes.com on the Talos homelab

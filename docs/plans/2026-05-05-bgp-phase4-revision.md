@@ -2,6 +2,7 @@
 status: superseded
 last_modified: 2026-05-06
 superseded_by: docs/plans/2026-05-06-network-resilience-and-bgp-completion.md
+summary: "Revised BGP phase 4 (safe L2 removal gate) after wired-client ARP regression"
 ---
 
 # BGP Phase 4 Revision — Safe L2 Removal Gate

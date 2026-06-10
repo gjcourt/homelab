@@ -1,6 +1,7 @@
 ---
 status: complete
 last_modified: 2026-03-06
+summary: "Migrate the LAN from 192.168.5.0/24 to 10.42.2.0/24"
 ---
 
 # Network Migration Plan: 192.168.5.0/24 → 10.42.2.0/24

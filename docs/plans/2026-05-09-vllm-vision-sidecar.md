@@ -1,6 +1,7 @@
 ---
 status: abandoned
 last_modified: 2026-05-09
+summary: "vLLM vision sidecar — reverted on quality (47% vs 70% target on real eBay photos)"
 ---
 
 ## Status: abandoned (vision quality on Qwen3-VL-2B-FP8 insufficient)

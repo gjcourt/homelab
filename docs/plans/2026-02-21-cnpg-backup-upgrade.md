@@ -1,6 +1,7 @@
 ---
 status: complete
 last_modified: 2026-02-27
+summary: "Migrate CNPG backups to Barman Cloud Plugin"
 ---
 
 # CNPG Backup Upgrade Plan

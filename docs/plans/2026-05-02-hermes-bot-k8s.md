@@ -1,6 +1,8 @@
 ---
 status: in-progress
-last_modified: 2026-05-03
+last_modified: 2026-06-10
+blocked_on: "LLM backend gone (RTX 4090s sold 2026-05-16); deployment scaled to 0"
+summary: "Hermes agent (Signal mode) on melodic-muse so the bot is laptop-independent"
 ---
 
 # Hermes-bot — always-on Signal agent on melodic-muse

@@ -1,7 +1,10 @@
-# Hestia as SOT for family/ + homes/
+---
+status: in-progress
+last_modified: 2026-06-10
+summary: "Make hestia the source of truth for family/ + homes/; repoint Immich NFS PV; alcatraz narrows to upload target"
+---
 
-Status: draft
-Last modified: 2026-06-01
+# Hestia as SOT for family/ + homes/
 
 ## Architecture goal
 

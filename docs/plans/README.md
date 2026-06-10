@@ -22,6 +22,7 @@ Every plan document **must** include YAML front-matter at the top of the file wi
 ---
 status: <value>
 last_modified: YYYY-MM-DD
+summary: "One line (<120 chars) describing the work — feeds the generated index below"
 ---
 ```
 
@@ -39,33 +40,78 @@ last_modified: YYYY-MM-DD
 
 Use `YYYY-MM-DD` format. Update this field whenever the document is meaningfully changed.
 
+### Optional fields
+
+| Field | Use |
+| :--- | :--- |
+| `blocked_on: "<reason>"` | An `in-progress` plan that cannot advance — say what unblocks it. |
+| `superseded_by: docs/plans/<file>` | Required on `superseded` plans; points at the replacement. |
+
+When a plan's status changes, update `docs/STATUS.md` in the same PR.
+(The dashboard lands with Phase B of
+[2026-06-10-docs-reorg-status-dashboard.md](2026-06-10-docs-reorg-status-dashboard.md);
+until then this step is a no-op.)
+
 ## Document Index
 
-Sorted by filing date (newest first).
+Grouped by status, newest filing date first. **Generated — do not edit by
+hand.** Edit plan frontmatter and run `make plans-index` (CI fails on drift;
+see `scripts/plans-index/`).
 
-| File | Status | Description |
+<!-- BEGIN PLANS INDEX -->
+
+### In progress (8)
+
+| File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-06-01-hestia-photos-sot.md](2026-06-01-hestia-photos-sot.md) | `draft` | Make hestia the source-of-truth for `alcatraz:/volume1/family/` (everything except video, already migrated) + `alcatraz:/volume1/homes/` (~470 GB net-new + rename of the existing 425 GB immich-photos dataset). Repoints Immich's NFS PV to hestia. Alcatraz role narrows to phone-upload target + passive copy. |
-| [2026-05-20-alcatraz-to-hestia-migration.md](2026-05-20-alcatraz-to-hestia-migration.md) | `in-progress` | Migrate all non-photo data (~870 GiB iSCSI + 3 TiB NFS media) off alcatraz onto hestia ZFS; Phase 1.4 moves qBittorrent to a hestia Custom App; Phase 2 adds rsync+ZFS-snapshot backup of the 5 TiB photo library |
-| [2026-05-09-vllm-vision-sidecar.md](2026-05-09-vllm-vision-sidecar.md) | `abandoned` | Sidecar built and stability-tested (co-tenancy soak passed, 0 errors); reverted on quality — Qwen3-VL-2B-FP8 scored 47% on real eBay photos vs 70% target |
-| [2026-05-07-hestia-p2p-enablement.md](2026-05-07-hestia-p2p-enablement.md) | `abandoned` | Sub-plan: enable GPU P2P on hestia (blocked: 3-slot 4090s can't physically swap to PCIE1+PCIE3 in current chassis) |
-| [2026-05-07-vllm-frontier-model-experiments.md](2026-05-07-vllm-frontier-model-experiments.md) | `complete` | Stability-first vLLM experiments on hestia (2× 4090, no P2P) — winner: Qwen3.6-35B-A3B-AWQ TP=2, 194 t/s, beats prior llama.cpp prod |
-| [2026-05-04-llama-cpp-benchmarking.md](2026-05-04-llama-cpp-benchmarking.md) | `planned` | Systematic benchmarking methodology for llama.cpp on hestia 4090 (after #434/#441) |
-| [2026-05-03-snapcast-hifiberry-rollout.md](2026-05-03-snapcast-hifiberry-rollout.md) | `planned` | Wire kitchen + living-room HifiBerries as snapclients of the in-cluster snapserver |
-| [2026-05-02-hestia-gha-runner.md](2026-05-02-hestia-gha-runner.md) | `in-progress` | Self-hosted GHA runner on hestia for auto-deploy of Custom App compose changes |
-| [2026-05-02-hermes-bot-k8s.md](2026-05-02-hermes-bot-k8s.md) | `in-progress` | Hermes agent (Signal mode) deployed to melodic-muse so the bot is laptop-independent |
-| [2026-05-02-signal-cli-hermes-rollout.md](2026-05-02-signal-cli-hermes-rollout.md) | `superseded` | Signal-cli + signal-bridge stack to feed the Hermes agent (replaced by hermes-bot-k8s.md) |
-| [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | `complete` | IaC hardening — close the 22 findings from the 2026-05-02 critique |
-| [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | `planned` | Navidrome → Mopidy → Snapcast → HifiBerry whole-house audio |
-| [2026-03-08-drawer-inserts.md](2026-03-08-drawer-inserts.md) | `planned` | Cardboard drawer insert design (75×32×12 cm) |
-| [2026-03-08-bgp-rollout.md](2026-03-08-bgp-rollout.md) | `planned` | Move LoadBalancer IP advertisement from L2 to BGP with the UCGF |
-| [2026-03-08-adguard-dns-rollout.md](2026-03-08-adguard-dns-rollout.md) | `in-progress` | Roll AdGuard Home as the homelab DNS resolver |
-| [2026-02-28-network-migration-192-to-10-42-2.md](2026-02-28-network-migration-192-to-10-42-2.md) | `complete` | Migrate the LAN from 192.168.5.0/24 to 10.42.2.0/24 |
-| [2026-02-21-linkding-db-restore-plan.md](2026-02-21-linkding-db-restore-plan.md) | `planned` | Live DR test: destroy and restore Linkding staging DB |
-| [2026-02-21-documentation-rewrite-plan.md](2026-02-21-documentation-rewrite-plan.md) | `complete` | Rewrite all app and infra documentation |
-| [2026-02-21-cnpg-backup-upgrade.md](2026-02-21-cnpg-backup-upgrade.md) | `complete` | Migrate CNPG backups to Barman Cloud Plugin |
-| [2026-02-21-cluster-health-dashboards-plan.md](2026-02-21-cluster-health-dashboards-plan.md) | `complete` | Grafana cluster health dashboard suite |
-| [2026-02-21-app-health-dashboards-plan.md](2026-02-21-app-health-dashboards-plan.md) | `complete` | Grafana application health dashboards |
-| [2026-02-17-authelia-smtp-notifier.md](2026-02-17-authelia-smtp-notifier.md) | `in-progress` | Replace filesystem notifier with real SMTP |
-| [2026-02-15-adguard-ha.md](2026-02-15-adguard-ha.md) | `planned` | AdGuard Home high-availability with config sync |
-| [2026-02-11-authelia-sso-rollout.md](2026-02-11-authelia-sso-rollout.md) | `complete` | SSO rollout across all homelab apps |
+| [2026-06-10-docs-reorg-status-dashboard.md](2026-06-10-docs-reorg-status-dashboard.md) | 2026-06-10 | Docs status legibility: plan frontmatter cleanup, generated index, STATUS.md dashboard, HOMELAB.md migration |
+| [2026-06-10-burntbytes-self-host.md](2026-06-10-burntbytes-self-host.md) | 2026-06-10 | Self-host the burntbytes.com blog; hidden-origin live, apex + Cloudflare swing pending |
+| [2026-06-01-hestia-photos-sot.md](2026-06-01-hestia-photos-sot.md) | 2026-06-10 | Make hestia the source of truth for family/ + homes/; repoint Immich NFS PV; alcatraz narrows to upload target |
+| [2026-05-20-alcatraz-to-hestia-migration.md](2026-05-20-alcatraz-to-hestia-migration.md) | 2026-05-21 | Migrate non-photo data (~870 GiB iSCSI + 3 TiB NFS media) off alcatraz onto hestia ZFS |
+| [2026-05-15-hestia-memory-benchmark.md](2026-05-15-hestia-memory-benchmark.md) | 2026-05-15 | STREAM + Intel MLC bandwidth benchmark: 6-DIMM baseline vs 8-DIMM comparison |
+| [2026-05-03-snapcast-hifiberry-rollout.md](2026-05-03-snapcast-hifiberry-rollout.md) | 2026-06-10 | Wire kitchen + living-room HifiBerries as snapclients of the in-cluster snapserver |
+| [2026-05-02-hermes-bot-k8s.md](2026-05-02-hermes-bot-k8s.md) | 2026-06-10 | Hermes agent (Signal mode) on melodic-muse so the bot is laptop-independent — **blocked:** LLM backend gone (RTX 4090s sold 2026-05-16); deployment scaled to 0 |
+| [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
+
+### Planned (6)
+
+| File | Last modified | Summary |
+| :--- | :--- | :--- |
+| [2026-06-02-immich-vectorchord-migration.md](2026-06-02-immich-vectorchord-migration.md) | 2026-06-10 | Migrate Immich CNPG from pgvecto.rs to VectorChord |
+| [2026-05-09-monitoring-enhancement.md](2026-05-09-monitoring-enhancement.md) | 2026-06-10 | ServiceMonitor coverage audit, critical-alert Signal routing, Flux reconciliation alerts |
+| [2026-05-09-democratic-csi-least-privilege-key.md](2026-05-09-democratic-csi-least-privilege-key.md) | 2026-05-09 | Migrate democratic-csi to a least-privilege TrueNAS API key |
+| [2026-05-06-network-resilience-and-bgp-completion.md](2026-05-06-network-resilience-and-bgp-completion.md) | 2026-05-06 | Unified network resilience + BGP completion plan, phases A-F with GO gates |
+| [2026-03-08-drawer-inserts.md](2026-03-08-drawer-inserts.md) | 2026-05-03 | Cardboard drawer insert design (75×32×12 cm) — physical project, no repo artifacts |
+| [2026-02-21-linkding-db-restore-plan.md](2026-02-21-linkding-db-restore-plan.md) | 2026-05-03 | Live DR drill: destroy and restore Linkding staging DB (never executed) |
+
+### Complete (14)
+
+| File | Last modified | Summary |
+| :--- | :--- | :--- |
+| [2026-05-07-vllm-frontier-model-experiments.md](2026-05-07-vllm-frontier-model-experiments.md) | 2026-05-09 | Stability-first vLLM experiments on 2× 4090 — winner Qwen3.6-35B-A3B-AWQ TP=2 |
+| [2026-05-07-guest-vlan-dns-and-hifiberry-access.md](2026-05-07-guest-vlan-dns-and-hifiberry-access.md) | 2026-06-10 | Guest VLAN DNS + HifiBerry speaker access (firewall rules + mDNS reflector) |
+| [2026-05-04-phase2-5-completion.md](2026-05-04-phase2-5-completion.md) | 2026-06-10 | Close critique phases 2-5: probe coverage and liveness/readiness gaps (PRs A-D) |
+| [2026-05-02-hestia-gha-runner.md](2026-05-02-hestia-gha-runner.md) | 2026-06-10 | Self-hosted GHA runner on hestia for auto-deploy of Custom App compose changes |
+| [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry whole-house audio pipeline |
+| [2026-03-08-adguard-dns-rollout.md](2026-03-08-adguard-dns-rollout.md) | 2026-06-10 | Roll AdGuard Home out as the primary LAN DNS resolver |
+| [2026-02-28-network-migration-192-to-10-42-2.md](2026-02-28-network-migration-192-to-10-42-2.md) | 2026-03-06 | Migrate the LAN from 192.168.5.0/24 to 10.42.2.0/24 |
+| [2026-02-21-documentation-rewrite-plan.md](2026-02-21-documentation-rewrite-plan.md) | 2026-05-02 | Rewrite all app and infra documentation |
+| [2026-02-21-cnpg-backup-upgrade.md](2026-02-21-cnpg-backup-upgrade.md) | 2026-02-27 | Migrate CNPG backups to Barman Cloud Plugin |
+| [2026-02-21-cluster-health-dashboards-plan.md](2026-02-21-cluster-health-dashboards-plan.md) | 2026-05-03 | Grafana cluster health dashboard suite |
+| [2026-02-21-app-health-dashboards-plan.md](2026-02-21-app-health-dashboards-plan.md) | 2026-05-03 | Grafana application health dashboards |
+| [2026-02-17-authelia-smtp-notifier.md](2026-02-17-authelia-smtp-notifier.md) | 2026-06-10 | Replace Authelia filesystem notifier with real SMTP (Gmail app password) |
+| [2026-02-15-adguard-ha.md](2026-02-15-adguard-ha.md) | 2026-06-10 | AdGuard Home high-availability: 2 replicas on distinct workers + config sync |
+| [2026-02-11-authelia-sso-rollout.md](2026-02-11-authelia-sso-rollout.md) | 2026-05-03 | SSO rollout across all homelab apps |
+
+### Superseded / abandoned (6)
+
+| File | Last modified | Summary |
+| :--- | :--- | :--- |
+| [2026-05-09-vllm-vision-sidecar.md](2026-05-09-vllm-vision-sidecar.md) | 2026-05-09 | vLLM vision sidecar — reverted on quality (47% vs 70% target on real eBay photos) |
+| [2026-05-07-hestia-p2p-enablement.md](2026-05-07-hestia-p2p-enablement.md) | 2026-05-07 | Enable GPU P2P on hestia — blocked by 3-slot 4090 chassis constraints |
+| [2026-05-05-bgp-phase4-revision.md](2026-05-05-bgp-phase4-revision.md) | 2026-05-06 | Revised BGP phase 4 (safe L2 removal gate) after wired-client ARP regression — superseded by [2026-05-06-network-resilience-and-bgp-completion.md](2026-05-06-network-resilience-and-bgp-completion.md) |
+| [2026-05-04-llama-cpp-benchmarking.md](2026-05-04-llama-cpp-benchmarking.md) | 2026-06-10 | Systematic llama.cpp benchmarking on hestia 4090s — moot after GPU sale |
+| [2026-05-02-signal-cli-hermes-rollout.md](2026-05-02-signal-cli-hermes-rollout.md) | 2026-05-03 | Signal-cli + signal-bridge as TrueNAS Custom App; went k8s-native instead — superseded by [2026-05-02-hermes-bot-k8s.md](2026-05-02-hermes-bot-k8s.md) |
+| [2026-03-08-bgp-rollout.md](2026-03-08-bgp-rollout.md) | 2026-06-10 | L2 → BGP LoadBalancer advertisement with the UCGF; phases 1-3 live, phase 4 reverted — superseded by [2026-05-06-network-resilience-and-bgp-completion.md](2026-05-06-network-resilience-and-bgp-completion.md) |
+
+<!-- END PLANS INDEX -->

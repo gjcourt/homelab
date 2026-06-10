@@ -1,6 +1,7 @@
 ---
-status: draft
-last_modified: 2026-05-09
+status: planned
+last_modified: 2026-06-10
+summary: "ServiceMonitor coverage audit, critical-alert Signal routing, Flux reconciliation alerts"
 ---
 
 # Monitoring Coverage & Signal Routing

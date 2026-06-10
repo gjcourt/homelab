@@ -1,6 +1,7 @@
 ---
-status: in_progress
+status: in-progress
 last_modified: 2026-05-15
+summary: "STREAM + Intel MLC bandwidth benchmark: 6-DIMM baseline vs 8-DIMM comparison"
 ---
 
 # Hestia memory bandwidth benchmark — 6 DIMM vs 8 DIMM

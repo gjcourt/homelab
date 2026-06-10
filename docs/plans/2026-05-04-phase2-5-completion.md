@@ -1,6 +1,7 @@
 ---
-status: in-progress
-last_modified: 2026-05-04
+status: complete
+last_modified: 2026-06-10
+summary: "Close critique phases 2-5: probe coverage and liveness/readiness gaps (PRs A-D)"
 parent_plan: 2026-05-02-critique-remediation.md
 ---
 

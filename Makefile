@@ -43,6 +43,14 @@ format: fmt-yaml ## Alias for fmt-yaml
 lint-shell: ## Run shellcheck on scripts
 	docker run --rm -v "$(PWD)":/work -w /work $(SHELLCHECK_IMAGE) scripts/*.sh
 
+.PHONY: plans-index
+plans-index: ## Regenerate the docs/plans Document Index from frontmatter
+	cd scripts/plans-index && go run . -write
+
+.PHONY: plans-index-check
+plans-index-check: ## Verify docs/plans frontmatter and index are in sync
+	cd scripts/plans-index && go run . -check
+
 .PHONY: test
 test: test-kustomize test-kubeconform fmt-yaml-check ## Render + validate manifests
 

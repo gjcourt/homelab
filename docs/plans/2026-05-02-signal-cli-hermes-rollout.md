@@ -1,6 +1,8 @@
 ---
 status: superseded
 last_modified: 2026-05-03
+superseded_by: docs/plans/2026-05-02-hermes-bot-k8s.md
+summary: "Signal-cli + signal-bridge as TrueNAS Custom App; went k8s-native instead"
 ---
 
 # Signal-cli + Hermes Rollout — TrueNAS Custom App

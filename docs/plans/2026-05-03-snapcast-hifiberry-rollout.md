@@ -1,6 +1,7 @@
 ---
-status: planned
-last_modified: 2026-05-03
+status: in-progress
+last_modified: 2026-06-10
+summary: "Wire kitchen + living-room HifiBerries as snapclients of the in-cluster snapserver"
 ---
 
 # Snapcast — HifiBerry client rollout

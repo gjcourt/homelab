@@ -1,7 +1,10 @@
-# Immich: migrate pgvecto.rs → VectorChord
+---
+status: planned
+last_modified: 2026-06-10
+summary: "Migrate Immich CNPG from pgvecto.rs to VectorChord"
+---
 
-Status: draft
-Last modified: 2026-06-02
+# Immich: migrate pgvecto.rs → VectorChord
 
 ## Why now
 

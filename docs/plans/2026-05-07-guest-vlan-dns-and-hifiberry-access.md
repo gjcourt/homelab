@@ -1,9 +1,50 @@
 ---
-status: planned
-last_modified: 2026-05-23
+status: complete
+last_modified: 2026-06-10
 ---
 
 # Guest VLAN DNS Recovery + HifiBerry Speaker Access
+
+> **Execution complete (2026-06-09 / 2026-06-10).** All three phases
+> landed end-to-end:
+>
+> - **Phase A** — Guest DHCP DNS already on Cloudflare `1.1.1.2 / 1.0.0.2`
+>   (malware-filtered) as a prior live fix; superset of the plan's
+>   vanilla Cloudflare. Skipped formal Phase B (AdGuard migration)
+>   tonight as a polish item — `1.1.1.2` is a reasonable terminal state.
+>   _Update: Phase B executed shortly after — see below._
+> - **Phase B** — UniFi firewall policy `Guest → AdGuard DNS` (TCP/UDP
+>   53 to `10.42.2.43`, `10.42.2.45`) created, validated on a single
+>   device with manual override, then enabled; Guest DHCP DNS flipped
+>   back to AdGuard. AdGuard's filter confirmed active from CoS
+>   (`doubleclick.net → 0.0.0.0`).
+> - **Phase C** — UniFi firewall policy `Guest → HifiBerry speakers`
+>   to `10.42.2.37` / `.38` / `.39` on TCP `80, 1705, 1780, 4070, 7000`
+>   (port `4070` added after Spotify-Connect ephemeral-port debugging,
+>   see Open items below). SSH (`:22`) explicitly excluded and
+>   verified still blocked. mDNS reflector confirmed already enabled
+>   on UCGF (`enable-reflector=yes`, `allow-interfaces` includes
+>   `br6`, `_raop._tcp` + `_airplay._tcp` + `_spotify-connect._tcp`
+>   in reflect filters). avahi `SIGHUP`'d once to clear stale cache.
+>   iOS Spotify on Chamber of Secrets now sees `Kitchen` and
+>   `Living-Room` essentially instantly.
+>
+> Plan's Open Items resolution:
+> - Pinned Snapcast LB IP — verified `10.42.2.37` matches.
+> - AdGuard service IPs — verified `10.42.2.43` / `.45` match.
+> - mDNS reflector scope — confirmed cross-VLAN reflection works; no
+>   noticeable clutter in iOS pickers from non-allowlisted services.
+> - Logging volume — left enabled; will revisit if UCGF event log
+>   floods.
+> - **New gotcha surfaced during execution (not in original plan):**
+>   `go-librespot`'s Spotify Connect zeroconf endpoint binds an
+>   ephemeral high port by default (`43077` / `43991`). The plan's
+>   AirPlay/web/Snapcast allow-list didn't cover it, so iOS Spotify
+>   saw the mDNS announcement but couldn't complete the discovery
+>   handshake. Fix: set `zeroconf_port: 4070` in both HifiBerries'
+>   `/etc/go-librespot/config.yml`, restart `spotify.service`, add
+>   `4070` to the firewall policy. See memory
+>   `feedback_spotify_connect_ephemeral_port.md`.
 
 > **Context:** The "Chamber of Secrets" SSID (Guest VLAN, `br6`,
 > `10.42.6.0/24`) lets clients associate and obtain a DHCP lease but

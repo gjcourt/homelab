@@ -1,5 +1,13 @@
 # Hermes
 
+> **Status (2026-06-10): scaled to 0 — no backend.** Both bots are deployed but
+> have no LLM to talk to: the llama.cpp backend ran on hestia's GPUs, which were
+> sold 2026-05-16. The Signal account `+16179397251` and the in-cluster
+> `signal-cli` transport still exist (also scaled to 0). Restoring Hermes needs
+> a new inference backend — GPU hardware or a hosted-API endpoint in the bot
+> config. The architecture below documents the intended wiring, not the current
+> running state.
+
 ## 1. Overview
 
 Hermes is the [Hermes Agent](https://hermes-agent.nousresearch.com/) from NousResearch deployed in Signal-only mode. It runs as a long-lived gateway that listens for direct messages from allow-listed phone numbers, forwards each conversation to a local LLM, and replies back over Signal.

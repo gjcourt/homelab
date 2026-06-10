@@ -2,23 +2,46 @@
 
 | Attribute | Value |
 |-----------|-------|
-| SSH | `truenas_admin@10.42.2.10` |
-| Role | NAS + GPU inference host |
+| SSH | `truenas_admin@10.42.2.10` (no passwordless sudo; `/home` is `noexec`) |
+| IPMI | ASRock Rack BMC at `10.42.2.13` (switch port 48) |
+| Role | TrueNAS storage + general-purpose compute (no GPUs since 2026-05-16) |
 | OS | TrueNAS SCALE |
 | Docker | 29.0.4 (managed by TrueNAS Apps) |
 | Arch | x86_64 |
+
+## Hardware
+
+| Component | Detail |
+|-----------|--------|
+| Board | ASRock Rack SIENAD8-2L2T (8 DIMM slots over 6 memory channels — 2 channels share slots) |
+| CPU | AMD EPYC 8324P (32-core Siena, Zen 4c), NPS1 (1 NUMA node) |
+| RAM | DDR5, populated 6× (1DPC × 6 channels = full speed); 8-DIMM mode forces 2 channels into 2DPC and derates the bus |
+| GPUs | **None** — 2× RTX 4090 sold 2026-05-16. `nvidia-smi` fails on the host; this is expected. |
+| Storage | pool `main` at `/mnt/main` (~21 TB) |
+
+### Network interfaces
+
+- **Management NIC** `enp201s0` — 1 GbE onboard, static `10.42.2.10/24` (active interface).
+- **25 GbE Mellanox NIC** — removed 2026-05-14 (overheating → PCIe BadTLP errors and instability); switch ports 51/52 LAG config preserved but inactive.
+- **IPMI NIC** — ASRock Rack BMC at `10.42.2.13` (switch port 48, DHCP on the Lab VLAN).
 
 ## Services
 
 All services on hestia run as **TrueNAS Custom Apps** (SCALE UI → Apps → Custom App).
 The compose YAML in each subdirectory is the canonical source.
 
-| Service | Directory | Port | Notes |
-|---------|-----------|------|-------|
-| signal | `signal/` | 8080 | signal-cli daemon + signal-bridge SSE relay |
-| llms | `llms/` | varies | llama.cpp / vLLM inference (GPU box) |
-| monitoring | `monitoring/` | varies | nvtop and GPU metrics |
-| gha-runner | `actions-runner/` | — | Self-hosted GitHub Actions runner; auto-deploys other hestia apps |
+| Service | Directory | Notes |
+|---------|-----------|-------|
+| gha-runner | `actions-runner/` | Self-hosted GitHub Actions runner; auto-deploys other hestia apps |
+| immich-photos-backup | `immich-photos-backup/` | Daily rsync of the Immich photo library from alcatraz into ZFS |
+| qbittorrent | `qbittorrent/` | P2P client, private-tracker downloads |
+| thermalscope | `thermalscope/` | Thermal + power telemetry, Prometheus metrics over host networking |
+| ipmi-exporter | `monitoring/` | IPMI metrics (`docker-compose-ipmi-exporter.yml`) |
+| memory bench | `bench/memory/` | On-demand STREAM + Intel MLC bandwidth benchmark (not a long-running app) |
+| llms | `llms/` | **Archived 2026-05-16** — llama.cpp / vLLM inference; GPUs sold |
+| monitoring (GPU) | `monitoring/` | **Archived** — `nvtop` + GPU metrics; GPUs sold |
+
+> signal-cli moved off hestia into the cluster (`apps/base/signal-cli/`, namespace `signal-cli`) — the old `signal/` Custom App was removed. Both it and the `hermes` bots are currently scaled to 0 (no LLM backend since the GPU sale).
 
 ## Deploying changes
 
@@ -72,8 +95,9 @@ Operator-owned datasets (survive App deletion):
 
 | Dataset | Mount | Used by |
 |---------|-------|---------|
-| `tank/apps/signal` | `/mnt/tank/apps/signal` | signal-cli identity data |
 | `main/apps/actions-runner` | `/mnt/main/apps/actions-runner` | runner registration + workspace |
+| `main/family/images/photos` | `/mnt/main/family/images/photos` | Immich photo-backup rsync target |
+| `tank/apps/signal` | `/mnt/tank/apps/signal` | Legacy — signal-cli identity data from the removed Custom App (signal-cli now runs in-cluster) |
 
 ## Common operations
 

@@ -6,9 +6,11 @@ GitOps-managed Kubernetes cluster, powered by [Flux](https://fluxcd.io/) and [Ku
 
 This repository drives the state of the home infrastructure. It uses a **GitOps** workflow: changes are made in Git (via Pull Requests), and Flux reconciles the cluster to match this state.
 
-**Cluster**: `melodic-muse` (Single physical cluster)
-**Storage**: Synology NAS (iSCSI via CSI)
-**Networking**: Cilium (CNI + Gateway API)
+**Cluster**: `melodic-muse` — 6 Talos nodes (3 control-plane + 3 workers)
+**Storage**: Synology + hestia (TrueNAS) via democratic-csi iSCSI; hestia NFS backs the photo library
+**Networking**: Cilium (CNI + Gateway API), L2 + BGP load-balancer advertisement
+
+> **Current state, in-flight work, and known issues:** [`docs/STATUS.md`](docs/STATUS.md).
 
 ## 🏗 Architecture
 
@@ -47,10 +49,14 @@ The repository follows a **dry (Don't Repeat Yourself)** structure using Kustomi
     *   [`staging/`](apps/staging/) - Test overlays.
 *   [`clusters/`](clusters/) - Flux entrypoints.
 *   [`infra/`](infra/) - System-level controllers & configs.
+*   [`hosts/`](hosts/) - Non-Kubernetes host config (hestia TrueNAS Custom Apps, compose).
+*   [`images/`](images/) - Custom container image definitions.
 *   [`docs/`](docs/) - Runbooks and architecture notes.
 *   [`scripts/`](scripts/) - Automation & maintenance tools.
 
 ## 🔎 Status
 
+- **Current state / in-flight / known issues**: [docs/STATUS.md](docs/STATUS.md)
+- **Plans index** (status-grouped): [docs/plans/README.md](docs/plans/README.md)
 - **Applications Index**: [See apps/README.md](apps/README.md)
 - **Infrastructure Index**: [See infra/README.md](infra/README.md)

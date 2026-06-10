@@ -1,12 +1,21 @@
-# llms — GPU inference on hestia
+# llms — GPU inference on hestia (archived)
 
-> **Disabled 2026-05-10:** GPUs removed from hestia for sale. All compose
-> files in this directory are inactive — the SCALE Custom Apps (`llama`,
-> `vllm`) have been stopped and should not be restarted until GPU
-> hardware is restored. Downstream consumers (`openwebui`, `hermes`,
-> `hermes-callee`) are scaled to 0 in the apps overlays.
+> **Archived 2026-05-16:** the 2× RTX 4090 were **sold** — hestia has no GPUs.
+> Every compose file here is archived (`x-deploy.archived: true`) and the SCALE
+> Custom Apps have been deleted:
+>
+> ```bash
+> midclt call app.delete vllm
+> midclt call app.delete vllm-vision
+> midclt call app.delete ollama
+> ```
+>
+> Downstream consumers (`hermes`, `hermes-callee`, `signal-cli`) are scaled to 0
+> in the apps overlays. These files are kept for historical reference and as a
+> starting point if GPU hardware is ever re-added; they are **not** a
+> "restore when the GPUs come back" plan.
 
-LLM inference services for the GPU box on hestia (RTX 4090, 24 GB VRAM).
+LLM inference services from when hestia had a GPU box (RTX 4090, 24 GB VRAM).
 
 ## Services
 

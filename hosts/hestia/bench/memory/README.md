@@ -7,11 +7,6 @@ Measures memory bandwidth and latency on hestia (ASRock Rack SIENAD8-2L2T, EPYC 
 - Intel MLC tarball — download from <https://www.intel.com/content/www/us/en/developer/articles/tool/intelr-memory-latency-checker.html>, accept the EULA, and place `mlc_v3.12.tgz` in this directory before `docker build`.
 - Docker available on the host.
 - Root / `sudo` access (MLC and `numactl` pinning require it).
-- vLLM stoppable. Operator owns the recipe; recap:
-  ```bash
-  midclt call app.stop vllm
-  nvidia-smi   # confirm GPUs idle, no PIDs holding VRAM
-  ```
 - `cpupower` installed (`apt-get install linux-cpupower`) or fallback: write directly to `/sys/devices/system/cpu/cpu*/cpufreq/scaling_governor`.
 - SIENAD8-2L2T board manual on hand for the DIMM-slot map: `~/Downloads/SIENAD8-2L2T.pdf` (slot layout on p. 12-13).
 
@@ -25,16 +20,12 @@ The build will fail loudly if `mlc_v3.12.tgz` is missing from the build context.
 
 ## Run
 
-### 1. Stop vLLM
+> hestia has no GPUs since 2026-05-16 — earlier revisions told you to stop
+> vLLM and check `nvidia-smi` first; there's no GPU workload to quiesce now.
+> For the cleanest numbers, still quiesce other heavy tenants (the rsync
+> backup, qBittorrent) before a run.
 
-```bash
-midclt call app.stop vllm
-nvidia-smi                      # both GPUs must show 0 MiB used and no PIDs
-```
-
-If vLLM does not stop cleanly within ~60s, see Troubleshooting.
-
-### 2. Apply controls and benchmark
+### Apply controls and benchmark
 
 ```bash
 # Optional: override results location (default lives on the boot pool)
@@ -75,13 +66,7 @@ Filenames are `<label>-<utc-ts>.jsonl` (e.g. `6dimm-2026-05-15T14-23-45Z.jsonl`)
 
 Diff the two JSONLs into a single markdown comparison under `docs/research/`. The aggregate script computes Δ% on STREAM Triad, idle latency delta, and a small loaded-latency table.
 
-## Restore service
-
-```bash
-midclt call app.start vllm
-# smoke test
-curl -sS http://10.42.2.10:8000/v1/models | jq '.data[].id'
-```
+The 6-DIMM baseline (2026-05-16) is captured in [`docs/research/2026-05-16-hestia-memory-bench-results.md`](../../../../docs/research/2026-05-16-hestia-memory-bench-results.md); the 8-DIMM comparison is still pending a physical DIMM swap.
 
 ## Interpreting results
 
@@ -97,7 +82,6 @@ curl -sS http://10.42.2.10:8000/v1/models | jq '.data[].id'
 | `mlc_v3.12.tgz not found` at build time | Tarball wasn't placed next to the Dockerfile | Download from Intel, accept EULA, drop in this directory, rebuild. |
 | 8DIMM didn't derate the bus | CPU silicon binning or BIOS auto-bump kept the bus at 4800 | Inspect the preflight JSON for `Configured Memory Speed` (from `dmidecode -t memory`). If it really is 4800 at 2DPC, document it — that's the answer. |
 | Run-to-run stddev > 2% | C-states or turbo bouncing leaked through | Check `/sys/devices/system/cpu/cpu0/cpuidle/state*/disable` — all non-C0/C1 should be `1`. Retry with `idle=poll` on the kernel cmdline. |
-| vLLM won't stop cleanly | Worker stuck on a CUDA op | Grace period 60s, then `midclt call app.kill vllm`. Confirm with `nvidia-smi`. |
 
 ## Related
 

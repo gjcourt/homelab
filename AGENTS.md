@@ -84,12 +84,14 @@ See `docs/architecture/` for component-level architecture (DNS strategy, gateway
 4. New apps wired into the right `apps/{staging,production}/kustomization.yaml`
 5. Namespace follows the convention (production unsuffixed, staging `-stage`)
 6. New CNPG clusters: iSCSI PVC provisioned and StorageClass correct
-7. Docs updated if the change affects a runbook or architecture doc
+7. Docs updated if the change affects a runbook or architecture doc; `docs/STATUS.md` updated if the change flips a plan's status, lands an incident, or changes hardware/topology
 8. Every container has a `readinessProbe`; a `livenessProbe` is added only with a signal distinct from readiness (see `docs/operations/2026-05-02-adding-an-app.md#health-probes`)
 
 ## Documentation
 
-`docs/` taxonomy: `architecture/` · `design/` · `operations/` · `plans/` · `reference/` · `research/`. Each folder's `README.md` describes scope. Index: `docs/README.md`.
+**Current state, in-flight work, and known issues: `docs/STATUS.md`** — start here for "what's running / what's next".
+
+`docs/` taxonomy: `architecture/` · `design/` · `operations/` · `plans/` · `reference/` · `research/`. Each folder's `README.md` describes scope. Index: `docs/README.md`. The plans index (`docs/plans/README.md`) is generated from frontmatter by `scripts/plans-index` — edit a plan's frontmatter and run `make plans-index`, never hand-edit the index block.
 
 Per-app runbooks live under `docs/operations/apps/<app>.md`. Incident postmortems live under `docs/operations/incidents/<yyyy-mm-dd>-<topic>.md`. Per-doc content rewrites are tracked in `docs/plans/2026-02-21-documentation-rewrite-plan.md`.
 

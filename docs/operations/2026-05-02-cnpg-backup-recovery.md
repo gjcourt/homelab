@@ -10,7 +10,7 @@ tags: [operations, cnpg, postgres, backup, recovery]
 # CNPG Backup & Disaster Recovery Guide
 
 > **Last tested:** 2026-04-18 — full wipe + S3 restore of `immich-stage` in ~5 minutes  
-> **Cluster:** Talos Kubernetes single-node (`talos-ykb-uir`)  
+> **Cluster:** Talos Kubernetes, 6 nodes (drill ran against CP `talos-ykb-uir`)  
 > **Backup method:** CloudNativePG + barman-cloud plugin v0.11.0 → AWS S3
 
 ---

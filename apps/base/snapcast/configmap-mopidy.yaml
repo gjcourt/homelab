@@ -24,6 +24,17 @@ data:
     hostname = ::
     port = 6600
 
+    [http]
+    # Serves the Mopidy-Iris web client (browse Navidrome + play to the
+    # snapcast `navidrome` stream from a browser). Listen on all interfaces;
+    # the Service exposes 6680 and the cast.burntbytes.com route lands on /iris/.
+    enabled = true
+    hostname = ::
+    port = 6680
+
+    [iris]
+    enabled = true
+
     [subidy]
     url = ${NAVIDROME_URL}
     username = ${NAVIDROME_USER}

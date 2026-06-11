@@ -44,3 +44,10 @@ spec:
       port: 6600
       targetPort: 6600
       protocol: TCP
+    # Mopidy HTTP — serves the Mopidy-Iris web client (browse Navidrome +
+    # play to the `navidrome` stream). Reached via the cast.burntbytes.com
+    # gateway route (LAN only) or directly on the LB IP:6680.
+    - name: iris
+      port: 6680
+      targetPort: 6680
+      protocol: TCP

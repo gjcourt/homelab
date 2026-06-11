@@ -232,11 +232,10 @@ spec:
 
         - name: mopidy
           # ghcr.io/gjcourt/mopidy:2026-06-11 — first-party image built by
-          # .github/workflows/build-mopidy.yml from images/mopidy/. Digest-pinned
-          # to the Debian rebuild (#899) with system GStreamer/gi bindings; the
-          # earlier python:slim builds crashlooped on pkg_resources then on
-          # missing `gi`.
-          image: ghcr.io/gjcourt/mopidy:2026-06-11@sha256:9877833580604f8e123915f1a797bfd1188c1cd965953a85ec7d0af762d812bd
+          # .github/workflows/build-mopidy.yml from images/mopidy/. Digest-pinned;
+          # this build adds Mopidy-Iris (#901) on top of the Debian + system
+          # GStreamer/gi base.
+          image: ghcr.io/gjcourt/mopidy:2026-06-11@sha256:bcbec138dc9c29a2ac56b5e265b825a82a93d57a7eece9349c8f2f5b18df6382
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -263,6 +262,8 @@ spec:
           ports:
             - name: mpd
               containerPort: 6600
+            - name: iris
+              containerPort: 6680
           command:
             - sh
             - -c

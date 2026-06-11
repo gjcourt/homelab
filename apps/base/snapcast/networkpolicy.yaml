@@ -33,6 +33,10 @@ spec:
             # (Symfonium, MALP, ncmpcpp) on 6600 via the snapcast LB.
             - port: "6600"
               protocol: TCP
+            # Mopidy HTTP — the Mopidy-Iris web client, via the gateway
+            # (cast.burntbytes.com) or the LB IP directly.
+            - port: "6680"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:

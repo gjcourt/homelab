@@ -38,6 +38,35 @@ Snapcast is deployed as a Kubernetes `Deployment` with a single replica in the `
   ```
 - **Spotify Connect**: Open the Spotify app on your phone or computer, select "Devices Available", and choose "Snapcast". Playback will be routed through the Snapserver to all connected clients.
 
+### Playing Navidrome (the `navidrome` stream, via MPD)
+
+The Mopidy sidecar bridges Navidrome into Snapcast: it exposes the **MPD
+protocol on port 6600** (on the snapcast LB, `10.42.2.37:6600`), pulls the
+library from Navidrome over the Subsonic API, and writes audio into the
+`navidrome` snapcast stream. There are **two control surfaces** — one chooses
+the music, the other chooses the speakers:
+
+| Task | Where | Address |
+|---|---|---|
+| Choose & play music (Navidrome library) | an **MPD client** → Mopidy | `10.42.2.37:6600` (no password) |
+| Route audio to speakers | **Snapweb** | `snapcast.burntbytes.com` / `http://10.42.2.37:1780` |
+
+1. **Assign a speaker to the `navidrome` stream** in Snapweb: open a client
+   (Kitchen `10.42.2.38`, Living Room `10.42.2.39`) and set its stream/group to
+   `navidrome` (the streams are `default`, `spotify`, `navidrome`). Multi-room
+   works by grouping clients onto the same stream, or putting different clients
+   on `navidrome` vs `spotify`.
+2. **Play music from an MPD client** pointed at `10.42.2.37:6600`:
+   - Android: **Symfonium** (paid, best) or **M.A.L.P.** (free).
+   - Desktop: **Cantata** (GUI) or `ncmpcpp -h 10.42.2.37 -p 6600`.
+   - The Navidrome library appears under a Subsonic/subidy browse root.
+   Queue tracks and play; audio comes out of whatever HifiBerry is on the
+   `navidrome` stream.
+
+> **No sound after hitting play?** Almost always Step 1 — no speaker is assigned
+> to the `navidrome` stream. The stream is idle (a snapserver "connect to pipe"
+> log line) until an MPD client actually plays something; that's normal.
+
 ## 6. Testing
 To verify Snapcast is working:
 1. Navigate to the Snapweb UI and ensure it loads.

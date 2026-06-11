@@ -232,10 +232,11 @@ spec:
 
         - name: mopidy
           # ghcr.io/gjcourt/mopidy:2026-06-11 — first-party image built by
-          # .github/workflows/build-mopidy.yml from images/mopidy/. The
-          # 2026-05-04 build crashlooped on pkg_resources (Python 3.14); this
-          # tag is the Python 3.12 + setuptools fix (#898). Digest-pinned.
-          image: ghcr.io/gjcourt/mopidy:2026-06-11@sha256:233fa674aa61d1d04d3c6f1ef0825a50138c60f100a17ef3c8186f8bfb3cf390
+          # .github/workflows/build-mopidy.yml from images/mopidy/. Digest-pinned
+          # to the Debian rebuild (#899) with system GStreamer/gi bindings; the
+          # earlier python:slim builds crashlooped on pkg_resources then on
+          # missing `gi`.
+          image: ghcr.io/gjcourt/mopidy:2026-06-11@sha256:9877833580604f8e123915f1a797bfd1188c1cd965953a85ec7d0af762d812bd
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

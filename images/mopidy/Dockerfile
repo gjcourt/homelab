@@ -49,7 +49,8 @@ RUN pip install --no-cache-dir \
         mopidy==3.4.2 \
         mopidy-mpd==3.3.0 \
         mopidy-subidy==1.1.0 \
-        mopidy-local==3.2.1
+        mopidy-local==3.2.1 \
+        Mopidy-Iris==3.69.3
 
 # Match the snapcast pod's runAsUser: 1000 / fsGroup: 1000. The sidecar only
 # writes to /tmp (cache) and the mopidy-state PVC at /mopidy-state, both

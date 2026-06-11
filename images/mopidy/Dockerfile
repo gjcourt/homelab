@@ -5,7 +5,12 @@
 # pipeline writes raw S16LE PCM into a shared FIFO that snapserver reads as the
 # `navidrome` source. See docs/plans/2026-03-14-navidrome-snapcast-mopidy.md.
 
-FROM python:3.14-slim-bookworm
+# Python 3.12 — mopidy 3.4.2 predates 3.14 and imports the legacy
+# pkg_resources (from setuptools). On 3.14 the sidecar crashed at startup with
+# `ModuleNotFoundError: No module named 'pkg_resources'`. 3.12 is within mopidy
+# 3.4.x's supported range; setuptools is installed explicitly below since pip
+# no longer bundles it on 3.12+.
+FROM python:3.12-slim-bookworm
 
 # Runtime deps:
 #   - gstreamer1.0-plugins-{base,good} + tools — the audio pipeline (audioresample,
@@ -26,7 +31,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libgstreamer1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
+# setuptools provides pkg_resources, which mopidy 3.4.2 imports at startup.
+# Pinned <81 to stay clear of the aggressive pkg_resources deprecation/removal
+# in newer setuptools while keeping Python 3.12 support.
 RUN pip install --no-cache-dir \
+        "setuptools<81" \
         mopidy==3.4.2 \
         mopidy-mpd==3.3.0 \
         mopidy-subidy==1.1.0 \

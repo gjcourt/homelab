@@ -88,6 +88,33 @@ spec:
             - name: audio-pipes
               mountPath: /audio
 
+        - name: init-navidrome-fifo
+          # busybox 1.37
+          image: busybox@sha256:1487d0af5f52b4ba31c7e465126ee2123fe3f2305d638e7827681e7cf6c83d5e
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              rm -f /audio/navidrome.fifo
+              mkfifo /audio/navidrome.fifo
+              chmod 666 /audio/navidrome.fifo
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          volumeMounts:
+            - name: audio-pipes
+              mountPath: /audio
+
       containers:
         - name: snapserver
           image: gjcourt/snapcast:0.34.0-snapweb0.9.3
@@ -203,6 +230,71 @@ spec:
               cpu: 1000m
               memory: 512Mi
 
+        - name: mopidy
+          # ghcr.io/gjcourt/mopidy:2026-06-11 — first-party image built by
+          # .github/workflows/build-mopidy.yml from images/mopidy/. Digest-pinned
+          # to the Debian rebuild (#899) with system GStreamer/gi bindings; the
+          # earlier python:slim builds crashlooped on pkg_resources then on
+          # missing `gi`.
+          image: ghcr.io/gjcourt/mopidy:2026-06-11@sha256:9877833580604f8e123915f1a797bfd1188c1cd965953a85ec7d0af762d812bd
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            # The Navidrome URL isn't a secret — keep it a plaintext literal so
+            # it's reviewable in git and can't drift inside the encrypted blob.
+            # In-cluster Subsonic API (only the blog is exposed via the tunnel).
+            - name: NAVIDROME_URL
+              value: "http://navidrome.navidrome-prod.svc.cluster.local:4533"
+            - name: NAVIDROME_USER
+              valueFrom:
+                secretKeyRef:
+                  name: navidrome-credentials
+                  key: NAVIDROME_USER
+            - name: NAVIDROME_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: navidrome-credentials
+                  key: NAVIDROME_PASSWORD
+            - name: HOME
+              value: /mopidy-state
+          ports:
+            - name: mpd
+              containerPort: 6600
+          command:
+            - sh
+            - -c
+            - |
+              # Substitute env vars into the templated config before starting.
+              # gettext-base provides envsubst in the python:slim base image.
+              envsubst < /etc/mopidy/mopidy.conf > /tmp/mopidy.conf
+              exec mopidy --config /tmp/mopidy.conf
+          readinessProbe:
+            tcpSocket:
+              port: mpd
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 6
+          volumeMounts:
+            - name: mopidy-config
+              mountPath: /etc/mopidy/mopidy.conf
+              subPath: mopidy.conf
+              readOnly: true
+            - name: mopidy-state
+              mountPath: /mopidy-state
+            - name: audio-pipes
+              mountPath: /audio
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
       volumes:
         - name: snapserver-config
           configMap:
@@ -217,3 +309,9 @@ spec:
         - name: go-librespot-config
           configMap:
             name: go-librespot-config
+        - name: mopidy-config
+          configMap:
+            name: mopidy-config
+        - name: mopidy-state
+          persistentVolumeClaim:
+            claimName: snapcast-mopidy-state

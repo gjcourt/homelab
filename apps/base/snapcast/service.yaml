@@ -36,3 +36,11 @@ spec:
       port: 57622
       targetPort: 57622
       protocol: TCP
+
+    # MPD protocol — mopidy sidecar exposes port 6600 for clients
+    # (Symfonium, MALP, ncmpcpp). Browse the Navidrome library, queue
+    # tracks; audio streams into the snapcast `navidrome` source.
+    - name: mpd
+      port: 6600
+      targetPort: 6600
+      protocol: TCP

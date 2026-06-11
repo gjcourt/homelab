@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: navidrome
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Gateway ingress on 4533; egress DNS + HTTPS for Last.fm and Deezer scrobbling.
+  description: Gateway ingress on 4533 + snapcast mopidy sidecar (Subsonic API); egress DNS + HTTPS for Last.fm and Deezer scrobbling.
   endpointSelector:
     matchLabels:
       app: navidrome
@@ -17,6 +17,20 @@ spec:
         - host
         - remote-node
         - ingress
+      toPorts:
+        - ports:
+            - port: "4533"
+              protocol: TCP
+    # Snapcast's mopidy sidecar fetches the library via the Subsonic API
+    # (pod-to-pod, in-cluster). Both prod and staging snapcast point at
+    # navidrome-prod, so allow both namespaces.
+    - fromEndpoints:
+        - matchLabels:
+            app: snapcast
+            k8s:io.kubernetes.pod.namespace: snapcast-prod
+        - matchLabels:
+            app: snapcast
+            k8s:io.kubernetes.pod.namespace: snapcast-stage
       toPorts:
         - ports:
             - port: "4533"

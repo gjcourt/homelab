@@ -242,11 +242,11 @@ spec:
               drop:
                 - ALL
           env:
+            # The Navidrome URL isn't a secret — keep it a plaintext literal so
+            # it's reviewable in git and can't drift inside the encrypted blob.
+            # In-cluster Subsonic API (only the blog is exposed via the tunnel).
             - name: NAVIDROME_URL
-              valueFrom:
-                secretKeyRef:
-                  name: navidrome-credentials
-                  key: NAVIDROME_URL
+              value: "http://navidrome.navidrome-prod.svc.cluster.local:4533"
             - name: NAVIDROME_USER
               valueFrom:
                 secretKeyRef:

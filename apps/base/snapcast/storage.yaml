@@ -23,6 +23,7 @@ metadata:
   labels:
     app: snapcast
 spec:
+  storageClassName: truenas-iscsi
   accessModes:
     - ReadWriteOnce
   resources:

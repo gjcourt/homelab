@@ -16,14 +16,14 @@
         siteMonitor: https://music.burntbytes.com
     - Kitchen:
         icon: mdi-speaker
-        href: http://10.42.2.38
+        href: http://kitchen-music.burntbytes.com
         description: HifiBerry OS – Kitchen
-        siteMonitor: http://10.42.2.38
+        siteMonitor: http://kitchen-music.burntbytes.com
     - Living Room:
         icon: mdi-speaker
-        href: http://10.42.2.39
+        href: http://living-music.burntbytes.com
         description: HifiBerry OS – Living Room
-        siteMonitor: http://10.42.2.39
+        siteMonitor: http://living-music.burntbytes.com
     - Snapcast:
         icon: mdi-speaker-multiple
         href: https://snapcast.burntbytes.com

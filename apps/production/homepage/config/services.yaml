@@ -29,6 +29,11 @@
         href: https://snapcast.burntbytes.com
         description: Multi-room audio (Snapweb)
         siteMonitor: https://snapcast.burntbytes.com
+    - Cast:
+        icon: mdi-cast-audio
+        href: https://cast.burntbytes.com
+        description: Play Navidrome to the speakers (Mopidy / Iris)
+        siteMonitor: https://cast.burntbytes.com/iris/
     - Audiobookshelf:
         icon: audiobookshelf.png
         href: https://audiobooks.burntbytes.com

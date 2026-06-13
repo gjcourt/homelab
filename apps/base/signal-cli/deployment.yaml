@@ -27,7 +27,7 @@ spec:
         - name: ghcr-secret
       containers:
         - name: signal-cli
-          image: ghcr.io/asamk/signal-cli@sha256:728c8380e6df383388d86e4d0ee83cf140448d61b15fdaec52b4dd14e38b522b
+          image: ghcr.io/asamk/signal-cli@sha256:b9ccf23800f16dbf12ac07d9079a43fca7199cb6033c4f25096e16ad4173869a
           command:
             - /opt/signal-cli/bin/signal-cli
             - --config

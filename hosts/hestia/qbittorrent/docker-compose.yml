@@ -35,7 +35,7 @@ services:
     # version string "20.04.1" lexically looks newer than "5.2.1" but
     # semantically refers to a different (older) qbit. This is the
     # canonical example of the linuxserver tag-scheme trap.
-    image: lscr.io/linuxserver/qbittorrent:5.2.1@sha256:689c81f580345135e48b5aa09b26a4d864d7af1b9a496a47db61eebe71fd480c
+    image: lscr.io/linuxserver/qbittorrent:5.2.1@sha256:1fc3067c4e684a4139be2e17915a63e9355ccba91c954a330d33fcb033bf7e71
     container_name: qbittorrent
     restart: unless-stopped
     environment:

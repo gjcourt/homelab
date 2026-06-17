@@ -38,7 +38,7 @@ spec:
           # hwmon chip handling (thermalscope PR #3), exposing
           # `thermalscope_amdgpu_temperature_celsius` on nodes with
           # an AMD GPU present.
-          image: "ghcr.io/gjcourt/thermalscope:88170e1@sha256:df4839459c785db2e4988521be3448dc10a3a4baa0645bea93f8d3c777db11fe"
+          image: "ghcr.io/gjcourt/thermalscope:a561320@sha256:734a5a68d40ec780afd2916b039814999a05de6b8181122720d4ca56b4db8f6c"
           imagePullPolicy: IfNotPresent
           ports:
             - name: metrics

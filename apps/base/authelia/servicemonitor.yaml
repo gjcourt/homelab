@@ -5,6 +5,7 @@ metadata:
   namespace: authelia
   labels:
     app: authelia
+    release: kube-prometheus-stack
 spec:
   selector:
     matchLabels:

@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: authelia
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Gateway ingress on 9091; egress DNS + SMTP (port 465) for email notifications.
+  description: Gateway ingress on 9091; Prometheus scrape on 9959; egress DNS + SMTP (port 465) for email notifications.
   endpointSelector:
     matchLabels:
       app: authelia
@@ -20,6 +20,16 @@ spec:
       toPorts:
         - ports:
             - port: "9091"
+              protocol: TCP
+    # Prometheus scrapes the metrics endpoint (port 9959). Without this rule the
+    # ServiceMonitor target stays up=0 — the default-deny CNP drops the scrape.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9959"
               protocol: TCP
   egress:
     - toEndpoints:

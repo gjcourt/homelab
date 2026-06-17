@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: signal-cli
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Ingress from hermes only; egress DNS + HTTPS for Signal servers.
+  description: Ingress from hermes + Prometheus scrape on 8080; egress DNS + HTTPS for Signal servers.
   endpointSelector:
     matchLabels:
       app: signal-cli
@@ -29,6 +29,17 @@ spec:
         - matchLabels:
             app: hermes
             k8s:io.kubernetes.pod.namespace: hermes-callee-stage
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Prometheus scrapes /metrics on the same bridge port (8080). Without this
+    # rule the ServiceMonitor target stays up=0 — the default-deny CNP drops
+    # the scrape even after the SM is discovered.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: prometheus
       toPorts:
         - ports:
             - port: "8080"

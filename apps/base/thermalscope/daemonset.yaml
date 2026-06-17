@@ -69,6 +69,9 @@ spec:
             - name: thermal
               mountPath: /sys/class/thermal
               readOnly: true
+            - name: powercap
+              mountPath: /sys/class/powercap
+              readOnly: true
           resources:
             requests:
               cpu: 10m
@@ -100,3 +103,9 @@ spec:
           hostPath:
             path: /sys/class/thermal
             type: Directory
+        # No `type: Directory` check: RAPL/powercap is CPU+kernel dependent.
+        # Verified present on talos-18u-ski; omitting the existence check so a
+        # node lacking powercap loses only power metrics, not all thermalscope.
+        - name: powercap
+          hostPath:
+            path: /sys/class/powercap

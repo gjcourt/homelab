@@ -114,6 +114,10 @@ For each new SM, add `- servicemonitor.yaml` to `apps/base/<app>/kustomization.y
 
 ## Phase 2 — Critical-alert routing to Signal
 
+> **OBSOLETE / SUPERSEDED (2026-06-17):** `signal-cli` + `hermes` were decommissioned and garbage-collected from the cluster. The `signal-cli-bridge` Service this phase depends on no longer exists, so **Signal-based critical-alert routing is dead.** The entire phase below (relay, webhook, self-monitoring rules) cannot be implemented as written. The section is retained for history.
+>
+> **Open question (TBD):** critical-alert delivery still needs a real channel. Pick a replacement — email (Alertmanager `email_configs`, already have SMTP via Authelia notifier), ntfy, or another transport — and write a fresh Phase 2 against it. Phases 1 and 3 are unaffected.
+
 **Order of operations:** §2.1 audit → §2.2 deploy relay and smoke-test → §2.3 enable webhook in Alertmanager → §2.4 end-to-end test → §2.5 self-monitoring rule. Flipping the webhook (§2.3) before the relay is up will cause Alertmanager delivery timeouts.
 
 ### 2.1 Pin down the bridge API

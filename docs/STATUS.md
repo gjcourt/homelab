@@ -54,6 +54,7 @@ Planned, not yet started:
 
 ## Known issues / blocked
 
-- **No on-prem LLM inference.** The 2× RTX 4090 were sold 2026-05-16. `hermes` / `hermes-callee` (Signal bots) and `signal-cli` are deployed but **scaled to 0** — they have no model backend. The `llms/` and GPU-`monitoring/` Custom Apps on hestia are archived. Restoring inference needs new GPU hardware or a hosted-API backend. See [hermes runbook](operations/apps/hermes.md) and [plans/2026-05-02-hermes-bot-k8s.md](plans/2026-05-02-hermes-bot-k8s.md).
+- **No on-prem LLM inference.** The 2× RTX 4090 were sold 2026-05-16. The `llms/` and GPU-`monitoring/` Custom Apps on hestia are archived. Restoring inference needs new GPU hardware or a hosted-API backend.
+- **`hermes` / `hermes-callee` (Signal bots) and `signal-cli` decommissioned 2026-06-17.** Removed from `apps/{base,production,staging}/` and garbage-collected by Flux (`prune: true`). They had no model backend after the GPUs were sold and were already scaled to 0. Signal-based critical-alert routing is dead as a result — see the obsoleted Phase 2 in [plans/2026-05-09-monitoring-enhancement.md](plans/2026-05-09-monitoring-enhancement.md).
 - **CNPG WAL archiving** broken on several staging clusters (stale system-ID in S3) — base backups succeed, but no PITR until fixed.
 - **LB pool / Lab-VLAN `/24` sharing** is the root cause of the 2026-05-05 wired-device incident; the dedicated LB subnet migration is tracked in the network-resilience plan (Phase D).

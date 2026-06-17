@@ -72,6 +72,12 @@ spec:
             - name: powercap
               mountPath: /sys/class/powercap
               readOnly: true
+            # /sys/class/powercap entries are symlinks into
+            # /sys/devices/virtual/powercap; the symlink targets must be
+            # mounted too or RAPL reads resolve to nothing (verified).
+            - name: powercap-devices
+              mountPath: /sys/devices/virtual/powercap
+              readOnly: true
           resources:
             requests:
               cpu: 10m
@@ -109,3 +115,7 @@ spec:
         - name: powercap
           hostPath:
             path: /sys/class/powercap
+        # Symlink targets for /sys/class/powercap (see volumeMount note).
+        - name: powercap-devices
+          hostPath:
+            path: /sys/devices/virtual/powercap

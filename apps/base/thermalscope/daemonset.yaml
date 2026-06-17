@@ -33,13 +33,18 @@ spec:
         - operator: Exists
       containers:
         - name: agent
-          # Pin to a digest per the homelab image-discipline rule. Tag
-          # `88170e1` is the thermalscope main SHA that adds amdgpu
-          # hwmon chip handling (thermalscope PR #3), exposing
-          # `thermalscope_amdgpu_temperature_celsius` on nodes with
-          # an AMD GPU present.
-          image: "ghcr.io/gjcourt/thermalscope:88170e1@sha256:df4839459c785db2e4988521be3448dc10a3a4baa0645bea93f8d3c777db11fe"
+          # Pin to a digest per the homelab image-discipline rule.
+          # `b7e057a` reads RAPL energy from the powercap device tree
+          # (thermalscope PR #5) instead of the /sys/class symlinks,
+          # which containerd masks — see the powercap volume note below.
+          image: "ghcr.io/gjcourt/thermalscope:096a780@sha256:e609b6626f8e3fb47f17c8dd4e7df69be7d389d04397b2cc5ab7deeaaf832cc3"
           imagePullPolicy: IfNotPresent
+          env:
+            # The default powercap root (/sys/devices/virtual/powercap) is
+            # masked by containerd with an empty tmpfs; point the collector
+            # at the non-/sys bind mount below, which escapes the mask.
+            - name: THERMALSCOPE_POWERCAP_ROOT
+              value: /host/sys/powercap
           ports:
             - name: metrics
               containerPort: 9102
@@ -68,6 +73,13 @@ spec:
               readOnly: true
             - name: thermal
               mountPath: /sys/class/thermal
+              readOnly: true
+            # Mount the powercap device tree at a NON-/sys path: anything
+            # under /sys/... gets re-masked by containerd's empty tmpfs, so
+            # /sys/class/powercap symlinks resolve to nothing. /host/sys/powercap
+            # escapes the mask; THERMALSCOPE_POWERCAP_ROOT points the collector here.
+            - name: powercap
+              mountPath: /host/sys/powercap
               readOnly: true
           resources:
             requests:
@@ -100,3 +112,10 @@ spec:
           hostPath:
             path: /sys/class/thermal
             type: Directory
+        # Real RAPL device tree (real dirs, no symlinks). No `type` check:
+        # RAPL is CPU+kernel dependent, so a node without it degrades to no
+        # power metrics rather than failing the whole pod. Mounted at a
+        # non-/sys path (see volumeMount note) to escape containerd masking.
+        - name: powercap
+          hostPath:
+            path: /sys/devices/virtual/powercap

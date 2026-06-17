@@ -7,6 +7,97 @@ metadata:
     release: kube-prometheus-stack
 spec:
   groups:
+    # Recording rules backing the dashboard's Power & Energy row. RAPL
+    # exposes a microjoule counter per CPU package; rate() over it yields
+    # watts, and increase() over 24h converted to kWh drives the energy
+    # and cost panels.
+    - name: thermalscope.recording
+      rules:
+        # CPU package power (watts) per node — rate of the RAPL energy
+        # counter (µJ/s = µW) divided by 1e6 to convert to watts.
+        - record: instance:thermalscope_cpu_package_watts:rate5m
+          expr: rate(thermalscope_rapl_energy_microjoules_total{domain="package-0"}[5m]) / 1e6
+
+        # CPU package energy over the trailing 24h (kWh) per node.
+        # increase() yields µJ; 1 kWh = 3.6e12 µJ.
+        - record: instance:thermalscope_cpu_package_kwh:increase1d
+          expr: increase(thermalscope_rapl_energy_microjoules_total{domain="package-0"}[24h]) / 3.6e12
+
+        # --- Phase 2: Headroom & Throttle ---
+
+        # NVMe thermal headroom (°C) to the SMART crit threshold, per drive.
+        # Joins the threshold and current-temp series on their shared
+        # (instance,device,sensor) labels. Only temp1/Composite exposes a
+        # crit threshold, so headroom is defined exactly where crit exists.
+        - record: instance:thermalscope_nvme_headroom_celsius
+          expr: thermalscope_nvme_temperature_threshold_celsius{level="crit"} - on(instance,device,sensor) thermalscope_nvme_temperature_celsius
+
+        # CPU frequency ratio (current / max) for the worst-throttled core,
+        # per node. A throttle indicator: <1 means at least one core is
+        # below its max clock. Note these AMD APUs idle-park cores well
+        # below max, so the idle baseline is ~0.4–0.7, NOT ~1.0 — a low
+        # ratio is only meaningful when paired with high temperature (see
+        # ThermalScopeCPUThrottling). node-exporter keys series by
+        # instance="<ip>:9100"; we re-key to the thermalscope
+        # instance="<nodename>" via node_uname_info so this rule joins
+        # cleanly with thermalscope_cpu_temperature_celsius and matches the
+        # dashboard's $instance variable. node-exporter covers the 6 Talos
+        # nodes only (hestia is a bare host outside the DaemonSet).
+        - record: instance:thermalscope_cpu_freq_ratio
+          expr: |
+            min by(instance) (
+              label_replace(
+                (node_cpu_scaling_frequency_hertz / node_cpu_scaling_frequency_max_hertz)
+                  * on(instance) group_left(nodename) node_uname_info,
+                "instance", "$1", "nodename", "(.+)"
+              )
+            )
+
+        # CPU thermal headroom (°C) to Tjmax, per host. These AMD APUs
+        # expose no crit sensor in sysfs, so Tjmax is an advisory constant.
+        # Hardcoded 95 here; the dashboard panel single-sources the same
+        # value through the $cpu_tjmax constant template variable. Keep the
+        # two in sync if you change the assumption.
+        - record: instance:thermalscope_cpu_headroom_celsius
+          expr: 95 - thermalscope_cpu_temperature_celsius{sensor="Tctl"}
+
+        # --- Phase 3: Degradation & Fans ---
+
+        # Per-host CPU utilization (0–1) over 5m, re-keyed to the
+        # thermalscope instance="<nodename>" label so it joins cleanly with
+        # thermalscope_cpu_temperature_celsius for the temp-vs-load
+        # degradation analysis. node-exporter keys series by
+        # instance="<ip>:9100"; node_uname_info maps that to nodename. The
+        # outer sum by(instance) drops the temporary nodename label left by
+        # group_left so the result carries exactly the thermalscope label
+        # set (matches the dashboard's $instance variable). node-exporter
+        # covers the 6 Talos nodes only — hestia is a bare host outside the
+        # DaemonSet, so it has no utilization series here (its temps still
+        # appear, just without a load pairing).
+        - record: instance:node_cpu_utilization:rate5m
+          expr: |
+            sum by(instance) (
+              label_replace(
+                (1 - avg by(instance)(rate(node_cpu_seconds_total{mode="idle"}[5m])))
+                  * on(instance) group_left(nodename) node_uname_info,
+                "instance", "$1", "nodename", "(.+)"
+              )
+            )
+
+        # Per-host busy disk fraction (0–1) over 5m — the hottest device on
+        # each node. Same node-exporter → nodename re-key as the CPU
+        # utilization rule above, so it shares the thermalscope instance
+        # label. Used as a secondary load axis in the degradation row.
+        - record: instance:node_disk_busy:rate5m
+          expr: |
+            max by(instance) (
+              label_replace(
+                rate(node_disk_io_time_seconds_total[5m])
+                  * on(instance) group_left(nodename) node_uname_info,
+                "instance", "$1", "nodename", "(.+)"
+              )
+            )
+
     - name: thermalscope
       rules:
         - alert: ThermalScopeScraperDown
@@ -66,3 +157,70 @@ spec:
           annotations:
             summary: "AMD iGPU on {{ $labels.instance }} is hot"
             description: "amdgpu {{ $labels.sensor }} on {{ $labels.instance }} is {{ $value }}°C (threshold 90°C)."
+
+        # --- Phase 2: Headroom & Throttle ---
+
+        # Fires per-instance per-device when an NVMe drive is within 5°C of
+        # its SMART crit threshold. This complements the fixed-65°C
+        # ThermalScopeNVMeTemperatureHigh alert by tracking the
+        # drive-reported limit directly, so it stays correct across drives
+        # with different crit points (currently 82–88°C).
+        - alert: ThermalScopeNVMeHeadroomLow
+          expr: instance:thermalscope_nvme_headroom_celsius < 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} has low thermal headroom"
+            description: "{{ $labels.device }} on {{ $labels.instance }} is only {{ $value }}°C from its crit threshold (<5°C headroom)."
+
+        # Real throttling = depressed clock WHILE hot. The freq ratio alone
+        # is meaningless on these APUs (idle cores park at ~0.4–0.7), so we
+        # gate on Tctl > 80°C. The join keys both sides on the thermalscope
+        # instance label (the recording rule re-keys node-exporter to
+        # nodename for exactly this reason). 0.85/80 chosen to sit below the
+        # 85°C ThermalScopeCPUTemperatureHigh threshold while still
+        # requiring genuinely high heat alongside the clock drop.
+        - alert: ThermalScopeCPUThrottling
+          expr: |
+            instance:thermalscope_cpu_freq_ratio < 0.85
+              and on(instance) max by(instance)(thermalscope_cpu_temperature_celsius{sensor="Tctl"}) > 80
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CPU on {{ $labels.instance }} appears to be thermally throttling"
+            description: "{{ $labels.instance }} worst-core frequency ratio is {{ $value }} (<0.85) while Tctl is above 80°C — likely thermal throttling."
+
+        # --- Phase 3: Degradation & Fans ---
+
+        # A hestia chassis fan is stalled/degraded WHILE the CPU is hot.
+        # Two failure signals OR'd together:
+        #   - ipmi_fan_speed_state != 0 — the BMC's own per-fan assessment
+        #     (0 = "ok"/nominal; non-zero = warning/critical per IPMI SDR).
+        #   - ipmi_fan_speed_rpm < 500 — a hard RPM floor. Observed baseline
+        #     over 7d is ~1000–1400 rpm steady across all five fans, so 500
+        #     sits well below normal idle and only trips on a genuine stall
+        #     (a spun-down or seized fan), not on normal fan-curve dips.
+        # Gated on hestia Tctl > 70°C so a fan that idles low while the box
+        # is cool does not page — a degraded fan only matters under heat.
+        # Fan and temp series are joined on instance="hestia" (ipmi-exporter
+        # and thermalscope both label this host literally "hestia" — no
+        # node_uname_info re-key needed, unlike the node-exporter joins).
+        # The temp side is reduced with max by(instance) so a single high
+        # CPU sensor satisfies the gate for every fan on the host.
+        - alert: ThermalScopeFanFailing
+          expr: |
+            (
+              ipmi_fan_speed_state{instance="hestia"} != 0
+              or ipmi_fan_speed_rpm{instance="hestia"} < 500
+            )
+              and on(instance) max by(instance)(
+                thermalscope_cpu_temperature_celsius{instance="hestia", sensor="Tctl"}
+              ) > 70
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "hestia chassis fan {{ $labels.name }} may be failing"
+            description: "Fan {{ $labels.name }} on hestia is stalled or in a non-OK state while CPU Tctl is above 70°C — possible fan failure under load."

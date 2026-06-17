@@ -504,6 +504,520 @@ data:
         {
           "collapsed": false,
           "gridPos": {"h": 1, "w": 24, "x": 0, "y": 51},
+          "id": 300,
+          "title": "Power & Energy — CPU RAPL + SoC; cost is an estimate (set $cost_per_kwh)",
+          "type": "row",
+          "panels": []
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Per-node CPU package power from the RAPL energy counter (rate over 5m). Backed by the instance:thermalscope_cpu_package_watts:rate5m recording rule.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "spanNulls": false},
+              "unit": "watt",
+              "min": 0
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 52},
+          "id": 301,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "instance:thermalscope_cpu_package_watts:rate5m{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "title": "CPU Package Power (RAPL)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Per-node SoC rail power reported by the amdgpu chip sensor.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "spanNulls": false},
+              "unit": "watt",
+              "min": 0
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 52},
+          "id": 302,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_power_watts{instance=~\"$instance\", chip=\"amdgpu\"}",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "title": "SoC Power (amdgpu)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Total CPU package energy across all nodes over the trailing 24h. Backed by the instance:thermalscope_cpu_package_kwh:increase1d recording rule.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null}
+                ]
+              },
+              "unit": "kwatth",
+              "decimals": 3,
+              "min": 0
+            }
+          },
+          "gridPos": {"h": 5, "w": 12, "x": 0, "y": 60},
+          "id": 303,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "value",
+            "graphMode": "area",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "sum(instance:thermalscope_cpu_package_kwh:increase1d{instance=~\"$instance\"})",
+              "legendFormat": "Total CPU energy / day"
+            }
+          ],
+          "title": "Energy per day (kWh)",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Estimated monthly CPU-package electricity cost: daily kWh × 30 × $cost_per_kwh. This is an ESTIMATE driven by the editable cost_per_kwh template variable — set it to your actual rate. Covers CPU package (RAPL) only, not whole-system draw.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null}
+                ]
+              },
+              "unit": "currencyUSD",
+              "decimals": 2,
+              "min": 0
+            }
+          },
+          "gridPos": {"h": 5, "w": 12, "x": 12, "y": 60},
+          "id": 304,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "sum(instance:thermalscope_cpu_package_kwh:increase1d{instance=~\"$instance\"}) * 30 * $cost_per_kwh",
+              "legendFormat": "Est. CPU cost / month"
+            }
+          ],
+          "title": "Estimated cost / month ($) — estimate, see $cost_per_kwh",
+          "type": "stat"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 65},
+          "id": 600,
+          "title": "Wall Power (UniFi PDU) — measured per-device draw from the USP PDU Pro, not RAPL estimate",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "Measured WALL power per PDU outlet from the UniFi USP PDU Pro (real per-device draw, not a CPU-only RAPL estimate). Only energized outlets shown (> 0 W), sorted descending. Some outlets carry an operator-set name (DS923+, 805 G6, UCG Fiber, XB8); unnamed ones show as their outlet index.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "thresholds"},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null},
+                      {"color": "orange", "value": 100},
+                      {"color": "red", "value": 200}
+                    ]
+                  },
+                  "unit": "watt",
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 10, "w": 12, "x": 0, "y": 66},
+              "id": 601,
+              "options": {
+                "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "sortBy": "Value",
+                "sortDescending": true
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "unpoller_device_outlet_outlet_power{name=\"USP PDU Pro\"} > 0",
+                  "legendFormat": "{{outlet_name}}"
+                }
+              ],
+              "title": "Wall power per device (PDU outlets)",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "Total AC power consumption reported by the UniFi USP PDU Pro — the true whole-rack wall draw for everything plugged into it.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "watt",
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 5, "w": 12, "x": 12, "y": 66},
+              "id": 602,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "unpoller_device_outlet_ac_power_consumption{name=\"USP PDU Pro\"}",
+                  "legendFormat": "PDU total"
+                }
+              ],
+              "title": "PDU total (W)",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "Estimated monthly electricity cost from MEASURED wall power (PDU total), covering ALL devices plugged into the USP PDU Pro: PDU watts × 24 × 30 / 1000 × $cost_per_kwh. Unlike the RAPL cost stat above (CPU package only), this is the true whole-system bill for the rack. Cost is an estimate driven by the editable $cost_per_kwh template variable.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "thresholds"},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null}
+                    ]
+                  },
+                  "unit": "currencyUSD",
+                  "decimals": 2,
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 5, "w": 12, "x": 12, "y": 71},
+              "id": 603,
+              "options": {
+                "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+                "orientation": "auto",
+                "colorMode": "value",
+                "graphMode": "none",
+                "textMode": "value_and_name"
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "unpoller_device_outlet_ac_power_consumption{name=\"USP PDU Pro\"} * 24 * 30 / 1000 * $cost_per_kwh",
+                  "legendFormat": "Wall cost / month (PDU, all devices)"
+                }
+              ],
+              "title": "Whole-system cost / month ($) — measured wall power (PDU), all devices on it",
+              "type": "stat"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "PoE power delivered per switch port (unpoller_device_port_poe_watts), energized ports only (> 0 W). This is the PoE draw the switch sources to downstream devices (APs, cameras, phones); it is a subset of the switch's own outlet wall power.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "thresholds"},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null},
+                      {"color": "orange", "value": 15},
+                      {"color": "red", "value": 25}
+                    ]
+                  },
+                  "unit": "watt",
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 76},
+              "id": 604,
+              "options": {
+                "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "sortBy": "Value",
+                "sortDescending": true
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "unpoller_device_port_poe_watts > 0",
+                  "legendFormat": "{{name}} {{port_name}}"
+                }
+              ],
+              "title": "PoE delivered per port (W)",
+              "type": "bargauge"
+            }
+          ]
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 66},
+          "id": 400,
+          "title": "Headroom & Throttle — °C to thermal limits + CPU clock throttle indicator",
+          "type": "row",
+          "panels": []
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "NVMe thermal headroom to the SMART crit threshold, per drive (crit − current). Backed by the instance:thermalscope_nvme_headroom_celsius recording rule. Red <5°C, orange <10°C.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "orange", "value": 5},
+                  {"color": "green", "value": 10}
+                ]
+              },
+              "unit": "celsius",
+              "min": 0
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 67},
+          "id": 401,
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": ""}, "orientation": "horizontal", "displayMode": "gradient"},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "instance:thermalscope_nvme_headroom_celsius{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} {{device}}"
+            }
+          ],
+          "title": "NVMe headroom (°C to crit)",
+          "type": "bargauge"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "CPU thermal headroom to Tjmax, per host ($cpu_tjmax − Tctl). Tjmax is an advisory constant — these AMD APUs expose no crit sensor — set via the $cpu_tjmax template variable. Red <5°C, orange <10°C.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "orange", "value": 5},
+                  {"color": "green", "value": 10}
+                ]
+              },
+              "unit": "celsius",
+              "min": 0
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 67},
+          "id": 402,
+          "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": ""}, "orientation": "horizontal", "displayMode": "gradient"},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "$cpu_tjmax - thermalscope_cpu_temperature_celsius{sensor=\"Tctl\", instance=~\"$instance\"}",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "title": "CPU headroom (°C to Tjmax)",
+          "type": "bargauge"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Worst-throttled-core CPU frequency ratio (current/max), per node. Backed by the instance:thermalscope_cpu_freq_ratio recording rule. NOTE: these APUs idle-park cores well below max, so the idle baseline is ~0.4–0.7, NOT ~1.0 — a low ratio is only concerning alongside high temperature (see the ThermalScopeCPUThrottling alert). node-exporter covers the 6 Talos nodes only (not hestia). Red <0.85.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {"lineWidth": 2, "spanNulls": false},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 0.85}
+                ]
+              },
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1
+            }
+          },
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 75},
+          "id": 403,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "instance:thermalscope_cpu_freq_ratio{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "title": "CPU frequency ratio (throttle indicator)",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 83},
+          "id": 500,
+          "title": "Degradation & Fans — temp-vs-load (cooling drift) + fan curve",
+          "type": "row",
+          "panels": []
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Cooling-degradation scatter: CPU Tctl (Y) vs CPU utilization (X), per host. A host that over time drifts UP-and-LEFT (hotter at the same load) is losing cooling capacity (dust, dried paste, weak fan). Utilization is the instance:node_cpu_utilization:rate5m recording rule, re-keyed to the thermalscope instance label via node_uname_info. node-exporter covers the 6 Talos nodes only — hestia (bare host, no DaemonSet) has no utilization series and does not appear here.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"pointSize": {"fixed": 8}},
+              "unit": "celsius"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 84},
+          "id": 501,
+          "options": {
+            "seriesMapping": "auto",
+            "tooltip": {"mode": "single"},
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_cpu_utilization:rate5m",
+              "format": "time_series",
+              "legendFormat": "{{instance}} Tctl"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "instance:node_cpu_utilization:rate5m{instance=~\"$instance\"}",
+              "format": "time_series",
+              "legendFormat": "{{instance}} util"
+            }
+          ],
+          "title": "CPU temp vs CPU load (degradation scatter)",
+          "type": "xychart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Secondary degradation scatter: CPU Tctl (Y) vs busy disk fraction (X), per host. Backed by instance:node_disk_busy:rate5m (hottest device per node, re-keyed to the thermalscope instance label). Useful when a host's heat tracks storage I/O rather than CPU. Talos nodes only (no hestia node-exporter series).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"pointSize": {"fixed": 8}},
+              "unit": "celsius"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 84},
+          "id": 502,
+          "options": {
+            "seriesMapping": "auto",
+            "tooltip": {"mode": "single"},
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_disk_busy:rate5m",
+              "format": "time_series",
+              "legendFormat": "{{instance}} Tctl"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "instance:node_disk_busy:rate5m{instance=~\"$instance\"}",
+              "format": "time_series",
+              "legendFormat": "{{instance}} disk busy"
+            }
+          ],
+          "title": "CPU temp vs disk busy (degradation scatter)",
+          "type": "xychart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Cooling-drift trend: current CPU Tctl minus Tctl 7 days ago, per host. Persistent positive drift = the host runs hotter than a week ago (cooling degradation). Retention is 10d so the offset window is 7d, NOT 30d — this signal DEEPENS as history accumulates and a longer baseline becomes possible. Compares wall-clock-aligned samples (not same-load), so read it alongside the scatter panels. Orange ≥2°C hotter, red ≥5°C.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {"lineWidth": 2, "spanNulls": false},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 2},
+                  {"color": "red", "value": 5}
+                ]
+              },
+              "unit": "celsius"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 92},
+          "id": 503,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} - thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} offset 7d",
+              "legendFormat": "{{instance}} Δ vs 7d ago"
+            }
+          ],
+          "title": "CPU temp drift vs 7d ago (deepens as history grows)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "hestia fan curve: chassis fan RPM (Y) vs CPU Tctl (X). Shows whether the BMC fan curve ramps sensibly with CPU heat. Fan RPM and temp join on instance=\"hestia\" (ipmi-exporter and thermalscope both label this host literally — no node_uname_info re-key needed). Visualization only; backs the ThermalScopeFanFailing alert qualitatively.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"pointSize": {"fixed": 8}},
+              "unit": "rotrpm"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 92},
+          "id": 504,
+          "options": {
+            "seriesMapping": "auto",
+            "tooltip": {"mode": "single"},
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "ipmi_fan_speed_rpm{instance=\"hestia\"}",
+              "format": "time_series",
+              "legendFormat": "{{name}} rpm"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "max by(instance)(thermalscope_cpu_temperature_celsius{instance=\"hestia\", sensor=\"Tctl\"})",
+              "format": "time_series",
+              "legendFormat": "hestia Tctl"
+            }
+          ],
+          "title": "hestia fan curve (RPM vs CPU Tctl)",
+          "type": "xychart"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 100},
           "id": 105,
           "title": "AMD iGPU Thermals (Talos APUs)",
           "type": "row",
@@ -542,7 +1056,7 @@ data:
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 60},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 109},
           "id": 102,
           "title": "NVIDIA GPU Thermals & Power (hestia) — collapsed; expand when GPUs in use",
           "type": "row",
@@ -628,7 +1142,7 @@ data:
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 52},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 110},
           "id": 103,
           "title": "NVIDIA GPU Utilization & Clock (hestia) — collapsed",
           "type": "row",
@@ -707,7 +1221,7 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 54},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 111},
           "id": 104,
           "title": "Collector Health",
           "type": "row"
@@ -729,7 +1243,7 @@ data:
               ]
             }
           },
-          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 55},
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 87},
           "id": 11,
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "colorMode": "background"},
           "targets": [
@@ -756,7 +1270,7 @@ data:
               "unit": "s"
             }
           },
-          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 55},
+          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 87},
           "id": 12,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
@@ -805,6 +1319,24 @@ data:
             "skipUrlSync": false,
             "sort": 1,
             "type": "query"
+          },
+          {
+            "current": {"selected": false, "text": "0.45", "value": "0.45"},
+            "hide": 0,
+            "label": "Electricity rate ($/kWh) — PG&E blended, all-in (bill 5/2026)",
+            "name": "cost_per_kwh",
+            "query": "0.45",
+            "skipUrlSync": false,
+            "type": "constant"
+          },
+          {
+            "current": {"selected": false, "text": "95", "value": "95"},
+            "hide": 0,
+            "label": "AMD APU Tjmax (°C) — advisory",
+            "name": "cpu_tjmax",
+            "query": "95",
+            "skipUrlSync": false,
+            "type": "constant"
           }
         ]
       },
@@ -813,5 +1345,5 @@ data:
       "timezone": "browser",
       "title": "ThermalScope — Rack",
       "uid": null,
-      "version": 3
+      "version": 8
     }

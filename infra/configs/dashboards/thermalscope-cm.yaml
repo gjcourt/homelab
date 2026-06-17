@@ -630,8 +630,151 @@ data:
           "type": "stat"
         },
         {
-          "collapsed": false,
+          "collapsed": true,
           "gridPos": {"h": 1, "w": 24, "x": 0, "y": 65},
+          "id": 600,
+          "title": "Wall Power (UniFi PDU) — measured per-device draw from the USP PDU Pro, not RAPL estimate",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "Measured WALL power per PDU outlet from the UniFi USP PDU Pro (real per-device draw, not a CPU-only RAPL estimate). Only energized outlets shown (> 0 W), sorted descending. Some outlets carry an operator-set name (DS923+, 805 G6, UCG Fiber, XB8); unnamed ones show as their outlet index.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "thresholds"},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null},
+                      {"color": "orange", "value": 100},
+                      {"color": "red", "value": 200}
+                    ]
+                  },
+                  "unit": "watt",
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 10, "w": 12, "x": 0, "y": 66},
+              "id": 601,
+              "options": {
+                "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "sortBy": "Value",
+                "sortDescending": true
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "unpoller_device_outlet_outlet_power{name=\"USP PDU Pro\"} > 0",
+                  "legendFormat": "{{outlet_name}}"
+                }
+              ],
+              "title": "Wall power per device (PDU outlets)",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "Total AC power consumption reported by the UniFi USP PDU Pro — the true whole-rack wall draw for everything plugged into it.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "watt",
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 5, "w": 12, "x": 12, "y": 66},
+              "id": 602,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "unpoller_device_outlet_ac_power_consumption{name=\"USP PDU Pro\"}",
+                  "legendFormat": "PDU total"
+                }
+              ],
+              "title": "PDU total (W)",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "Estimated monthly electricity cost from MEASURED wall power (PDU total), covering ALL devices plugged into the USP PDU Pro: PDU watts × 24 × 30 / 1000 × $cost_per_kwh. Unlike the RAPL cost stat above (CPU package only), this is the true whole-system bill for the rack. Cost is an estimate driven by the editable $cost_per_kwh template variable.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "thresholds"},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null}
+                    ]
+                  },
+                  "unit": "currencyUSD",
+                  "decimals": 2,
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 5, "w": 12, "x": 12, "y": 71},
+              "id": 603,
+              "options": {
+                "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+                "orientation": "auto",
+                "colorMode": "value",
+                "graphMode": "none",
+                "textMode": "value_and_name"
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "unpoller_device_outlet_ac_power_consumption{name=\"USP PDU Pro\"} * 24 * 30 / 1000 * $cost_per_kwh",
+                  "legendFormat": "Wall cost / month (PDU, all devices)"
+                }
+              ],
+              "title": "Whole-system cost / month ($) — measured wall power (PDU), all devices on it",
+              "type": "stat"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "PoE power delivered per switch port (unpoller_device_port_poe_watts), energized ports only (> 0 W). This is the PoE draw the switch sources to downstream devices (APs, cameras, phones); it is a subset of the switch's own outlet wall power.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "thresholds"},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null},
+                      {"color": "orange", "value": 15},
+                      {"color": "red", "value": 25}
+                    ]
+                  },
+                  "unit": "watt",
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 76},
+              "id": 604,
+              "options": {
+                "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "sortBy": "Value",
+                "sortDescending": true
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "unpoller_device_port_poe_watts > 0",
+                  "legendFormat": "{{name}} {{port_name}}"
+                }
+              ],
+              "title": "PoE delivered per port (W)",
+              "type": "bargauge"
+            }
+          ]
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 66},
           "id": 400,
           "title": "Headroom & Throttle — °C to thermal limits + CPU clock throttle indicator",
           "type": "row",
@@ -655,7 +798,7 @@ data:
               "min": 0
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 66},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 67},
           "id": 401,
           "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": ""}, "orientation": "horizontal", "displayMode": "gradient"},
           "targets": [
@@ -686,7 +829,7 @@ data:
               "min": 0
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 66},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 67},
           "id": 402,
           "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": ""}, "orientation": "horizontal", "displayMode": "gradient"},
           "targets": [
@@ -718,7 +861,7 @@ data:
               "max": 1
             }
           },
-          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 74},
+          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 75},
           "id": 403,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
@@ -733,7 +876,7 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 82},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 83},
           "id": 500,
           "title": "Degradation & Fans — temp-vs-load (cooling drift) + fan curve",
           "type": "row",
@@ -749,7 +892,7 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 83},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 84},
           "id": 501,
           "options": {
             "seriesMapping": "auto",
@@ -783,7 +926,7 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 83},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 84},
           "id": 502,
           "options": {
             "seriesMapping": "auto",
@@ -825,7 +968,7 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 91},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 92},
           "id": 503,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
@@ -848,7 +991,7 @@ data:
               "unit": "rotrpm"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 91},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 92},
           "id": 504,
           "options": {
             "seriesMapping": "auto",
@@ -874,7 +1017,7 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 99},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 100},
           "id": 105,
           "title": "AMD iGPU Thermals (Talos APUs)",
           "type": "row",
@@ -913,7 +1056,7 @@ data:
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 108},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 109},
           "id": 102,
           "title": "NVIDIA GPU Thermals & Power (hestia) — collapsed; expand when GPUs in use",
           "type": "row",
@@ -999,7 +1142,7 @@ data:
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 109},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 110},
           "id": 103,
           "title": "NVIDIA GPU Utilization & Clock (hestia) — collapsed",
           "type": "row",
@@ -1078,7 +1221,7 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 110},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 111},
           "id": 104,
           "title": "Collector Health",
           "type": "row"
@@ -1100,7 +1243,7 @@ data:
               ]
             }
           },
-          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 86},
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 87},
           "id": 11,
           "options": {"reduceOptions": {"calcs": ["lastNotNull"]}, "orientation": "horizontal", "colorMode": "background"},
           "targets": [
@@ -1127,7 +1270,7 @@ data:
               "unit": "s"
             }
           },
-          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 86},
+          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 87},
           "id": 12,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
@@ -1202,5 +1345,5 @@ data:
       "timezone": "browser",
       "title": "ThermalScope — Rack",
       "uid": null,
-      "version": 7
+      "version": 8
     }

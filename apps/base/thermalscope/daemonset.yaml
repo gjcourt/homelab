@@ -37,7 +37,7 @@ spec:
           # `b7e057a` reads RAPL energy from the powercap device tree
           # (thermalscope PR #5) instead of the /sys/class symlinks,
           # which containerd masks — see the powercap volume note below.
-          image: "ghcr.io/gjcourt/thermalscope:b7e057a@sha256:dbdee8e06a7a1c890b84ce0773b5c2706b5a59eabb1e7dcbab48ac88e0807957"
+          image: "ghcr.io/gjcourt/thermalscope:096a780@sha256:e609b6626f8e3fb47f17c8dd4e7df69be7d389d04397b2cc5ab7deeaaf832cc3"
           imagePullPolicy: IfNotPresent
           env:
             # The default powercap root (/sys/devices/virtual/powercap) is

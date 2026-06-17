@@ -9,6 +9,7 @@ resources:
   - cloudflare-tunnel
   - excalidraw
   - external-services
+  - finance-dashboard
   - flashcards
   - flashcards-sync
   - golinks

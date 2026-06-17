@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: finance-dashboard
+  # No `http-ingress` label on purpose — this app is internal-only (ClusterIP +
+  # kubectl port-forward), so it must NOT be eligible for gateway ingress.

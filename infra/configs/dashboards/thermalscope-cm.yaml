@@ -734,6 +734,147 @@ data:
         {
           "collapsed": false,
           "gridPos": {"h": 1, "w": 24, "x": 0, "y": 82},
+          "id": 500,
+          "title": "Degradation & Fans — temp-vs-load (cooling drift) + fan curve",
+          "type": "row",
+          "panels": []
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Cooling-degradation scatter: CPU Tctl (Y) vs CPU utilization (X), per host. A host that over time drifts UP-and-LEFT (hotter at the same load) is losing cooling capacity (dust, dried paste, weak fan). Utilization is the instance:node_cpu_utilization:rate5m recording rule, re-keyed to the thermalscope instance label via node_uname_info. node-exporter covers the 6 Talos nodes only — hestia (bare host, no DaemonSet) has no utilization series and does not appear here.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"pointSize": {"fixed": 8}},
+              "unit": "celsius"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 83},
+          "id": 501,
+          "options": {
+            "seriesMapping": "auto",
+            "tooltip": {"mode": "single"},
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_cpu_utilization:rate5m",
+              "format": "time_series",
+              "legendFormat": "{{instance}} Tctl"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "instance:node_cpu_utilization:rate5m{instance=~\"$instance\"}",
+              "format": "time_series",
+              "legendFormat": "{{instance}} util"
+            }
+          ],
+          "title": "CPU temp vs CPU load (degradation scatter)",
+          "type": "xychart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Secondary degradation scatter: CPU Tctl (Y) vs busy disk fraction (X), per host. Backed by instance:node_disk_busy:rate5m (hottest device per node, re-keyed to the thermalscope instance label). Useful when a host's heat tracks storage I/O rather than CPU. Talos nodes only (no hestia node-exporter series).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"pointSize": {"fixed": 8}},
+              "unit": "celsius"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 83},
+          "id": 502,
+          "options": {
+            "seriesMapping": "auto",
+            "tooltip": {"mode": "single"},
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_disk_busy:rate5m",
+              "format": "time_series",
+              "legendFormat": "{{instance}} Tctl"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "instance:node_disk_busy:rate5m{instance=~\"$instance\"}",
+              "format": "time_series",
+              "legendFormat": "{{instance}} disk busy"
+            }
+          ],
+          "title": "CPU temp vs disk busy (degradation scatter)",
+          "type": "xychart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Cooling-drift trend: current CPU Tctl minus Tctl 7 days ago, per host. Persistent positive drift = the host runs hotter than a week ago (cooling degradation). Retention is 10d so the offset window is 7d, NOT 30d — this signal DEEPENS as history accumulates and a longer baseline becomes possible. Compares wall-clock-aligned samples (not same-load), so read it alongside the scatter panels. Orange ≥2°C hotter, red ≥5°C.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {"lineWidth": 2, "spanNulls": false},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 2},
+                  {"color": "red", "value": 5}
+                ]
+              },
+              "unit": "celsius"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 91},
+          "id": 503,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} - thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} offset 7d",
+              "legendFormat": "{{instance}} Δ vs 7d ago"
+            }
+          ],
+          "title": "CPU temp drift vs 7d ago (deepens as history grows)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "hestia fan curve: chassis fan RPM (Y) vs CPU Tctl (X). Shows whether the BMC fan curve ramps sensibly with CPU heat. Fan RPM and temp join on instance=\"hestia\" (ipmi-exporter and thermalscope both label this host literally — no node_uname_info re-key needed). Visualization only; backs the ThermalScopeFanFailing alert qualitatively.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"pointSize": {"fixed": 8}},
+              "unit": "rotrpm"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 91},
+          "id": 504,
+          "options": {
+            "seriesMapping": "auto",
+            "tooltip": {"mode": "single"},
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "ipmi_fan_speed_rpm{instance=\"hestia\"}",
+              "format": "time_series",
+              "legendFormat": "{{name}} rpm"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "max by(instance)(thermalscope_cpu_temperature_celsius{instance=\"hestia\", sensor=\"Tctl\"})",
+              "format": "time_series",
+              "legendFormat": "hestia Tctl"
+            }
+          ],
+          "title": "hestia fan curve (RPM vs CPU Tctl)",
+          "type": "xychart"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 99},
           "id": 105,
           "title": "AMD iGPU Thermals (Talos APUs)",
           "type": "row",
@@ -772,7 +913,7 @@ data:
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 91},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 108},
           "id": 102,
           "title": "NVIDIA GPU Thermals & Power (hestia) — collapsed; expand when GPUs in use",
           "type": "row",
@@ -858,7 +999,7 @@ data:
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 83},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 109},
           "id": 103,
           "title": "NVIDIA GPU Utilization & Clock (hestia) — collapsed",
           "type": "row",
@@ -937,7 +1078,7 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 85},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 110},
           "id": 104,
           "title": "Collector Health",
           "type": "row"
@@ -1061,5 +1202,5 @@ data:
       "timezone": "browser",
       "title": "ThermalScope — Rack",
       "uid": null,
-      "version": 6
+      "version": 7
     }

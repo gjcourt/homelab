@@ -82,8 +82,8 @@
     - Hestia:
         icon: truenas-scale.png
         href: https://hestia.burntbytes.com
-        # Originally provisioned as a GPU server (RTX 4090, vLLM, signal-cli)
-        # but the GPU was removed and sold 2026-05-10. Hestia is now a
+        # Originally provisioned as a GPU server (RTX 4090, vLLM) but the
+        # GPU was removed and sold 2026-05-10. Hestia is now a
         # TrueNAS storage server, primarily backing democratic-csi-provisioned
         # iSCSI volumes for the cluster.
         description: TrueNAS storage server (iSCSI for cluster PVCs)

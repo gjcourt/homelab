@@ -9,8 +9,6 @@ resources:
   - flashcards
   - flashcards-sync
   - golinks
-  - hermes
-  - hermes-callee
   - homeassistant
   - homepage
   - immich
@@ -22,6 +20,5 @@ resources:
   - navidrome
   - netscope
   - openwebui
-  - signal-cli
   - snapcast
   - vitals

@@ -2,5 +2,9 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: finance-dashboard
-  # No `http-ingress` label on purpose — this app is internal-only (ClusterIP +
-  # kubectl port-forward), so it must NOT be eligible for gateway ingress.
+  labels:
+    # Admits the HTTPRoute to the LAN gateway (app-gateway-production), serving
+    # https://finance.burntbytes.com off the wildcard cert. The gateway only
+    # holds a LAN IP (home-c-pool) and is NOT tunneled to the internet, so the
+    # dashboard resolves + serves on the local network only.
+    http-ingress: "true"

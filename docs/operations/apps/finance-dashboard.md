@@ -19,7 +19,7 @@ Internal-only net-worth + IPS-allocation dashboard. Renders the family-office
 | Image | `ghcr.io/gjcourt/finance-dashboard` (built from `images/finance-dashboard/`, **code-only**) |
 | Namespace | `finance-dashboard` (production-only; no staging variant → plain name) |
 | Data | `positions.yaml` via SOPS Secret `finance-dashboard-positions`, mounted at `/data` |
-| Exposure | ClusterIP only (kubectl port-forward); no Gateway ingress |
+| Exposure | LAN-only via gateway — `https://finance.burntbytes.com` (wildcard cert). Gateway holds a LAN IP, not tunneled → not reachable off-network. |
 | Prices | static/offline in v1 (NetworkPolicy is DNS-egress-only) |
 
 ## Architecture
@@ -31,9 +31,13 @@ only in the SOPS-encrypted Secret and in the running pod's memory.
 
 ## Access
 
+On the LAN: **https://finance.burntbytes.com** (valid TLS off the `*.burntbytes.com`
+wildcard cert; internal DNS resolves it to the gateway's LAN IP). Not tunneled, so
+it's unreachable from outside the network.
+
+Fallback (no DNS / debugging):
 ```bash
-kubectl -n finance-dashboard port-forward svc/finance-dashboard 8080:8080
-# open http://localhost:8080
+kubectl -n finance-dashboard port-forward svc/finance-dashboard 8080:8080  # → localhost:8080
 ```
 
 ## Update the numbers

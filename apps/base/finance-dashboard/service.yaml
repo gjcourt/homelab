@@ -6,10 +6,9 @@ metadata:
   labels:
     app: finance-dashboard
 spec:
-  # Internal-only. Reach it with:
+  # ClusterIP — the LAN gateway (HTTPRoute → https://finance.burntbytes.com)
+  # routes to it. Fallback for debugging without DNS:
   #   kubectl -n finance-dashboard port-forward svc/finance-dashboard 8080:8080
-  # then open http://localhost:8080. (Swap to type: LoadBalancer +
-  # lbipam.cilium.io/ip-pool: home-c-pool for a stable LAN IP later.)
   type: ClusterIP
   selector:
     app: finance-dashboard

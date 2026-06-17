@@ -1178,11 +1178,11 @@ data:
             "type": "query"
           },
           {
-            "current": {"selected": false, "text": "0.20", "value": "0.20"},
+            "current": {"selected": false, "text": "0.45", "value": "0.45"},
             "hide": 0,
-            "label": "Electricity rate ($/kWh) — set to your actual rate",
+            "label": "Electricity rate ($/kWh) — PG&E blended, all-in (bill 5/2026)",
             "name": "cost_per_kwh",
-            "query": "0.20",
+            "query": "0.45",
             "skipUrlSync": false,
             "type": "constant"
           },

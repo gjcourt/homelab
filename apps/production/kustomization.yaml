@@ -13,8 +13,6 @@ resources:
   - flashcards
   - flashcards-sync
   - golinks
-  - hermes
-  - hermes-callee
   - homeassistant
   - homepage
   - immich
@@ -25,7 +23,6 @@ resources:
   - navidrome
   - openwebui
   - overture
-  - signal-cli
   - snapcast
   - thermalscope
   - truenas-iscsi-monitor

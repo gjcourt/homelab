@@ -160,9 +160,10 @@ API, NetworkPolicy enforcement, and observability via Hubble.
 from a pod inside the cluster to Cloudflare's edge. Provides public
 ingress without port-forwarding. Config in `apps/base/cloudflare-tunnel/`.
 
-**hestia.** TrueNAS GPU server at `10.42.2.10`. Hosts vLLM/llama.cpp for
-local LLM inference, signal-cli-rest-api for the Hermes Signal bot, and
-serves iSCSI for non-Synology PVCs.
+**hestia.** TrueNAS storage server at `10.42.2.10`. Serves iSCSI for
+non-Synology PVCs. (Formerly a GPU server hosting vLLM/llama.cpp and
+signal-cli-rest-api for the Hermes Signal bot; the GPUs were sold and
+signal-cli/hermes were decommissioned 2026-06-17.)
 
 **`melodic-muse`.** The Talos cluster name.
 

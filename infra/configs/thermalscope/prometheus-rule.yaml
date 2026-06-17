@@ -23,6 +23,44 @@ spec:
         - record: instance:thermalscope_cpu_package_kwh:increase1d
           expr: increase(thermalscope_rapl_energy_microjoules_total{domain="package-0"}[24h]) / 3.6e12
 
+        # --- Phase 2: Headroom & Throttle ---
+
+        # NVMe thermal headroom (°C) to the SMART crit threshold, per drive.
+        # Joins the threshold and current-temp series on their shared
+        # (instance,device,sensor) labels. Only temp1/Composite exposes a
+        # crit threshold, so headroom is defined exactly where crit exists.
+        - record: instance:thermalscope_nvme_headroom_celsius
+          expr: thermalscope_nvme_temperature_threshold_celsius{level="crit"} - on(instance,device,sensor) thermalscope_nvme_temperature_celsius
+
+        # CPU frequency ratio (current / max) for the worst-throttled core,
+        # per node. A throttle indicator: <1 means at least one core is
+        # below its max clock. Note these AMD APUs idle-park cores well
+        # below max, so the idle baseline is ~0.4–0.7, NOT ~1.0 — a low
+        # ratio is only meaningful when paired with high temperature (see
+        # ThermalScopeCPUThrottling). node-exporter keys series by
+        # instance="<ip>:9100"; we re-key to the thermalscope
+        # instance="<nodename>" via node_uname_info so this rule joins
+        # cleanly with thermalscope_cpu_temperature_celsius and matches the
+        # dashboard's $instance variable. node-exporter covers the 6 Talos
+        # nodes only (hestia is a bare host outside the DaemonSet).
+        - record: instance:thermalscope_cpu_freq_ratio
+          expr: |
+            min by(instance) (
+              label_replace(
+                (node_cpu_scaling_frequency_hertz / node_cpu_scaling_frequency_max_hertz)
+                  * on(instance) group_left(nodename) node_uname_info,
+                "instance", "$1", "nodename", "(.+)"
+              )
+            )
+
+        # CPU thermal headroom (°C) to Tjmax, per host. These AMD APUs
+        # expose no crit sensor in sysfs, so Tjmax is an advisory constant.
+        # Hardcoded 95 here; the dashboard panel single-sources the same
+        # value through the $cpu_tjmax constant template variable. Keep the
+        # two in sync if you change the assumption.
+        - record: instance:thermalscope_cpu_headroom_celsius
+          expr: 95 - thermalscope_cpu_temperature_celsius{sensor="Tctl"}
+
     - name: thermalscope
       rules:
         - alert: ThermalScopeScraperDown
@@ -82,3 +120,37 @@ spec:
           annotations:
             summary: "AMD iGPU on {{ $labels.instance }} is hot"
             description: "amdgpu {{ $labels.sensor }} on {{ $labels.instance }} is {{ $value }}°C (threshold 90°C)."
+
+        # --- Phase 2: Headroom & Throttle ---
+
+        # Fires per-instance per-device when an NVMe drive is within 5°C of
+        # its SMART crit threshold. This complements the fixed-65°C
+        # ThermalScopeNVMeTemperatureHigh alert by tracking the
+        # drive-reported limit directly, so it stays correct across drives
+        # with different crit points (currently 82–88°C).
+        - alert: ThermalScopeNVMeHeadroomLow
+          expr: instance:thermalscope_nvme_headroom_celsius < 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} has low thermal headroom"
+            description: "{{ $labels.device }} on {{ $labels.instance }} is only {{ $value }}°C from its crit threshold (<5°C headroom)."
+
+        # Real throttling = depressed clock WHILE hot. The freq ratio alone
+        # is meaningless on these APUs (idle cores park at ~0.4–0.7), so we
+        # gate on Tctl > 80°C. The join keys both sides on the thermalscope
+        # instance label (the recording rule re-keys node-exporter to
+        # nodename for exactly this reason). 0.85/80 chosen to sit below the
+        # 85°C ThermalScopeCPUTemperatureHigh threshold while still
+        # requiring genuinely high heat alongside the clock drop.
+        - alert: ThermalScopeCPUThrottling
+          expr: |
+            instance:thermalscope_cpu_freq_ratio < 0.85
+              and on(instance) max by(instance)(thermalscope_cpu_temperature_celsius{sensor="Tctl"}) > 80
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CPU on {{ $labels.instance }} appears to be thermally throttling"
+            description: "{{ $labels.instance }} worst-core frequency ratio is {{ $value }} (<0.85) while Tctl is above 80°C — likely thermal throttling."

@@ -1,0 +1,29 @@
+# Scrapes the Flux controllers' Prometheus metrics (gotk_reconcile_condition,
+# etc.) so the Flux reconciliation alerts in
+# infra/configs/alerts/prometheus-rules.yaml have data to evaluate against.
+#
+# A PodMonitor (not ServiceMonitor) is required: helm-controller and
+# kustomize-controller expose http-prom:8080 but have no Service. The
+# controllers all carry app.kubernetes.io/part-of: flux. The
+# `release: kube-prometheus-stack` label is what makes Prometheus discover
+# this PodMonitor (podMonitorSelectorNilUsesHelmValues: true). Ingress to
+# :8080 is already permitted by the flux-system `allow-scraping` NetworkPolicy.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: flux-system
+  namespace: flux-system
+  labels:
+    app.kubernetes.io/part-of: flux
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - flux-system
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: flux
+  podMetricsEndpoints:
+    - port: http-prom
+      path: /metrics
+      interval: 60s

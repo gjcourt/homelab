@@ -222,3 +222,45 @@ spec:
             summary: "Immich photo backup hasn't completed in >36h"
             description: >
               Last successful immich-photos-backup.sh run on hestia was {{ $value | humanizeDuration }} ago. Daily cron is at 04:00; >36h means at least one full day's backup was missed. Check /var/log/immich-photos-backup.log on hestia and verify the ssh key to alcatraz still works.
+    # -------------------------------------------------------------------------
+    # Flux reconciliation health
+    #
+    # gotk_reconcile_condition is emitted by every Flux controller for each
+    # managed object. A Ready=False condition that persists means GitOps has
+    # stopped converging that object: a Kustomization stuck on a build error, a
+    # HelmRelease failing to upgrade, or a GitRepository that can't fetch. Left
+    # silent, the cluster drifts from Git until something else breaks loudly.
+    #
+    # `for: 15m` rides out normal in-flight reconciles (a HelmRelease upgrade,
+    # a transient source fetch) — only a genuinely stuck object fires. Metrics
+    # are scraped via the flux-system PodMonitor in infra/configs/flux-monitoring.
+    # -------------------------------------------------------------------------
+    - name: flux-reconciliation
+      rules:
+        - alert: FluxKustomizationNotReady
+          expr: max by (name, namespace) (gotk_reconcile_condition{type="Ready",status="False",kind="Kustomization"}) == 1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Flux Kustomization {{ $labels.namespace }}/{{ $labels.name }} not ready"
+            description: >
+              Kustomization {{ $labels.namespace }}/{{ $labels.name }} has been Ready=False for >15m — Flux is no longer converging it to Git. Run `flux get kustomization {{ $labels.name }} -n {{ $labels.namespace }}` and check the status message for the build/apply error.
+        - alert: FluxHelmReleaseNotReady
+          expr: max by (name, namespace) (gotk_reconcile_condition{type="Ready",status="False",kind="HelmRelease"}) == 1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Flux HelmRelease {{ $labels.namespace }}/{{ $labels.name }} not ready"
+            description: >
+              HelmRelease {{ $labels.namespace }}/{{ $labels.name }} has been Ready=False for >15m. Run `kubectl describe helmrelease {{ $labels.name }} -n {{ $labels.namespace }}`; a `flux reconcile helmrelease … --reset` clears a stalled upgrade.
+        - alert: FluxGitRepositoryNotReady
+          expr: max by (name, namespace) (gotk_reconcile_condition{type="Ready",status="False",kind="GitRepository"}) == 1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Flux GitRepository {{ $labels.namespace }}/{{ $labels.name }} not ready"
+            description: >
+              GitRepository {{ $labels.namespace }}/{{ $labels.name }} has been Ready=False for >15m — Flux can't fetch the source, so every Kustomization downstream is frozen at its last-applied revision. Check credentials and connectivity to the Git remote.

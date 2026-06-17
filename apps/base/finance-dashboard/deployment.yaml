@@ -23,6 +23,8 @@ spec:
     spec:
       serviceAccountName: finance-dashboard
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-secret
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -32,10 +34,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: finance-dashboard
-          # Public, code-only image (no financial data baked in). If you'd rather
-          # keep the ghcr package private, add an imagePullSecrets + a SOPS
-          # secret-ghcr.yaml here (see apps/base/burntbytes for the pattern).
-          # Pin to the date tag CI produces (build-finance-dashboard.yml) once built.
+          # Private code-only image, pulled via the ghcr-secret
+          # (secret-ghcr.yaml, operator-encrypted). Pin to the date tag CI
+          # produces (build-finance-dashboard.yml) once the first image is built.
           image: ghcr.io/gjcourt/finance-dashboard:latest
           ports:
             - containerPort: 8080

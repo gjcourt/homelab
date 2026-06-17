@@ -7,9 +7,10 @@ resources:
   - service.yaml
   - networkpolicy.yaml
   - httproute.yaml
-  # SOPS-encrypted, operator-created from secret-positions.yaml.example.
-  # CI / kustomize build fails until this exists — that's the intended gate.
+  # SOPS-encrypted, operator-created from the .example templates. CI / kustomize
+  # build fails until both exist — the intended gate.
   - secret-positions.yaml
+  - secret-ghcr.yaml
 labels:
   - includeSelectors: false
     pairs:

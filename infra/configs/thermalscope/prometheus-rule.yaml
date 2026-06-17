@@ -7,6 +7,22 @@ metadata:
     release: kube-prometheus-stack
 spec:
   groups:
+    # Recording rules backing the dashboard's Power & Energy row. RAPL
+    # exposes a microjoule counter per CPU package; rate() over it yields
+    # watts, and increase() over 24h converted to kWh drives the energy
+    # and cost panels.
+    - name: thermalscope.recording
+      rules:
+        # CPU package power (watts) per node — rate of the RAPL energy
+        # counter (µJ/s = µW) divided by 1e6 to convert to watts.
+        - record: instance:thermalscope_cpu_package_watts:rate5m
+          expr: rate(thermalscope_rapl_energy_microjoules_total{domain="package-0"}[5m]) / 1e6
+
+        # CPU package energy over the trailing 24h (kWh) per node.
+        # increase() yields µJ; 1 kWh = 3.6e12 µJ.
+        - record: instance:thermalscope_cpu_package_kwh:increase1d
+          expr: increase(thermalscope_rapl_energy_microjoules_total{domain="package-0"}[24h]) / 3.6e12
+
     - name: thermalscope
       rules:
         - alert: ThermalScopeScraperDown

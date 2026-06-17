@@ -768,6 +768,135 @@ data:
           ],
           "title": "Scrape Duration",
           "type": "timeseries"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 64},
+          "id": 300,
+          "title": "Power & Energy — CPU RAPL + SoC; cost is an estimate (set $cost_per_kwh)",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "Per-node CPU package power from the RAPL energy counter (rate over 5m). Backed by the instance:thermalscope_cpu_package_watts:rate5m recording rule.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "watt",
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 8, "w": 12, "x": 0, "y": 65},
+              "id": 301,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "instance:thermalscope_cpu_package_watts:rate5m{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}}"
+                }
+              ],
+              "title": "CPU Package Power (RAPL)",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "Per-node SoC rail power reported by the amdgpu chip sensor.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "watt",
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 8, "w": 12, "x": 12, "y": 65},
+              "id": 302,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_power_watts{instance=~\"$instance\", chip=\"amdgpu\"}",
+                  "legendFormat": "{{instance}}"
+                }
+              ],
+              "title": "SoC Power (amdgpu)",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "Total CPU package energy across all nodes over the trailing 24h. Backed by the instance:thermalscope_cpu_package_kwh:increase1d recording rule.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "thresholds"},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null}
+                    ]
+                  },
+                  "unit": "kwatth",
+                  "decimals": 3,
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 5, "w": 12, "x": 0, "y": 73},
+              "id": 303,
+              "options": {
+                "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+                "orientation": "auto",
+                "colorMode": "value",
+                "graphMode": "area",
+                "textMode": "value_and_name"
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "sum(instance:thermalscope_cpu_package_kwh:increase1d{instance=~\"$instance\"})",
+                  "legendFormat": "Total CPU energy / day"
+                }
+              ],
+              "title": "Energy per day (kWh)",
+              "type": "stat"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "Estimated monthly CPU-package electricity cost: daily kWh × 30 × $cost_per_kwh. This is an ESTIMATE driven by the editable cost_per_kwh template variable — set it to your actual rate. Covers CPU package (RAPL) only, not whole-system draw.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "thresholds"},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null}
+                    ]
+                  },
+                  "unit": "currencyUSD",
+                  "decimals": 2,
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 5, "w": 12, "x": 12, "y": 73},
+              "id": 304,
+              "options": {
+                "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+                "orientation": "auto",
+                "colorMode": "value",
+                "graphMode": "none",
+                "textMode": "value_and_name"
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "sum(instance:thermalscope_cpu_package_kwh:increase1d{instance=~\"$instance\"}) * 30 * $cost_per_kwh",
+                  "legendFormat": "Est. CPU cost / month"
+                }
+              ],
+              "title": "Estimated cost / month ($) — estimate, see $cost_per_kwh",
+              "type": "stat"
+            }
+          ]
         }
       ],
       "refresh": "30s",
@@ -805,6 +934,15 @@ data:
             "skipUrlSync": false,
             "sort": 1,
             "type": "query"
+          },
+          {
+            "current": {"selected": false, "text": "0.20", "value": "0.20"},
+            "hide": 0,
+            "label": "Electricity rate ($/kWh) — set to your actual rate",
+            "name": "cost_per_kwh",
+            "query": "0.20",
+            "skipUrlSync": false,
+            "type": "constant"
           }
         ]
       },
@@ -813,5 +951,5 @@ data:
       "timezone": "browser",
       "title": "ThermalScope — Rack",
       "uid": null,
-      "version": 3
+      "version": 4
     }

@@ -1,7 +1,7 @@
 ---
-status: planned
-last_modified: 2026-06-16
-summary: "thermalscope: add power/energy/cost (RAPL), thermal headroom, and throttle/degradation signals — grounded in verified Talos sysfs"
+status: in-progress
+last_modified: 2026-06-17
+summary: "thermalscope: add power/energy/cost (RAPL), thermal headroom, and throttle/degradation signals — phases 1–3 live; phase 4 pending"
 ---
 
 # thermalscope — Power, Energy, Headroom & Degradation
@@ -9,6 +9,21 @@ summary: "thermalscope: add power/energy/cost (RAPL), thermal headroom, and thro
 thermalscope today measures **heat** (CPU/NVMe/AMD-iGPU temps, fans, GPU power) well. The gaps
 are **energy/cost**, **headroom** (how close to throttle), and **degradation** (cooling getting
 worse over time). This plan adds those, scoped strictly to what the real nodes expose.
+
+## Execution status (2026-06-17)
+
+- **Phase 1 — Power & Energy:** ✅ live. RAPL package+core energy (per-node watts), hwmon SoC watts,
+  recording rules (watts, kWh/day), and a dashboard "Power & Energy" row with a $/month cost stat
+  (`cost_per_kwh` set to the real PG&E blended rate, 0.45). Root cause of an early failure —
+  containerd masks `/sys/devices/virtual/powercap`; fixed by walking the device tree via a non-`/sys`
+  mount (thermalscope PR #5).
+- **Phase 2 — Headroom & throttle:** ✅ live. NVMe headroom from sysfs crit/max, CPU headroom via a
+  Tjmax constant, throttle inference reusing node-exporter cpufreq; alerts + dashboard row.
+- **Phase 3 — Degradation & fans:** ✅ live. CPU-utilization/disk-busy recording rules (re-keyed
+  across exporters via `node_uname_info`), temp-vs-load + 7d-drift panels, fan-failing alert, fan
+  curve. Plus a UniFi PDU per-outlet wall-power row (real per-device draw + whole-system cost).
+- **Phase 4 — SMART/HDD temps, workload correlation, drop vestigial `/sys/class/thermal` mount:**
+  ⏳ pending. SMART needs a smartctl exporter on hestia (operator-gated TrueNAS Custom App).
 
 ## Hardware feasibility — VERIFIED on `talos-18u-ski` (2026-06-16)
 

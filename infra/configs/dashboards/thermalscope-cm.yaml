@@ -897,6 +897,109 @@ data:
               "type": "stat"
             }
           ]
+        },
+        {
+          "collapsed": true,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 78},
+          "id": 400,
+          "title": "Headroom & Throttle — °C to thermal limits + CPU clock throttle indicator",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "NVMe thermal headroom to the SMART crit threshold, per drive (crit − current). Backed by the instance:thermalscope_nvme_headroom_celsius recording rule. Red <5°C, orange <10°C.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "thresholds"},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "red", "value": null},
+                      {"color": "orange", "value": 5},
+                      {"color": "green", "value": 10}
+                    ]
+                  },
+                  "unit": "celsius",
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 8, "w": 12, "x": 0, "y": 79},
+              "id": 401,
+              "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": ""}, "orientation": "horizontal", "displayMode": "gradient"},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "instance:thermalscope_nvme_headroom_celsius{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} {{device}}"
+                }
+              ],
+              "title": "NVMe headroom (°C to crit)",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "CPU thermal headroom to Tjmax, per host ($cpu_tjmax − Tctl). Tjmax is an advisory constant — these AMD APUs expose no crit sensor — set via the $cpu_tjmax template variable. Red <5°C, orange <10°C.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "thresholds"},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "red", "value": null},
+                      {"color": "orange", "value": 5},
+                      {"color": "green", "value": 10}
+                    ]
+                  },
+                  "unit": "celsius",
+                  "min": 0
+                }
+              },
+              "gridPos": {"h": 8, "w": 12, "x": 12, "y": 79},
+              "id": 402,
+              "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": ""}, "orientation": "horizontal", "displayMode": "gradient"},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "$cpu_tjmax - thermalscope_cpu_temperature_celsius{sensor=\"Tctl\", instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}}"
+                }
+              ],
+              "title": "CPU headroom (°C to Tjmax)",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "description": "Worst-throttled-core CPU frequency ratio (current/max), per node. Backed by the instance:thermalscope_cpu_freq_ratio recording rule. NOTE: these APUs idle-park cores well below max, so the idle baseline is ~0.4–0.7, NOT ~1.0 — a low ratio is only concerning alongside high temperature (see the ThermalScopeCPUThrottling alert). node-exporter covers the 6 Talos nodes only (not hestia). Red <0.85.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "thresholds"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "red", "value": null},
+                      {"color": "green", "value": 0.85}
+                    ]
+                  },
+                  "unit": "percentunit",
+                  "min": 0,
+                  "max": 1
+                }
+              },
+              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 87},
+              "id": 403,
+              "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "instance:thermalscope_cpu_freq_ratio{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}}"
+                }
+              ],
+              "title": "CPU frequency ratio (throttle indicator)",
+              "type": "timeseries"
+            }
+          ]
         }
       ],
       "refresh": "30s",
@@ -943,6 +1046,15 @@ data:
             "query": "0.20",
             "skipUrlSync": false,
             "type": "constant"
+          },
+          {
+            "current": {"selected": false, "text": "95", "value": "95"},
+            "hide": 0,
+            "label": "AMD APU Tjmax (°C) — advisory",
+            "name": "cpu_tjmax",
+            "query": "95",
+            "skipUrlSync": false,
+            "type": "constant"
           }
         ]
       },
@@ -951,5 +1063,5 @@ data:
       "timezone": "browser",
       "title": "ThermalScope — Rack",
       "uid": null,
-      "version": 4
+      "version": 5
     }

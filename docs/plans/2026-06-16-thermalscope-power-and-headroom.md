@@ -29,6 +29,17 @@ netscope BPF saga: confirm on real hardware before planning):
 RAPL `energy_uj` requires root — thermalscope already runs `runAsUser: 0`, so this works under
 Talos lockdown (RAPL reads are root-gated by the Platypus mitigation, which we satisfy).
 
+## Review findings — checked against live Prometheus (2026-06-16)
+
+Verified what `kube-prometheus-stack` node-exporter already exposes, to avoid duplicating it:
+
+| Metric | Present? | Decision |
+| :--- | :--- | :--- |
+| `node_rapl_package_joules_total` | **absent** | node-exporter runs non-root; RAPL is root-gated under lockdown so its `rapl` collector yields nothing. **thermalscope (root) is genuinely needed** — Phase 1 is not redundant. |
+| `node_cpu_scaling_frequency_hertz` | **present (72 series)** | **Do NOT add a cpufreq metric to thermalscope.** Phase 2 throttle inference uses node-exporter's existing series; thermalscope contributes only Tjmax constants + headroom rules. |
+| `node_hwmon_power_average_watt` | **absent** | thermalscope surfacing hwmon `power1_input` is non-redundant. |
+| `thermalscope_cpu_temperature_celsius` | present (11 series) | thermalscope healthy; build on it. |
+
 ## Repos touched
 
 - **thermalscope** (`~/src/thermalscope`) — new collectors (Go), following the existing
@@ -67,9 +78,10 @@ and a **$/month cost** stat. This is the single most compelling missing view.
   headroom < 5 °C (portable across drives, unlike the hardcoded `>65` today).
 - **CPU/GPU headroom** (config Tjmax, since sysfs has no crit): a small per-chip threshold map
   (k10temp Tjmax, amdgpu junction max) in the agent config or as a recording-rule constant.
-- **Throttle inference:** expose `thermalscope_cpu_scaling_hertz{cpu}` (cur) and
-  `thermalscope_cpu_max_hertz{cpu}`; alert/panel when `cur/max < 0.85` *while* temp is high
-  (real throttling, not a fixed temp threshold).
+- **Throttle inference:** reuse node-exporter's existing `node_cpu_scaling_frequency_hertz` and
+  `node_cpu_scaling_frequency_max_hertz` (both already scraped — do not duplicate in thermalscope);
+  alert/panel when `cur/max < 0.85` *while* thermalscope temp is high (real throttling, not a fixed
+  temp threshold). thermalscope adds only the per-chip Tjmax constants for the headroom calc.
 
 ## Phase 3 — Degradation & correlation (the predictive angle)
 

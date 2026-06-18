@@ -5,6 +5,7 @@ resources:
   - cert-manager-issuers
   - cilium
   - dashboards
+  - flux-monitoring
   - gateway
   - ipmi-exporter
   - network-policies

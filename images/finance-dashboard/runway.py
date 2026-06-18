@@ -170,7 +170,7 @@ SLIDERS = [
     ("annual_spend", "Annual spend (today's $)", 100_000, 400_000, 5_000),
     ("expected_return", "Expected return (nominal)", 0.03, 0.10, 0.0025),
     ("inflation", "Inflation", 0.00, 0.05, 0.0025),
-    ("annual_savings", "Pre-retirement savings/yr", 0, 300_000, 10_000),
+    ("annual_savings", "Pre-retirement savings/yr", 0, 4_000_000, 10_000),
 ]
 
 

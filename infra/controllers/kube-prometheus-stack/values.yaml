@@ -2444,7 +2444,85 @@ kube-state-metrics:
   namespaceOverride: ""
   rbac:
     create: true
+    # Allow kube-state-metrics to list/watch Flux custom resources so the
+    # customResourceState config below can emit gotk_resource_info. GA Flux
+    # controllers (helm/kustomize-controller v1) no longer expose the
+    # gotk_reconcile_condition gauge, so per-object readiness for the Flux
+    # alerts in infra/configs/alerts/prometheus-rules.yaml comes from here.
+    extraRules:
+      - apiGroups:
+          - source.toolkit.fluxcd.io
+          - kustomize.toolkit.fluxcd.io
+          - helm.toolkit.fluxcd.io
+          - notification.toolkit.fluxcd.io
+        resources: ["*"]
+        verbs: ["list", "watch"]
   releaseLabel: true
+
+  # Emit gotk_resource_info{customresource_kind, exported_namespace, name,
+  # ready, suspended, revision} for Flux objects, mirroring the upstream
+  # flux2-monitoring-example. This is the replacement for the removed
+  # gotk_reconcile_condition gauge. Served CRD versions on this cluster:
+  # Kustomization v1, HelmRelease v2, GitRepository v1.
+  customResourceState:
+    enabled: true
+    config:
+      kind: CustomResourceStateMetrics
+      spec:
+        resources:
+          - groupVersionKind:
+              group: kustomize.toolkit.fluxcd.io
+              kind: Kustomization
+              version: v1
+            metricNamePrefix: gotk
+            metrics:
+              - name: resource_info
+                help: "The current state of a Flux Kustomization."
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      name: [metadata, name]
+                labelsFromPath:
+                  exported_namespace: [metadata, namespace]
+                  ready: [status, conditions, "[type=Ready]", status]
+                  suspended: [spec, suspend]
+                  revision: [status, lastAppliedRevision]
+          - groupVersionKind:
+              group: helm.toolkit.fluxcd.io
+              kind: HelmRelease
+              version: v2
+            metricNamePrefix: gotk
+            metrics:
+              - name: resource_info
+                help: "The current state of a Flux HelmRelease."
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      name: [metadata, name]
+                labelsFromPath:
+                  exported_namespace: [metadata, namespace]
+                  ready: [status, conditions, "[type=Ready]", status]
+                  suspended: [spec, suspend]
+          - groupVersionKind:
+              group: source.toolkit.fluxcd.io
+              kind: GitRepository
+              version: v1
+            metricNamePrefix: gotk
+            metrics:
+              - name: resource_info
+                help: "The current state of a Flux GitRepository."
+                each:
+                  type: Info
+                  info:
+                    labelsFromPath:
+                      name: [metadata, name]
+                labelsFromPath:
+                  exported_namespace: [metadata, namespace]
+                  ready: [status, conditions, "[type=Ready]", status]
+                  suspended: [spec, suspend]
+                  revision: [status, artifact, revision]
 
   ## Enable scraping via kubernetes-service-endpoints
   ## Disabled by default as we service monitor is enabled below

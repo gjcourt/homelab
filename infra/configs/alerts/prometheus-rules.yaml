@@ -225,42 +225,48 @@ spec:
     # -------------------------------------------------------------------------
     # Flux reconciliation health
     #
-    # gotk_reconcile_condition is emitted by every Flux controller for each
-    # managed object. A Ready=False condition that persists means GitOps has
+    # gotk_resource_info is an Info gauge (always 1) emitted by kube-state-metrics
+    # for each Flux object, carrying a `ready` label sourced from the object's
+    # Ready condition. A series with ready="False" that persists means GitOps has
     # stopped converging that object: a Kustomization stuck on a build error, a
     # HelmRelease failing to upgrade, or a GitRepository that can't fetch. Left
     # silent, the cluster drifts from Git until something else breaks loudly.
     #
-    # `for: 15m` rides out normal in-flight reconciles (a HelmRelease upgrade,
-    # a transient source fetch) — only a genuinely stuck object fires. Metrics
-    # are scraped via the flux-system PodMonitor in infra/configs/flux-monitoring.
+    # NOTE: GA Flux controllers (helm/kustomize-controller v1) no longer expose
+    # the old gotk_reconcile_condition gauge — readiness now comes from the
+    # kube-state-metrics customResourceState config in
+    # infra/controllers/kube-prometheus-stack/values.yaml. The namespace label is
+    # `exported_namespace` (the object's namespace); `customresource_kind`
+    # distinguishes the Flux kind. `for: 15m` rides out normal in-flight
+    # reconciles (a HelmRelease upgrade, a transient source fetch) so only a
+    # genuinely stuck object fires.
     # -------------------------------------------------------------------------
     - name: flux-reconciliation
       rules:
         - alert: FluxKustomizationNotReady
-          expr: max by (name, namespace) (gotk_reconcile_condition{type="Ready",status="False",kind="Kustomization"}) == 1
+          expr: max by (name, exported_namespace) (gotk_resource_info{customresource_kind="Kustomization", ready="False"}) == 1
           for: 15m
           labels:
             severity: critical
           annotations:
-            summary: "Flux Kustomization {{ $labels.namespace }}/{{ $labels.name }} not ready"
+            summary: "Flux Kustomization {{ $labels.exported_namespace }}/{{ $labels.name }} not ready"
             description: >
-              Kustomization {{ $labels.namespace }}/{{ $labels.name }} has been Ready=False for >15m — Flux is no longer converging it to Git. Run `flux get kustomization {{ $labels.name }} -n {{ $labels.namespace }}` and check the status message for the build/apply error.
+              Kustomization {{ $labels.exported_namespace }}/{{ $labels.name }} has been Ready=False for >15m — Flux is no longer converging it to Git. Run `flux get kustomization {{ $labels.name }} -n {{ $labels.exported_namespace }}` and check the status message for the build/apply error.
         - alert: FluxHelmReleaseNotReady
-          expr: max by (name, namespace) (gotk_reconcile_condition{type="Ready",status="False",kind="HelmRelease"}) == 1
+          expr: max by (name, exported_namespace) (gotk_resource_info{customresource_kind="HelmRelease", ready="False"}) == 1
           for: 15m
           labels:
             severity: critical
           annotations:
-            summary: "Flux HelmRelease {{ $labels.namespace }}/{{ $labels.name }} not ready"
+            summary: "Flux HelmRelease {{ $labels.exported_namespace }}/{{ $labels.name }} not ready"
             description: >
-              HelmRelease {{ $labels.namespace }}/{{ $labels.name }} has been Ready=False for >15m. Run `kubectl describe helmrelease {{ $labels.name }} -n {{ $labels.namespace }}`; a `flux reconcile helmrelease … --reset` clears a stalled upgrade.
+              HelmRelease {{ $labels.exported_namespace }}/{{ $labels.name }} has been Ready=False for >15m. Run `kubectl describe helmrelease {{ $labels.name }} -n {{ $labels.exported_namespace }}`; a `flux reconcile helmrelease … --reset` clears a stalled upgrade.
         - alert: FluxGitRepositoryNotReady
-          expr: max by (name, namespace) (gotk_reconcile_condition{type="Ready",status="False",kind="GitRepository"}) == 1
+          expr: max by (name, exported_namespace) (gotk_resource_info{customresource_kind="GitRepository", ready="False"}) == 1
           for: 15m
           labels:
             severity: critical
           annotations:
-            summary: "Flux GitRepository {{ $labels.namespace }}/{{ $labels.name }} not ready"
+            summary: "Flux GitRepository {{ $labels.exported_namespace }}/{{ $labels.name }} not ready"
             description: >
-              GitRepository {{ $labels.namespace }}/{{ $labels.name }} has been Ready=False for >15m — Flux can't fetch the source, so every Kustomization downstream is frozen at its last-applied revision. Check credentials and connectivity to the Git remote.
+              GitRepository {{ $labels.exported_namespace }}/{{ $labels.name }} has been Ready=False for >15m — Flux can't fetch the source, so every Kustomization downstream is frozen at its last-applied revision. Check credentials and connectivity to the Git remote.

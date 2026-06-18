@@ -1,6 +1,11 @@
-# Scrapes the Flux controllers' Prometheus metrics (gotk_reconcile_condition,
-# etc.) so the Flux reconciliation alerts in
-# infra/configs/alerts/prometheus-rules.yaml have data to evaluate against.
+# Scrapes the Flux controllers' own Prometheus metrics: reconcile durations
+# (gotk_reconcile_duration_seconds), controller-runtime reconcile/error
+# counters, and work-queue depth — useful for dashboards and controller-health
+# debugging. Per-object readiness for the Flux alerts in
+# infra/configs/alerts/prometheus-rules.yaml does NOT come from here: GA Flux
+# controllers no longer expose the gotk_reconcile_condition gauge, so that
+# signal (gotk_resource_info) is produced by the kube-state-metrics
+# customResourceState config in infra/controllers/kube-prometheus-stack.
 #
 # A PodMonitor (not ServiceMonitor) is required: helm-controller and
 # kustomize-controller expose http-prom:8080 but have no Service. The

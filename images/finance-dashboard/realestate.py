@@ -67,8 +67,12 @@ function recompute(){
   document.getElementById('r_steady').textContent=money(r.nat_steady);
   document.getElementById('r_down').textContent='Down: '+money(r.down);
 }
-function setPrice(v){ const el=document.getElementById('price');
-  el.value=Math.max(el.min, Math.min(el.max, v)); recompute();
+function setPrice(row){ const el=document.getElementById('price');
+  el.value=Math.max(el.min, Math.min(el.max, parseFloat(row.dataset.price))); recompute();
+  document.querySelectorAll('tr.sel').forEach(r=>r.classList.remove('sel'));
+  row.classList.add('sel');
+  const m=document.getElementById('modeling');
+  if(m) m.textContent='Modeling: '+(row.dataset.addr||'');
   window.scrollTo({top:0, behavior:'smooth'}); }
 window.addEventListener('load', function(){
   document.querySelectorAll('input[type=range]').forEach(el=>el.addEventListener('input', recompute));
@@ -94,7 +98,7 @@ def render_html(cfg: dict, cands: dict) -> str:
         if (c.get("freeway_mi") or 9) < 0.5:
             flags.append('<span class=off>freeway</span>')
         bdba = f'{c.get("beds","?")}/{c.get("baths","?")}'
-        rows += (f'<tr class=click onclick="setPrice({price})">'
+        rows += (f'<tr class=click data-price="{price}" data-addr="{html.escape(c.get("address",""))}" onclick="setPrice(this)">'
                  f'<td class=num>{c.get("fit","")}</td>'
                  f'<td><a href="{html.escape(c.get("url",""))}" onclick="event.stopPropagation()">{html.escape(c.get("address",""))}</a> {" ".join(flags)}</td>'
                  f'<td class=num>${price/1e6:.2f}M</td><td class=num>{c.get("acres","")}</td>'
@@ -113,6 +117,8 @@ click a candidate below to load its price. Fixed: {cfg['rental_share']*100:.0f}%
  <div class=card><div class=label>Year-1 after-tax</div><div class="value big" id=r_y1></div><div class=sub id=r_down></div></div>
  <div class=card><div class=label>Steady-state / yr</div><div class="value big" id=r_steady></div><div class=sub>yr 2+ (shield spent)</div></div>
 </div>
+
+<div class=note id=modeling>Click a candidate below to load it into the model.</div>
 
 <div class=controls>
  {sliders}

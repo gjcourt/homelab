@@ -117,6 +117,7 @@ function init(){
     }
   });
   ctx.ondblclick = ()=>chart.resetZoom();
+  document.getElementById('zoomreset').addEventListener('click', ()=>chart.resetZoom());
   document.querySelectorAll('input[type=range]').forEach(el=>el.addEventListener('input', recompute));
   recompute();
 }
@@ -157,7 +158,8 @@ projection + the odds update live. Nominal model; spend &amp; savings grow with 
 </div>
 
 <div class=chartbox><div style="height:340px"><canvas id=chart></canvas></div>
- <div class=legend>Three deterministic paths at expected ±{cfg['spread']*100:.0f}% return; <span style="color:#f87171">red = underwater</span>. Success % runs {cfg['mc_paths']} Monte Carlo paths (vol {cfg['return_vol']*100:.0f}%). <b>Drag to zoom a year range · double-click to reset.</b></div>
+ <div class=zoombar><button id=zoomreset class="btn subtle">&#10530; Reset zoom</button></div>
+ <div class=legend>Three deterministic paths at expected ±{cfg['spread']*100:.0f}% return; <span style="color:#f87171">red = underwater</span>. Success % runs {cfg['mc_paths']} Monte Carlo paths (vol {cfg['return_vol']*100:.0f}%). <b>Drag to zoom a year range · double-click (or Reset zoom) to reset.</b></div>
 </div>
 
 <div class=controls>

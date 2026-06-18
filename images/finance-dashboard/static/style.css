@@ -83,6 +83,18 @@ th.sortable { cursor:pointer; user-select:none; } th.sortable:hover { color:var(
 .foot { color:var(--muted); font-size:12px; margin-top:36px; border-top:1px solid var(--line); padding-top:12px; }
 .note { color:var(--muted); font-size:13px; margin:8px 0; }
 
+/* ---- edit-mode toggle (cash flow) ---- */
+.hidden { display:none !important; }
+.editbar { margin:12px 0 4px; }
+.btn { background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:8px;
+  padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; }
+.btn:hover { border-color:var(--blue); color:#fff; }
+.btn.on { background:var(--blue); border-color:var(--blue); color:#fff; }
+.btn.subtle { background:transparent; border-color:var(--line); color:var(--muted);
+  padding:4px 10px; font-size:12px; font-weight:550; }
+.btn.subtle:hover { color:var(--txt); border-color:var(--blue); background:transparent; }
+.zoombar { text-align:right; margin-top:6px; }
+
 /* ---- mobile (iPhone etc.) ---- */
 @media (max-width:720px){
   .wrap { padding:14px 12px 48px; }

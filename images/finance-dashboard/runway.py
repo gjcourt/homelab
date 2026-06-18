@@ -130,7 +130,7 @@ function init(){
         zoom:{
           limits:{ x:{min:R.current_age, max:MAXAGE} },     // never pan/zoom into negative ages; cap at 300
           zoom:{ wheel:{enabled:true},
-            drag:{enabled:true, backgroundColor:'rgba(47,111,237,0.12)', borderColor:'#2f6fed', borderWidth:1},
+            drag:{enabled:true, threshold:10, backgroundColor:'rgba(47,111,237,0.12)', borderColor:'#2f6fed', borderWidth:1},
             mode:'x', onZoomComplete:()=>{ rescaleY(); chart.update('none'); } },
           pan:{ enabled:true, mode:'x', onPanComplete:()=>{ rescaleY(); chart.update('none'); } } } }
     }

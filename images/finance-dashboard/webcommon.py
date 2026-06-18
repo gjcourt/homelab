@@ -14,8 +14,8 @@ import html
 NAV = [
     ("index.html", "Balance Sheet"),
     ("cashflow.html", "Cash Flow"),
-    ("realestate.html", "Real Estate"),
     ("runway.html", "Runway"),
+    ("realestate.html", "Real Estate"),
 ]
 
 

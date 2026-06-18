@@ -44,8 +44,8 @@ RSU_Q = (3, 6, 9, 12)
 
 # (id, label, min, max, step, fmt) — the live sliders. Everything else is baked.
 SLIDERS = [
-    ("base", "Base salary", 200_000, 500_000, 5_000, "money"),
-    ("rsu_annual", "RSU / stock per yr", 0, 800_000, 10_000, "money"),
+    ("base", "Base salary", 200_000, 1_000_000, 5_000, "money"),
+    ("rsu_annual", "RSU / stock per yr", 0, 5_000_000, 25_000, "money"),
     ("bonus", "Bonus", 0, 150_000, 5_000, "money"),
     ("mortgage_pi", "Mortgage P&I (monthly)", 4_000, 20_000, 250, "money"),
     ("living", "Living (monthly)", 5_000, 25_000, 500, "money"),

@@ -9,7 +9,7 @@ resources:
   - httproute.yaml
   # SOPS-encrypted, operator-created from the .example templates. CI / kustomize
   # build fails until both exist — the intended gate.
-  - secret-positions.yaml
+  - secret-finance-data.yaml
   - secret-ghcr.yaml
 labels:
   - includeSelectors: false

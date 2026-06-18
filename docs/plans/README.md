@@ -84,10 +84,11 @@ see `scripts/plans-index/`).
 | [2026-03-08-drawer-inserts.md](2026-03-08-drawer-inserts.md) | 2026-05-03 | Cardboard drawer insert design (75×32×12 cm) — physical project, no repo artifacts |
 | [2026-02-21-linkding-db-restore-plan.md](2026-02-21-linkding-db-restore-plan.md) | 2026-05-03 | Live DR drill: destroy and restore Linkding staging DB (never executed) |
 
-### Complete (16)
+### Complete (17)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-06-18-finance-dashboard-multipage.md](2026-06-18-finance-dashboard-multipage.md) | 2026-06-18 | finance.burntbytes.com expanded from one balance-sheet page to a 4-page static site (balance sheet, cash flow, STR model, retirement runway) with encrypted-YAML data + interactive client-side charts |
 | [2026-06-10-docs-reorg-status-dashboard.md](2026-06-10-docs-reorg-status-dashboard.md) | 2026-06-10 | Docs status legibility: plan frontmatter cleanup, generated index, STATUS.md dashboard, HOMELAB.md migration |
 | [2026-06-10-burntbytes-self-host.md](2026-06-10-burntbytes-self-host.md) | 2026-06-10 | burntbytes.com self-hosted on the cluster via Cloudflare tunnel; apex cutover live, GitHub Pages retired |
 | [2026-05-09-monitoring-enhancement.md](2026-05-09-monitoring-enhancement.md) | 2026-06-17 | ServiceMonitor coverage audit, critical-alert Signal routing, Flux reconciliation alerts |

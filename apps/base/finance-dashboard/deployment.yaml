@@ -37,12 +37,14 @@ spec:
           # Private code-only image, pulled via the ghcr-secret
           # (secret-ghcr.yaml, operator-encrypted). Pin to the date tag CI
           # produces (build-finance-dashboard.yml) once the first image is built.
-          image: ghcr.io/gjcourt/finance-dashboard:2026-06-18
+          # Bootstrap on :latest — the multi-page image only builds on merge.
+          # Pin the immutable :YYYY-MM-DD-<sha> tag in a follow-up after the build.
+          image: ghcr.io/gjcourt/finance-dashboard:latest
           ports:
             - containerPort: 8080
           env:
-            - name: POSITIONS_FILE
-              value: /data/positions.yaml
+            - name: DATA_DIR
+              value: /data
             - name: OUT_DIR
               value: /srv/html
           resources:
@@ -69,14 +71,14 @@ spec:
                 - ALL
             readOnlyRootFilesystem: true
           volumeMounts:
-            - name: positions
+            - name: data
               mountPath: /data
               readOnly: true
             - name: html
               mountPath: /srv/html
       volumes:
-        - name: positions
+        - name: data
           secret:
-            secretName: finance-dashboard-positions
+            secretName: finance-dashboard-data
         - name: html
           emptyDir: {}

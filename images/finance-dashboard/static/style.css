@@ -1,0 +1,75 @@
+/* Shared dark theme for the finance-dashboard site (balance sheet, cash flow,
+   real estate, runway). One stylesheet → consistent look across all pages. */
+:root {
+  --bg:#0f1419; --panel:#171c24; --line:#262d38; --txt:#e6e9ef; --muted:#8b97a8;
+  --blue:#2f6fed; --green:#16a34a; --amber:#d97706; --red:#f87171;
+}
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--txt);
+  font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; }
+.wrap { max-width:980px; margin:0 auto; padding:18px 20px 60px; }
+
+/* ---- top nav ---- */
+.topnav { display:flex; gap:4px; flex-wrap:wrap; margin:0 0 22px;
+  border-bottom:1px solid var(--line); padding-bottom:0; }
+.topnav a { color:var(--muted); text-decoration:none; font-size:14px; font-weight:550;
+  padding:10px 14px; border-bottom:2px solid transparent; }
+.topnav a:hover { color:var(--txt); }
+.topnav a.active { color:var(--txt); border-bottom-color:var(--blue); }
+
+/* ---- headings ---- */
+h1 { font-size:20px; margin:0 0 2px; }
+.date, .sublede { color:var(--muted); font-size:13px; margin-bottom:4px; }
+h2 { font-size:14px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted);
+  border-bottom:1px solid var(--line); padding-bottom:8px; margin:30px 0 14px; }
+
+/* ---- summary cards ---- */
+.cards { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:22px 0; }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px 16px; }
+.card .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+.card .value { font-size:22px; font-weight:650; margin-top:4px; }
+.card .sub { color:var(--muted); font-size:12px; margin-top:2px; }
+@media (max-width:720px){ .cards { grid-template-columns:repeat(2,1fr); } }
+
+/* ---- tables ---- */
+table { width:100%; border-collapse:collapse; }
+td,th { padding:7px 10px; border-bottom:1px solid var(--line); text-align:left; vertical-align:middle; }
+th { color:var(--muted); font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:.03em; }
+.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.muted { color:var(--muted); } .neg { color:var(--red); }
+.grp td { font-weight:650; background:#11161d; color:var(--txt); }
+.ok { color:var(--green); } .off { color:var(--red); font-weight:600; }
+.drift.off { color:var(--red); } .drift { color:var(--green); }
+tr.click { cursor:pointer; } tr.click:hover td { background:#1d2530; }
+
+/* ---- allocation / progress bars ---- */
+.bar { width:42%; }
+.atrack { position:relative; height:14px; background:#0d1117; border-radius:7px; overflow:hidden; }
+.afill { height:100%; border-radius:7px; }
+.tmark { position:absolute; top:-3px; width:2px; height:20px; background:var(--txt); z-index:2; }
+.prow { display:grid; grid-template-columns:160px 1fr 200px; align-items:center; gap:14px; margin:9px 0; }
+.ptrack { height:12px; background:#0d1117; border-radius:6px; overflow:hidden; }
+.pfill { height:100%; background:linear-gradient(90deg,var(--blue),var(--green)); }
+.pnum { font-variant-numeric:tabular-nums; }
+
+/* ---- interactive controls (runway / real-estate models) ---- */
+.controls { display:grid; grid-template-columns:repeat(2,1fr); gap:14px 28px;
+  background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:14px 0; }
+@media (max-width:720px){ .controls { grid-template-columns:1fr; } }
+.ctrl label { display:flex; justify-content:space-between; font-size:13px; color:var(--muted); margin-bottom:5px; }
+.ctrl label b { color:var(--txt); font-variant-numeric:tabular-nums; font-weight:600; }
+.ctrl input[type=range] { width:100%; accent-color:var(--blue); height:22px; }
+
+/* ---- result tiles (live-updating outputs) ---- */
+.results { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:16px 0; }
+.results .card .value.big { font-size:24px; }
+.results .pos { color:var(--green); } .results .warn { color:var(--amber); } .results .bad { color:var(--red); }
+@media (max-width:720px){ .results { grid-template-columns:repeat(2,1fr); } }
+
+/* ---- chart ---- */
+.chartbox { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; margin:14px 0; }
+.chartbox canvas { width:100% !important; }
+.legend { color:var(--muted); font-size:12px; margin-top:6px; }
+
+.foot { color:var(--muted); font-size:12px; margin-top:36px; border-top:1px solid var(--line); padding-top:12px; }
+.note { color:var(--muted); font-size:13px; margin:8px 0; }

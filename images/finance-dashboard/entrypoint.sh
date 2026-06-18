@@ -1,16 +1,18 @@
 #!/bin/sh
-# Render the dashboard from the mounted positions data, then serve it.
+# Render the four pages from the mounted data, copy static assets, then serve.
 set -eu
 
-OUT_DIR="${OUT_DIR:-/srv/html}"
-POSITIONS_FILE="${POSITIONS_FILE:-/data/positions.yaml}"
+OUT="${OUT_DIR:-/srv/html}"
+DATA="${DATA_DIR:-/data}"
 
-mkdir -p "$OUT_DIR"
+mkdir -p "$OUT"
+cp /app/static/style.css /app/static/chart.min.js "$OUT"/
 
-# Static prices (offline) for v1 — no internet egress required, so the
-# NetworkPolicy stays DNS-only. Add `--live` later (plus an egress rule for the
-# Stooq / Coinbase quote endpoints) to mark public holdings to market.
-python report_html.py --file "$POSITIONS_FILE" --out "$OUT_DIR/index.html"
+# Static prices (offline) — no internet egress; all charts are client-side JS.
+python report_html.py --file "$DATA/positions.yaml"                                --out "$OUT/index.html"
+python cashflow.py    --file "$DATA/cashflow.yaml"   --html                        --out "$OUT/cashflow.html"
+python realestate.py  --str  "$DATA/str.yaml" --candidates "$DATA/candidates.yaml" --out "$OUT/realestate.html"
+python runway.py      --file "$DATA/runway.yaml"                                   --out "$OUT/runway.html"
 
-cd "$OUT_DIR"
+cd "$OUT"
 exec python -m http.server 8080

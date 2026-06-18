@@ -50,7 +50,7 @@ SLIDERS = [
     ("mortgage_pi", "Mortgage P&I (monthly)", 4_000, 20_000, 250, "money"),
     ("living", "Living (monthly)", 5_000, 25_000, 500, "money"),
     ("pretax_pct", "401k pre-tax %", 0, 0.20, 0.01, "pct"),
-    ("aftertax_pct", "401k after-tax %", 0, 0.20, 0.01, "pct"),
+    ("aftertax_pct", "401k after-tax % (mega-backdoor)", 0, 0.30, 0.01, "pct"),
 ]
 FIXED_KEYS = ["bonus_month", "deferral_cap", "total_415c", "match", "salary_wh",
               "supp_wh", "prop_tax", "hoa", "insurance", "insurance_month",
@@ -61,7 +61,9 @@ const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov',
 const money=x=>(x<0?'−$':'$')+Math.abs(Math.round(x)).toLocaleString();
 const fmtV=(v,f)=>f==='pct'?(v*100).toFixed(0)+'%':'$'+Math.round(v).toLocaleString();
 function build(p){
-  const gm=p.base/12, rv=p.rsu_annual/4, atroom=p.total_415c-p.deferral_cap-p.match;
+  const gm=p.base/12, rv=p.rsu_annual/4;
+  const annualPre=Math.min(p.pretax_pct*p.base, p.deferral_cap);     // actual pre-tax (capped at the deferral limit)
+  const atroom=Math.max(0, p.total_415c-annualPre-p.match);          // after-tax fills the rest up to the $72k 415(c) max
   let pd=0, ad=0, cum=p.start_cash, rows=[], tin=0, tout=0, t401k=0;
   for(let i=0;i<12;i++){ const m=i+1;
     const pre=Math.max(0,Math.min(p.pretax_pct*gm, p.deferral_cap-pd)); pd+=pre;
@@ -85,7 +87,10 @@ function recompute(){
   document.getElementById('t_surplus').textContent=money(r.surplus);
   document.getElementById('t_takehome').textContent=money(r.tin);
   document.getElementById('t_spend').textContent=money(r.tout);
-  document.getElementById('t_401k').textContent=money(r.t401k+p.match);
+  const tot401=r.t401k+p.match, maxed=tot401>=p.total_415c-1;
+  document.getElementById('t_401k').textContent=money(tot401);
+  document.getElementById('t_401k').className='value big'+(maxed?' pos':'');
+  document.getElementById('t_401k_sub').textContent=(maxed?'maxed · ':'')+'of '+money(p.total_415c)+' 415(c) max';
   let h='';
   for(const x of r.rows){ const net=x[6], ncls=net<0?'num neg':'num';
     h+='<tr><td>'+x[0]+'</td><td class=num>'+money(x[1])+'</td><td class=num>'+(x[2]?money(x[2]):'—')
@@ -96,6 +101,9 @@ function recompute(){
   document.getElementById('cfbody').innerHTML=h;
   document.getElementById('lowcash').textContent=money(r.min);
 }
+function toggleEdit(){ const c=document.getElementById('cfg'), b=document.getElementById('editbtn');
+  const hidden=c.classList.toggle('hidden');                       // default: hidden (display mode)
+  b.textContent=hidden?'✎ Edit inputs':'Done'; b.classList.toggle('on', !hidden); }
 window.addEventListener('load', function(){
   document.querySelectorAll('input[type=range]').forEach(el=>el.addEventListener('input', recompute));
   recompute();
@@ -118,7 +126,8 @@ def _txt(x):
 def build(p):
     gross_m = p["base"] / 12
     rsu_vest = p["rsu_annual"] / len(RSU_Q)
-    aftertax_room = p["total_415c"] - p["deferral_cap"] - p["match"]
+    annual_pre = min(p["pretax_pct"] * p["base"], p["deferral_cap"])
+    aftertax_room = max(0.0, p["total_415c"] - annual_pre - p["match"])
     pre_done = at_done = 0.0
     cum = p["start_cash"]
     rows, tot_in, tot_out, tot_401k = [], 0.0, 0.0, 0.0
@@ -155,22 +164,24 @@ def render_html(p: dict) -> str:
 
     def card(label, vid, sub=""):
         return (f'<div class=card><div class=label>{label}</div>'
-                f'<div class="value big" id={vid}></div><div class=sub>{sub}</div></div>')
+                f'<div class="value big" id={vid}></div><div class=sub id={vid}_sub>{sub}</div></div>')
 
     body = f"""
 <h1>Monthly Cash Flow</h1>
-<div class=sublede>Drag the sliders — base, RSU, bonus, mortgage, living, 401(k) — and the monthly table + totals
-update live. Salary alone runs short most months; the quarterly RSU vests + March bonus carry the year.</div>
+<div class=sublede>Display mode shows the year as budgeted. Hit <b>Edit inputs</b> to tune base / RSU / bonus / mortgage /
+living / 401(k) — the monthly table + totals update live. Salary alone runs short most months; the quarterly RSU
+vests + March bonus carry the year.</div>
+
+<div class=editbar><button id=editbtn class=btn onclick="toggleEdit()">&#9998; Edit inputs</button></div>
+<div class="controls hidden" id=cfg>
+ {sliders}
+</div>
 
 <div class=results>
  {card("Cash surplus / yr", "t_surplus", "after everything")}
  {card("Take-home / yr", "t_takehome", "net of tax + 401k")}
  {card("Total spend / yr", "t_spend", "incl. mortgage + tax")}
  {card("401(k) saved", "t_401k", "you + employer match")}
-</div>
-
-<div class=controls>
- {sliders}
 </div>
 <p class=note>Cash bottoms at <b id=lowcash></b> (the April property-tax installment + the ~{wc.usd(p['april_trueup'])}
 tax true-up estimate). Withholding rates are approximations — a CPA item; quarterly estimates would smooth April.</p>

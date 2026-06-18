@@ -26,6 +26,7 @@ const R = RUNWAY;
 const MAXAGE = 300;            // project the lines all the way out so zooming out keeps rendering
 const fmtM = x => (x<0?'−$':'$') + Math.abs(x/1e6).toFixed(2) + 'M';
 const fmtK = x => '$' + Math.round(x).toLocaleString();
+const fmtD = x => (x<0?'−$':'$') + Math.round(Math.abs(x)).toLocaleString();   // whole dollars, comma-separated
 
 function project(rate, retireAge, spend0, sav0, infl){
   let bal=R.current_investable, spend=spend0, sav=sav0;
@@ -96,7 +97,7 @@ function recompute(){
     e.textContent=txt; e.className='value big '+(cls||''); };
   setT('t_dep', dep ? ('age '+dep) : 'never', dep ? (dep<80?'bad':'warn') : 'pos');
   setT('t_succ', (success*100).toFixed(0)+'%', success>=0.9?'pos':success>=0.75?'warn':'bad');
-  setT('t_term', fmtM(term), term>0?'pos':'bad');
+  setT('t_term', fmtD(term), term>0?'pos':'bad');
   setT('t_verdict', success>=0.9?'Work-optional':success>=0.75?'Borderline':'Keep earning',
        success>=0.9?'pos':success>=0.75?'warn':'bad');
 }

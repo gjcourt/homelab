@@ -73,3 +73,21 @@ tr.click { cursor:pointer; } tr.click:hover td { background:#1d2530; }
 
 .foot { color:var(--muted); font-size:12px; margin-top:36px; border-top:1px solid var(--line); padding-top:12px; }
 .note { color:var(--muted); font-size:13px; margin:8px 0; }
+
+/* ---- mobile (iPhone etc.) ---- */
+@media (max-width:720px){
+  .wrap { padding:14px 12px 48px; }
+  h1 { font-size:18px; }
+  h2 { margin:22px 0 10px; }
+  .topnav { gap:0; }
+  .topnav a { padding:9px 10px; font-size:13px; }
+  /* wide tables (cash flow, candidates, holdings) scroll instead of overflowing */
+  table { display:block; overflow-x:auto; -webkit-overflow-scrolling:touch; white-space:nowrap; }
+  /* FI progress rows stack — the 160px/200px fixed columns overflowed the viewport */
+  .prow { grid-template-columns:1fr; gap:3px; margin:12px 0; }
+  .prow .pnum { text-align:left; }
+  .bar { width:auto; min-width:130px; }
+  .card .value, .results .card .value.big { font-size:20px; }
+  /* chart shorter on small screens (overrides the inline height) */
+  .chartbox > div { height:260px !important; }
+}

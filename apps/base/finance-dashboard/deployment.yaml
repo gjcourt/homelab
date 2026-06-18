@@ -34,12 +34,13 @@ spec:
           type: RuntimeDefault
       containers:
         - name: finance-dashboard
-          # Private code-only image, pulled via the ghcr-secret
-          # (secret-ghcr.yaml, operator-encrypted). Pin to the date tag CI
-          # produces (build-finance-dashboard.yml) once the first image is built.
-          # Bootstrap on :latest — the multi-page image only builds on merge.
-          # Pin the immutable :YYYY-MM-DD-<sha> tag in a follow-up after the build.
-          image: ghcr.io/gjcourt/finance-dashboard:2026-06-18-75ff25e
+          # Private code-only image, pulled via the ghcr-secret. This is an
+          # actively-iterated PERSONAL app, so we run :latest + Always — a
+          # deliberate exception to immutable-tag pinning so every code change is
+          # just merge → build :latest → rollout (no per-change pin follow-up).
+          # Data changes don't rebuild the image — see update-finance-data.sh.
+          image: ghcr.io/gjcourt/finance-dashboard:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:

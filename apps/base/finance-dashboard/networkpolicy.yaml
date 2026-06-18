@@ -1,0 +1,39 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: finance-dashboard
+  namespace: finance-dashboard
+  labels:
+    app.kubernetes.io/name: finance-dashboard
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: |
+    Internal-only static financial dashboard. Renders a mounted Secret to HTML
+    and serves on 8080. No DB, no external calls (static prices in v1). Ingress
+    for kubectl port-forward (host/remote-node) only; egress DNS only.
+  endpointSelector:
+    matchLabels:
+      app: finance-dashboard
+  ingress:
+    # kubectl port-forward arrives via the kubelet/API path = host + remote-node;
+    # 'ingress' kept for parity with the gateway proxy identity (harmless here).
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS only. (Add the quote endpoints here if/when --live is enabled.)
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

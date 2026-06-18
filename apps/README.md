@@ -10,6 +10,7 @@
 - [authelia](base/authelia/)
 - [burntbytes](base/burntbytes/)
 - [excalidraw](base/excalidraw/)
+- [finance-dashboard](base/finance-dashboard/)
 - [flashcards-sync](base/flashcards-sync/)
 - [flashcards](base/flashcards/)
 - [golinks](base/golinks/)

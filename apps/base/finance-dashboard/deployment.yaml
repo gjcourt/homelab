@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finance-dashboard
+  namespace: finance-dashboard
+  labels:
+    app: finance-dashboard
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: finance-dashboard
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: finance-dashboard
+    spec:
+      serviceAccountName: finance-dashboard
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: finance-dashboard
+          # Private code-only image, pulled via the ghcr-secret
+          # (secret-ghcr.yaml, operator-encrypted). Pin to the date tag CI
+          # produces (build-finance-dashboard.yml) once the first image is built.
+          image: ghcr.io/gjcourt/finance-dashboard:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: POSITIONS_FILE
+              value: /data/positions.yaml
+            - name: OUT_DIR
+              value: /srv/html
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 96Mi
+          # Static file server — TCP readiness is the honest signal. No
+          # livenessProbe: it would share path+timing with readiness and just
+          # add restart-flap risk (per docs/operations/2026-05-02-adding-an-app.md).
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: positions
+              mountPath: /data
+              readOnly: true
+            - name: html
+              mountPath: /srv/html
+      volumes:
+        - name: positions
+          secret:
+            secretName: finance-dashboard-positions
+        - name: html
+          emptyDir: {}

@@ -23,13 +23,14 @@ import webcommon as wc
 
 JS = r"""
 const R = RUNWAY;
+const MAXAGE = 300;            // project the lines all the way out so zooming out keeps rendering
 const fmtM = x => (x<0?'−$':'$') + Math.abs(x/1e6).toFixed(2) + 'M';
 const fmtK = x => '$' + Math.round(x).toLocaleString();
 
 function project(rate, retireAge, spend0, sav0, infl){
   let bal=R.current_investable, spend=spend0, sav=sav0;
   const pts=[{x:R.current_age, y:bal}];
-  for(let age=R.current_age; age<R.end_age; age++){
+  for(let age=R.current_age; age<MAXAGE; age++){
     bal = (age<retireAge) ? bal*(1+rate)+sav : bal*(1+rate)-spend;
     spend*=(1+infl); sav*=(1+infl);
     pts.push({x:age+1, y:bal});   // allow negative — shows how far underwater you'd go
@@ -37,6 +38,17 @@ function project(rate, retireAge, spend0, sav0, infl){
   return pts;
 }
 function depletion(pts){ for(const p of pts) if(p.y<=0) return p.x; return null; }
+
+function rescaleY(){   // fit y to whatever x-range is visible, so the default + zoomed-to-300 views both read well
+  const xs=chart.scales.x;
+  const x0=(xs&&xs.min!=null)?xs.min:R.current_age, x1=(xs&&xs.max!=null)?xs.max:R.end_age;
+  let lo=Infinity, hi=-Infinity;
+  for(const ds of chart.data.datasets) for(const p of ds.data)
+    if(p.x>=x0 && p.x<=x1){ if(p.y<lo)lo=p.y; if(p.y>hi)hi=p.y; }
+  if(lo===Infinity){ lo=0; hi=1; }
+  const pad=(hi-lo)*0.08 || Math.abs(hi)*0.08 || 1;
+  chart.options.scales.y.min=lo-pad; chart.options.scales.y.max=hi+pad;
+}
 
 function gauss(){ let u=0,v=0; while(!u)u=Math.random(); while(!v)v=Math.random();
   return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
@@ -73,6 +85,7 @@ function recompute(){
   chart.data.datasets[0].data = lo;
   chart.data.datasets[1].data = mid;
   chart.data.datasets[2].data = hi;
+  rescaleY();
   chart.update('none');
 
   const dep = depletion(mid);
@@ -81,7 +94,7 @@ function recompute(){
 
   const setT = (id, txt, cls) => { const e=document.getElementById(id);
     e.textContent=txt; e.className='value big '+(cls||''); };
-  setT('t_dep', dep ? ('age '+dep) : (R.end_age+'+'), dep ? (dep<80?'bad':'warn') : 'pos');
+  setT('t_dep', dep ? ('age '+dep) : 'never', dep ? (dep<80?'bad':'warn') : 'pos');
   setT('t_succ', (success*100).toFixed(0)+'%', success>=0.9?'pos':success>=0.75?'warn':'bad');
   setT('t_term', fmtM(term), term>0?'pos':'bad');
   setT('t_verdict', success>=0.9?'Work-optional':success>=0.75?'Borderline':'Keep earning',
@@ -95,29 +108,35 @@ function init(){
   chart = new Chart(ctx, {
     type:'line',
     data:{ datasets:[
-      {label:'Conservative', data:[], borderColor:'#d97706', pointRadius:0, borderWidth:1.5, tension:.1},
+      {label:'Conservative', data:[], borderColor:'#d97706', pointRadius:0, borderWidth:1.5, tension:.1,
+       fill:{target:{value:0}, above:'transparent', below:'rgba(248,113,113,0.18)'}},
       {label:'Expected', data:[], borderColor:'#2f6fed', pointRadius:0, borderWidth:2.5, tension:.1,
        fill:{target:{value:0}, above:'transparent', below:'rgba(248,113,113,0.22)'}},
-      {label:'Optimistic', data:[], borderColor:'#16a34a', pointRadius:0, borderWidth:1.5, tension:.1},
+      {label:'Optimistic', data:[], borderColor:'#16a34a', pointRadius:0, borderWidth:1.5, tension:.1,
+       fill:{target:{value:0}, above:'transparent', below:'rgba(248,113,113,0.18)'}},
     ]},
     options:{ animation:false, parsing:false, responsive:true, maintainAspectRatio:false,
       interaction:{mode:'index', intersect:false},
       scales:{
         x:{type:'linear', title:{display:true,text:'Age'}, min:R.current_age, max:R.end_age,
-           ticks:{stepSize:5}, grid:{color:'#1c222b'}},
+           ticks:{maxTicksLimit:16}, grid:{color:'#1c222b'}},
         y:{title:{display:true,text:'Balance'},
            ticks:{callback:v=>(v<0?'−$':'$')+Math.abs(v/1e6).toFixed(1)+'M'},
            grid:{color:'#1c222b'}}
       },
       plugins:{ legend:{labels:{usePointStyle:true, boxWidth:8}},
         tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtM(c.parsed.y)+' @ '+c.parsed.x}},
-        zoom:{ zoom:{ wheel:{enabled:true},
-          drag:{enabled:true, backgroundColor:'rgba(47,111,237,0.12)', borderColor:'#2f6fed', borderWidth:1},
-          mode:'x' } } }
+        zoom:{
+          limits:{ x:{min:R.current_age, max:MAXAGE} },     // never pan/zoom into negative ages; cap at 300
+          zoom:{ wheel:{enabled:true},
+            drag:{enabled:true, backgroundColor:'rgba(47,111,237,0.12)', borderColor:'#2f6fed', borderWidth:1},
+            mode:'x', onZoomComplete:()=>{ rescaleY(); chart.update('none'); } },
+          pan:{ enabled:true, mode:'x', onPanComplete:()=>{ rescaleY(); chart.update('none'); } } } }
     }
   });
-  ctx.ondblclick = ()=>chart.resetZoom();
-  document.getElementById('zoomreset').addEventListener('click', ()=>chart.resetZoom());
+  function resetView(){ chart.resetZoom(); rescaleY(); chart.update('none'); }
+  ctx.ondblclick = resetView;
+  document.getElementById('zoomreset').addEventListener('click', resetView);
   document.querySelectorAll('input[type=range]').forEach(el=>el.addEventListener('input', recompute));
   recompute();
 }

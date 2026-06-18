@@ -25,7 +25,7 @@ import webcommon as wc
 SLIDERS = [
     ("price", "Purchase price", 1_000_000, 5_000_000, 50_000, "money"),
     ("down_pct", "Down payment", 0.05, 0.30, 0.005, "pct1"),
-    ("rate", "Mortgage rate", 0.04, 0.085, 0.00125, "pct1"),
+    ("rate", "Mortgage rate", 0.0375, 0.10, 0.00125, "pct1"),
     ("nightly", "Nightly rate", 300, 2000, 25, "money"),
     ("occupancy", "Occupancy", 0.25, 0.80, 0.01, "pct0"),
     ("insurance_pct", "Insurance (fire-zone)", 0.005, 0.03, 0.0005, "pct1"),
@@ -45,14 +45,18 @@ function proforma(p){
   const loan=p.price*(1-p.down_pct), pi=annual_pi(loan,p.rate,p.term), y1i=loan*p.rate;
   const ptax=p.price*p.prop_tax_rate, ins=p.price*p.insurance_pct, maint=p.price*p.maint_pct;
   const revenue=p.nightly*365*p.occupancy, strop=revenue*p.str_op_pct;
-  const net_cash=pi+ptax+ins+maint+strop-revenue;
+  const carry=pi+ptax+ins+maint;                  // full annual carrying cost (no STR opex / no income)
+  const net_cash=carry+strop-revenue;
+  const ownerCost=(1-p.rental_share)*carry;       // the structure you live in (non-rental)
+  const rentalCost=p.rental_share*carry+strop;    // rented structure's share + STR operating costs
+  const rentalNet=rentalCost-revenue;             // rental side net of STR income (negative = throws off cash)
   const rb=(1-p.land_frac)*p.rental_share*p.price;
   const dep_y1=rb*p.costseg_pct*p.bonus_pct + rb*(1-p.costseg_pct)/27.5;
   const dep_steady=rb*(1-p.costseg_pct)/27.5;
   const rce=p.rental_share*(y1i+ptax+ins+maint)+strop;
   const at=(dep)=> net_cash - (-(revenue-rce-dep)*p.marginal);
-  return {revenue, net_cash, nat_y1:at(dep_y1), nat_steady:at(dep_steady),
-          down:p.price*p.down_pct};
+  return {revenue, net_cash, nat_y1:at(dep_y1), nat_steady:at(dep_steady), down:p.price*p.down_pct,
+          secondHome:carry, secondHomeMo:carry/12, ownerCost, rentalCost, rentalNet};
 }
 function recompute(){
   const p=Object.assign({}, FIXED);
@@ -66,6 +70,14 @@ function recompute(){
   document.getElementById('r_y1').textContent=money(r.nat_y1);
   document.getElementById('r_steady').textContent=money(r.nat_steady);
   document.getElementById('r_down').textContent='Down: '+money(r.down);
+  // 2nd-home (non-rental) view
+  document.getElementById('r_2h').textContent=money(r.secondHome);
+  document.getElementById('r_2h_mo').textContent=money(r.secondHomeMo)+'/mo';
+  document.getElementById('r_down2').textContent=money(r.down);
+  // explicit rental vs non-rental cost split
+  document.getElementById('r_break').textContent=
+    'Cost split — owner-occupied side '+money(r.ownerCost)+'/yr · rental side '+money(r.rentalCost)
+    +'/yr offset by '+money(r.revenue)+' STR income (rental net '+money(r.rentalNet)+'). Net cash cost combines both.';
 }
 function setPrice(row){ const el=document.getElementById('price');
   el.value=Math.max(el.min, Math.min(el.max, parseFloat(row.dataset.price))); recompute();
@@ -125,19 +137,28 @@ def render_html(cfg: dict, cands: dict) -> str:
                  f'<td class=num>{c.get("dom","")}</td></tr>')
 
     body = f"""
-<h1>Wine-Country STR — Dual-Structure Model</h1>
-<div class=sublede>Live pro-forma for a 2-structure property (rent one, live in the other). Drag the sliders;
-click a candidate below to load its price. Fixed: {cfg['rental_share']*100:.0f}% rental share, {cfg['land_frac']*100:.0f}% land,
+<h1>Wine-Country Property — 2nd Home vs STR Rental</h1>
+<div class=sublede>One property, two ways to hold it — modeled side by side off the same sliders. Click a candidate below to load
+its price. Fixed: {cfg['rental_share']*100:.0f}% rental share, {cfg['land_frac']*100:.0f}% land,
 {cfg['prop_tax_rate']*100:.2f}% prop-tax, 100% bonus depreciation. <b>Not tax advice.</b></div>
 
+<div class=note id=modeling>Click a candidate below to load it into the model.</div>
+
+<h2>As a second home (personal use &middot; no rental)</h2>
+<div class=results>
+ <div class=card><div class=label>Annual carrying cost</div><div class="value big" id=r_2h></div><div class=sub>mortgage + tax + insurance + upkeep</div></div>
+ <div class=card><div class=label>Monthly cost</div><div class="value big" id=r_2h_mo></div></div>
+ <div class=card><div class=label>Cash to close</div><div class="value big" id=r_down2></div><div class=sub>down payment</div></div>
+</div>
+
+<h2>As a dual-structure STR rental (rent one &middot; live in the other)</h2>
 <div class=results>
  <div class=card><div class=label>Annual STR revenue</div><div class="value big pos" id=r_revenue></div></div>
  <div class=card><div class=label>Net cash cost / yr</div><div class="value big" id=r_netcash></div></div>
  <div class=card><div class=label>Year-1 after-tax</div><div class="value big" id=r_y1></div><div class=sub id=r_down></div></div>
  <div class=card><div class=label>Steady-state / yr</div><div class="value big" id=r_steady></div><div class=sub>yr 2+ (shield spent)</div></div>
 </div>
-
-<div class=note id=modeling>Click a candidate below to load it into the model.</div>
+<p class=note id=r_break></p>
 
 <div class=controls>
  {sliders}

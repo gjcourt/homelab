@@ -70,8 +70,10 @@ function recompute(){
 function setPrice(v){ const el=document.getElementById('price');
   el.value=Math.max(el.min, Math.min(el.max, v)); recompute();
   window.scrollTo({top:0, behavior:'smooth'}); }
-document.querySelectorAll('input[type=range]').forEach(el=>el.addEventListener('input', recompute));
-recompute();
+window.addEventListener('load', function(){
+  document.querySelectorAll('input[type=range]').forEach(el=>el.addEventListener('input', recompute));
+  recompute();
+});
 """
 
 

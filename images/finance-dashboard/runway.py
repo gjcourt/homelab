@@ -44,8 +44,11 @@ function rescaleY(){   // fit y to whatever x-range is visible, so the default +
   const xs=chart.scales.x;
   const x0=(xs&&xs.min!=null)?xs.min:R.current_age, x1=(xs&&xs.max!=null)?xs.max:R.end_age;
   let lo=Infinity, hi=-Infinity;
-  for(const ds of chart.data.datasets) for(const p of ds.data)
-    if(p.x>=x0 && p.x<=x1){ if(p.y<lo)lo=p.y; if(p.y>hi)hi=p.y; }
+  for(let i=0;i<chart.data.datasets.length;i++){      // only the legend-visible lines drive the y-range
+    if(!chart.isDatasetVisible(i)) continue;
+    for(const p of chart.data.datasets[i].data)
+      if(p.x>=x0 && p.x<=x1){ if(p.y<lo)lo=p.y; if(p.y>hi)hi=p.y; }
+  }
   if(lo===Infinity){ lo=0; hi=1; }
   const pad=(hi-lo)*0.08 || Math.abs(hi)*0.08 || 1;
   chart.options.scales.y.min=lo-pad; chart.options.scales.y.max=hi+pad;
@@ -80,18 +83,29 @@ function recompute(){
   document.getElementById('inflation_v').textContent = (infl*100).toFixed(1)+'%';
   document.getElementById('annual_savings_v').textContent = fmtK(sav)+'/yr';
 
-  const lo = project(exp-R.spread, retireAge, spend, sav, infl);
-  const mid = project(exp, retireAge, spend, sav, infl);
-  const hi = project(exp+R.spread, retireAge, spend, sav, infl);
-  chart.data.datasets[0].data = lo;
-  chart.data.datasets[1].data = mid;
-  chart.data.datasets[2].data = hi;
+  chart.data.datasets[0].data = project(exp-R.spread, retireAge, spend, sav, infl);
+  chart.data.datasets[1].data = project(exp, retireAge, spend, sav, infl);
+  chart.data.datasets[2].data = project(exp+R.spread, retireAge, spend, sav, infl);
   rescaleY();
   chart.update('none');
+  updateTiles();
+}
 
-  const dep = depletion(mid);
-  const term = (mid.find(p=>p.x===65) || mid[mid.length-1]).y;   // balance at age 65
-  const success = montecarlo(exp, retireAge, spend, sav, infl, R.return_vol, R.mc_paths);
+// The 4 headline tiles reflect the most optimistic scenario still visible in the legend:
+// all shown -> optimistic; deselect optimistic -> expected; deselect expected -> conservative.
+function updateTiles(){
+  const get = id => parseFloat(document.getElementById(id).value);
+  const retireAge = get('retire_age'), spend = get('annual_spend'),
+        exp = get('expected_return'), infl = get('inflation'), sav = get('annual_savings');
+  let rate, label;
+  if(chart.isDatasetVisible(2)){ rate=exp+R.spread; label='optimistic'; }
+  else if(chart.isDatasetVisible(1)){ rate=exp; label='expected'; }
+  else if(chart.isDatasetVisible(0)){ rate=exp-R.spread; label='conservative'; }
+  else { rate=exp; label='expected'; }
+  const pts = project(rate, retireAge, spend, sav, infl);
+  const dep = depletion(pts);
+  const term = (pts.find(p=>p.x===65) || pts[pts.length-1]).y;   // balance at age 65
+  const success = montecarlo(rate, retireAge, spend, sav, infl, R.return_vol, R.mc_paths);
 
   const setT = (id, txt, cls) => { const e=document.getElementById(id);
     e.textContent=txt; e.className='value big '+(cls||''); };
@@ -100,6 +114,8 @@ function recompute(){
   setT('t_term', fmtD(term), term>0?'pos':'bad');
   setT('t_verdict', success>=0.9?'Work-optional':success>=0.75?'Borderline':'Keep earning',
        success>=0.9?'pos':success>=0.75?'warn':'bad');
+  document.getElementById('t_dep_sub').textContent = label+' case';
+  document.getElementById('t_term_sub').textContent = label+' case';
 }
 
 function init(){
@@ -125,7 +141,10 @@ function init(){
            ticks:{callback:v=>(v<0?'−$':'$')+Math.abs(v/1e6).toFixed(1)+'M'},
            grid:{color:'#1c222b'}}
       },
-      plugins:{ legend:{labels:{usePointStyle:true, boxWidth:8}},
+      plugins:{ legend:{labels:{usePointStyle:true, boxWidth:8},
+          onClick:(e, item, legend)=>{ const ci=legend.chart, i=item.datasetIndex;
+            ci.isDatasetVisible(i)?ci.hide(i):ci.show(i); item.hidden=!item.hidden;
+            rescaleY(); updateTiles(); ci.update('none'); }},
         tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtM(c.parsed.y)+' @ '+c.parsed.x}},
         zoom:{
           limits:{ x:{min:R.current_age, max:MAXAGE} },     // never pan/zoom into negative ages; cap at 300
@@ -171,9 +190,9 @@ def render_html(cfg: dict) -> str:
 projection + the odds update live. Nominal model; spend &amp; savings grow with inflation. <b>Not advice.</b></div>
 
 <div class=results>
- <div class=card><div class=label>Funds last to</div><div class="value big" id=t_dep></div><div class=sub>expected case</div></div>
+ <div class=card><div class=label>Funds last to</div><div class="value big" id=t_dep></div><div class=sub id=t_dep_sub>expected case</div></div>
  <div class=card><div class=label>Monte Carlo success</div><div class="value big" id=t_succ></div><div class=sub>chance funds last to {cfg['end_age']}</div></div>
- <div class=card><div class=label>Balance at 65</div><div class="value big" id=t_term></div><div class=sub>expected case</div></div>
+ <div class=card><div class=label>Balance at 65</div><div class="value big" id=t_term></div><div class=sub id=t_term_sub>expected case</div></div>
  <div class=card><div class=label>Verdict</div><div class="value big" id=t_verdict></div><div class=sub>at 90% success bar</div></div>
 </div>
 

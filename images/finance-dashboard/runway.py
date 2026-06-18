@@ -89,7 +89,7 @@ function recompute(){
   chart.update('none');
 
   const dep = depletion(mid);
-  const term = mid[mid.length-1].y;
+  const term = (mid.find(p=>p.x===65) || mid[mid.length-1]).y;   // balance at age 65
   const success = montecarlo(exp, retireAge, spend, sav, infl, R.return_vol, R.mc_paths);
 
   const setT = (id, txt, cls) => { const e=document.getElementById(id);
@@ -172,7 +172,7 @@ projection + the odds update live. Nominal model; spend &amp; savings grow with 
 <div class=results>
  <div class=card><div class=label>Funds last to</div><div class="value big" id=t_dep></div><div class=sub>expected case</div></div>
  <div class=card><div class=label>Monte Carlo success</div><div class="value big" id=t_succ></div><div class=sub>chance funds last to {cfg['end_age']}</div></div>
- <div class=card><div class=label>Balance at {cfg['end_age']}</div><div class="value big" id=t_term></div><div class=sub>expected case</div></div>
+ <div class=card><div class=label>Balance at 65</div><div class="value big" id=t_term></div><div class=sub>expected case</div></div>
  <div class=card><div class=label>Verdict</div><div class="value big" id=t_verdict></div><div class=sub>at 90% success bar</div></div>
 </div>
 

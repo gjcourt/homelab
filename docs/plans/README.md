@@ -60,10 +60,11 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (8)
+### In progress (9)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-06-17-alertmanager-smtp-alerting.md](2026-06-17-alertmanager-smtp-alerting.md) | 2026-06-17 | Route critical Alertmanager alerts to email via Gmail SMTP (replaces dead Signal channel) |
 | [2026-06-16-thermalscope-power-and-headroom.md](2026-06-16-thermalscope-power-and-headroom.md) | 2026-06-17 | thermalscope: add power/energy/cost (RAPL), thermal headroom, and throttle/degradation signals — phases 1–3 live; phase 4 pending |
 | [2026-06-01-hestia-photos-sot.md](2026-06-01-hestia-photos-sot.md) | 2026-06-10 | Make hestia the source of truth for family/ + homes/; repoint Immich NFS PV; alcatraz narrows to upload target |
 | [2026-05-20-alcatraz-to-hestia-migration.md](2026-05-20-alcatraz-to-hestia-migration.md) | 2026-05-21 | Migrate non-photo data (~870 GiB iSCSI + 3 TiB NFS media) off alcatraz onto hestia ZFS |

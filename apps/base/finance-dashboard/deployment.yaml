@@ -37,7 +37,7 @@ spec:
           # Private code-only image, pulled via the ghcr-secret
           # (secret-ghcr.yaml, operator-encrypted). Pin to the date tag CI
           # produces (build-finance-dashboard.yml) once the first image is built.
-          image: ghcr.io/gjcourt/finance-dashboard:latest
+          image: ghcr.io/gjcourt/finance-dashboard:2026-06-18
           ports:
             - containerPort: 8080
           env:

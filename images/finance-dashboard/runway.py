@@ -32,8 +32,7 @@ function project(rate, retireAge, spend0, sav0, infl){
   for(let age=R.current_age; age<R.end_age; age++){
     bal = (age<retireAge) ? bal*(1+rate)+sav : bal*(1+rate)-spend;
     spend*=(1+infl); sav*=(1+infl);
-    if(bal<0) bal=0;
-    pts.push({x:age+1, y:bal});
+    pts.push({x:age+1, y:bal});   // allow negative — shows how far underwater you'd go
   }
   return pts;
 }
@@ -97,7 +96,8 @@ function init(){
     type:'line',
     data:{ datasets:[
       {label:'Conservative', data:[], borderColor:'#d97706', pointRadius:0, borderWidth:1.5, tension:.1},
-      {label:'Expected', data:[], borderColor:'#2f6fed', pointRadius:0, borderWidth:2.5, tension:.1},
+      {label:'Expected', data:[], borderColor:'#2f6fed', pointRadius:0, borderWidth:2.5, tension:.1,
+       fill:{target:{value:0}, above:'transparent', below:'rgba(248,113,113,0.22)'}},
       {label:'Optimistic', data:[], borderColor:'#16a34a', pointRadius:0, borderWidth:1.5, tension:.1},
     ]},
     options:{ animation:false, parsing:false, responsive:true, maintainAspectRatio:false,
@@ -105,13 +105,18 @@ function init(){
       scales:{
         x:{type:'linear', title:{display:true,text:'Age'}, min:R.current_age, max:R.end_age,
            ticks:{stepSize:5}, grid:{color:'#1c222b'}},
-        y:{title:{display:true,text:'Balance'}, ticks:{callback:v=>'$'+(v/1e6).toFixed(1)+'M'},
-           grid:{color:'#1c222b'}, beginAtZero:true}
+        y:{title:{display:true,text:'Balance'},
+           ticks:{callback:v=>(v<0?'−$':'$')+Math.abs(v/1e6).toFixed(1)+'M'},
+           grid:{color:'#1c222b'}}
       },
       plugins:{ legend:{labels:{usePointStyle:true, boxWidth:8}},
-        tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtM(c.parsed.y)+' @ '+c.parsed.x}} }
+        tooltip:{callbacks:{label:c=>c.dataset.label+': '+fmtM(c.parsed.y)+' @ '+c.parsed.x}},
+        zoom:{ zoom:{ wheel:{enabled:true},
+          drag:{enabled:true, backgroundColor:'rgba(47,111,237,0.12)', borderColor:'#2f6fed', borderWidth:1},
+          mode:'x' } } }
     }
   });
+  ctx.ondblclick = ()=>chart.resetZoom();
   document.querySelectorAll('input[type=range]').forEach(el=>el.addEventListener('input', recompute));
   recompute();
 }
@@ -152,7 +157,7 @@ projection + the odds update live. Nominal model; spend &amp; savings grow with 
 </div>
 
 <div class=chartbox><div style="height:340px"><canvas id=chart></canvas></div>
- <div class=legend>Three deterministic paths at expected ±{cfg['spread']*100:.0f}% return. The success % runs {cfg['mc_paths']} Monte Carlo paths (return vol {cfg['return_vol']*100:.0f}%).</div>
+ <div class=legend>Three deterministic paths at expected ±{cfg['spread']*100:.0f}% return; <span style="color:#f87171">red = underwater</span>. Success % runs {cfg['mc_paths']} Monte Carlo paths (vol {cfg['return_vol']*100:.0f}%). <b>Drag to zoom a year range · double-click to reset.</b></div>
 </div>
 
 <div class=controls>
@@ -161,7 +166,8 @@ projection + the odds update live. Nominal model; spend &amp; savings grow with 
 <p class=note>Starting from {wc.usd(cfg['current_investable'])} investable at age {cfg['current_age']}. "Retire now" = retirement age at your current age.
 Real advisors run this as Monte Carlo for exactly this reason — a single line hides sequence-of-returns risk.</p>
 """
-    head = ('<script src=chart.min.js></script>\n<script>\nconst RUNWAY = '
+    head = ('<script src=chart.min.js></script>\n'
+            '<script src=chartjs-zoom.min.js></script>\n<script>\nconst RUNWAY = '
             + json.dumps(baked) + ';\n' + JS + '\n</script>')
     return wc.page("Retirement Runway", "runway.html", body, head_extra=head)
 

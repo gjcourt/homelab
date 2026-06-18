@@ -6,7 +6,7 @@ OUT="${OUT_DIR:-/srv/html}"
 DATA="${DATA_DIR:-/data}"
 
 mkdir -p "$OUT"
-cp /app/static/style.css /app/static/chart.min.js "$OUT"/
+cp /app/static/* "$OUT"/   # style.css, chart.min.js, chartjs-zoom.min.js
 
 # Static prices (offline) — no internet egress; all charts are client-side JS.
 python report_html.py --file "$DATA/positions.yaml"                                --out "$OUT/index.html"

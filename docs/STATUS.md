@@ -45,11 +45,11 @@ Planned, not yet started:
 
 - [Network resilience + BGP completion](plans/2026-05-06-network-resilience-and-bgp-completion.md) — the consolidated plan that supersedes the earlier BGP rollout.
 - [democratic-csi least-privilege key](plans/2026-05-09-democratic-csi-least-privilege-key.md).
-- [Monitoring enhancement](plans/2026-05-09-monitoring-enhancement.md) — ServiceMonitor coverage + critical-alert Signal routing.
 - [Immich pgvecto.rs → VectorChord](plans/2026-06-02-immich-vectorchord-migration.md).
 
 ## Recently completed (last ~60 days)
 
+- [Monitoring enhancement](plans/2026-05-09-monitoring-enhancement.md) — **complete.** Phase 1 ServiceMonitor coverage (#935); Phase 2 (Signal routing) obsoleted by the signal-cli/hermes decommission; Phase 3 Flux reconciliation alerts (#937 PodMonitor + #940). GA Flux dropped `gotk_reconcile_condition`, so readiness alerts are sourced from kube-state-metrics `gotk_resource_info`. ⚠️ The 3 critical Flux alerts evaluate correctly but route to the `null` receiver — no delivery channel until a replacement for Signal is chosen.
 - burntbytes.com self-hosted (off GitHub Pages → cluster via Cloudflare tunnel) · Guest VLAN DNS + HifiBerry access · AdGuard HA + DNS rollout · Authelia SMTP notifier · hestia GHA auto-deploy runner · critique remediation phases 2–5.
 
 ## Known issues / blocked

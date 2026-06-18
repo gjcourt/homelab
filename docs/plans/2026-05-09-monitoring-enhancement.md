@@ -1,8 +1,13 @@
 ---
-status: planned
-last_modified: 2026-06-10
+status: complete
+last_modified: 2026-06-17
 summary: "ServiceMonitor coverage audit, critical-alert Signal routing, Flux reconciliation alerts"
 ---
+
+> **EXECUTION STATUS (2026-06-17): complete.**
+> - **Phase 1** — landed in #935. Audit found no un-scraped apps beyond authelia; fixed authelia's missing `release` label + scrape netpol.
+> - **Phase 2** — **OBSOLETE.** signal-cli + hermes were decommissioned and garbage-collected (#936). Critical alerts currently route to the `null` receiver; a replacement delivery channel (email/ntfy) is an open question tracked separately.
+> - **Phase 3** — landed in #937 (PodMonitor) + #940 (alerts). See the §3 correction note below: GA Flux dropped `gotk_reconcile_condition`, so the rules were re-sourced from kube-state-metrics `gotk_resource_info`. Verified live: 19 series across 3 kinds, all 3 rules `health=ok state=inactive`.
 
 # Monitoring Coverage & Signal Routing
 
@@ -235,6 +240,8 @@ Add **both** rules to `infra/configs/alerts/prometheus-rules.yaml` — together 
 The `Failing` rule covers the case where the relay is up but POSTs to signal-cli-bridge are erroring (counter increments). The `Down` rule covers the case where the relay pod is gone entirely — no metric increments, but `up=0`. Without both, a hard relay outage produces total silence.
 
 ## Phase 3 — PrometheusRules for Flux reconciliation
+
+> **CORRECTION (2026-06-17, as built):** This phase assumed `gotk_reconcile_condition`, but the deployed **GA Flux** controllers (helm-controller v1.5.5, kustomize-controller v1.8.5) no longer expose that gauge — verified live, only `gotk_reconcile_duration_seconds` / `controller_runtime_*` are present. Per-object readiness now comes from **kube-state-metrics** via a `customResourceState` config (the upstream `flux2-monitoring-example` pattern) emitting `gotk_resource_info{customresource_kind, exported_namespace, name, ready}`. The PodMonitor in #937 still scrapes the controllers for duration/error metrics; the readiness signal is ksm. The rules below are kept for historical context — the shipped exprs are `gotk_resource_info{customresource_kind="<Kind>", ready="False"} == 1` (note `exported_namespace`, not `namespace`). Config: `infra/controllers/kube-prometheus-stack/values.yaml` (`kube-state-metrics.customResourceState` + `rbac.extraRules`).
 
 ### 3.1 Pre-flight: confirm Flux metrics are scraped
 

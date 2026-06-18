@@ -90,6 +90,10 @@ th.sortable { cursor:pointer; user-select:none; } th.sortable:hover { color:var(
   padding:8px 14px; font-size:13px; font-weight:600; cursor:pointer; }
 .btn:hover { border-color:var(--blue); color:#fff; }
 .btn.on { background:var(--blue); border-color:var(--blue); color:#fff; }
+.btn.subtle { background:transparent; border-color:var(--line); color:var(--muted);
+  padding:4px 10px; font-size:12px; font-weight:550; }
+.btn.subtle:hover { color:var(--txt); border-color:var(--blue); background:transparent; }
+.zoombar { text-align:right; margin-top:6px; }
 
 /* ---- mobile (iPhone etc.) ---- */
 @media (max-width:720px){

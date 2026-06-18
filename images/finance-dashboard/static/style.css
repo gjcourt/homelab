@@ -48,6 +48,8 @@ th { color:var(--muted); font-size:12px; font-weight:600; text-transform:upperca
 tr.click { cursor:pointer; } tr.click:hover td { background:#1d2530; }
 tr.sel td { background:#16314e; }
 tr.sel td:first-child { box-shadow:inset 3px 0 0 var(--blue); }
+th.sortable { cursor:pointer; user-select:none; } th.sortable:hover { color:var(--txt); }
+.arr { color:var(--blue); }
 
 /* ---- allocation / progress bars ---- */
 .bar { width:42%; }

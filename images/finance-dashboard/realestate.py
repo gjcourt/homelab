@@ -74,9 +74,26 @@ function setPrice(row){ const el=document.getElementById('price');
   const m=document.getElementById('modeling');
   if(m) m.textContent='Modeling: '+(row.dataset.addr||'');
   window.scrollTo({top:0, behavior:'smooth'}); }
+function sortTable(th){
+  const tbl=th.closest('table'), tb=tbl.tBodies[0], rows=Array.from(tb.rows);
+  const key=th.dataset.key, type=th.dataset.type, asc=th.dataset.dir!=='asc';
+  tbl.querySelectorAll('th').forEach(h=>{h.dataset.dir=''; const a=h.querySelector('.arr'); if(a)a.remove();});
+  th.dataset.dir=asc?'asc':'desc';
+  rows.sort((a,b)=>{ let va=a.dataset[key], vb=b.dataset[key];
+    if(type==='num'){ va=parseFloat(va)||0; vb=parseFloat(vb)||0; return asc?va-vb:vb-va; }
+    return asc?(''+va).localeCompare(''+vb):(''+vb).localeCompare(''+va); });
+  rows.forEach(r=>tb.appendChild(r));
+  const s=document.createElement('span'); s.className='arr'; s.textContent=asc?' ▲':' ▼'; th.appendChild(s);
+}
 window.addEventListener('load', function(){
   document.querySelectorAll('input[type=range]').forEach(el=>el.addEventListener('input', recompute));
+  document.querySelectorAll('#cands th.sortable').forEach(th=>th.addEventListener('click', ()=>sortTable(th)));
   recompute();
+  const first=document.querySelector('#cands tbody tr');   // initial selection: top candidate, highlighted
+  if(first){ first.classList.add('sel');
+    const el=document.getElementById('price');
+    el.value=Math.max(el.min, Math.min(el.max, parseFloat(first.dataset.price))); recompute();
+    const m=document.getElementById('modeling'); if(m) m.textContent='Modeling: '+(first.dataset.addr||''); }
 });
 """
 
@@ -98,7 +115,9 @@ def render_html(cfg: dict, cands: dict) -> str:
         if (c.get("freeway_mi") or 9) < 0.5:
             flags.append('<span class=off>freeway</span>')
         bdba = f'{c.get("beds","?")}/{c.get("baths","?")}'
-        rows += (f'<tr class=click data-price="{price}" data-addr="{html.escape(c.get("address",""))}" onclick="setPrice(this)">'
+        rows += (f'<tr class=click data-price="{price}" data-addr="{html.escape(c.get("address",""))}" '
+                 f'data-fit="{c.get("fit",0)}" data-acres="{c.get("acres",0)}" data-beds="{c.get("beds",0) or 0}" '
+                 f'data-dist="{c.get("dist_mi",0)}" data-dom="{c.get("dom",0) or 0}" onclick="setPrice(this)">'
                  f'<td class=num>{c.get("fit","")}</td>'
                  f'<td><a href="{html.escape(c.get("url",""))}" onclick="event.stopPropagation()">{html.escape(c.get("address",""))}</a> {" ".join(flags)}</td>'
                  f'<td class=num>${price/1e6:.2f}M</td><td class=num>{c.get("acres","")}</td>'
@@ -127,10 +146,17 @@ click a candidate below to load its price. Fixed: {cfg['rental_share']*100:.0f}%
 cost-seg depreciation offsets W-2. Steady-state shows the carry once bonus depreciation is exhausted.</p>
 
 <h2>Candidates &nbsp;<span class=muted style="text-transform:none;font-weight:400">(from Redfin export · {cands.get("meta",{}).get("count","?")} hits · existing homes, by fit)</span></h2>
-<table>
- <tr><th class=num>Fit</th><th>Address</th><th class=num>Price</th><th class=num>Acres</th>
-     <th class=num>Bd/Ba</th><th class=num>Mi</th><th class=num>DOM</th></tr>
- {rows}
+<table id=cands>
+ <thead><tr>
+   <th class="num sortable" data-key=fit data-type=num>Fit</th>
+   <th class=sortable data-key=addr data-type=str>Address</th>
+   <th class="num sortable" data-key=price data-type=num>Price</th>
+   <th class="num sortable" data-key=acres data-type=num>Acres</th>
+   <th class="num sortable" data-key=beds data-type=num>Bd/Ba</th>
+   <th class="num sortable" data-key=dist data-type=num>Mi</th>
+   <th class="num sortable" data-key=dom data-type=num>DOM</th>
+ </tr></thead>
+ <tbody>{rows}</tbody>
 </table>
 <p class=note>Fit = composite (Plaza proximity · freeway distance · acreage · value · DOM-leverage). Click a row to model it.</p>
 """

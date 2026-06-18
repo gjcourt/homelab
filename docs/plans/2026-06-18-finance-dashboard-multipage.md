@@ -1,4 +1,10 @@
-# Plan — finance.burntbytes.com → 4-page personal-finance site
+---
+status: complete
+last_modified: 2026-06-18
+summary: "finance.burntbytes.com expanded from one balance-sheet page to a 4-page static site (balance sheet, cash flow, STR model, retirement runway) with encrypted-YAML data + interactive client-side charts"
+---
+
+# finance-dashboard → 4-page personal-finance site
 
 ## Context
 The deployed dashboard (`finance.burntbytes.com`, the `finance-dashboard` app in `gjcourt/homelab`) currently serves **one** static page: the balance sheet (`report_html.py` → `index.html`, fed by an encrypted `positions.yaml`). George wants it to become a small **4-page static site**:

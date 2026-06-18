@@ -104,8 +104,9 @@ function updateTiles(){
   else { rate=exp; label='expected'; }
   const pts = project(rate, retireAge, spend, sav, infl);
   const dep = depletion(pts);
-  const term = (pts.find(p=>p.x===65) || pts[pts.length-1]).y;   // balance at age 65
-  const success = montecarlo(rate, retireAge, spend, sav, infl, R.return_vol, R.mc_paths);
+  const term = (pts.find(p=>p.x===65) || pts[pts.length-1]).y;   // balance at age 65 (tracks the visible line)
+  // MC success + verdict are the one probabilistic forecast — always the expected case, regardless of selection
+  const success = montecarlo(exp, retireAge, spend, sav, infl, R.return_vol, R.mc_paths);
 
   const setT = (id, txt, cls) => { const e=document.getElementById(id);
     e.textContent=txt; e.className='value big '+(cls||''); };

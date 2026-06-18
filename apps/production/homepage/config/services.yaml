@@ -41,6 +41,11 @@
         siteMonitor: https://audiobooks.burntbytes.com
 
 - Tools:
+    - Finance:
+        icon: mdi-finance
+        href: https://finance.burntbytes.com
+        description: Net worth + IPS allocation dashboard
+        siteMonitor: https://finance.burntbytes.com
     - Vitals:
         icon: mdi-heart-pulse
         href: https://vitals.burntbytes.com

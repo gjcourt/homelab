@@ -208,14 +208,27 @@ Ran live from the Mac, one step at a time. Final state: **4-node cluster — 3 c
 4. **Maintenance-mode talosctl needs `-e <nodeIP>`**, not just `-n`. With `TALOSCONFIG` set, the endpoint defaults to the cluster (`.20`), so `-n 10.42.2.23 --insecure` never reaches the unconfigured node. Use `-e 10.42.2.23 -n 10.42.2.23 --insecure`.
 5. **`get disks` rejects `--insecure`** — it's not a global flag. `apply-config --insecure` is the self-validating action; a configured node refuses it (`x509: certificate signed by unknown authority` when probing a freshly-reset node confirms maintenance mode).
 
-### Open post-checks (NOT yet verified — physical / out of band)
+### Topology reality (verified 2026-06-19 via UniFi)
 
-- [ ] **Confirm `.23`'s switch + PSU/power-strip are independent of `.20`/`.21`.** This is the whole reason `.23`
-      was chosen over `.25`, and it's the one thing software can't see (unpoller exposes switch *device* health but
-      not the wired-client→port topology; `unpoller_client_info` has 0 series). Verify in the UniFi controller UI
-      (each switch's port list → connected client) **and** physically trace the power strips. Bar: **no single switch
-      and no single PSU/power-strip carries ≥2 of `{.20,.21,.23}`.** If `.20`/`.21` themselves share a path, the
-      3-CP design is only as available as that shared path — the root cause of 2026-06-18.
+The switch/PSU-independence rationale for picking `.23` over `.25` turned out to be **moot** —
+all four nodes converge on two shared devices:
+
+- **All 4 nodes are on one switch — the Rack Switch (USWED42, `10.42.1.100`).** The house has other
+  switches (Living Room, Kitchen) but they're physically away from the rack. → the Rack Switch is a
+  **single point of failure**: if it dies, all 3 control-plane nodes partition at once = total
+  control-plane loss. No node-selection choice changes this.
+- **All 4 nodes are on one managed PDU — the USP PDU Pro (`10.42.1.170`), but on separate outlets**
+  (four distinct ~11–16 W draws on the per-outlet metrics). → a single *outlet* failure drops only one
+  node, but a whole-PDU or upstream-feed event drops multiple.
+
+**What the 3-member etcd actually buys here:** tolerance of a single **node or outlet** loss — which is
+exactly the 2026-06-18 failure mode (a survivor blipped while at 2/3). It does **not** survive a
+whole-switch or whole-PDU failure; those are **accepted single points of failure** for this homelab.
+
+- [ ] **Highest-value mitigation: ensure the Rack Switch + USP PDU Pro are on a UPS** (if not already).
+      The 6/18 trigger was a *blip on a shared path* — a UPS absorbs exactly that, far cheaper than
+      re-cabling. True switch-level HA would need the control plane split across two rack switches
+      (a separate project, likely not worth it here).
 - [ ] `.22` hardware verdict (DIMM/board/RMA). `.24` (`talos-18u-ski`) and `.22` remain physically out of the rack.
 - [ ] Watch the 4 staging CNPG clusters (`flashcards/golinks/linkding/memos-stage`) re-spin replicas after the node
       churn — same set as the known WAL-archive issue (`docs/operations/incidents/2026-02-20-immich-staging-wal-archive-failure.md` family).

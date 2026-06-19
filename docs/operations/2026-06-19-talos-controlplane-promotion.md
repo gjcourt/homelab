@@ -12,13 +12,21 @@ raw `talosctl gen config`, not talhelper). `TALOSCONFIG=~/.talos/config`. Run fr
 
 ## Choosing which worker to promote
 
-Do **not** just pick the coolest box. An etcd member's **power/fault independence outranks
-temperature.** The 3 control-plane nodes must sit on **3 independent switch + PSU paths** — if
-two share a switch or power strip, losing it drops 2 of 3 = quorum. (This is exactly what
-caused the 2026-06-18 outage.) Pick the worker that is power-independent from the existing
-control-plane nodes; let the coolest box stay the worker (it carries app load, where thermals
-matter most). thermalscope gives temps; the switch/PSU map is **physical** — verify it (UniFi
-controller UI for switch ports; eyes/trace for power strips).
+An etcd member's **power/fault independence outranks temperature** — *when you have a choice.* The
+ideal is 3 control-plane nodes on 3 independent switch + power paths, so no single device drops 2 of 3.
+
+**Reality check first (do this before agonizing over node choice):** map where the nodes actually
+plug in. On melodic-muse (verified 2026-06-19) **all nodes share one Rack Switch (USWED42) and one
+USP PDU Pro** (on separate outlets). So switch/PSU independence between control-plane nodes **isn't
+achievable** — the Rack Switch and the PDU are accepted single points of failure, and which worker you
+promote doesn't change that. In that situation, just promote any healthy worker and let the coolest box
+stay the worker (it carries app load). thermalscope gives temps; the switch/PDU map is in the **UniFi
+controller** (Topology view; PDU outlet power via unpoller `unpoller_device_outlet_outlet_power`).
+The wired-client→port map is **not** in Prometheus (`unpoller_client_info` = 0 series) — use the UniFi UI.
+
+**The mitigation that actually helps** when everything's on one switch + PDU: put the **Rack Switch and
+PDU on a UPS**, so a brief power/path blip (the 2026-06-18 trigger) doesn't cascade. A 3-member etcd then
+tolerates the realistic failure (a single node/outlet loss); whole-switch/whole-PDU loss stays a known SPOF.
 
 ## Pre-flight (all true before starting)
 
@@ -81,8 +89,8 @@ kubectl delete node <stale-old-target> <dead-node> <any-out-of-rack>   # ghosts
 ## Post-checks (some are physical — don't skip)
 
 - [ ] etcd 3 healthy members, in sync, no alarms; `/readyz` ok; all nodes Ready; Flux green.
-- [ ] **Switch + PSU independence of the 3 control-plane nodes** — no single switch and no single
-      power strip carries ≥2 control-plane nodes. unpoller/Prometheus does **not** expose the
-      wired-client→port map (`unpoller_client_info` = 0 series); verify in the UniFi controller UI
-      and physically trace power. This is the load-bearing check the whole node choice depends on.
+- [ ] **Map the switch + power topology of the control-plane nodes** (UniFi UI / PDU outlet metrics).
+      If they're independent, good. If they share a switch and/or PDU (as on melodic-muse — single Rack
+      Switch + single USP PDU Pro), accept those as named SPOFs and **put the switch + PDU on a UPS** —
+      that's the mitigation that addresses the realistic blip-on-a-shared-path failure.
 - [ ] Prod CNPG clusters healthy; watch any staging clusters re-spin replicas after the node churn.

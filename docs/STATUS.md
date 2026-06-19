@@ -5,14 +5,14 @@
 > this page links out. **Update this file in the same PR whenever** a plan's
 > status changes, an incident postmortem lands, or hardware/topology changes.
 >
-> Last updated: 2026-06-10
+> Last updated: 2026-06-19
 
 ## Cluster at a glance
 
 | | |
 |---|---|
 | Cluster | `melodic-muse` |
-| Nodes | 6 — 3 control-plane + 3 workers |
+| Nodes | 4 — 3 control-plane (`.20`/`.21`/`.23`) + 1 worker (`.25`); `.22`/`.24` physically out (see Known issues) |
 | Platform | Talos v1.12.4 · Kubernetes v1.35.0 |
 | CNI / ingress | Cilium 1.19 (VXLAN) + Gateway API |
 | GitOps | Flux CD, reconciling from `master` |
@@ -25,7 +25,7 @@ Full picture: [AGENTS.md](../AGENTS.md) · architecture in [docs/architecture/](
 
 | Host | Role | Notes |
 |---|---|---|
-| 6× Talos nodes | Kubernetes cluster | `10.42.2.20–25` on the Lab VLAN |
+| 4× Talos nodes | Kubernetes cluster | `.20`/`.21`/`.23` (control-plane) + `.25` (worker) on the Lab VLAN, `10.42.2.x`. `.22` (bad DIMM) + `.24` physically out. |
 | hestia (`10.42.2.10`) | TrueNAS storage + compute | No GPUs since 2026-05-16. Runs the GHA deploy runner, Immich photo-backup rsync, qBittorrent, thermalscope telemetry, IPMI exporter. See [hosts/hestia/](../hosts/hestia/README.md). |
 | Synology / alcatraz (`10.42.2.11`) | Block + photo storage | iSCSI backing for CNPG PVCs; phone-photo upload target. Role narrowing — see the photos-SOT plan. |
 
@@ -56,6 +56,6 @@ Planned, not yet started:
 
 - **No on-prem LLM inference.** The 2× RTX 4090 were sold 2026-05-16. The `llms/` and GPU-`monitoring/` Custom Apps on hestia are archived. Restoring inference needs new GPU hardware or a hosted-API backend.
 - **`hermes` / `hermes-callee` (Signal bots) and `signal-cli` decommissioned 2026-06-17.** Removed from `apps/{base,production,staging}/` and garbage-collected by Flux (`prune: true`). They had no model backend after the GPUs were sold and were already scaled to 0. Signal-based critical-alert routing is dead as a result — see the obsoleted Phase 2 in [plans/2026-05-09-monitoring-enhancement.md](plans/2026-05-09-monitoring-enhancement.md).
-- **`talos-v2l-hng` (10.42.2.22) reports 30.6 GiB instead of ~62 GiB** — likely an unseated/failed DIMM on that control-plane node. Cluster is healthy (etcd 3/3); this is a single-node capacity shortfall, not an outage. Maintenance to re-seat/replace requires a quorum-safe power-down of `.22–.25` — see the [Talos node maintenance runbook](operations/2026-06-17-talos-node-maintenance.md).
+- **`.22` (talos-v2l-hng) decommissioned 2026-06-19** — bad DIMM (reads 30.6 GiB vs ~62), did not return after the 2026-06-18 maintenance. Removed from etcd and the cluster; **`.23` was promoted to control-plane in its place**, restoring fault-tolerant 3-member etcd (now a 4-node cluster). See the [control-plane promotion runbook](operations/2026-06-19-talos-controlplane-promotion.md) and [plan/execution record](plans/2026-06-19-promote-talos-25-to-controlplane.md). `.22` hardware verdict (DIMM/board/RMA) and `.24` re-entry still pending. **Open post-check:** confirm `.23`'s switch/PSU is independent of `.20`/`.21` (the basis for choosing `.23` over the cooler `.25`).
 - **CNPG WAL archiving** broken on several staging clusters (stale system-ID in S3) — base backups succeed, but no PITR until fixed.
 - **LB pool / Lab-VLAN `/24` sharing** is the root cause of the 2026-05-05 wired-device incident; the dedicated LB subnet migration is tracked in the network-resilience plan (Phase D).

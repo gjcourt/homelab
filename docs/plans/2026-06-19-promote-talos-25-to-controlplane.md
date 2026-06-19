@@ -1,8 +1,22 @@
-# Plan: Promote talos-kot-7x7 (.25) to control-plane, restore 3-member etcd
+---
+status: complete
+last_modified: 2026-06-19
+summary: "EXECUTED 2026-06-19 — promoted .23 (not .25) to control-plane and removed dead .22, restoring 3-member etcd; cluster now 4 nodes (3 CP + 1 worker)"
+---
 
-**Status:** Draft — not yet executed
+# Plan: Promote a worker to control-plane, restore 3-member etcd
+
+**Status:** ✅ **Executed 2026-06-19.** See the [Execution record](#execution-record-2026-06-19) at the bottom.
 **Date:** 2026-06-19
 **Author:** George (with Claude)
+
+> **Deviation from the original plan:** the procedure below was written to promote **`.25` (talos-kot-7x7)**.
+> On execution we promoted **`.23`** instead and kept `.25` as the worker. Reason: thermalscope showed `.25`
+> is the coolest box, but it **shares a switch/PSU path with `.20`/`.21`** — making `.25` the 3rd control-plane
+> would put all three etcd members on one power path (the exact correlated-failure that caused the 2026-06-18
+> outage). `.23` is power-independent, so it became the 3rd CP; the coolest box (`.25`) carries the worker
+> load instead. Everything else ran as written (retargeted `.25`→`.23`). Generalized runbook:
+> [`docs/operations/2026-06-19-talos-controlplane-promotion.md`](../operations/2026-06-19-talos-controlplane-promotion.md).
 
 ## Why
 
@@ -167,3 +181,41 @@ kubectl get clusters.postgresql.cnpg.io -A   # prod clusters return to 3/3
   `docs/operations/` once this runs clean.
 - Revisit etcd resilience posture: 3 control-plane on shared shelves/switch is a
   correlated-failure risk (root cause of the 2026-06-18 outage).
+
+---
+
+## Execution record (2026-06-19)
+
+Ran live from the Mac, one step at a time. Final state: **4-node cluster — 3 control-plane
+(`.20` talos-ykb-uir, `.21` talos-2mz-rfj, `.23`) + 1 worker (`.25` talos-kot-7x7)**, etcd
+3 members with no alarms, `/readyz` ok, Flux green, prod CNPG 3/3.
+
+| Step | Action | Result |
+|---|---|---|
+| Pre-flight | etcd status/alarms, `/readyz`, `.23` install disk, validate config | all green; `.23` disk `/dev/nvme0n1` |
+| 1 | `kubectl drain talos-lmh-kyf --disable-eviction --force` | `.23` emptied (only DaemonSets left) |
+| 2 | `talosctl -n 10.42.2.20 etcd remove-member 5f91a708c22777db` | dead `.22` removed → etcd `{.20,.21}` (2-member window opens) |
+| 3a | `talosctl -n 10.42.2.23 reset --graceful=false --reboot --system-labels-to-wipe STATE --system-labels-to-wipe EPHEMERAL` | `.23` wiped → maintenance mode |
+| 3b | `talosctl -e 10.42.2.23 -n 10.42.2.23 apply-config --insecure --file controlplane.yaml --config-patch @patch.yaml --config-patch @install-disk.yaml` | `.23` installs as CP, auto-joins etcd → 3 members (window closes) |
+| 4 | verify | etcd `{.20,.21,.23}`, leader present, no alarms |
+| 5 | `kubectl uncordon talos-kot-7x7`; `kubectl delete node talos-lmh-kyf talos-v2l-hng talos-18u-ski` | worker `.25` schedulable; stale ghosts removed |
+
+### Deviations & gotchas (learned the hard way)
+
+1. **Promoted `.23`, not `.25`** — see the deviation note at top (power-domain independence > coolness for an etcd member).
+2. **Reset regenerates the node identity** — `.23` rejoined under a **new hostname `talos-fpd-h0t`** (was `talos-lmh-kyf`), because the STATE wipe + auto-stable hostname derive from the machine ID. Expect a rename after any reset; clean up the old node object.
+3. **macOS has no `timeout(1)`** — wrapping `talosctl reset` in `timeout` silently no-ops the whole command (`command not found`). Don't wrap; rely on the tool's own timeout or background + poll.
+4. **Maintenance-mode talosctl needs `-e <nodeIP>`**, not just `-n`. With `TALOSCONFIG` set, the endpoint defaults to the cluster (`.20`), so `-n 10.42.2.23 --insecure` never reaches the unconfigured node. Use `-e 10.42.2.23 -n 10.42.2.23 --insecure`.
+5. **`get disks` rejects `--insecure`** — it's not a global flag. `apply-config --insecure` is the self-validating action; a configured node refuses it (`x509: certificate signed by unknown authority` when probing a freshly-reset node confirms maintenance mode).
+
+### Open post-checks (NOT yet verified — physical / out of band)
+
+- [ ] **Confirm `.23`'s switch + PSU/power-strip are independent of `.20`/`.21`.** This is the whole reason `.23`
+      was chosen over `.25`, and it's the one thing software can't see (unpoller exposes switch *device* health but
+      not the wired-client→port topology; `unpoller_client_info` has 0 series). Verify in the UniFi controller UI
+      (each switch's port list → connected client) **and** physically trace the power strips. Bar: **no single switch
+      and no single PSU/power-strip carries ≥2 of `{.20,.21,.23}`.** If `.20`/`.21` themselves share a path, the
+      3-CP design is only as available as that shared path — the root cause of 2026-06-18.
+- [ ] `.22` hardware verdict (DIMM/board/RMA). `.24` (`talos-18u-ski`) and `.22` remain physically out of the rack.
+- [ ] Watch the 4 staging CNPG clusters (`flashcards/golinks/linkding/memos-stage`) re-spin replicas after the node
+      churn — same set as the known WAL-archive issue (`docs/operations/incidents/2026-02-20-immich-staging-wal-archive-failure.md` family).

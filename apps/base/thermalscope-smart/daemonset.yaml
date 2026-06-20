@@ -46,6 +46,17 @@ spec:
             # this smart-agent exists ONLY in staging (thermalscope-stage).
             - name: THERMALSCOPE_LISTEN_ADDR
               value: ":9103"
+            # Host /dev is bind-mounted read-only at /host/dev (NOT /dev) so
+            # the container keeps its own writable /dev — otherwise the default
+            # terminationMessagePath (/dev/termination-log) is unwritable and
+            # the pod crashloops. Point the NVMe collector at the host devices.
+            - name: THERMALSCOPE_NVME_DEV_ROOT
+              value: "/host/dev"
+            # Surface per-device read failures: the collector logs failed
+            # device open/ioctl at Debug; without this the errno is hidden
+            # while the pod runs at the default Info level.
+            - name: THERMALSCOPE_LOG_LEVEL
+              value: "debug"
           ports:
             - name: metrics
               containerPort: 9103
@@ -70,13 +81,16 @@ spec:
               add:
                 - SYS_ADMIN
           volumeMounts:
-            # ONLY /dev (read-only) — the NVMe admin ioctl needs an open
-            # handle on /dev/nvmeN. Deliberately NO /sys/* mounts: without
-            # hwmon/thermal/powercap the temp/RAPL/GPU collectors stay inert,
-            # so this agent emits ONLY the NVMe-health series and does not
-            # duplicate the production agent's temperature series.
+            # ONLY host /dev (read-only) — the NVMe admin ioctl needs an open
+            # handle on /dev/nvmeN. Mounted at /host/dev (NOT /dev) so the
+            # container's own writable /dev (and /dev/termination-log) survive;
+            # the collector is pointed here via THERMALSCOPE_NVME_DEV_ROOT.
+            # Deliberately NO /sys/* mounts: without hwmon/thermal/powercap the
+            # temp/RAPL/GPU collectors stay inert, so this agent emits ONLY the
+            # NVMe-health series and does not duplicate the production agent's
+            # temperature series.
             - name: dev
-              mountPath: /dev
+              mountPath: /host/dev
               readOnly: true
           resources:
             requests:

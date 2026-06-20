@@ -36,11 +36,12 @@ spec:
         - targetLabel: job
           replacement: thermalscope-smart
       metricRelabelings:
-        # Keep ONLY the NVMe-health series this agent is responsible for
-        # (plus `up`). Everything else the binary might emit is dropped so
-        # this DaemonSet's footprint is exactly the SMART data.
+        # Keep ONLY the NVMe wear/health series this agent is responsible for
+        # (plus `up`). The previous `thermalscope_nvme.*` wildcard also let the
+        # NVMe *temperature* series through, duplicating the production agent's
+        # temps; this explicit allow-list excludes _temperature_ entirely.
         - sourceLabels: [__name__]
-          regex: ^(thermalscope_nvme.*|thermalscope_nvmehealth_up|up)$
+          regex: ^(thermalscope_nvme_(percentage_used_ratio|available_spare_ratio|available_spare_threshold_ratio|critical_warning|media_errors_total|error_log_entries_total|power_on_hours_total|power_cycles_total|unsafe_shutdowns_total|data_units_written_total|data_units_read_total)|thermalscope_nvmehealth_up|up)$
           action: keep
         # Drop the per-pod label: under hostNetwork the pod identity is the
         # node, and pod names churn on restart — cardinality without signal.

@@ -293,3 +293,15 @@ spec:
           annotations:
             summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} logged new media errors"
             description: "{{ $labels.device }} on {{ $labels.instance }} recorded {{ $value }} new media/uncorrectable error(s) in the last 24h."
+
+        # New read errors in the last hour. Pairs with the thermalscope
+        # smart-agent's read-error counter. Read errors are rare on a healthy
+        # drive; any increase in an hour is worth surfacing for inspection.
+        - alert: ThermalScopeNVMeReadErrors
+          expr: increase(thermalscope_nvme_read_errors_total[1h]) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} logged new read errors"
+            description: "{{ $labels.device }} on {{ $labels.instance }} recorded {{ $value }} new read error(s) in the last hour."

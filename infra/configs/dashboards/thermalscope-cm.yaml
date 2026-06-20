@@ -880,6 +880,210 @@ data:
         {
           "collapsed": false,
           "gridPos": {"h": 1, "w": 24, "x": 0, "y": 83},
+          "id": 700,
+          "title": "NVMe Wear & Health",
+          "type": "row",
+          "panels": []
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "SMART endurance estimate per drive (0–1 = fraction of rated write endurance consumed). Yellow ≥70%, red ≥85%; the drive is end-of-life past ~95%.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 0.7},
+                  {"color": "red", "value": 0.85}
+                ]
+              },
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1
+            }
+          },
+          "id": 701,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "orientation": "horizontal",
+            "displayMode": "gradient"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_nvme_percentage_used_ratio{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} {{device}}"
+            }
+          ],
+          "title": "% endurance used",
+          "type": "bargauge",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 84}
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Spare headroom per drive: available-spare ratio minus the drive's own SMART spare threshold. Green ≥10%, orange <10%, red at/below threshold (0) — a drive running out of spare turns red.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "orange", "value": 0.05},
+                  {"color": "green", "value": 0.1}
+                ]
+              },
+              "unit": "percentunit",
+              "min": 0,
+              "max": 1
+            }
+          },
+          "id": 702,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "orientation": "horizontal",
+            "displayMode": "lcd"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_nvme_available_spare_ratio{instance=~\"$instance\"} - thermalscope_nvme_available_spare_threshold_ratio{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} {{device}}"
+            }
+          ],
+          "title": "NVMe Spare Headroom",
+          "type": "bargauge",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 84}
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "SMART critical-warning bitfield per drive. 0 = OK; any non-zero value means the drive is reporting a critical condition (failing).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]
+              },
+              "mappings": [{"type": "value", "options": {"0": {"text": "OK", "color": "green"}}}],
+              "unit": "short"
+            }
+          },
+          "id": 703,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "orientation": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_nvme_critical_warning{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} {{device}}"
+            }
+          ],
+          "title": "Critical warning",
+          "type": "stat",
+          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 92}
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Cumulative uncorrectable (media) errors per drive, plus new errors in the last 24h. Any non-zero value is bad.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "spanNulls": false, "fillOpacity": 10, "drawStyle": "line"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]
+              },
+              "unit": "short",
+              "min": 0
+            }
+          },
+          "id": 704,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "right"}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_nvme_media_errors_total{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} {{device}} total"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "increase(thermalscope_nvme_media_errors_total{instance=~\"$instance\"}[24h])",
+              "legendFormat": "{{instance}} {{device}} +24h"
+            }
+          ],
+          "title": "Media errors (cumulative + 24h)",
+          "type": "timeseries",
+          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 92}
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Lifetime power-on hours per drive — age/context for the wear figures.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+              "unit": "h"
+            }
+          },
+          "id": 705,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "orientation": "auto",
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_nvme_power_on_hours_total{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} {{device}}"
+            }
+          ],
+          "title": "Power-on hours",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 12, "x": 0, "y": 98}
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Lifetime host data written per drive (data units × 512000 = bytes). Context for endurance burn rate.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+              "unit": "decbytes"
+            }
+          },
+          "id": 706,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "orientation": "auto",
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value_and_name"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_nvme_data_units_written_total{instance=~\"$instance\"} * 512000",
+              "legendFormat": "{{instance}} {{device}}"
+            }
+          ],
+          "title": "Data written",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 12, "x": 12, "y": 98}
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 102},
           "id": 500,
           "title": "Degradation & Fans — temp-vs-load (cooling drift) + fan curve",
           "type": "row",
@@ -895,7 +1099,7 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 84},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 103},
           "id": 501,
           "options": {
             "seriesMapping": "auto",
@@ -929,7 +1133,7 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 84},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 103},
           "id": 502,
           "options": {
             "seriesMapping": "auto",
@@ -971,7 +1175,7 @@ data:
               "unit": "celsius"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 92},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 111},
           "id": 503,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
@@ -994,7 +1198,7 @@ data:
               "unit": "rotrpm"
             }
           },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 92},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 111},
           "id": 504,
           "options": {
             "seriesMapping": "auto",
@@ -1020,7 +1224,7 @@ data:
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 100},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 119},
           "id": 105,
           "title": "AMD iGPU Thermals (Talos APUs)",
           "type": "row",
@@ -1042,7 +1246,7 @@ data:
                   "unit": "celsius"
                 }
               },
-              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 101},
+              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 120},
               "id": 13,
               "options": {
                 "tooltip": {"mode": "multi"},
@@ -1062,7 +1266,7 @@ data:
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 101},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 120},
           "id": 102,
           "title": "NVIDIA GPU Thermals & Power (hestia) — collapsed; expand when GPUs in use",
           "type": "row",
@@ -1084,7 +1288,7 @@ data:
                   "unit": "celsius"
                 }
               },
-              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 102},
+              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 121},
               "id": 5,
               "options": {
                 "tooltip": {"mode": "multi"},
@@ -1110,7 +1314,7 @@ data:
                   "max": 500
                 }
               },
-              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 102},
+              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 121},
               "id": 6,
               "options": {
                 "tooltip": {"mode": "multi"},
@@ -1137,7 +1341,7 @@ data:
                   "max": 1
                 }
               },
-              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 102},
+              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 121},
               "id": 7,
               "options": {
                 "tooltip": {"mode": "multi"},
@@ -1157,7 +1361,7 @@ data:
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 102},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 121},
           "id": 103,
           "title": "NVIDIA GPU Utilization & Clock (hestia) — collapsed",
           "type": "row",
@@ -1173,7 +1377,7 @@ data:
                   "max": 1
                 }
               },
-              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 103},
+              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 122},
               "id": 8,
               "options": {
                 "tooltip": {"mode": "multi"},
@@ -1200,7 +1404,7 @@ data:
                   "max": 1
                 }
               },
-              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 103},
+              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 122},
               "id": 9,
               "options": {
                 "tooltip": {"mode": "multi"},
@@ -1225,7 +1429,7 @@ data:
                   "unit": "mhz"
                 }
               },
-              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 103},
+              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 122},
               "id": 10,
               "options": {
                 "tooltip": {"mode": "multi"},
@@ -1245,7 +1449,7 @@ data:
         },
         {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 103},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 122},
           "id": 104,
           "title": "Collector Health",
           "type": "row",
@@ -1263,7 +1467,7 @@ data:
               "mappings": [{"options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}, "type": "value"}]
             }
           },
-          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 104},
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 123},
           "id": 11,
           "options": {
             "reduceOptions": {"calcs": ["lastNotNull"]},
@@ -1294,7 +1498,7 @@ data:
               "unit": "s"
             }
           },
-          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 104},
+          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 123},
           "id": 12,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
@@ -1306,210 +1510,6 @@ data:
           ],
           "title": "Scrape Duration",
           "type": "timeseries"
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 108},
-          "id": 700,
-          "title": "NVMe Wear & Health",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "SMART endurance estimate per drive (0–1 = fraction of rated write endurance consumed). Yellow ≥70%, red ≥85%; the drive is end-of-life past ~95%.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 0.7},
-                  {"color": "red", "value": 0.85}
-                ]
-              },
-              "unit": "percentunit",
-              "min": 0,
-              "max": 1
-            }
-          },
-          "id": 701,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "horizontal",
-            "displayMode": "gradient"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_percentage_used_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
-            }
-          ],
-          "title": "% endurance used",
-          "type": "bargauge",
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 109}
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Spare headroom per drive: available-spare ratio minus the drive's own SMART spare threshold. Green ≥10%, orange <10%, red at/below threshold (0) — a drive running out of spare turns red.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "red", "value": null},
-                  {"color": "orange", "value": 0.05},
-                  {"color": "green", "value": 0.1}
-                ]
-              },
-              "unit": "percentunit",
-              "min": 0,
-              "max": 1
-            }
-          },
-          "id": 702,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "horizontal",
-            "displayMode": "lcd"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_available_spare_ratio{instance=~\"$instance\"} - thermalscope_nvme_available_spare_threshold_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
-            }
-          ],
-          "title": "NVMe Spare Headroom",
-          "type": "bargauge",
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 109}
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "SMART critical-warning bitfield per drive. 0 = OK; any non-zero value means the drive is reporting a critical condition (failing).",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]
-              },
-              "mappings": [{"type": "value", "options": {"0": {"text": "OK", "color": "green"}}}],
-              "unit": "short"
-            }
-          },
-          "id": 703,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "auto",
-            "colorMode": "background",
-            "graphMode": "none",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_critical_warning{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
-            }
-          ],
-          "title": "Critical warning",
-          "type": "stat",
-          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 117}
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Cumulative uncorrectable (media) errors per drive, plus new errors in the last 24h. Any non-zero value is bad.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false, "fillOpacity": 10, "drawStyle": "line"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]
-              },
-              "unit": "short",
-              "min": 0
-            }
-          },
-          "id": 704,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "right"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_media_errors_total{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}} total"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "increase(thermalscope_nvme_media_errors_total{instance=~\"$instance\"}[24h])",
-              "legendFormat": "{{instance}} {{device}} +24h"
-            }
-          ],
-          "title": "Media errors (cumulative + 24h)",
-          "type": "timeseries",
-          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 117}
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Lifetime power-on hours per drive — age/context for the wear figures.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
-              "unit": "h"
-            }
-          },
-          "id": 705,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "auto",
-            "colorMode": "value",
-            "graphMode": "none",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_power_on_hours_total{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
-            }
-          ],
-          "title": "Power-on hours",
-          "type": "stat",
-          "gridPos": {"h": 4, "w": 12, "x": 0, "y": 123}
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Lifetime host data written per drive (data units × 512000 = bytes). Context for endurance burn rate.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
-              "unit": "decbytes"
-            }
-          },
-          "id": 706,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "auto",
-            "colorMode": "value",
-            "graphMode": "none",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_data_units_written_total{instance=~\"$instance\"} * 512000",
-              "legendFormat": "{{instance}} {{device}}"
-            }
-          ],
-          "title": "Data written",
-          "type": "stat",
-          "gridPos": {"h": 4, "w": 12, "x": 12, "y": 123}
         }
       ],
       "refresh": "30s",

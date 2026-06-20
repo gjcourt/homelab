@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# PRODUCTION overlay for the NVMe SMART smart-agent. There is intentionally
+# NO apps/staging/thermalscope-smart overlay in this branch: staging and
+# production share the same physical Talos nodes, so a second DaemonSet on
+# hostPort 9103 must exist on at most ONE DaemonSet per node. The staging
+# smart-agent (thermalscope-stage, PR #967) verified the privileged NVMe
+# ioctl; it must be torn down (close PR #967) at/before this merges, or a
+# staging + prod smart-agent both bind hostPort 9103 on the same nodes —
+# the #676 hostPort collision that wedges pods Pending.
+#
+# The `thermalscope` Namespace is owned by the existing
+# apps/production/thermalscope overlay (it pulls in base/thermalscope's
+# namespace.yaml, with PSA enforce=privileged). This smart-agent lands in
+# that SAME namespace, so it must NOT re-declare the Namespace object —
+# two overlays emitting Namespace/thermalscope collide in the
+# apps/production build. We only set the `namespace:` field here.
+namespace: thermalscope
+resources:
+  - ../../base/thermalscope-smart/

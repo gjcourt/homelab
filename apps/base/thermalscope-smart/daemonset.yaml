@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: thermalscope-smart-agent
+  namespace: thermalscope
+  labels:
+    app.kubernetes.io/name: thermalscope
+    app.kubernetes.io/component: smart-agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thermalscope
+      app.kubernetes.io/component: smart-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: thermalscope
+        app.kubernetes.io/component: smart-agent
+    spec:
+      serviceAccountName: thermalscope-smart-agent
+      hostNetwork: true
+      hostPID: false
+      dnsPolicy: ClusterFirstWithHostNet
+      # Same scheduling intent as the production thermalscope-agent: run on
+      # every node (3 CP + 3 worker). NVMe wear/health is per-drive and we
+      # want it visible on all six. `operator: Exists` with no key tolerates
+      # every taint, including the control-plane NoSchedule taint.
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: agent
+          # thermalscope PR #7 — NVMe SMART wear/health collector, opt-in via
+          # THERMALSCOPE_NVME_HEALTH. Pinned to the multi-arch index digest
+          # per the homelab image-discipline rule.
+          image: "ghcr.io/gjcourt/thermalscope:fe29fe5@sha256:ef85dd996cb042024388565eadd356bf5b225fb87a9970c89b49055148043019"
+          imagePullPolicy: IfNotPresent
+          env:
+            # Turn ON the SMART health collector (off by default in the agent).
+            - name: THERMALSCOPE_NVME_HEALTH
+              value: "1"
+            # Bind to :9103 so this DaemonSet never collides with the
+            # production thermalscope-agent on hostPort 9102. Staging and
+            # production share the same physical Talos nodes — two DaemonSets
+            # on the same hostPort wedge prod pods Pending (see incident
+            # PR #676). 9103 is bound by at most one DaemonSet per node, and
+            # this smart-agent exists ONLY in staging (thermalscope-stage).
+            - name: THERMALSCOPE_LISTEN_ADDR
+              value: ":9103"
+            # Host /dev is bind-mounted read-only at /host/dev (NOT /dev) so
+            # the container keeps its own writable /dev — otherwise the default
+            # terminationMessagePath (/dev/termination-log) is unwritable and
+            # the pod crashloops. Point the NVMe collector at the host devices.
+            - name: THERMALSCOPE_NVME_DEV_ROOT
+              value: "/host/dev"
+            # info for production. debug was used only during the staging
+            # errno hunt (to surface the per-device open/ioctl EPERM); at the
+            # 5-minute scrape cadence it is too noisy for steady-state prod.
+            - name: THERMALSCOPE_LOG_LEVEL
+              value: "info"
+          ports:
+            - name: metrics
+              containerPort: 9103
+              hostPort: 9103
+              protocol: TCP
+          securityContext:
+            # privileged is REQUIRED here. NVMe SMART/health is read via the
+            # NVMe admin passthrough ioctl (NVME_IOCTL_ADMIN_CMD, Get Log Page
+            # 0x02) on /dev/nvmeN, which needs an open handle on the char
+            # device. With privileged:false the staging run confirmed (debug
+            # log, all 4 nodes) `open /host/dev/nvme0: operation not
+            # permitted` (EPERM): the Kubernetes device cgroup denies access
+            # to host /dev/nvme* char devices for non-privileged pods EVEN
+            # WITH CAP_SYS_ADMIN and the /dev bind mount. privileged:true
+            # opens the device cgroup so the open() (and the admin ioctl)
+            # succeed. CAP_SYS_ADMIN below is retained (harmless/redundant
+            # under privileged) to document the ioctl's capability need.
+            # Required: the k8s device cgroup denies /dev/nvme* to non-privileged pods even with CAP_SYS_ADMIN (confirmed EPERM in staging).
+            privileged: true
+            runAsUser: 0
+            # allowPrivilegeEscalation is intentionally omitted: the API
+            # server rejects privileged:true together with
+            # allowPrivilegeEscalation:false ("cannot set
+            # allowPrivilegeEscalation to false and privileged to true").
+            # privileged already implies escalation is allowed.
+            readOnlyRootFilesystem: true
+            seccompProfile:
+              type: RuntimeDefault
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - SYS_ADMIN
+          volumeMounts:
+            # ONLY host /dev (read-only) — the NVMe admin ioctl needs an open
+            # handle on /dev/nvmeN. Mounted at /host/dev (NOT /dev) so the
+            # container's own writable /dev (and /dev/termination-log) survive;
+            # the collector is pointed here via THERMALSCOPE_NVME_DEV_ROOT.
+            # Deliberately NO /sys/* mounts: without hwmon/thermal/powercap the
+            # temp/RAPL/GPU collectors stay inert, so this agent emits ONLY the
+            # NVMe-health series and does not duplicate the production agent's
+            # temperature series.
+            - name: dev
+              mountPath: /host/dev
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 32Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9103
+              host: 127.0.0.1
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # No livenessProbe: stateless Go HTTP server; readiness recovery
+          # plus the up{job="thermalscope-smart"} alert is sufficient — a
+          # liveness restart would not unstick anything readiness wouldn't.
+      volumes:
+        - name: dev
+          hostPath:
+            path: /dev
+            type: Directory

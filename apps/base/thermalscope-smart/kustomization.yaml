@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Separate base from apps/base/thermalscope — that base stamps
+# `app.kubernetes.io/component: agent` onto ALL its resources, which would
+# clobber the smart-agent's component label and break the Service selector.
+# The smart-agent's `component: smart-agent` label lives directly in each
+# manifest (DaemonSet/Service/SM/SA), so the labels block below only adds the
+# shared identity labels with includeSelectors:false — it never touches the
+# selector labels.
+resources:
+  - serviceaccount.yaml
+  - daemonset.yaml
+  - service.yaml
+  - servicemonitor.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: thermalscope
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux

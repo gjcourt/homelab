@@ -25,5 +25,6 @@ resources:
   - overture
   - snapcast
   - thermalscope
+  - thermalscope-smart
   - truenas-iscsi-monitor
   - vitals

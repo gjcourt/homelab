@@ -76,7 +76,11 @@ spec:
             # under privileged) to document the ioctl's capability need.
             privileged: true
             runAsUser: 0
-            allowPrivilegeEscalation: false
+            # allowPrivilegeEscalation is intentionally omitted: the API
+            # server rejects privileged:true together with
+            # allowPrivilegeEscalation:false ("cannot set
+            # allowPrivilegeEscalation to false and privileged to true").
+            # privileged already implies escalation is allowed.
             readOnlyRootFilesystem: true
             seccompProfile:
               type: RuntimeDefault

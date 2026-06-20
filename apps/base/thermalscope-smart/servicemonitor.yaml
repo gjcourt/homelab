@@ -1,0 +1,48 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: thermalscope-smart-agent
+  namespace: thermalscope
+  labels:
+    # kube-prometheus-stack's Prometheus instance selects ServiceMonitors by
+    # helm-default release label. Without this label the SM is invisible.
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: thermalscope
+    app.kubernetes.io/component: smart-agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thermalscope
+      app.kubernetes.io/component: smart-agent
+  # No namespaceSelector — defaults to the SM's own namespace, which the
+  # staging overlay rewrites to thermalscope-stage.
+  endpoints:
+    - port: metrics
+      path: /metrics
+      # SMART health changes slowly (wear, power-on hours, error counters);
+      # a 5-minute scrape interval is plenty and keeps the NVMe admin ioctl
+      # cost negligible.
+      interval: 300s
+      scrapeTimeout: 30s
+      relabelings:
+        # Promote the pod's node name to `instance` so each Talos node is a
+        # distinct target (e.g. instance="talos-ykb-uir").
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: instance
+          action: replace
+        # Distinct job from the production agent's job="thermalscope" so the
+        # two never share an up{} series and the NVMe-health alerts can scope
+        # cleanly if needed.
+        - targetLabel: job
+          replacement: thermalscope-smart
+      metricRelabelings:
+        # Keep ONLY the NVMe-health series this agent is responsible for
+        # (plus `up`). Everything else the binary might emit is dropped so
+        # this DaemonSet's footprint is exactly the SMART data.
+        - sourceLabels: [__name__]
+          regex: ^(thermalscope_nvme.*|thermalscope_nvmehealth_up|up)$
+          action: keep
+        # Drop the per-pod label: under hostNetwork the pod identity is the
+        # node, and pod names churn on restart — cardinality without signal.
+        - action: labeldrop
+          regex: pod

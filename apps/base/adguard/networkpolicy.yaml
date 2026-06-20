@@ -87,6 +87,18 @@ spec:
         - ports:
             - port: "80"
               protocol: TCP
+    # Pingo (DDNS) writes the WireGuard endpoint's DNS rewrite via the
+    # adguard-admin Service (port 8080 → pod port 80). Same DNAT note as above:
+    # match the pod port (80). Rewrites land on the primary and propagate to
+    # replicas via the adguardhome-sync CronJob.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: pingo
+            app.kubernetes.io/name: pingo
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
   egress:
     # kube-dns / CoreDNS for in-cluster Service resolution.
     - toEndpoints:

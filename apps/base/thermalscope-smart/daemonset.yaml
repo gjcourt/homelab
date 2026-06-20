@@ -63,13 +63,18 @@ spec:
               hostPort: 9103
               protocol: TCP
           securityContext:
-            privileged: false
-            # NVMe SMART/health is read via the NVMe admin passthrough ioctl
-            # (NVME_IOCTL_ADMIN_CMD, Get Log Page 0x02) on /dev/nvmeN. That
-            # ioctl requires CAP_SYS_ADMIN and an open handle on the char
-            # device — hence the single added capability and the read-only
-            # /dev mount below. We keep privileged:false and drop all other
-            # caps; SYS_ADMIN alone is the minimum for the admin ioctl.
+            # privileged is REQUIRED here. NVMe SMART/health is read via the
+            # NVMe admin passthrough ioctl (NVME_IOCTL_ADMIN_CMD, Get Log Page
+            # 0x02) on /dev/nvmeN, which needs an open handle on the char
+            # device. With privileged:false the staging run confirmed (debug
+            # log, all 4 nodes) `open /host/dev/nvme0: operation not
+            # permitted` (EPERM): the Kubernetes device cgroup denies access
+            # to host /dev/nvme* char devices for non-privileged pods EVEN
+            # WITH CAP_SYS_ADMIN and the /dev bind mount. privileged:true
+            # opens the device cgroup so the open() (and the admin ioctl)
+            # succeed. CAP_SYS_ADMIN below is retained (harmless/redundant
+            # under privileged) to document the ioctl's capability need.
+            privileged: true
             runAsUser: 0
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

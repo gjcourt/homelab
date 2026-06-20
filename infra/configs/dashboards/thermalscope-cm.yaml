@@ -1102,23 +1102,41 @@ data:
           "gridPos": {"h": 8, "w": 12, "x": 0, "y": 103},
           "id": 501,
           "options": {
-            "seriesMapping": "auto",
+            "seriesMapping": "manual",
+            "series": [
+              {
+                "frame": {"matcher": {"id": "byIndex", "options": 0}},
+                "x": {"matcher": {"id": "byName", "options": "cpu_util"}},
+                "y": {"matcher": {"id": "byName", "options": "cpu_temp"}}
+              }
+            ],
+            "colorField": {"matcher": {"id": "byName", "options": "instance"}},
+            "pointSize": {"mode": "fixed", "fixed": 8},
             "tooltip": {"mode": "single"},
             "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
           },
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_cpu_utilization:rate5m",
-              "format": "time_series",
-              "legendFormat": "{{instance}} Tctl"
+              "expr": "label_replace(thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_cpu_utilization:rate5m, \"__name__\", \"cpu_temp\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A",
+              "legendFormat": "cpu_temp"
             },
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "instance:node_cpu_utilization:rate5m{instance=~\"$instance\"}",
-              "format": "time_series",
-              "legendFormat": "{{instance}} util"
+              "expr": "label_replace(instance:node_cpu_utilization:rate5m{instance=~\"$instance\"}, \"__name__\", \"cpu_util\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "B",
+              "legendFormat": "cpu_util"
             }
+          ],
+          "transformations": [
+            {"id": "joinByLabels", "options": {"value": "__name__", "join": ["instance"]}}
           ],
           "title": "CPU temp vs CPU load (degradation scatter)",
           "type": "xychart"
@@ -1136,23 +1154,41 @@ data:
           "gridPos": {"h": 8, "w": 12, "x": 12, "y": 103},
           "id": 502,
           "options": {
-            "seriesMapping": "auto",
+            "seriesMapping": "manual",
+            "series": [
+              {
+                "frame": {"matcher": {"id": "byIndex", "options": 0}},
+                "x": {"matcher": {"id": "byName", "options": "disk_busy"}},
+                "y": {"matcher": {"id": "byName", "options": "cpu_temp"}}
+              }
+            ],
+            "colorField": {"matcher": {"id": "byName", "options": "instance"}},
+            "pointSize": {"mode": "fixed", "fixed": 8},
             "tooltip": {"mode": "single"},
             "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
           },
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_disk_busy:rate5m",
-              "format": "time_series",
-              "legendFormat": "{{instance}} Tctl"
+              "expr": "label_replace(thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_disk_busy:rate5m, \"__name__\", \"cpu_temp\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A",
+              "legendFormat": "cpu_temp"
             },
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "instance:node_disk_busy:rate5m{instance=~\"$instance\"}",
-              "format": "time_series",
-              "legendFormat": "{{instance}} disk busy"
+              "expr": "label_replace(instance:node_disk_busy:rate5m{instance=~\"$instance\"}, \"__name__\", \"disk_busy\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "B",
+              "legendFormat": "disk_busy"
             }
+          ],
+          "transformations": [
+            {"id": "joinByLabels", "options": {"value": "__name__", "join": ["instance"]}}
           ],
           "title": "CPU temp vs disk busy (degradation scatter)",
           "type": "xychart"
@@ -1201,23 +1237,41 @@ data:
           "gridPos": {"h": 8, "w": 12, "x": 12, "y": 111},
           "id": 504,
           "options": {
-            "seriesMapping": "auto",
+            "seriesMapping": "manual",
+            "series": [
+              {
+                "frame": {"matcher": {"id": "byIndex", "options": 0}},
+                "x": {"matcher": {"id": "byName", "options": "fan_tctl"}},
+                "y": {"matcher": {"id": "byName", "options": "fan_rpm"}}
+              }
+            ],
+            "colorField": {"matcher": {"id": "byName", "options": "name"}},
+            "pointSize": {"mode": "fixed", "fixed": 8},
             "tooltip": {"mode": "single"},
             "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
           },
           "targets": [
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "ipmi_fan_speed_rpm{instance=\"hestia\"}",
-              "format": "time_series",
-              "legendFormat": "{{name}} rpm"
+              "expr": "label_replace(ipmi_fan_speed_rpm{instance=\"hestia\"}, \"__name__\", \"fan_rpm\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A",
+              "legendFormat": "fan_rpm"
             },
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "max by(instance)(thermalscope_cpu_temperature_celsius{instance=\"hestia\", sensor=\"Tctl\"})",
-              "format": "time_series",
-              "legendFormat": "hestia Tctl"
+              "expr": "label_replace(ipmi_fan_speed_rpm{instance=\"hestia\"} * 0 + on(instance) group_left max by(instance)(thermalscope_cpu_temperature_celsius{instance=\"hestia\", sensor=\"Tctl\"}), \"__name__\", \"fan_tctl\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "B",
+              "legendFormat": "fan_tctl"
             }
+          ],
+          "transformations": [
+            {"id": "joinByLabels", "options": {"value": "__name__", "join": ["name"]}}
           ],
           "title": "hestia fan curve (RPM vs CPU Tctl)",
           "type": "xychart"

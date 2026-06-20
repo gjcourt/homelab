@@ -1265,191 +1265,8 @@ data:
           ]
         },
         {
-          "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 120},
-          "id": 102,
-          "title": "NVIDIA GPU Thermals & Power (hestia) — collapsed; expand when GPUs in use",
-          "type": "row",
-          "panels": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {"color": "green", "value": null},
-                      {"color": "orange", "value": 75},
-                      {"color": "red", "value": 83}
-                    ]
-                  },
-                  "unit": "celsius"
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 121},
-              "id": 5,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_temperature_celsius{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}}"
-                }
-              ],
-              "title": "NVIDIA GPU Temperature",
-              "type": "timeseries"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "watt",
-                  "max": 500
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 121},
-              "id": 6,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_power_draw_watts{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}}"
-                }
-              ],
-              "title": "NVIDIA GPU Power Draw",
-              "type": "timeseries"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "percentunit",
-                  "min": 0,
-                  "max": 1
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 121},
-              "id": 7,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_fan_speed_ratio{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}} fan"
-                }
-              ],
-              "title": "NVIDIA GPU Fan Speed",
-              "type": "timeseries"
-            }
-          ]
-        },
-        {
-          "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 121},
-          "id": 103,
-          "title": "NVIDIA GPU Utilization & Clock (hestia) — collapsed",
-          "type": "row",
-          "panels": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "percentunit",
-                  "min": 0,
-                  "max": 1
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 122},
-              "id": 8,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_sm_utilization_ratio{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}} SM"
-                }
-              ],
-              "title": "NVIDIA GPU SM Utilization",
-              "type": "timeseries"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "percentunit",
-                  "min": 0,
-                  "max": 1
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 122},
-              "id": 9,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_memory_utilization_ratio{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}} memory"
-                }
-              ],
-              "title": "NVIDIA GPU Memory Utilization",
-              "type": "timeseries"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "mhz"
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 122},
-              "id": 10,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_sm_clock_hz{instance=~\"$instance\"} / 1e6",
-                  "legendFormat": "{{instance}} GPU {{gpu}}"
-                }
-              ],
-              "title": "NVIDIA GPU SM Clock",
-              "type": "timeseries"
-            }
-          ]
-        },
-        {
           "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 122},
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 120},
           "id": 104,
           "title": "Collector Health",
           "type": "row",
@@ -1467,7 +1284,7 @@ data:
               "mappings": [{"options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}, "type": "value"}]
             }
           },
-          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 123},
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 121},
           "id": 11,
           "options": {
             "reduceOptions": {"calcs": ["lastNotNull"]},
@@ -1498,7 +1315,7 @@ data:
               "unit": "s"
             }
           },
-          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 123},
+          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 121},
           "id": 12,
           "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
           "targets": [
@@ -1510,6 +1327,189 @@ data:
           ],
           "title": "Scrape Duration",
           "type": "timeseries"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 125},
+          "id": 102,
+          "title": "NVIDIA GPU Thermals & Power (hestia) — collapsed; expand when GPUs in use",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null},
+                      {"color": "orange", "value": 75},
+                      {"color": "red", "value": 83}
+                    ]
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 126},
+              "id": 5,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_temperature_celsius{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}}"
+                }
+              ],
+              "title": "NVIDIA GPU Temperature",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "watt",
+                  "max": 500
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 126},
+              "id": 6,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_power_draw_watts{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}}"
+                }
+              ],
+              "title": "NVIDIA GPU Power Draw",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "percentunit",
+                  "min": 0,
+                  "max": 1
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 126},
+              "id": 7,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_fan_speed_ratio{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}} fan"
+                }
+              ],
+              "title": "NVIDIA GPU Fan Speed",
+              "type": "timeseries"
+            }
+          ]
+        },
+        {
+          "collapsed": true,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 126},
+          "id": 103,
+          "title": "NVIDIA GPU Utilization & Clock (hestia) — collapsed",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "percentunit",
+                  "min": 0,
+                  "max": 1
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 127},
+              "id": 8,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_sm_utilization_ratio{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}} SM"
+                }
+              ],
+              "title": "NVIDIA GPU SM Utilization",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "percentunit",
+                  "min": 0,
+                  "max": 1
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 127},
+              "id": 9,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_memory_utilization_ratio{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}} memory"
+                }
+              ],
+              "title": "NVIDIA GPU Memory Utilization",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "mhz"
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 127},
+              "id": 10,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_sm_clock_hz{instance=~\"$instance\"} / 1e6",
+                  "legendFormat": "{{instance}} GPU {{gpu}}"
+                }
+              ],
+              "title": "NVIDIA GPU SM Clock",
+              "type": "timeseries"
+            }
+          ]
         }
       ],
       "refresh": "30s",

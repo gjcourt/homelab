@@ -914,7 +914,9 @@ data:
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
               "expr": "thermalscope_nvme_percentage_used_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
+              "legendFormat": "{{instance}} {{device}}",
+              "instant": true,
+              "range": false
             }
           ],
           "title": "% endurance used",
@@ -950,7 +952,9 @@ data:
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
               "expr": "thermalscope_nvme_available_spare_ratio{instance=~\"$instance\"} - thermalscope_nvme_available_spare_threshold_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
+              "legendFormat": "{{instance}} {{device}}",
+              "instant": true,
+              "range": false
             }
           ],
           "title": "NVMe Spare Headroom",
@@ -983,7 +987,9 @@ data:
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
               "expr": "thermalscope_nvme_critical_warning{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
+              "legendFormat": "{{instance}} {{device}}",
+              "instant": true,
+              "range": false
             }
           ],
           "title": "Critical warning",

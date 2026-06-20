@@ -32,7 +32,7 @@ spec:
           # thermalscope PR #7 — NVMe SMART wear/health collector, opt-in via
           # THERMALSCOPE_NVME_HEALTH. Pinned to the multi-arch index digest
           # per the homelab image-discipline rule.
-          image: "ghcr.io/gjcourt/thermalscope:fe29fe5@sha256:ef85dd996cb042024388565eadd356bf5b225fb87a9970c89b49055148043019"
+          image: "ghcr.io/gjcourt/thermalscope:defd02f@sha256:e285862d816c6630e85cc0031179cbdd33b2c38a988938386bbc7bb569b141ad"
           imagePullPolicy: IfNotPresent
           env:
             # Turn ON the SMART health collector (off by default in the agent).

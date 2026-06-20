@@ -224,3 +224,72 @@ spec:
           annotations:
             summary: "hestia chassis fan {{ $labels.name }} may be failing"
             description: "Fan {{ $labels.name }} on hestia is stalled or in a non-OK state while CPU Tctl is above 70°C — possible fan failure under load."
+
+    # NVMe SMART wear/health (thermalscope PR #7, opt-in smart-agent). These
+    # alerts are global and inactive until the metrics exist — they begin
+    # firing only once a thermalscope-smart DaemonSet is scraped. The staging
+    # smart-agent (job="thermalscope-smart") emits them first; the prod
+    # promotion is a gated follow-up. Wear/spare/error counters change
+    # slowly, so the `for:` windows are long and the scrape is every 5m.
+    - name: thermalscope.nvmehealth
+      rules:
+        # Percentage-used is the SMART endurance estimate (0–1 here; 1.0 =
+        # rated write endurance consumed). >80% is a plan-a-replacement
+        # warning; the drive is typically still healthy past 100%, but at
+        # >95% it is firmly end-of-life and should be swapped.
+        - alert: ThermalScopeNVMeWearHigh
+          expr: thermalscope_nvme_percentage_used_ratio > 0.8
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} is wearing out"
+            description: "{{ $labels.device }} on {{ $labels.instance }} reports {{ $value | humanizePercentage }} of rated write endurance used (>80%). Plan a replacement."
+
+        - alert: ThermalScopeNVMeWearCritical
+          expr: thermalscope_nvme_percentage_used_ratio > 0.95
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} is at end-of-life"
+            description: "{{ $labels.device }} on {{ $labels.instance }} reports {{ $value | humanizePercentage }} of rated write endurance used (>95%). Replace the drive."
+
+        # Available spare blocks have fallen below the drive's own SMART
+        # threshold — the drive is signalling that spare capacity is running
+        # out. Gated on threshold>0 so drives that don't report a threshold
+        # (threshold=0) never trip this.
+        - alert: ThermalScopeNVMeSpareLow
+          expr: |
+            thermalscope_nvme_available_spare_ratio < thermalscope_nvme_available_spare_threshold_ratio
+              and thermalscope_nvme_available_spare_threshold_ratio > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} is low on spare blocks"
+            description: "{{ $labels.device }} on {{ $labels.instance }} available spare {{ $value | humanizePercentage }} is below its SMART threshold. The drive is running out of spare capacity."
+
+        # The SMART critical-warning bitfield is non-zero — the drive is
+        # reporting at least one critical condition (spare below threshold,
+        # temperature out of range, reliability degraded, read-only, or
+        # volatile-memory backup failed). Any non-zero value pages.
+        - alert: ThermalScopeNVMeCriticalWarning
+          expr: thermalscope_nvme_critical_warning != 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} reports a SMART critical warning"
+            description: "{{ $labels.device }} on {{ $labels.instance }} critical_warning bitfield is {{ $value }} (non-zero). Inspect the drive's SMART status immediately."
+
+        # New media (uncorrectable) errors in the last 24h. Media errors are
+        # rare and cumulative; any increase is worth surfacing.
+        - alert: ThermalScopeNVMeMediaErrors
+          expr: increase(thermalscope_nvme_media_errors_total[24h]) > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} logged new media errors"
+            description: "{{ $labels.device }} on {{ $labels.instance }} recorded {{ $value }} new media/uncorrectable error(s) in the last 24h."

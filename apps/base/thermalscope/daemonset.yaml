@@ -34,10 +34,15 @@ spec:
       containers:
         - name: agent
           # Pin to a digest per the homelab image-discipline rule.
-          # `b7e057a` reads RAPL energy from the powercap device tree
-          # (thermalscope PR #5) instead of the /sys/class symlinks,
-          # which containerd masks — see the powercap volume note below.
-          image: "ghcr.io/gjcourt/thermalscope:096a780@sha256:e609b6626f8e3fb47f17c8dd4e7df69be7d389d04397b2cc5ab7deeaaf832cc3"
+          # `fe29fe5` adds the opt-in NVMe SMART health collector
+          # (thermalscope PR #7) on top of the powercap RAPL device-tree
+          # reads from PR #5 (the /sys/class symlinks are masked by
+          # containerd — see the powercap volume note below). This bump is a
+          # pure superset for THIS agent: nvmehealth is off unless
+          # THERMALSCOPE_NVME_HEALTH is set (it is not here), so behavior is
+          # identical to the prior `096a780` digest. The collector is enabled
+          # only on the separate privileged thermalscope-smart DaemonSet.
+          image: "ghcr.io/gjcourt/thermalscope:fe29fe5@sha256:ef85dd996cb042024388565eadd356bf5b225fb87a9970c89b49055148043019"
           imagePullPolicy: IfNotPresent
           env:
             # The default powercap root (/sys/devices/virtual/powercap) is

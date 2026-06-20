@@ -1,0 +1,49 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: thermalscope-smart-agent
+  namespace: thermalscope
+  labels:
+    # kube-prometheus-stack's Prometheus instance selects ServiceMonitors by
+    # helm-default release label. Without this label the SM is invisible.
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: thermalscope
+    app.kubernetes.io/component: smart-agent
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: thermalscope
+      app.kubernetes.io/component: smart-agent
+  # No namespaceSelector — defaults to the SM's own namespace, which the
+  # staging overlay rewrites to thermalscope-stage.
+  endpoints:
+    - port: metrics
+      path: /metrics
+      # SMART health changes slowly (wear, power-on hours, error counters);
+      # a 5-minute scrape interval is plenty and keeps the NVMe admin ioctl
+      # cost negligible.
+      interval: 300s
+      scrapeTimeout: 30s
+      relabelings:
+        # Promote the pod's node name to `instance` so each Talos node is a
+        # distinct target (e.g. instance="talos-ykb-uir").
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: instance
+          action: replace
+        # Distinct job from the production agent's job="thermalscope" so the
+        # two never share an up{} series and the NVMe-health alerts can scope
+        # cleanly if needed.
+        - targetLabel: job
+          replacement: thermalscope-smart
+      metricRelabelings:
+        # Keep ONLY the NVMe wear/health series this agent is responsible for
+        # (plus `up`). The previous `thermalscope_nvme.*` wildcard also let the
+        # NVMe *temperature* series through, duplicating the production agent's
+        # temps; this explicit allow-list excludes _temperature_ entirely.
+        - sourceLabels: [__name__]
+          regex: ^(thermalscope_nvme_(percentage_used_ratio|available_spare_ratio|available_spare_threshold_ratio|critical_warning|media_errors_total|error_log_entries_total|power_on_hours_total|power_cycles_total|unsafe_shutdowns_total|data_units_written_total|data_units_read_total)|thermalscope_nvmehealth_up|up)$
+          action: keep
+        # Drop the per-pod label: under hostNetwork the pod identity is the
+        # node, and pod names churn on restart — cardinality without signal.
+        - action: labeldrop
+          regex: pod

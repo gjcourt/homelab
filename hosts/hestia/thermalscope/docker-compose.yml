@@ -1,4 +1,4 @@
-# thermalscope — hestia thermal + power telemetry agent.
+# thermalscope — hestia thermal + power + NVMe-health telemetry agent.
 #
 # Image is built from https://github.com/gjcourt/thermalscope (Go agent,
 # distroless static base). Tags are git short SHAs from that repo; bump
@@ -7,22 +7,38 @@
 # Runs with host networking and CAP-PRIVILEGED because it reads:
 #   - /sys/class/hwmon          CPU + chassis sensors
 #   - /sys/class/thermal        thermal zones (per-core + package)
+#   - /sys/class/nvme           NVMe controller enumeration (for SMART)
+#   - /dev/nvme*                NVMe admin ioctl for the SMART/Health log;
+#                               privileged grants the device-cgroup access
+#                               and populates /dev with the host devices
+#                               (no extra mount needed under privileged)
 #   - /usr/bin/nvidia-smi       (bind-mounted ro from host; legacy from
 #                               the 4090 era — leave in place; the
 #                               binary is a no-op without GPUs and
 #                               agent code already handles its absence)
+#
+# THERMALSCOPE_NVME_HEALTH=1 turns on the SMART wear/failure collector
+# (percentage_used, available_spare, critical_warning, media_errors,
+# power_on_hours, data_units_written, read_errors_total). hestia has 4
+# NVMe drives (nvme0-nvme3); these surface under instance="hestia" on the
+# shared "ThermalScope — Rack" dashboard's NVMe Wear & Health row and the
+# thermalscope.nvmehealth alerts, alongside the Talos nodes — no dashboard
+# or alert change needed (both are per-instance/device).
 #
 # Metrics are exposed via host networking; Prometheus scrapes hestia
 # directly.
 
 services:
   thermalscope:
-    image: ghcr.io/gjcourt/thermalscope:d470623@sha256:af1c2d64a54ffb4168ab8424a704a3b9b49efe8d1b4cdb9f4f64f18cdd70b0c3
+    image: ghcr.io/gjcourt/thermalscope:defd02f@sha256:e285862d816c6630e85cc0031179cbdd33b2c38a988938386bbc7bb569b141ad
     container_name: thermalscope
     network_mode: host
     privileged: true
     restart: unless-stopped
+    environment:
+      THERMALSCOPE_NVME_HEALTH: "1"
     volumes:
       - /sys/class/hwmon:/sys/class/hwmon:ro
       - /sys/class/thermal:/sys/class/thermal:ro
+      - /sys/class/nvme:/sys/class/nvme:ro
       - /usr/bin/nvidia-smi:/usr/bin/nvidia-smi:ro

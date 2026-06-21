@@ -26,6 +26,15 @@ Build a self-hosted "presence sensor" that answers **who is home, how many peopl
 - **ESPresense over Bermuda**: beacon→room + arbitrary-device enumeration (the guest-count signal) over MQTT, which we already run (mosquitto). Bermuda is slicker for known-beacon trilateration but weaker at counting unknown devices. (Note: the ESP32-C6 fallback via ESPHome BT-proxy is a *different* data path — it would NOT feed the guest-count enumeration.)
 - **XIAO ESP32-C3**: BLE-only RISC-V (no wasted Classic-BT power), lowest practical idle-scan draw (~0.3 W), $5, and a **u.FL connector** for an external antenna. For always-on plugged-in nodes the watt differences between boards are a few $/yr; **antenna quality drives detection accuracy far more than power**. ESPresense flashing for this exact board is documented by Seeed.
 
+### Board choice: C3 over C6 (recorded rationale)
+Considered the newer XIAO **ESP32-C6** and rejected it for the scanner role. In decreasing order of weight:
+1. **ESPresense firmware support is the settling factor.** The whole stack is ESPresense. The **C3 has confirmed, documented support** ([Seeed XIAO-C3 + ESPresense wiki](https://wiki.seeedstudio.com/xiao-esp32c3-espresense/)); the **C6's support is unconfirmed/experimental** (no first-class build/guide). A board ESPresense can't reliably flash is unusable here regardless of specs.
+2. **The C6's headline features are dead weight for this role.** Its advantage over the C3 is **WiFi 6 + Thread/Zigbee (802.15.4) + Matter** — none of which a BLE-scanner-publishing-tiny-MQTT-messages uses: WiFi 6 is overkill for a few RSSI bytes; the 802.15.4 radio sits idle (Zigbee is handled by the existing **zigbee2mqtt coordinator**, not these nodes); Matter is irrelevant. You'd pay more money + slightly more power for radios this role never powers on — the opposite of the efficiency lean.
+3. **On the dimensions that matter, they tie.** Both are BLE 5.0 (the C6 doesn't detect beacons better), and the u.FL external-antenna connector — the real accuracy upgrade — is on **both** XIAO variants. So C6 buys nothing on BLE or antenna.
+4. **The only scenario where C6 wins is a different job.** If we later want a **Thread/Matter border-router foothold**, a C6 is the right chip — but that's a separate purpose, wouldn't run ESPresense, and shouldn't be bolted onto a scanner node. Hence the plan keeps C6 as an explicit *"one node, future-proof, not now, verify ESPresense first"* option, not the scanner default.
+
+**Conclusion:** for 8 always-on ESPresense BLE scanners the C3 is cheaper, lower-power, confirmed-supported, and gives up nothing the role uses. Revisit C6 only as a deliberate Thread/Matter foothold.
+
 ## Architecture
 
 ```

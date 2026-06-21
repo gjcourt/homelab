@@ -113,11 +113,12 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 ## Phased plan (tasks)
 
 ### P0 — Inventory & long-lead (do first, unblocks everything)
-- [ ] List zigbee2mqtt paired devices (`kubectl exec` / z2m UI); enumerate HA `binary_sensor.*` motion/occupancy entities → fusion inputs for P4 (or note none exist).
+- [x] **Inventoried zigbee2mqtt (2026-06-21):** 8 paired devices, **no motion sensors paired yet** (2 Aqara `lumi.weather`, 3 routers, 1 plug, 2 Tuya `TS0502B` lights). George **has Zigbee motion sensors on hand — not yet paired**; no motion `binary_sensor` exists in HA yet.
+- [ ] **Pair the on-hand Zigbee motion sensors** — z2m coordinator is healthy (ember adapter, MQTT connected). Enable permit-join via the z2m frontend/MQTT **only during pairing, then disable** (security hygiene). Each → an HA `binary_sensor` = back-half presence input for P4 fusion. *(Physical task — do when home.)*
 - [ ] Map UniFi Protect **camera coverage** to rooms (which of the 8 are front-half/covered).
-- [ ] Choose the 8 rooms + mark power drops / node mounting points, and assign each a **presence source**: UniFi Protect person (camera rooms) / **C3+mmWave** / Zigbee motion / PIR. Pick the **5 mmWave rooms** (back-half, no camera, people sit still — e.g. office, bedrooms, living).
-- [ ] Confirm a **configurable** iBeacon SKU (major/minor settable) + its config method.
-- [ ] Order **1 scanner + 1 mmWave stack + 1 beacon** for the PoC (and queue the rest: 8 scanners, 5 mmWave nodes + modules, 3 beacons).
+- [ ] Choose the 8 rooms + mark power drops / node mounting points, and assign each a **presence source**: UniFi Protect person (camera rooms) / **C3+mmWave** (the 5 sit-still rooms) / **Zigbee motion** (pair on-hand sensors) / BLE-only. Pick the **5 mmWave rooms** (back-half, no camera, people sit still — e.g. office, bedrooms, living).
+- [x] **Beacon SKU confirmed:** **HolyIOT nRF52810** keyfob — major/minor/UUID settable via the free **Holyiot-beacon** app (iOS/Android); iBeacon, coin-cell, ~$5–8.
+- [ ] Order **1 scanner + 1 mmWave stack + 1 beacon** for the PoC (and queue the rest: 8 scanners, 5 mmWave nodes + modules, 3 beacons). PoC items: XIAO C3 + u.FL antenna; XIAO C3 + Seeed 24 GHz mmWave module; HolyIOT nRF52810.
 
 ### P1 — Home/away (zero new hardware)
 - [ ] Create a UniFi **local read-only** account; add the **UniFi Network integration** (config-flow; creds via SOPS; `.storage`, not committed YAML) for `device_tracker.*`.

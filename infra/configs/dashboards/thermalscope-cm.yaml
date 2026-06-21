@@ -880,436 +880,6 @@ data:
         {
           "collapsed": false,
           "gridPos": {"h": 1, "w": 24, "x": 0, "y": 83},
-          "id": 500,
-          "title": "Degradation & Fans — temp-vs-load (cooling drift) + fan curve",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Cooling-degradation scatter: CPU Tctl (Y) vs CPU utilization (X), per host. A host that over time drifts UP-and-LEFT (hotter at the same load) is losing cooling capacity (dust, dried paste, weak fan). Utilization is the instance:node_cpu_utilization:rate5m recording rule, re-keyed to the thermalscope instance label via node_uname_info. node-exporter covers the 6 Talos nodes only — hestia (bare host, no DaemonSet) has no utilization series and does not appear here.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"pointSize": {"fixed": 8}},
-              "unit": "celsius"
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 84},
-          "id": 501,
-          "options": {
-            "seriesMapping": "auto",
-            "tooltip": {"mode": "single"},
-            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_cpu_utilization:rate5m",
-              "format": "time_series",
-              "legendFormat": "{{instance}} Tctl"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "instance:node_cpu_utilization:rate5m{instance=~\"$instance\"}",
-              "format": "time_series",
-              "legendFormat": "{{instance}} util"
-            }
-          ],
-          "title": "CPU temp vs CPU load (degradation scatter)",
-          "type": "xychart"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Secondary degradation scatter: CPU Tctl (Y) vs busy disk fraction (X), per host. Backed by instance:node_disk_busy:rate5m (hottest device per node, re-keyed to the thermalscope instance label). Useful when a host's heat tracks storage I/O rather than CPU. Talos nodes only (no hestia node-exporter series).",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"pointSize": {"fixed": 8}},
-              "unit": "celsius"
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 84},
-          "id": 502,
-          "options": {
-            "seriesMapping": "auto",
-            "tooltip": {"mode": "single"},
-            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_disk_busy:rate5m",
-              "format": "time_series",
-              "legendFormat": "{{instance}} Tctl"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "instance:node_disk_busy:rate5m{instance=~\"$instance\"}",
-              "format": "time_series",
-              "legendFormat": "{{instance}} disk busy"
-            }
-          ],
-          "title": "CPU temp vs disk busy (degradation scatter)",
-          "type": "xychart"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Cooling-drift trend: current CPU Tctl minus Tctl 7 days ago, per host. Persistent positive drift = the host runs hotter than a week ago (cooling degradation). Retention is 10d so the offset window is 7d, NOT 30d — this signal DEEPENS as history accumulates and a longer baseline becomes possible. Compares wall-clock-aligned samples (not same-load), so read it alongside the scatter panels. Orange ≥2°C hotter, red ≥5°C.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 2},
-                  {"color": "red", "value": 5}
-                ]
-              },
-              "unit": "celsius"
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 92},
-          "id": 503,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} - thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} offset 7d",
-              "legendFormat": "{{instance}} Δ vs 7d ago"
-            }
-          ],
-          "title": "CPU temp drift vs 7d ago (deepens as history grows)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "hestia fan curve: chassis fan RPM (Y) vs CPU Tctl (X). Shows whether the BMC fan curve ramps sensibly with CPU heat. Fan RPM and temp join on instance=\"hestia\" (ipmi-exporter and thermalscope both label this host literally — no node_uname_info re-key needed). Visualization only; backs the ThermalScopeFanFailing alert qualitatively.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"pointSize": {"fixed": 8}},
-              "unit": "rotrpm"
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 92},
-          "id": 504,
-          "options": {
-            "seriesMapping": "auto",
-            "tooltip": {"mode": "single"},
-            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "ipmi_fan_speed_rpm{instance=\"hestia\"}",
-              "format": "time_series",
-              "legendFormat": "{{name}} rpm"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "max by(instance)(thermalscope_cpu_temperature_celsius{instance=\"hestia\", sensor=\"Tctl\"})",
-              "format": "time_series",
-              "legendFormat": "hestia Tctl"
-            }
-          ],
-          "title": "hestia fan curve (RPM vs CPU Tctl)",
-          "type": "xychart"
-        },
-        {
-          "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 100},
-          "id": 105,
-          "title": "AMD iGPU Thermals (Talos APUs)",
-          "type": "row",
-          "panels": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {"color": "green", "value": null},
-                      {"color": "orange", "value": 80},
-                      {"color": "red", "value": 90}
-                    ]
-                  },
-                  "unit": "celsius"
-                }
-              },
-              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 101},
-              "id": 13,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_amdgpu_temperature_celsius{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} {{sensor}}"
-                }
-              ],
-              "title": "AMD iGPU Temperature",
-              "type": "timeseries"
-            }
-          ]
-        },
-        {
-          "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 101},
-          "id": 102,
-          "title": "NVIDIA GPU Thermals & Power (hestia) — collapsed; expand when GPUs in use",
-          "type": "row",
-          "panels": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "thresholds": {
-                    "mode": "absolute",
-                    "steps": [
-                      {"color": "green", "value": null},
-                      {"color": "orange", "value": 75},
-                      {"color": "red", "value": 83}
-                    ]
-                  },
-                  "unit": "celsius"
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 102},
-              "id": 5,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_temperature_celsius{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}}"
-                }
-              ],
-              "title": "NVIDIA GPU Temperature",
-              "type": "timeseries"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "watt",
-                  "max": 500
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 102},
-              "id": 6,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_power_draw_watts{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}}"
-                }
-              ],
-              "title": "NVIDIA GPU Power Draw",
-              "type": "timeseries"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "percentunit",
-                  "min": 0,
-                  "max": 1
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 102},
-              "id": 7,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_fan_speed_ratio{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}} fan"
-                }
-              ],
-              "title": "NVIDIA GPU Fan Speed",
-              "type": "timeseries"
-            }
-          ]
-        },
-        {
-          "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 102},
-          "id": 103,
-          "title": "NVIDIA GPU Utilization & Clock (hestia) — collapsed",
-          "type": "row",
-          "panels": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "percentunit",
-                  "min": 0,
-                  "max": 1
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 103},
-              "id": 8,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_sm_utilization_ratio{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}} SM"
-                }
-              ],
-              "title": "NVIDIA GPU SM Utilization",
-              "type": "timeseries"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "percentunit",
-                  "min": 0,
-                  "max": 1
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 103},
-              "id": 9,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_memory_utilization_ratio{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}} memory"
-                }
-              ],
-              "title": "NVIDIA GPU Memory Utilization",
-              "type": "timeseries"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "mhz"
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 103},
-              "id": 10,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_sm_clock_hz{instance=~\"$instance\"} / 1e6",
-                  "legendFormat": "{{instance}} GPU {{gpu}}"
-                }
-              ],
-              "title": "NVIDIA GPU SM Clock",
-              "type": "timeseries"
-            }
-          ]
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 103},
-          "id": 104,
-          "title": "Collector Health",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]
-              },
-              "mappings": [{"options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}, "type": "value"}]
-            }
-          },
-          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 104},
-          "id": 11,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "horizontal",
-            "colorMode": "background"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_hwmon_up{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} hwmon"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_up{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} gpu"
-            }
-          ],
-          "title": "Collector Status",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 1, "spanNulls": false},
-              "unit": "s"
-            }
-          },
-          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 104},
-          "id": 12,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "scrape_duration_seconds{job=\"thermalscope\", instance=~\"$instance\"}",
-              "legendFormat": "{{instance}}"
-            }
-          ],
-          "title": "Scrape Duration",
-          "type": "timeseries"
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 108},
           "id": 700,
           "title": "NVMe Wear & Health",
           "type": "row",
@@ -1344,12 +914,14 @@ data:
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
               "expr": "thermalscope_nvme_percentage_used_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
+              "legendFormat": "{{instance}} {{device}}",
+              "instant": true,
+              "range": false
             }
           ],
           "title": "% endurance used",
           "type": "bargauge",
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 109}
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 84}
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
@@ -1380,12 +952,14 @@ data:
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
               "expr": "thermalscope_nvme_available_spare_ratio{instance=~\"$instance\"} - thermalscope_nvme_available_spare_threshold_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
+              "legendFormat": "{{instance}} {{device}}",
+              "instant": true,
+              "range": false
             }
           ],
           "title": "NVMe Spare Headroom",
           "type": "bargauge",
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 109}
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 84}
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
@@ -1413,12 +987,14 @@ data:
             {
               "datasource": {"type": "prometheus", "uid": "${datasource}"},
               "expr": "thermalscope_nvme_critical_warning{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
+              "legendFormat": "{{instance}} {{device}}",
+              "instant": true,
+              "range": false
             }
           ],
           "title": "Critical warning",
           "type": "stat",
-          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 117}
+          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 92}
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
@@ -1451,7 +1027,7 @@ data:
           ],
           "title": "Media errors (cumulative + 24h)",
           "type": "timeseries",
-          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 117}
+          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 92}
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
@@ -1480,7 +1056,7 @@ data:
           ],
           "title": "Power-on hours",
           "type": "stat",
-          "gridPos": {"h": 4, "w": 12, "x": 0, "y": 123}
+          "gridPos": {"h": 4, "w": 12, "x": 0, "y": 98}
         },
         {
           "datasource": {"type": "prometheus", "uid": "${datasource}"},
@@ -1509,7 +1085,491 @@ data:
           ],
           "title": "Data written",
           "type": "stat",
-          "gridPos": {"h": 4, "w": 12, "x": 12, "y": 123}
+          "gridPos": {"h": 4, "w": 12, "x": 12, "y": 98}
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 102},
+          "id": 500,
+          "title": "Degradation & Fans — temp-vs-load (cooling drift) + fan curve",
+          "type": "row",
+          "panels": []
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Cooling-degradation scatter: CPU Tctl (Y) vs CPU utilization (X), per host. A host that over time drifts UP-and-LEFT (hotter at the same load) is losing cooling capacity (dust, dried paste, weak fan). Utilization is the instance:node_cpu_utilization:rate5m recording rule, re-keyed to the thermalscope instance label via node_uname_info. node-exporter covers the 6 Talos nodes only — hestia (bare host, no DaemonSet) has no utilization series and does not appear here.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"pointSize": {"fixed": 8}},
+              "unit": "celsius"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 103},
+          "id": 501,
+          "options": {
+            "seriesMapping": "manual",
+            "series": [
+              {
+                "frame": {"matcher": {"id": "byIndex", "options": 0}},
+                "x": {"matcher": {"id": "byName", "options": "cpu_util"}},
+                "y": {"matcher": {"id": "byName", "options": "cpu_temp"}}
+              }
+            ],
+            "colorField": {"matcher": {"id": "byName", "options": "instance"}},
+            "pointSize": {"mode": "fixed", "fixed": 8},
+            "tooltip": {"mode": "single"},
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "label_replace(thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_cpu_utilization:rate5m, \"__name__\", \"cpu_temp\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A",
+              "legendFormat": "cpu_temp"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "label_replace(instance:node_cpu_utilization:rate5m{instance=~\"$instance\"}, \"__name__\", \"cpu_util\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "B",
+              "legendFormat": "cpu_util"
+            }
+          ],
+          "transformations": [
+            {"id": "joinByLabels", "options": {"value": "__name__", "join": ["instance"]}}
+          ],
+          "title": "CPU temp vs CPU load (degradation scatter)",
+          "type": "xychart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Secondary degradation scatter: CPU Tctl (Y) vs busy disk fraction (X), per host. Backed by instance:node_disk_busy:rate5m (hottest device per node, re-keyed to the thermalscope instance label). Useful when a host's heat tracks storage I/O rather than CPU. Talos nodes only (no hestia node-exporter series).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"pointSize": {"fixed": 8}},
+              "unit": "celsius"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 103},
+          "id": 502,
+          "options": {
+            "seriesMapping": "manual",
+            "series": [
+              {
+                "frame": {"matcher": {"id": "byIndex", "options": 0}},
+                "x": {"matcher": {"id": "byName", "options": "disk_busy"}},
+                "y": {"matcher": {"id": "byName", "options": "cpu_temp"}}
+              }
+            ],
+            "colorField": {"matcher": {"id": "byName", "options": "instance"}},
+            "pointSize": {"mode": "fixed", "fixed": 8},
+            "tooltip": {"mode": "single"},
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "label_replace(thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_disk_busy:rate5m, \"__name__\", \"cpu_temp\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A",
+              "legendFormat": "cpu_temp"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "label_replace(instance:node_disk_busy:rate5m{instance=~\"$instance\"}, \"__name__\", \"disk_busy\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "B",
+              "legendFormat": "disk_busy"
+            }
+          ],
+          "transformations": [
+            {"id": "joinByLabels", "options": {"value": "__name__", "join": ["instance"]}}
+          ],
+          "title": "CPU temp vs disk busy (degradation scatter)",
+          "type": "xychart"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Cooling-drift trend: current CPU Tctl minus Tctl 7 days ago, per host. Persistent positive drift = the host runs hotter than a week ago (cooling degradation). Retention is 10d so the offset window is 7d, NOT 30d — this signal DEEPENS as history accumulates and a longer baseline becomes possible. Compares wall-clock-aligned samples (not same-load), so read it alongside the scatter panels. Orange ≥2°C hotter, red ≥5°C.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {"lineWidth": 2, "spanNulls": false},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "orange", "value": 2},
+                  {"color": "red", "value": 5}
+                ]
+              },
+              "unit": "celsius"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 111},
+          "id": 503,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} - thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} offset 7d",
+              "legendFormat": "{{instance}} Δ vs 7d ago"
+            }
+          ],
+          "title": "CPU temp drift vs 7d ago (deepens as history grows)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "hestia fan curve: chassis fan RPM (Y) vs CPU Tctl (X). Shows whether the BMC fan curve ramps sensibly with CPU heat. Fan RPM and temp join on instance=\"hestia\" (ipmi-exporter and thermalscope both label this host literally — no node_uname_info re-key needed). Visualization only; backs the ThermalScopeFanFailing alert qualitatively.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"pointSize": {"fixed": 8}},
+              "unit": "rotrpm"
+            }
+          },
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 111},
+          "id": 504,
+          "options": {
+            "seriesMapping": "manual",
+            "series": [
+              {
+                "frame": {"matcher": {"id": "byIndex", "options": 0}},
+                "x": {"matcher": {"id": "byName", "options": "fan_tctl"}},
+                "y": {"matcher": {"id": "byName", "options": "fan_rpm"}}
+              }
+            ],
+            "colorField": {"matcher": {"id": "byName", "options": "name"}},
+            "pointSize": {"mode": "fixed", "fixed": 8},
+            "tooltip": {"mode": "single"},
+            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "label_replace(ipmi_fan_speed_rpm{instance=\"hestia\"}, \"__name__\", \"fan_rpm\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A",
+              "legendFormat": "fan_rpm"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "label_replace(ipmi_fan_speed_rpm{instance=\"hestia\"} * 0 + on(instance) group_left max by(instance)(thermalscope_cpu_temperature_celsius{instance=\"hestia\", sensor=\"Tctl\"}), \"__name__\", \"fan_tctl\", \"\", \"\")",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "B",
+              "legendFormat": "fan_tctl"
+            }
+          ],
+          "transformations": [
+            {"id": "joinByLabels", "options": {"value": "__name__", "join": ["name"]}}
+          ],
+          "title": "hestia fan curve (RPM vs CPU Tctl)",
+          "type": "xychart"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 119},
+          "id": 105,
+          "title": "AMD iGPU Thermals (Talos APUs)",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null},
+                      {"color": "orange", "value": 80},
+                      {"color": "red", "value": 90}
+                    ]
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 120},
+              "id": 13,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_amdgpu_temperature_celsius{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} {{sensor}}"
+                }
+              ],
+              "title": "AMD iGPU Temperature",
+              "type": "timeseries"
+            }
+          ]
+        },
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 120},
+          "id": 104,
+          "title": "Collector Health",
+          "type": "row",
+          "panels": []
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]
+              },
+              "mappings": [{"options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}, "type": "value"}]
+            }
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 121},
+          "id": 11,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"]},
+            "orientation": "horizontal",
+            "colorMode": "background"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_hwmon_up{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} hwmon"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "thermalscope_gpu_up{instance=~\"$instance\"}",
+              "legendFormat": "{{instance}} gpu"
+            }
+          ],
+          "title": "Collector Status",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 1, "spanNulls": false},
+              "unit": "s"
+            }
+          },
+          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 121},
+          "id": 12,
+          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "scrape_duration_seconds{job=\"thermalscope\", instance=~\"$instance\"}",
+              "legendFormat": "{{instance}}"
+            }
+          ],
+          "title": "Scrape Duration",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 125},
+          "id": 102,
+          "title": "NVIDIA GPU Thermals & Power (hestia) — collapsed; expand when GPUs in use",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {"color": "green", "value": null},
+                      {"color": "orange", "value": 75},
+                      {"color": "red", "value": 83}
+                    ]
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 126},
+              "id": 5,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_temperature_celsius{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}}"
+                }
+              ],
+              "title": "NVIDIA GPU Temperature",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "watt",
+                  "max": 500
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 126},
+              "id": 6,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_power_draw_watts{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}}"
+                }
+              ],
+              "title": "NVIDIA GPU Power Draw",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "percentunit",
+                  "min": 0,
+                  "max": 1
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 126},
+              "id": 7,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_fan_speed_ratio{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}} fan"
+                }
+              ],
+              "title": "NVIDIA GPU Fan Speed",
+              "type": "timeseries"
+            }
+          ]
+        },
+        {
+          "collapsed": true,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 126},
+          "id": 103,
+          "title": "NVIDIA GPU Utilization & Clock (hestia) — collapsed",
+          "type": "row",
+          "panels": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "percentunit",
+                  "min": 0,
+                  "max": 1
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 127},
+              "id": 8,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_sm_utilization_ratio{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}} SM"
+                }
+              ],
+              "title": "NVIDIA GPU SM Utilization",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "percentunit",
+                  "min": 0,
+                  "max": 1
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 127},
+              "id": 9,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_memory_utilization_ratio{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} GPU {{gpu}} memory"
+                }
+              ],
+              "title": "NVIDIA GPU Memory Utilization",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "fieldConfig": {
+                "defaults": {
+                  "color": {"mode": "palette-classic"},
+                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "unit": "mhz"
+                }
+              },
+              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 127},
+              "id": 10,
+              "options": {
+                "tooltip": {"mode": "multi"},
+                "legend": {"displayMode": "list", "placement": "bottom"}
+              },
+              "targets": [
+                {
+                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "expr": "thermalscope_gpu_sm_clock_hz{instance=~\"$instance\"} / 1e6",
+                  "legendFormat": "{{instance}} GPU {{gpu}}"
+                }
+              ],
+              "title": "NVIDIA GPU SM Clock",
+              "type": "timeseries"
+            }
+          ]
         }
       ],
       "refresh": "30s",

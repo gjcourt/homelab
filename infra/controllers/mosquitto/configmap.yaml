@@ -8,6 +8,13 @@ data:
     persistence true
     persistence_location /mosquitto/data/
     listener 1883
-    # Allow anonymous for internal subnet, or user/pass.
-    # For simplicity in homelab internal cluster:
+    # --- Commit A (this PR): broker accepts authenticated clients, anonymous
+    # still allowed. Additive/safe — z2m + HA keep connecting anonymously while
+    # the new ESP32 nodes authenticate. (mounted from the mosquitto-auth Secret) ---
+    password_file /mosquitto/auth/passwordfile
     allow_anonymous true
+    # --- Commit B (LATER, flag-day — do via the two-commit interlock in the
+    # presence plan P2, after EVERY client has creds; enabling acl_file restricts
+    # anonymous clients, so this is NOT additive): ---
+    #   acl_file /mosquitto/auth/acl
+    #   allow_anonymous false

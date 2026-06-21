@@ -44,12 +44,18 @@ spec:
             - name: config
               mountPath: /mosquitto/config/mosquitto.conf
               subPath: mosquitto.conf
+            - name: auth
+              mountPath: /mosquitto/auth
+              readOnly: true
             - name: data
               mountPath: /mosquitto/data
       volumes:
         - name: config
           configMap:
             name: mosquitto-config
+        - name: auth
+          secret:
+            secretName: mosquitto-auth
         - name: data
           persistentVolumeClaim:
             claimName: mosquitto-data-pvc

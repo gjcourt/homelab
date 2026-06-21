@@ -19,7 +19,7 @@ Build a self-hosted "presence sensor" that answers **who is home, how many peopl
 | Scope | **Household + rough guest count** (guest count anonymous/aggregate) |
 | Scanner stack | **ESPresense (MQTT)** — beacon/device-centric, enumerates all adverts (needed for guest count), reuses existing mosquitto |
 | Scanner hardware | **Seeed XIAO ESP32-C3 + external u.FL antenna** — ESPresense support confirmed ([Seeed wiki](https://wiki.seeedstudio.com/xiao-esp32c3-espresense/)) |
-| Scale | **8 rooms / 8 scanner nodes**, **3 beacons** to start |
+| Scale | **8 ESPresense BLE scanners** (one/room) + **5 ESPHome mmWave presence nodes** (back-half static-presence rooms) + **3 beacons** = **13 C3 boards**, Option A (separate boards, all BLE on ESPresense) |
 
 ### Why these choices
 - **MAC randomization** (iOS 8+/Android 8+ rotate BLE MAC ~every 15 min) makes passive phone identification unreliable → carried beacons with a stable iBeacon major/minor are the robust identity path.
@@ -38,19 +38,18 @@ Considered the newer XIAO **ESP32-C6** and rejected it for the scanner role. In 
 ## Architecture
 
 ```
-[BLE beacons] --advert--> [8x XIAO ESP32-C3 / ESPresense] --MQTT--> [mosquitto (LB IP)]
-                                                                        |
-                                                              [Home Assistant]
-                                                       person / area / occupancy / count
-                                                                        |
-                                                          [HA prometheus: /api/prometheus]
-                                                                        |
-                                                        [ServiceMonitor → Prometheus → Grafana]
+[BLE beacons] --advert---> [8x C3 · ESPresense]       --MQTT-->\
+                                                                [mosquitto] --> [Home Assistant]
+[24GHz radar] --presence-> [5x C3 · ESPHome mmWave]   --MQTT-->/      person / area / occupancy / count
+                                                                                |
+                                                                  [HA prometheus: /api/prometheus]
+                                                                                |
+                                                                [ServiceMonitor → Prometheus → Grafana]
 ```
 
 - **ESPresense nodes** publish per-beacon RSSI + nearest-room and enumerate all BLE devices, over MQTT.
 - **Home Assistant** = brain: `person` entities, per-person room sensor (`mqtt_room` / ESPresense integration), **zone-aware** Bayesian **area occupancy** (fuse BLE-room + WiFi + the best per-room presence signal — see below), a `template` "people home" count, beacon **battery-low** + node-**offline** alerts.
-- **Per-room presence input (zone-aware):** front half (camera-covered) → **UniFi Protect person-detection** `binary_sensor` (best signal, no new hardware); back half → **Zigbee motion** (existing z2m, keeps the C3 a pure ESPresense BLE node) or a **PIR on the C3** (ESPresense supports a GPIO PIR over MQTT); **mmWave/LD2410** only where stationary-presence is needed (requires running that node on ESPHome — leaves the ESPresense/MQTT stack + guest-count enumeration).
+- **Per-room presence input (zone-aware):** front half (camera-covered) → **UniFi Protect person-detection** `binary_sensor` (best signal, no new hardware); **5 back-half static-presence rooms** → a dedicated **C3 + mmWave (ESPHome)** node publishing presence over MQTT (detects people sitting still — beats motion sensors); any remaining back-half room → **Zigbee motion** or a **$2 PIR on the scanner C3**.
 - **Guest count** is derived from the 8 nodes' device enumeration (distinct non-beacon devices, heavily smoothed) — **no dedicated counting node needed**.
 - **Grafana**: HA `prometheus:` endpoint → ServiceMonitor → Prometheus → history dashboards (same pattern as thermalscope).
 
@@ -81,6 +80,7 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 | **P1 — Home/away (no HW)** | UniFi local read-only account + URL; `person` entities created; (SOPS secret for creds) | `device_tracker`/`person` home-away (WiFi signal) **+ UniFi Protect person-detection sensors** (front-half presence) — both P4 fusion inputs | ~2–3 h |
 | **P2 — BLE PoC (1 node)** | mosquitto **LB IP** live + **IoT→:1883 firewall** + **auth/ACL + SOPS**; HA **MQTT integration** enabled; ESPresense flashed to C3 (✓ supported); 1 beacon with **set+verified major/minor** | Validated beacon→MQTT→HA path; firmware image + node-config template for P3 | ~3–4 h (mostly the broker exposure) |
 | **P3 — Roll out + calibrate (8 nodes)** | P2 green; 8 nodes flashed; placement/power map (from P0); firewall covers all nodes | 8 calibrated room sensors + hysteresis; room-resolution substrate | ~3–4 h |
+| **P3b — mmWave nodes (ESPHome)** | P2 green (same broker/auth — `mmwave` user); 5 rooms chosen (P0); modules in hand | 5 static-presence `binary_sensor`s over MQTT (back-half presence) | ~2–3 h |
 | **P4 — Identity + fusion** | 3 beacons configured (major/minor → person); P3 room sensors live; per-room presence sources ready (P0/P1: Protect person / Zigbee / C3 PIR); battery/offline signals available | person-room sensors; zone-aware Bayesian occupancy; people-home count; alerts | ~2–3 h |
 | **P5 — Guest count + history + automations** | HA **`prometheus:`** enabled + **ServiceMonitor** (label `release: kube-prometheus-stack`) + token; P4 entities stable | Grafana history; guest-count trend; automations | ~2–3 h |
 
@@ -90,18 +90,21 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 3. **Configurable beacon (settable major/minor)** gates ALL of P4 — verify on the PoC beacon in P2, not at 3-beacon rollout.
 4. **HA MQTT integration** gates P2; **HA Prometheus + a minted long-lived token + ServiceMonitor** gates P5.
 
-## Bill of materials (~$97)
+## Bill of materials (~$174)
 
 | Item | Qty | ~Unit | ~Total | Notes |
 |---|---|---|---|---|
-| Seeed XIAO ESP32-C3 | 8 | $5 | $40 | ESPresense-supported (Seeed wiki); BLE 5.0, u.FL connector |
-| External 2.4 GHz u.FL antenna | 8 | $1.5 | $12 | The accuracy upgrade — better/steadier RSSI |
-| 4-port USB power supply + USB-C cables | 2 | $15 | $30 | Power 4 nodes each (better efficiency than 8 cheap warts) |
-| **Configurable** BLE iBeacon keyfob | 3 | $5 | $15 | **Must expose major/minor** via app/NFC (verify before ordering); one as Niccolo's clip; coin-cell |
-| AM312 mini-PIR (optional) | per back-half room w/o Zigbee | $2 | — | 3.3 V, wires to a C3 GPIO; ESPresense-supported motion over MQTT. Skip where a camera or Zigbee sensor covers the room |
-| **Total** | | | **~$97** | Buy **1 node + 1 beacon first** for the P2 PoC before bulk-ordering |
+| Seeed XIAO ESP32-C3 — **ESPresense BLE scanners** | 8 | $5 | $40 | One/room; BLE 5.0, u.FL connector; ESPresense-supported (Seeed wiki) |
+| External 2.4 GHz u.FL antenna | 8 | $1.5 | $12 | For the 8 scanners — the RSSI accuracy upgrade (mmWave nodes don't need it) |
+| Seeed XIAO ESP32-C3 — **ESPHome mmWave nodes** | 5 | $5 | $25 | 5 back-half static-presence rooms; runs ESPHome, not ESPresense |
+| Seeed XIAO 24 GHz mmWave Human Static Presence module | 5 | $4.5 | $22 | Stacks on the C3; detects **stationary + moving** humans (FMCW radar) |
+| 4-port USB power supply + USB-C cables | 4 | $15 | $60 | Powers all 13 boards (a room's scanner + mmWave pair can share one) |
+| **Configurable** BLE iBeacon keyfob | 3 | $5 | $15 | **Must expose major/minor** via app/NFC (verify before ordering); one as Niccolo's clip |
+| **Total** | | | **~$174** | Buy **1 scanner + 1 mmWave stack + 1 beacon first** for the PoC before bulk-ordering |
 
-**Motion/presence inputs add little/no hardware:** front-half rooms use **UniFi Protect** person detection (existing cameras); back-half rooms use existing **Zigbee** motion or a **$2 PIR on the C3**. **mmWave/LD2410** (stationary presence) is the only option that needs a board on **ESPHome** instead of ESPresense — reserve it for a specific room that needs it.
+**13 C3 boards, 2 firmwares (Option A):** 8 run **ESPresense** (BLE beacon room-scan + guest count), 5 run **ESPHome** with the stacked mmWave module (static presence). Both node types **publish over MQTT to mosquitto** — the mmWave nodes use ESPHome's `mqtt:` component (not the native API), so they reuse the one broker path and HA needs no inbound reach into the IoT VLAN.
+
+**Presence inputs by zone:** front half → **UniFi Protect** person detection (existing cameras, no hardware); 5 back-half static-presence rooms → **C3 + mmWave (ESPHome)**; any remaining back-half room → existing **Zigbee** motion or a **$2 AM312 PIR on the scanner C3** (ESPresense GPIO).
 
 **Beacon SKU gate:** pin an exact model documented as user-configurable (major/minor settable + a known config app/NFC method). Many cheap keyfobs ship fixed vendor IDs — buying the wrong one sinks the P4 identity layer. Confirm in P0; prove in P2.
 
@@ -112,9 +115,9 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 ### P0 — Inventory & long-lead (do first, unblocks everything)
 - [ ] List zigbee2mqtt paired devices (`kubectl exec` / z2m UI); enumerate HA `binary_sensor.*` motion/occupancy entities → fusion inputs for P4 (or note none exist).
 - [ ] Map UniFi Protect **camera coverage** to rooms (which of the 8 are front-half/covered).
-- [ ] Choose the 8 rooms + mark power drops / node mounting points, and assign each a **presence source**: UniFi Protect person (camera rooms) / Zigbee motion / $2 C3 PIR / BLE-only.
+- [ ] Choose the 8 rooms + mark power drops / node mounting points, and assign each a **presence source**: UniFi Protect person (camera rooms) / **C3+mmWave** / Zigbee motion / PIR. Pick the **5 mmWave rooms** (back-half, no camera, people sit still — e.g. office, bedrooms, living).
 - [ ] Confirm a **configurable** iBeacon SKU (major/minor settable) + its config method.
-- [ ] Order 1 node + 1 beacon for PoC (and queue the rest).
+- [ ] Order **1 scanner + 1 mmWave stack + 1 beacon** for the PoC (and queue the rest: 8 scanners, 5 mmWave nodes + modules, 3 beacons).
 
 ### P1 — Home/away (zero new hardware)
 - [ ] Create a UniFi **local read-only** account; add the **UniFi Network integration** (config-flow; creds via SOPS; `.storage`, not committed YAML) for `device_tracker.*`.
@@ -127,8 +130,8 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 *Deploy path: all HA/mosquitto changes ship via the normal Flux flow (PR → CI builds `staging` branch → validate → merge to `master`); `mosquitto` is a plain-name app so prod is the only live broker. Optional rehearsal: wire `apps/staging/mosquitto` into `apps/staging/kustomization.yaml` first and dry-run Commit A/B against `mosquitto-stage`.*
 
 **The auth change is a flag-day on a singleton broker — do it as TWO commits so no client locks out:**
-- [ ] **Commit A (additive; broker stays `allow_anonymous true`):** mosquitto password file + ACL as a **SOPS secret**, with **three** users — **zigbee2mqtt** (`zigbee2mqtt/#` rw), **homeassistant** (read-all + `homeassistant/#` rw for discovery), **espresense** (`espresense/#` + `homeassistant/#` rw so discovery auto-creates entities). **One shared `espresense` user** for all 8 nodes (per-node creds buy little; 8× SOPS churn).
-- [ ] In the SAME commit, wire creds into each client: z2m configmap `user:`/`password:`, HA MQTT creds, ESPresense MQTT user. Confirm **all three authenticate with creds while anonymous is still allowed**.
+- [ ] **Commit A (additive; broker stays `allow_anonymous true`):** mosquitto password file + ACL as a **SOPS secret**, with **four** users — **zigbee2mqtt** (`zigbee2mqtt/#` rw), **homeassistant** (read-all + `homeassistant/#` rw for discovery), **espresense** (`espresense/#` + `homeassistant/#` rw — one shared user for all 8 scanners), **mmwave** (the 5 ESPHome nodes' topic prefix + `homeassistant/#` rw for discovery). One shared user per role (per-node creds buy little; SOPS churn).
+- [ ] In the SAME commit, wire creds into each client: z2m configmap, HA MQTT, the 8 ESPresense nodes, the 5 ESPHome mmWave nodes. Confirm **all four authenticate with creds while anonymous is still allowed**.
 - [ ] **Commit B:** flip `allow_anonymous false`. **Backout:** revert Commit B → anonymous back on; clients keep working on creds (low-risk).
 - [ ] **mosquitto LB Service** for the **ESP32 nodes only** (`lbipam.cilium.io/ip-pool: home-c-pool`, copy `apps/base/adguard/service.yaml`); record the IP. **HA + z2m keep in-cluster `mosquitto.mosquitto:1883`** (no netpol change, no UCGF hairpin). **Backout:** delete the LB Service → broker returns ClusterIP-only.
 - [ ] **UCGF firewall** allow `10.42.7.0/24 → <LB IP>:1883`. **Validate from a real IoT-VLAN host** (a Lab-VLAN test false-passes via L2 announcement).
@@ -142,6 +145,11 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 - [ ] **Calibration recipe per node:** place a beacon at 1 m, record RSSI → set `rssi@1m`; tune `absorption` until ESPresense distance tracks real distance across 1/3/5 m.
 - [ ] Add **hysteresis / nearest-node-wins** to prevent room-flapping.
 - [ ] **Done when:** a 10-min walk test shows correct room ≥ ~90% of dwell time with no rapid flapping.
+
+### P3b — mmWave presence nodes (ESPHome, runs parallel to P3)
+- [ ] Flash **ESPHome** to the 5 mmWave C3s: the Seeed 24 GHz mmWave component (UART) + the **`mqtt:`** component (creds from P2's `mmwave` user) + HA MQTT discovery. Stack the radar module; USB-power; IoT VLAN. *(No mosquitto/firewall work beyond P2 — same broker path.)*
+- [ ] Place per the radar's coverage (ceiling/corner, don't aim through a wall into the next room); tune sensitivity/timeout so a still person reads **present** without bleeding into the adjacent room.
+- [ ] **Done when:** each mmWave room's `binary_sensor` stays **on** while someone sits still and clears shortly after they leave.
 
 ### P4 — Identity + fusion
 - [ ] Configure all 3 beacons (unique major/minor → person); commit the beacon→person map.
@@ -176,7 +184,7 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 - zigbee2mqtt creds (same commit as the broker auth flip): `infra/controllers/zigbee2mqtt/`.
 - HA mqtt/template/bayesian/prometheus blocks: `apps/base/homeassistant/files/` (in `configuration.yaml` or a new `!include`d file, registered in the configMapGenerator — **no `packages/` dir today**).
 - HA ServiceMonitor + `homeassistant-prometheus-token` SOPS secret: `apps/base/homeassistant/`.
-- ESPresense node config: documented under `docs/operations/apps/` (firmware-config, not k8s).
+- ESPresense node config + ESPHome mmWave node YAML: documented under `docs/operations/apps/` (firmware-config, not k8s).
 
 ## Open questions
 - Exact UCGF firewall mechanism for IoT→mosquitto (UniFi rule vs Cilium policy) — confirm during P2.

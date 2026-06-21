@@ -1,0 +1,178 @@
+# =============================================================================
+# ESPHome mmWave presence node — REFERENCE / DRAFT (wire in during P3b)
+# =============================================================================
+# Parameterized ESPHome firmware config for the 5 back-half static-presence
+# rooms. Flash one node per room, overriding only the `substitutions:` block.
+#
+# This file is NOT wired into anything. It is a firmware-config template that
+# lives outside the cluster (ESP32 boards on the IoT VLAN). It is flashed with
+# the ESPHome CLI / dashboard during P3b of the Bluetooth-presence build.
+#
+# Hardware: Seeed XIAO ESP32-C3 + stacked Seeed 24 GHz mmWave Human Static
+# Presence module (FMCW radar — detects people sitting still, beats PIR/motion).
+# Transport: ESPHome `mqtt:` component → mosquitto (reuses the one broker path;
+# HA needs no inbound reach into the IoT VLAN). NOT the native ESPHome API.
+#
+# -----------------------------------------------------------------------------
+# The 5 nodes (substitutions per node) — see README room map
+# -----------------------------------------------------------------------------
+#   node           room      placement caveat
+#   ------------   -------   ------------------------------------------------
+#   mmwave-office  office    Ceiling/corner; standard desk-occupancy tune.
+#   mmwave-master  master    French doors (SW) — AIM THE RADAR INWARD, away
+#                            from the doors, so passers-by outside don't trip
+#                            it. Reduce max distance to the room depth.
+#   mmwave-son     son       French doors (SE) — same inward-aim caveat as
+#                            master. Niccolo's clip beacon is the BLE identity;
+#                            mmWave only answers "is the room occupied".
+#   mmwave-guest   guest     Mid-house, no exterior-door bleed; standard tune.
+#   mmwave-kitchen kitchen   TUNE OUT the range-hood fan vibration / airflow —
+#                            mmWave reacts to micro-motion. Lower sensitivity,
+#                            set a distance gate so the cooktop area doesn't
+#                            self-trigger, and lengthen the clear-delay so brief
+#                            vibration doesn't latch "present".
+# -----------------------------------------------------------------------------
+#
+# !!! VERIFY AT PoC: the exact Seeed 24 GHz mmWave ESPHome component / platform
+# !!! name is UNCONFIRMED. The block below assumes a UART-attached Seeed radar
+# !!! exposed via an `external_components` source. Depending on the exact module
+# !!! revision this may instead be:
+# !!!   - the built-in `seeed_mr24hpc1` platform (MR24HPC1 / "Human Static
+# !!!     Presence" — the most likely match), or
+# !!!   - the generic `ld2410` / `ld2410b` platform (if the module ships an
+# !!!     LD2410 radar), or
+# !!!   - a community `external_components:` repo.
+# !!! Confirm the platform name + UART baud (commonly 115200 or 256000) against
+# !!! the actual module datasheet during the P3b PoC, then delete the wrong
+# !!! variants. Do not bulk-flash 5 nodes before one is proven end-to-end.
+# =============================================================================
+
+substitutions:
+  # ----- OVERRIDE THESE PER NODE -----
+  node: "mmwave-office"        # one of: mmwave-office | mmwave-master |
+                               #         mmwave-son | mmwave-guest | mmwave-kitchen
+  room: "office"               # one of: office | master | son | guest | kitchen
+  friendly_room: "Office"      # human-readable, for the exposed entity name
+  # ESPHome node/device name must be DNS-safe (lowercase, hyphens). ${node}
+  # already satisfies this.
+
+esphome:
+  name: "${node}"
+  friendly_name: "mmWave ${friendly_room}"
+  # Comment kept on the board so a future maintainer reading the running config
+  # knows this is part of the bluetooth-presence system.
+  comment: "Bluetooth-presence mmWave node — room=${room}"
+
+esp32:
+  board: esp32-c3-devkitm-1   # Seeed XIAO ESP32-C3 target
+  framework:
+    type: esp-idf
+
+# ----- WiFi: IoT VLAN (10.42.7.0/24) -----
+# Credentials come from ESPHome secrets (secrets.yaml on the build host), NOT
+# committed here. The IoT-VLAN SSID/PSK are operator-provided.
+wifi:
+  ssid: !secret iot_wifi_ssid
+  password: !secret iot_wifi_password
+  # No fixed IP — DHCP on the IoT VLAN. The MQTT broker is reached by its
+  # LoadBalancer IP (below), routed from IoT via the UCGF (see plan P2).
+
+# Fallback hotspot if WiFi fails (lets you re-provision without re-flashing).
+captive_portal:
+
+logger:
+  level: INFO
+
+# ----- MQTT → mosquitto (reuses the one broker path; P2 'mmwave' user) -----
+mqtt:
+  # PLACEHOLDER: the mosquitto LoadBalancer IP recorded in plan P2. The off-
+  # cluster ESP32 nodes reach the broker by this LB IP (HA + z2m keep the
+  # in-cluster ClusterIP). Replace <MOSQUITTO_LB_IP> with the real value.
+  broker: "<MOSQUITTO_LB_IP>"
+  port: 1883
+  username: "mmwave"                    # the P2 'mmwave' MQTT user (shared by all 5 nodes)
+  password: !secret mqtt_mmwave_password # from ESPHome secrets, not committed
+  # All five nodes publish under mmwave/<node> so they fall under the
+  # `mmwave/#` ACL granted to the 'mmwave' user. HA MQTT discovery topics go
+  # under homeassistant/ (also granted to 'mmwave' for discovery).
+  topic_prefix: "mmwave/${node}"
+  discovery: true                       # HA MQTT discovery ON
+  discovery_prefix: "homeassistant"
+  # Last-Will-and-Testament drives the node-offline alert in the HA package:
+  # mosquitto publishes 'offline' to mmwave/<node>/status when the node drops.
+  birth_message:
+    topic: "mmwave/${node}/status"
+    payload: "online"
+    retain: true
+  will_message:
+    topic: "mmwave/${node}/status"
+    payload: "offline"
+    retain: true
+
+# ----- UART to the Seeed 24 GHz mmWave radar -----
+# XIAO ESP32-C3 default UART pins: TX=GPIO21, RX=GPIO20. Verify against the
+# stacked module's pinout at PoC. Baud per the module datasheet (see VERIFY note).
+uart:
+  id: mmwave_uart
+  tx_pin: GPIO21
+  rx_pin: GPIO20
+  baud_rate: 115200   # VERIFY: MR24HPC1 commonly 115200; LD2410 commonly 256000
+
+# ----- The mmWave sensor (VERIFY platform name — see top-of-file note) -----
+# Variant A (most likely): built-in Seeed MR24HPC1 "Human Static Presence".
+# Uncomment ONE variant after confirming the module at PoC.
+#
+# --- Variant A: seeed_mr24hpc1 (built-in) ---
+# seeed_mr24hpc1:
+#   id: mmwave_radar
+#   uart_id: mmwave_uart
+# binary_sensor:
+#   - platform: seeed_mr24hpc1
+#     mmwave_radar: mmwave_radar
+#     has_target:
+#       # This is the presence binary_sensor HA discovers as
+#       # binary_sensor.mmwave_${room}_presence
+#       name: "mmWave ${friendly_room} Presence"
+#       id: "mmwave_${room}_presence"
+#       device_class: occupancy
+#
+# --- Variant B: ld2410 (if the module ships an LD2410 radar) ---
+# ld2410:
+#   uart_id: mmwave_uart
+#   id: mmwave_radar
+# binary_sensor:
+#   - platform: ld2410
+#     has_target:
+#       name: "mmWave ${friendly_room} Presence"
+#       id: "mmwave_${room}_presence"
+#       device_class: occupancy
+#
+# --- Variant C: external_components (community Seeed repo) ---
+# external_components:
+#   - source: github://<owner>/<seeed-mmwave-esphome-repo>   # VERIFY the real repo
+#     components: [ seeed_mmwave ]
+# (then a platform block per that component's README)
+
+# Placeholder so this file parses standalone before a variant is uncommented.
+# Replace with the confirmed variant above at PoC. The discovered HA entity
+# MUST end up named binary_sensor.mmwave_${room}_presence (the naming convention
+# the HA Bayesian package consumes).
+binary_sensor:
+  - platform: template
+    name: "mmWave ${friendly_room} Presence"
+    id: "mmwave_${room}_presence"
+    device_class: occupancy
+    # TODO(P3b): replace this template stub with the real radar has_target
+    # output from the confirmed mmWave platform variant above.
+
+# -----------------------------------------------------------------------------
+# Per-room placement / tuning summary (re-stated from the substitutions table)
+# -----------------------------------------------------------------------------
+# - master / son: French doors → aim radar INWARD, shorten max-distance gate so
+#   outdoor passers-by don't register.
+# - kitchen: lower sensitivity + distance gate to exclude the cooktop/range-hood
+#   zone; lengthen clear-delay so fan vibration doesn't latch "present".
+# - office / guest: standard ceiling-or-corner placement, default sensitivity.
+# Tuning (sensitivity, distance gates, clear-delay) is platform-specific — set
+# it once the confirmed mmWave variant is uncommented.
+# -----------------------------------------------------------------------------

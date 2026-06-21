@@ -1,0 +1,484 @@
+# =============================================================================
+# Home Assistant presence/occupancy package — REFERENCE / DRAFT (wire in P4)
+# =============================================================================
+# This is a SINGLE-FILE staging copy of all the HA config the presence system
+# needs. It is NOT an HA "package" in the packages/ sense — this deployment has
+# NO packages/ directory. At P4 the blocks below are SPLIT BY TOP-LEVEL KEY and
+# lifted into apps/base/homeassistant/files/, then registered in the
+# configMapGenerator. See README.md → "How ha-presence-package.yaml gets wired
+# in (P4)". In short:
+#
+#   * mqtt:           -> single top-level key. Add via an !include'd file (e.g.
+#                        files/presence_mqtt.yaml, `mqtt: !include presence_mqtt.yaml`)
+#                        registered in configMapGenerator. (configuration.yaml has
+#                        no mqtt: today.)
+#   * template:       -> configuration.yaml already has ONE `template:` key. Merge
+#                        these list items into it (template: is a list of blocks),
+#                        OR move it to an !include'd file. Do NOT add a 2nd
+#                        top-level `template:` key.
+#   * binary_sensor:  -> APPEND the bayesian blocks to the EXISTING
+#                        files/binary_sensors.yaml (already !include'd as
+#                        `binary_sensor:`). A SECOND top-level binary_sensor: key
+#                        in configuration.yaml is REJECTED by HA. This is the
+#                        single most important wiring rule.
+#   * automation:     -> APPEND to files/automations.yaml (already !include'd as
+#                        `automation:`).
+#
+# Entity-id convention (see README): sensor.<person>_room,
+# binary_sensor.mmwave_<room>_presence, binary_sensor.<room>_occupied,
+# sensor.people_home, binary_sensor.anyone_home, binary_sensor.entry_camera_person.
+#
+# Some referenced entities don't exist until their integration is up:
+#   - binary_sensor.entry_camera_person   -> UniFi Protect integration (P1)
+#   - sensor.<person>_room                 -> ESPresense/mqtt_room (P3/P4)
+#   - binary_sensor.mmwave_<room>_presence -> ESPHome mmWave discovery (P3b)
+#   - person.george / person.mara / person.niccolo -> P1 person entities
+#   - binary_sensor.<room>_motion (Zigbee) -> z2m paired sensors (inventory P0)
+# Where an entity is named-but-not-yet-real, ALIGN THE ENTITY_ID AT P4 against
+# the actual discovered names before merging.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# 1) mqtt_room — per-person nearest-room sensors
+# -----------------------------------------------------------------------------
+# ESPresense's recommended HA path is the ESPresense HA integration (config-flow,
+# .storage), which creates sensor.<person>_room directly. If you instead use the
+# built-in `mqtt_room` platform (declarative, committable), it consumes the
+# ESPresense per-room topics and resolves the nearest room per device. Both
+# yield sensor.<person>_room. The mqtt_room form is shown here because it is the
+# committable one; if you adopt the integration, DELETE this block and let the
+# integration own the sensors.
+#
+# `device_id` MUST match the identifier ESPresense publishes for each beacon —
+# typically `irk:<...>` or `iBeacon:<uuid>-<major>-<minor>`. CONFIRM the exact id
+# string against the flashed firmware at P2 (see espresense-nodes.md MQTT schema
+# caveat), then set it here.
+sensor:
+  - platform: mqtt_room
+    # George — iBeacon major 1 / minor 1 (align device_id at P4)
+    device_id: "iBeacon:<HOUSEHOLD_UUID>-1-1"
+    name: george_room
+    state_topic: "espresense/rooms"
+    timeout: 30          # seconds before "not_home" if no update
+    away_timeout: 120    # seconds of silence -> away
+
+  - platform: mqtt_room
+    # Mara — major 1 / minor 2
+    device_id: "iBeacon:<HOUSEHOLD_UUID>-1-2"
+    name: mara_room
+    state_topic: "espresense/rooms"
+    timeout: 30
+    away_timeout: 120
+
+  - platform: mqtt_room
+    # Niccolo — major 1 / minor 3 (clip beacon)
+    device_id: "iBeacon:<HOUSEHOLD_UUID>-1-3"
+    name: niccolo_room
+    state_topic: "espresense/rooms"
+    timeout: 30
+    away_timeout: 120
+
+# -----------------------------------------------------------------------------
+# 2) mqtt: — mmWave node availability (drives the node-offline alert)
+# -----------------------------------------------------------------------------
+# The ESPHome mmWave presence binary_sensors themselves arrive via MQTT
+# *discovery* (homeassistant/ prefix) — you do NOT declare them here; they
+# appear automatically as binary_sensor.mmwave_<room>_presence. What we DO
+# declare is a connectivity sensor per node reading the LWT status topic
+# (mmwave/<node>/status, online|offline from the ESPHome birth/will messages in
+# esphome-mmwave-node.yaml) so the offline alert has something to watch.
+mqtt:
+  binary_sensor:
+    - name: "mmWave Office node status"
+      unique_id: mmwave_office_node_status
+      state_topic: "mmwave/mmwave-office/status"
+      payload_on: "online"
+      payload_off: "offline"
+      device_class: connectivity
+      # No `availability:` — this IS the availability signal.
+    - name: "mmWave Master node status"
+      unique_id: mmwave_master_node_status
+      state_topic: "mmwave/mmwave-master/status"
+      payload_on: "online"
+      payload_off: "offline"
+      device_class: connectivity
+    - name: "mmWave Son node status"
+      unique_id: mmwave_son_node_status
+      state_topic: "mmwave/mmwave-son/status"
+      payload_on: "online"
+      payload_off: "offline"
+      device_class: connectivity
+    - name: "mmWave Guest node status"
+      unique_id: mmwave_guest_node_status
+      state_topic: "mmwave/mmwave-guest/status"
+      payload_on: "online"
+      payload_off: "offline"
+      device_class: connectivity
+    - name: "mmWave Kitchen node status"
+      unique_id: mmwave_kitchen_node_status
+      state_topic: "mmwave/mmwave-kitchen/status"
+      payload_on: "online"
+      payload_off: "offline"
+      device_class: connectivity
+
+# -----------------------------------------------------------------------------
+# 3) binary_sensor: — zone-aware Bayesian per-room occupancy  (×8)
+# -----------------------------------------------------------------------------
+# >>> APPEND THESE TO files/binary_sensors.yaml AT P4 — do NOT create a second
+# >>> top-level binary_sensor: key. <<<
+#
+# Fusion design per zone:
+#   FRONT zone (living/dining/foyer): fuse entry_camera_person (UniFi Protect
+#     front-zone person detection — strong, no new HW) + per-room BLE
+#     (sensor.<person>_room == <Room>). The camera says "someone is in the front
+#     zone"; BLE disambiguates WHICH front room.
+#   mmWave rooms (office/master/son/guest/kitchen): fuse
+#     binary_sensor.mmwave_<room>_presence (strong static-presence) + BLE.
+#   Zigbee motion is an OPTIONAL extra observation where a paired sensor exists
+#     (inventory at P0); shown commented per room — uncomment + set the real
+#     entity_id for rooms that have one.
+#
+# `prob_given_true` / `prob_given_false` are starting priors — TUNE during P4
+# against real dwell data. `probability_threshold` 0.5 is a reasonable default.
+- platform: bayesian
+  name: "Living Occupied"
+  unique_id: living_occupied
+  prior: 0.25
+  probability_threshold: 0.5
+  device_class: occupancy
+  observations:
+    - platform: state
+      entity_id: binary_sensor.entry_camera_person   # front-zone camera (P1)
+      to_state: "on"
+      prob_given_true: 0.75
+      prob_given_false: 0.15
+    - platform: state
+      entity_id: sensor.george_room
+      to_state: "Living"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.mara_room
+      to_state: "Living"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.niccolo_room
+      to_state: "Living"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    # - platform: state                    # optional Zigbee motion (P0 inventory)
+    #   entity_id: binary_sensor.living_motion
+    #   to_state: "on"
+    #   prob_given_true: 0.6
+    #   prob_given_false: 0.1
+
+- platform: bayesian
+  name: "Dining Occupied"
+  unique_id: dining_occupied
+  prior: 0.2
+  probability_threshold: 0.5
+  device_class: occupancy
+  observations:
+    - platform: state
+      entity_id: binary_sensor.entry_camera_person   # shared front-zone camera
+      to_state: "on"
+      prob_given_true: 0.65
+      prob_given_false: 0.2
+    - platform: state
+      entity_id: sensor.george_room
+      to_state: "Dining"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.mara_room
+      to_state: "Dining"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.niccolo_room
+      to_state: "Dining"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+
+- platform: bayesian
+  name: "Foyer Occupied"
+  unique_id: foyer_occupied
+  prior: 0.1
+  probability_threshold: 0.5
+  device_class: occupancy
+  observations:
+    - platform: state
+      entity_id: binary_sensor.entry_camera_person   # shared front-zone camera
+      to_state: "on"
+      prob_given_true: 0.6
+      prob_given_false: 0.25
+    - platform: state
+      entity_id: sensor.george_room
+      to_state: "Foyer"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.mara_room
+      to_state: "Foyer"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.niccolo_room
+      to_state: "Foyer"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+
+- platform: bayesian
+  name: "Office Occupied"
+  unique_id: office_occupied
+  prior: 0.2
+  probability_threshold: 0.5
+  device_class: occupancy
+  observations:
+    - platform: state
+      entity_id: binary_sensor.mmwave_office_presence   # ESPHome mmWave (P3b)
+      to_state: "on"
+      prob_given_true: 0.85
+      prob_given_false: 0.1
+    - platform: state
+      entity_id: sensor.george_room
+      to_state: "Office"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.mara_room
+      to_state: "Office"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.niccolo_room
+      to_state: "Office"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+
+- platform: bayesian
+  name: "Master Occupied"
+  unique_id: master_occupied
+  prior: 0.3
+  probability_threshold: 0.5
+  device_class: occupancy
+  observations:
+    - platform: state
+      entity_id: binary_sensor.mmwave_master_presence   # aim inward off French doors
+      to_state: "on"
+      prob_given_true: 0.85
+      prob_given_false: 0.1
+    - platform: state
+      entity_id: sensor.george_room
+      to_state: "Master"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.mara_room
+      to_state: "Master"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+
+- platform: bayesian
+  name: "Son Occupied"
+  unique_id: son_occupied
+  prior: 0.25
+  probability_threshold: 0.5
+  device_class: occupancy
+  observations:
+    - platform: state
+      entity_id: binary_sensor.mmwave_son_presence      # aim inward off French doors
+      to_state: "on"
+      prob_given_true: 0.85
+      prob_given_false: 0.1
+    - platform: state
+      entity_id: sensor.niccolo_room                    # Niccolo's clip beacon
+      to_state: "Son"
+      prob_given_true: 0.75
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.george_room
+      to_state: "Son"
+      prob_given_true: 0.6
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.mara_room
+      to_state: "Son"
+      prob_given_true: 0.6
+      prob_given_false: 0.05
+
+- platform: bayesian
+  name: "Guest Occupied"
+  unique_id: guest_occupied
+  prior: 0.15
+  probability_threshold: 0.5
+  device_class: occupancy
+  observations:
+    - platform: state
+      entity_id: binary_sensor.mmwave_guest_presence
+      to_state: "on"
+      prob_given_true: 0.85
+      prob_given_false: 0.1
+    - platform: state
+      entity_id: sensor.george_room
+      to_state: "Guest"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.mara_room
+      to_state: "Guest"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.niccolo_room
+      to_state: "Guest"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+
+- platform: bayesian
+  name: "Kitchen Occupied"
+  unique_id: kitchen_occupied
+  prior: 0.2
+  probability_threshold: 0.5
+  device_class: occupancy
+  observations:
+    # Kitchen mmWave is tuned DOWN (range-hood vibration) — give it slightly
+    # lower weight and lean more on BLE here. See esphome node placement caveat.
+    - platform: state
+      entity_id: binary_sensor.mmwave_kitchen_presence
+      to_state: "on"
+      prob_given_true: 0.75
+      prob_given_false: 0.2
+    - platform: state
+      entity_id: sensor.george_room
+      to_state: "Kitchen"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.mara_room
+      to_state: "Kitchen"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+    - platform: state
+      entity_id: sensor.niccolo_room
+      to_state: "Kitchen"
+      prob_given_true: 0.7
+      prob_given_false: 0.05
+
+# -----------------------------------------------------------------------------
+# 4) template: — people_home count + anyone_home
+# -----------------------------------------------------------------------------
+# >>> Merge these list items into the EXISTING template: key in
+# >>> configuration.yaml (template: is a list of blocks), or move to an
+# >>> !include'd file. Do NOT add a second top-level template: key. <<<
+template:
+  - sensor:
+      - name: "People Home"
+        unique_id: people_home
+        # Count of person.* entities whose state == 'home'. This is the
+        # household count (NOT the fuzzy guest count, which is derived
+        # separately in P5 from ESPresense device enumeration).
+        state: >
+          {{ states.person
+             | selectattr('state', 'eq', 'home')
+             | list | count }}
+        unit_of_measurement: "people"
+        state_class: measurement
+        icon: mdi:account-group
+  - binary_sensor:
+      - name: "Anyone Home"
+        unique_id: anyone_home
+        device_class: presence
+        state: "{{ (states('sensor.people_home') | int(0)) > 0 }}"
+
+# -----------------------------------------------------------------------------
+# 5) automation: — node-offline + beacon-stale alerts
+# -----------------------------------------------------------------------------
+# >>> APPEND to files/automations.yaml at P4. <<<
+# Notification service shown as notify.notify (default); align to the real
+# notify target (mobile app / Signal bridge / etc.) at P4.
+automation:
+  # --- mmWave node offline (MQTT LWT / availability) ---
+  # Fires when any mmWave node's connectivity sensor flips to off (LWT
+  # 'offline') and STAYS off for 5 min (debounce reboots/WiFi blips).
+  - alias: "Presence — mmWave node offline"
+    id: presence_mmwave_node_offline
+    mode: parallel
+    trigger:
+      - platform: state
+        entity_id:
+          - binary_sensor.mmwave_office_node_status
+          - binary_sensor.mmwave_master_node_status
+          - binary_sensor.mmwave_son_node_status
+          - binary_sensor.mmwave_guest_node_status
+          - binary_sensor.mmwave_kitchen_node_status
+        to: "off"
+        for: "00:05:00"
+    action:
+      - service: notify.notify
+        data:
+          title: "Presence node offline"
+          message: >
+            mmWave node {{ trigger.to_state.attributes.friendly_name }}
+            has been offline for 5 minutes — that room's presence is
+            BLE-only until it returns.
+
+  # --- ESPresense scanner offline (best-effort) ---
+  # ESPresense publishes per-node availability under its own status topic; the
+  # ESPresense HA integration exposes a connectivity/diagnostic entity per node.
+  # ALIGN the entity_ids at P4 to whatever the integration creates
+  # (e.g. binary_sensor.presence_kitchen_status). Template stub until then.
+  - alias: "Presence — ESPresense scanner offline (align entity_id at P4)"
+    id: presence_espresense_scanner_offline
+    mode: parallel
+    trigger:
+      - platform: state
+        entity_id:
+          # TODO(P4): replace with the real ESPresense node status entities.
+          - binary_sensor.presence_kitchen_status
+        to: "off"
+        for: "00:05:00"
+    action:
+      - service: notify.notify
+        data:
+          title: "BLE scanner offline"
+          message: >
+            ESPresense scanner {{ trigger.to_state.attributes.friendly_name }}
+            offline 5 min — room/guest coverage degraded.
+
+  # --- Beacon stale (best-effort; last-seen based) ---
+  # We CANNOT rely on a HolyIOT battery broadcast (unconfirmed — see
+  # espresense-nodes.md). So "beacon stale" = the person's room sensor has been
+  # 'not_home'/'unknown' for a long, unusual stretch while at least one other
+  # person IS home — a likely dead/forgotten beacon rather than a real absence.
+  # This is intentionally fuzzy; tune the window at P4.
+  - alias: "Presence — beacon possibly stale/dead"
+    id: presence_beacon_stale
+    mode: parallel
+    trigger:
+      - platform: state
+        entity_id:
+          - sensor.george_room
+          - sensor.mara_room
+          - sensor.niccolo_room
+        to: "not_home"
+        for: "06:00:00"   # 6h with no room fix
+    condition:
+      # Only alert if someone else is home (so it doesn't fire when the whole
+      # household is genuinely out).
+      - condition: numeric_state
+        entity_id: sensor.people_home
+        above: 0
+    action:
+      - service: notify.notify
+        data:
+          title: "Beacon may be stale"
+          message: >
+            {{ trigger.to_state.attributes.friendly_name }} has had no room
+            fix for 6h while others are home — check the beacon battery /
+            that it's being carried.
+# =============================================================================
+# END — at P4, split by top-level key per the header. Do not commit this file
+# as-is into HA; it is a reference draft.
+# =============================================================================

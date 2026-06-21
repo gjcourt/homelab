@@ -40,7 +40,8 @@ Build a self-hosted "presence sensor" that answers **who is home, how many peopl
 ```
 
 - **ESPresense nodes** publish per-beacon RSSI + nearest-room and enumerate all BLE devices, over MQTT.
-- **Home Assistant** = brain: `person` entities, per-person room sensor (`mqtt_room` / ESPresense integration), Bayesian **area occupancy** (fuse BLE-room + UniFi/WiFi + Zigbee motion), a `template` "people home" count, beacon **battery-low** + node-**offline** alerts.
+- **Home Assistant** = brain: `person` entities, per-person room sensor (`mqtt_room` / ESPresense integration), **zone-aware** Bayesian **area occupancy** (fuse BLE-room + WiFi + the best per-room presence signal — see below), a `template` "people home" count, beacon **battery-low** + node-**offline** alerts.
+- **Per-room presence input (zone-aware):** front half (camera-covered) → **UniFi Protect person-detection** `binary_sensor` (best signal, no new hardware); back half → **Zigbee motion** (existing z2m, keeps the C3 a pure ESPresense BLE node) or a **PIR on the C3** (ESPresense supports a GPIO PIR over MQTT); **mmWave/LD2410** only where stationary-presence is needed (requires running that node on ESPHome — leaves the ESPresense/MQTT stack + guest-count enumeration).
 - **Guest count** is derived from the 8 nodes' device enumeration (distinct non-beacon devices, heavily smoothed) — **no dedicated counting node needed**.
 - **Grafana**: HA `prometheus:` endpoint → ServiceMonitor → Prometheus → history dashboards (same pattern as thermalscope).
 
@@ -51,7 +52,8 @@ Build a self-hosted "presence sensor" that answers **who is home, how many peopl
 | mosquitto | **Singleton** infra-controller (`mosquitto.mosquitto:1883`), `allow_anonymous true`, shared by prod HA + staging HA + **zigbee2mqtt (connects anonymously)**. **No live staging broker** — `apps/staging/mosquitto` exists & is valid but isn't listed in `apps/staging/kustomization.yaml`, so no `mosquitto-stage` is deployed → an auth change is a **flag-day** on the single prod broker. (Wiring the overlay in would give a staging broker to rehearse the flip — optional.) | **LoadBalancer IP for the off-cluster ESP32 nodes only** (HA + z2m keep the in-cluster ClusterIP — no netpol change). Per-client **auth/ACL for all three clients**, flipped via a **two-commit interlock** (add creds while anonymous still on → then flip `allow_anonymous false`; see P2). |
 | Network | LB pool `home-c-pool` (`10.42.2.40–254`) announced on the **Lab VLAN** (Cilium L2 **and** BGP). ESP32 nodes go on **IoT VLAN `10.42.7.0/24`** (cross-subnet). | Workers BGP-peer the UCGF (`10.42.2.1`, which is *also* the IoT gateway) → it learns the LB /32, so IoT clients route to it through the UCGF. Add a UCGF allow `10.42.7.0/24 → <LB IP>:1883`. **Validate from a real IoT-VLAN host** — L2 announcement makes the same IP reachable from the Lab VLAN and will *mask a missing BGP route* during same-VLAN testing. |
 | Home Assistant | git-versioned ConfigMap; **no `mqtt:`, no `prometheus:`, no UniFi** blocks. CiliumNetworkPolicy **already allows egress to mosquitto:1883** (half-done) | Enable MQTT + Prometheus integrations; UniFi integration for P1 |
-| zigbee2mqtt | deployed, wired to mosquitto, `permit_join: true`; **no paired-device list in repo** | **Inventory** paired motion/occupancy sensors (P0) for Bayesian fusion |
+| zigbee2mqtt | deployed, wired to mosquitto, `permit_join: true`; **no paired-device list in repo** | **Inventory** paired motion/occupancy sensors (P0) for Bayesian fusion (back-half rooms) |
+| UniFi Protect (cameras) | Deployed, covers the **front half**, person-detection works well. **HA UniFi Protect integration not yet set up** (config-flow, separate from UniFi Network). | Add the integration → per-camera **person-detection `binary_sensor`** = the front-half presence input (no new hardware). |
 | Patterns to copy | `apps/base/adguard/service.yaml` (LB), `apps/base/thermalscope/servicemonitor.yaml` (metrics; `release: kube-prometheus-stack` selector is **mandatory**) | — |
 
 ### Declarative-YAML vs UI/`.storage` state (read before P1)
@@ -67,10 +69,10 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 | Phase | Gates (must be true BEFORE start) | Produces / unblocks | Effort |
 |---|---|---|---|
 | **P0 — Inventory & long-lead** | none | Zigbee motion-sensor list; chosen 8 rooms + power map; **beacon SKU confirmed configurable**; hardware ordered (lead time) | ~1–2 h |
-| **P1 — Home/away (no HW)** | UniFi local read-only account + URL; `person` entities created; (SOPS secret for creds) | `device_tracker`/`person` home-away = the WiFi signal P4 fuses | ~2–3 h |
+| **P1 — Home/away (no HW)** | UniFi local read-only account + URL; `person` entities created; (SOPS secret for creds) | `device_tracker`/`person` home-away (WiFi signal) **+ UniFi Protect person-detection sensors** (front-half presence) — both P4 fusion inputs | ~2–3 h |
 | **P2 — BLE PoC (1 node)** | mosquitto **LB IP** live + **IoT→:1883 firewall** + **auth/ACL + SOPS**; HA **MQTT integration** enabled; ESPresense flashed to C3 (✓ supported); 1 beacon with **set+verified major/minor** | Validated beacon→MQTT→HA path; firmware image + node-config template for P3 | ~3–4 h (mostly the broker exposure) |
 | **P3 — Roll out + calibrate (8 nodes)** | P2 green; 8 nodes flashed; placement/power map (from P0); firewall covers all nodes | 8 calibrated room sensors + hysteresis; room-resolution substrate | ~3–4 h |
-| **P4 — Identity + fusion** | 3 beacons configured (major/minor → person); P3 room sensors live; motion sensors inventoried (P0); battery/offline signals available | person-room sensors; Bayesian occupancy; people-home count; alerts | ~2–3 h |
+| **P4 — Identity + fusion** | 3 beacons configured (major/minor → person); P3 room sensors live; per-room presence sources ready (P0/P1: Protect person / Zigbee / C3 PIR); battery/offline signals available | person-room sensors; zone-aware Bayesian occupancy; people-home count; alerts | ~2–3 h |
 | **P5 — Guest count + history + automations** | HA **`prometheus:`** enabled + **ServiceMonitor** (label `release: kube-prometheus-stack`) + token; P4 entities stable | Grafana history; guest-count trend; automations | ~2–3 h |
 
 **Hard cross-phase dependencies (the things that bite if mis-ordered):**
@@ -87,7 +89,10 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 | External 2.4 GHz u.FL antenna | 8 | $1.5 | $12 | The accuracy upgrade — better/steadier RSSI |
 | 4-port USB power supply + USB-C cables | 2 | $15 | $30 | Power 4 nodes each (better efficiency than 8 cheap warts) |
 | **Configurable** BLE iBeacon keyfob | 3 | $5 | $15 | **Must expose major/minor** via app/NFC (verify before ordering); one as Niccolo's clip; coin-cell |
+| AM312 mini-PIR (optional) | per back-half room w/o Zigbee | $2 | — | 3.3 V, wires to a C3 GPIO; ESPresense-supported motion over MQTT. Skip where a camera or Zigbee sensor covers the room |
 | **Total** | | | **~$97** | Buy **1 node + 1 beacon first** for the P2 PoC before bulk-ordering |
+
+**Motion/presence inputs add little/no hardware:** front-half rooms use **UniFi Protect** person detection (existing cameras); back-half rooms use existing **Zigbee** motion or a **$2 PIR on the C3**. **mmWave/LD2410** (stationary presence) is the only option that needs a board on **ESPHome** instead of ESPresense — reserve it for a specific room that needs it.
 
 **Beacon SKU gate:** pin an exact model documented as user-configurable (major/minor settable + a known config app/NFC method). Many cheap keyfobs ship fixed vendor IDs — buying the wrong one sinks the P4 identity layer. Confirm in P0; prove in P2.
 
@@ -97,12 +102,14 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 
 ### P0 — Inventory & long-lead (do first, unblocks everything)
 - [ ] List zigbee2mqtt paired devices (`kubectl exec` / z2m UI); enumerate HA `binary_sensor.*` motion/occupancy entities → fusion inputs for P4 (or note none exist).
-- [ ] Choose the 8 rooms + mark power drops / node mounting points.
+- [ ] Map UniFi Protect **camera coverage** to rooms (which of the 8 are front-half/covered).
+- [ ] Choose the 8 rooms + mark power drops / node mounting points, and assign each a **presence source**: UniFi Protect person (camera rooms) / Zigbee motion / $2 C3 PIR / BLE-only.
 - [ ] Confirm a **configurable** iBeacon SKU (major/minor settable) + its config method.
 - [ ] Order 1 node + 1 beacon for PoC (and queue the rest).
 
 ### P1 — Home/away (zero new hardware)
-- [ ] Create a UniFi **local read-only** account; add the **UniFi integration** in HA (config-flow; creds via SOPS); note this is `.storage`, not committed YAML.
+- [ ] Create a UniFi **local read-only** account; add the **UniFi Network integration** (config-flow; creds via SOPS; `.storage`, not committed YAML) for `device_tracker.*`.
+- [ ] Add the **UniFi Protect integration** (config-flow) → per-camera **person-detection `binary_sensor`** (the front-half presence input P4 fuses). Both UniFi integrations are `.storage` state.
 - [ ] Create `person` entities; map `device_tracker.*` (phones) → persons.
 - [ ] Tune away-timeout (phones disassociate when asleep → false "away"); combine with periodic ping if needed.
 - [ ] **Done when:** home/away flips correctly within ~1–2 min for each household phone over a day of use.
@@ -129,7 +136,7 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 
 ### P4 — Identity + fusion
 - [ ] Configure all 3 beacons (unique major/minor → person); commit the beacon→person map.
-- [ ] HA config (committed): per-person room sensor; **Bayesian `binary_sensor`** per area (BLE-room + WiFi + Zigbee motion from P0); `template` "people home" count. *Append the Bayesian sensors to the existing `binary_sensors.yaml` (already `!include`d) — a second top-level `binary_sensor:` key is rejected by HA. `mqtt:`/`prometheus:` are single keys → straight into `configuration.yaml`.*
+- [ ] HA config (committed): per-person room sensor; **zone-aware Bayesian `binary_sensor`** per area (BLE-room + WiFi + the room's P0 presence source: UniFi Protect person / Zigbee motion / C3 PIR); `template` "people home" count. *Append the Bayesian sensors to the existing `binary_sensors.yaml` (already `!include`d) — a second top-level `binary_sensor:` key is rejected by HA. `mqtt:`/`prometheus:` are single keys → straight into `configuration.yaml`.*
 - [ ] **Alerts:** per-beacon **battery-low** + per-node **offline** (MQTT LWT / Prometheus `up`).
 - [ ] **Done when:** each person resolves to the right room/away; on a known 2-person evening the people-home count reads `2` sustained ≥30 min; Zigbee motion still feeds the Bayesian sensor.
 

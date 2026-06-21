@@ -72,7 +72,7 @@ mmWave rooms are 5 of the 8 scanner rooms — not 5 extra rooms** (still 8 rooms
 | [`README.md`](README.md) | — | This index: room map, naming, phase guide. |
 | [`esphome-mmwave-node.yaml`](esphome-mmwave-node.yaml) | **P3b** | Parameterized ESPHome firmware config for the 5 mmWave nodes. Flash one per node, overriding `substitutions:`. |
 | [`espresense-nodes.md`](espresense-nodes.md) | **P2 (PoC), P3 (rollout)** | Runbook for the 8 ESPresense scanners: flashing, MQTT settings, RSSI calibration recipe, hysteresis, HolyIOT beacon → person major/minor map. |
-| [`ha-presence-package.yaml`](ha-presence-package.yaml) | **P4** | HA package: `mqtt_room` per-person sensors, zone-aware Bayesian `binary_sensor.<room>_occupied` ×8, `sensor.people_home` / `binary_sensor.anyone_home`, node-offline + beacon-stale alerts. Lifted into `apps/base/homeassistant/files/` — see the "how to wire in" note below. |
+| [`ha-presence-package.yaml.example`](ha-presence-package.yaml.example) | **P4** | HA package: `mqtt_room` per-person sensors, zone-aware Bayesian `binary_sensor.<room>_occupied` ×8, `sensor.people_home` / `binary_sensor.anyone_home`, node-offline + beacon-stale alerts. Lifted into `apps/base/homeassistant/files/` — see the "how to wire in" note below. |
 | [`prometheus-grafana.md`](prometheus-grafana.md) | **P5** | HA `prometheus:` block, the HA Service `metrics` port, and the authenticated ServiceMonitor (bearer-token + `/api/prometheus`). |
 | [`grafana-presence-dashboard.json`](grafana-presence-dashboard.json) | **P5** | Grafana dashboard: per-room occupancy timeline, people-home count, per-person room history, guest-count trend. "No data" until metrics exist. |
 
@@ -81,7 +81,7 @@ mmWave rooms are 5 of the 8 scanner rooms — not 5 extra rooms** (still 8 rooms
 - **P1 — Home/away (no new HW):** UniFi Network + UniFi Protect integrations
   (config-flow / `.storage`, not in this repo). Produces `binary_sensor.entry_camera_person`
   and `device_tracker.*` / `person.*`. No file here is *applied* yet, but the
-  Bayesian sensors in `ha-presence-package.yaml` consume `entry_camera_person`.
+  Bayesian sensors in `ha-presence-package.yaml.example` consume `entry_camera_person`.
 - **P2 — BLE PoC + broker exposure:** flash one ESPresense node per
   [`espresense-nodes.md`](espresense-nodes.md); prove beacon → MQTT → HA. Broker
   auth/LB/firewall work happens in `infra/controllers/mosquitto/` (out of scope
@@ -90,17 +90,17 @@ mmWave rooms are 5 of the 8 scanner rooms — not 5 extra rooms** (still 8 rooms
   calibration recipe + hysteresis.
 - **P3b — mmWave nodes (parallel to P3):** flash 5 nodes from
   [`esphome-mmwave-node.yaml`](esphome-mmwave-node.yaml).
-- **P4 — Identity + fusion:** lift [`ha-presence-package.yaml`](ha-presence-package.yaml)
+- **P4 — Identity + fusion:** lift [`ha-presence-package.yaml.example`](ha-presence-package.yaml.example)
   into HA (see below).
 - **P5 — Guest count + history:** wire [`prometheus-grafana.md`](prometheus-grafana.md)
   + import [`grafana-presence-dashboard.json`](grafana-presence-dashboard.json).
 
-### How `ha-presence-package.yaml` gets wired in (P4)
+### How `ha-presence-package.yaml.example` gets wired in (P4)
 
 There is **no `packages/` directory** in this HA deployment. Config is a
 committed ConfigMap built by `configMapGenerator` from `!include`d files in
 `apps/base/homeassistant/files/`. So at P4 the contents of
-`ha-presence-package.yaml` are **split by HA top-level key**, not copied wholesale:
+`ha-presence-package.yaml.example` are **split by HA top-level key**, not copied wholesale:
 
 - **`mqtt:`** and **`template:`** blocks → these are single top-level keys.
   `configuration.yaml` already uses `template:` once and has no `mqtt:` yet.

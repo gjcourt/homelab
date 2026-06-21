@@ -5,7 +5,7 @@
 # needs. It is NOT an HA "package" in the packages/ sense — this deployment has
 # NO packages/ directory. At P4 the blocks below are SPLIT BY TOP-LEVEL KEY and
 # lifted into apps/base/homeassistant/files/, then registered in the
-# configMapGenerator. See README.md → "How ha-presence-package.yaml gets wired
+# configMapGenerator. See README.md → "How ha-presence-package.yaml.example gets wired
 # in (P4)". In short:
 #
 #   * mqtt:           -> single top-level key. Add via an !include'd file (e.g.

@@ -2369,9 +2369,15 @@ kubeScheduler:
     targetLabels: []
 
 ## Component scraping kube proxy
+## Disabled: this cluster uses Cilium kube-proxy replacement
+## (cilium-config kube-proxy-replacement=true), so no kube-proxy runs. Leaving
+## this enabled ships a scrape target (:10249) that can never have endpoints and
+## the KubeProxyDown rule, which then fires perpetually as a critical false
+## positive (re-armed on every Prometheus restart). Disabling removes both the
+## ServiceMonitor and the rule at the source. See the 2026-06-24 investigation.
 ##
 kubeProxy:
-  enabled: true
+  enabled: false
 
   ## If your kube proxy is not deployed as a pod, specify IPs it can be found on
   ##

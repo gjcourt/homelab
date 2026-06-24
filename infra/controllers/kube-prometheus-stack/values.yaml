@@ -3984,9 +3984,11 @@ prometheus:
     ## on scaling down and deleting statefulset, respectively.
     ## Requires Kubernetes version 1.27.0+.
     ## Ref: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
-    persistentVolumeClaimRetentionPolicy: {}
-    #  whenDeleted: Retain
-    #  whenScaled: Retain
+    # Keep the TSDB PVC on scale-down/delete so metrics history survives pod
+    # churn (matches the Loki footgun fix in this PR).
+    persistentVolumeClaimRetentionPolicy:
+      whenDeleted: Retain
+      whenScaled: Retain
 
     ## If true, pass --storage.tsdb.max-block-duration=2h to prometheus. This is already done if using Thanos
     ##
@@ -4314,9 +4316,11 @@ prometheus:
     ##
     retention: 10d
 
-    ## Maximum size of metrics
-    ##
-    retentionSize: ""
+    ## Maximum size of metrics. Backstop for the 20Gi PVC: TSDB self-trims at
+    ## 15GiB (~75% of the volume), leaving headroom for WAL + compaction so a
+    ## metrics spike can't fill the disk. Whichever of retention(10d)/15GiB hits
+    ## first wins.
+    retentionSize: "15GiB"
 
     ## Allow out-of-order/out-of-bounds samples ingested into Prometheus for a specified duration
     ## See https://prometheus.io/docs/prometheus/latest/configuration/configuration/#tsdb
@@ -4333,8 +4337,10 @@ prometheus:
 
     ## Number of replicas of each shard to deploy for a Prometheus deployment.
     ## Number of replicas multiplied by shards is the total number of Pods created.
-    ##
-    replicas: 1
+    ## HA: 2 independent replicas so a single node hang (e.g. the 2026-06-21 .20
+    ## outage) can't strand the only Prometheus and black out all metrics. Each
+    ## replica is a full copy with its own PVC; Grafana queries via the Service.
+    replicas: 2
 
     ## EXPERIMENTAL: Number of shards to distribute targets onto.
     ## Number of replicas multiplied by shards is the total number of Pods created.
@@ -4416,8 +4422,18 @@ prometheus:
 
     ## Prometheus StorageSpec for persistent data
     ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/platform/storage.md
-    ##
-    storageSpec: {}
+    ## Durable TSDB: was emptyDir, so every restart wiped all history (the 10d
+    ## retention was never real) and a node hang lost the in-memory data. Each of
+    ## the 2 replicas gets its own 20Gi iSCSI PVC (40Gi total). retentionSize
+    ## below caps the TSDB at 15GiB so it self-trims before filling the volume.
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: truenas-iscsi
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 20Gi
     ## Using PersistentVolumeClaim
     ##
     #  volumeClaimTemplate:

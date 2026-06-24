@@ -508,6 +508,17 @@ alertmanager:
   config:
     global:
       resolve_timeout: 5m
+      # Gmail SMTP relay (same upstream Authelia uses). Port 587 + STARTTLS is
+      # Alertmanager's supported path (Authelia uses 465/implicit TLS; the same
+      # app password works on both). Gmail rewrites From to the authenticated
+      # account, so smtp_from is the bare account; delivery goes to the
+      # plus-alias via the receiver's `to`. Password comes from the mounted
+      # alertmanager-smtp secret, never from this ConfigMap.
+      smtp_smarthost: 'smtp.gmail.com:587'
+      smtp_from: 'gjcourt@gmail.com'
+      smtp_auth_username: 'gjcourt@gmail.com'
+      smtp_auth_password_file: '/etc/alertmanager/secrets/alertmanager-smtp/password'
+      smtp_require_tls: true
     inhibit_rules:
       - source_matchers:
           - 'severity = critical'
@@ -541,8 +552,19 @@ alertmanager:
       - receiver: 'null'
         matchers:
           - alertname = "Watchdog"
+      # Critical alerts (Flux not-ready, NodeFilesystemReadOnly, LokiPushErrors)
+      # go to email. repeat_interval is shorter than the global default because
+      # email has no ack — re-nag every 4h while still firing.
+      - receiver: 'email-critical'
+        matchers:
+          - severity = "critical"
+        repeat_interval: 4h
     receivers:
     - name: 'null'
+    - name: 'email-critical'
+      email_configs:
+        - to: 'gjcourt+alerts@gmail.com'
+          send_resolved: true
     templates:
     - '/etc/alertmanager/config/*.tmpl'
 
@@ -925,7 +947,12 @@ alertmanager:
     ## Secrets is a list of Secrets in the same namespace as the Alertmanager object, which shall be mounted into the
     ## Alertmanager Pods. The Secrets are mounted into /etc/alertmanager/secrets/.
     ##
-    secrets: []
+    # alertmanager-smtp holds the Gmail app password; mounted at
+    # /etc/alertmanager/secrets/alertmanager-smtp/password and referenced by
+    # config.global.smtp_auth_password_file so the credential never enters the
+    # (plaintext) values ConfigMap.
+    secrets:
+      - alertmanager-smtp
 
     ## If false then the user will opt out of automounting API credentials.
     ##

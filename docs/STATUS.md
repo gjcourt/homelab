@@ -5,14 +5,14 @@
 > this page links out. **Update this file in the same PR whenever** a plan's
 > status changes, an incident postmortem lands, or hardware/topology changes.
 >
-> Last updated: 2026-06-19
+> Last updated: 2026-06-24
 
 ## Cluster at a glance
 
 | | |
 |---|---|
 | Cluster | `melodic-muse` |
-| Nodes | 4 — 3 control-plane (`.20`/`.21`/`.23`) + 1 worker (`.25`); `.22`/`.24` physically out (see Known issues) |
+| Nodes | 4 — 3 control-plane (`.20`/`.21`/`.23`) + 1 worker (`.25`); **`.20` hung since 2026-06-21** (etcd at 2/3) and `.22`/`.24` physically out (see Known issues) |
 | Platform | Talos v1.12.4 · Kubernetes v1.35.0 |
 | CNI / ingress | Cilium 1.19 (VXLAN) + Gateway API |
 | GitOps | Flux CD, reconciling from `master` |
@@ -57,5 +57,6 @@ Planned, not yet started:
 - **No on-prem LLM inference.** The 2× RTX 4090 were sold 2026-05-16. The `llms/` and GPU-`monitoring/` Custom Apps on hestia are archived. Restoring inference needs new GPU hardware or a hosted-API backend.
 - **`hermes` / `hermes-callee` (Signal bots) and `signal-cli` decommissioned 2026-06-17.** Removed from `apps/{base,production,staging}/` and garbage-collected by Flux (`prune: true`). They had no model backend after the GPUs were sold and were already scaled to 0. Signal-based critical-alert routing is dead as a result — see the obsoleted Phase 2 in [plans/2026-05-09-monitoring-enhancement.md](plans/2026-05-09-monitoring-enhancement.md).
 - **`.22` (talos-v2l-hng) decommissioned 2026-06-19** — bad DIMM (reads 30.6 GiB vs ~62), did not return after the 2026-06-18 maintenance. Removed from etcd and the cluster; **`.23` was promoted to control-plane in its place**, restoring fault-tolerant 3-member etcd (now a 4-node cluster). See the [control-plane promotion runbook](operations/2026-06-19-talos-controlplane-promotion.md) and [plan/execution record](plans/2026-06-19-promote-talos-25-to-controlplane.md). `.22` hardware verdict (DIMM/board/RMA) and `.24` re-entry still pending. **Topology (verified 2026-06-19):** all 4 nodes share one **Rack Switch (USWED42)** and one **USP PDU Pro** (separate outlets) — so the switch + PDU are **accepted single points of failure** (a 3-member etcd survives a node/outlet loss, not a whole-switch/PDU loss). Highest-value mitigation: put the Rack Switch + PDU on a UPS.
+- **`.20` (talos-ykb-uir) hung 2026-06-21 21:16 UTC → cluster-wide DNS outage via a Cilium `k8sServiceHost` SPOF** (diagnosed/mitigated 2026-06-24). The node pings but `apid`/`kubelet` are stuck (no TLS handshake), so `talosctl` can't reach it — recovery needs a **physical power-cycle** (no BMC; mind the `.20/.21` shared switch/PDU). Cilium had `k8sServiceHost: 10.42.2.20` pinned, so losing that node killed cilium-operator → CoreDNS → every DNS-dependent service. **Mitigated live:** Cilium HelmRelease **suspended** and operator/agent `KUBERNETES_SERVICE_HOST` repointed to `.21`. Permanent fix (Talos KubePrism, `localhost:7445`) is in an open PR — **do not resume the suspended Cilium HelmRelease until it merges**, or Flux will re-apply the SPOF. Full postmortem: [incidents/2026-06-24-cp-node-hang-cilium-k8sservicehost-spof.md](operations/incidents/2026-06-24-cp-node-hang-cilium-k8sservicehost-spof.md).
 - **CNPG WAL archiving** broken on several staging clusters (stale system-ID in S3) — base backups succeed, but no PITR until fixed.
 - **LB pool / Lab-VLAN `/24` sharing** is the root cause of the 2026-05-05 wired-device incident; the dedicated LB subnet migration is tracked in the network-resilience plan (Phase D).

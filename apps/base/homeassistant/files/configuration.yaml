@@ -123,19 +123,22 @@ binary_sensor: !include binary_sensors.yaml
 # Room-level BLE presence via ESPresense nodes (MQTT broker mosquitto-lb).
 # Each mqtt_room sensor reports which room the tracked device is closest to.
 # Device identity is enrolled on the ESPresense node itself (IRK-based, so it
-# survives iOS BLE MAC rotation); the enrolled name becomes BOTH the device_id
-# and the final segment of the device topic. ESPresense publishes per-room to
-# `espresense/devices/<name>/<room>`; mqtt_room subscribes to `<state_topic>/+`
-# and matches the payload `id` against device_id, reporting the closest room.
+# survives iOS BLE MAC rotation). On enroll, ESPresense assigns a device id of
+# the form `phone:<slug>` (the enroll name slugified, prefixed by category) and
+# publishes it in `espresense/settings/irk:<key>/config` as the `id` field.
+# That id is BOTH the device_id and the final-but-one segment of the device
+# topic: ESPresense publishes per-room to `espresense/devices/<id>/<room>`;
+# mqtt_room subscribes to `<state_topic>/+` and matches the payload `id`
+# against device_id, reporting the closest room.
 #
 # To add a device: enroll it on a node (http://<node>/ui/ -> Name -> Enroll ->
-# accept the iOS Bluetooth pairing), confirm `espresense/devices/<name>/...`
-# starts publishing, then add an entry below with a matching device_id.
+# accept the iOS Bluetooth pairing), read the assigned id from
+# `espresense/settings/irk:<key>/config`, then add an entry below using it.
 sensor:
   - platform: mqtt_room
     name: "George iPhone Room"
-    device_id: "georgeiphone"
-    state_topic: "espresense/devices/georgeiphone"
+    device_id: "phone:george-iphone"
+    state_topic: "espresense/devices/phone:george-iphone"
     timeout: 5
     away_timeout: 180
 

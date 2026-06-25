@@ -44,8 +44,18 @@ spec:
             - name: config
               mountPath: /mosquitto/config/mosquitto.conf
               subPath: mosquitto.conf
+            # Mount each secret key as a real file via subPath, NOT the whole
+            # secret as a directory. A directory mount projects each key as a
+            # symlink (passwordfile -> ..data/passwordfile); mosquitto 2.1.2
+            # refuses to open the symlinked password_file ("Unable to open
+            # pwfile") and crashloops. subPath yields a real file it can open.
             - name: auth
-              mountPath: /mosquitto/auth
+              mountPath: /mosquitto/auth/passwordfile
+              subPath: passwordfile
+              readOnly: true
+            - name: auth
+              mountPath: /mosquitto/auth/acl
+              subPath: acl
               readOnly: true
             - name: data
               mountPath: /mosquitto/data

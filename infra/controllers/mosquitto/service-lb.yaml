@@ -1,0 +1,26 @@
+# LoadBalancer Service exposing mosquitto's MQTT port to the LAN, for the
+# off-cluster ESP32 presence nodes (ESPresense scanners + ESPHome mmWave) on the
+# IoT VLAN. HA + zigbee2mqtt keep using the in-cluster ClusterIP `mosquitto`
+# Service (no change). A dedicated LB IP from home-c-pool; the worker BGP peering
+# to the UCGF makes the /32 routable from the IoT VLAN (a UCGF firewall allow
+# 10.42.7.0/24 -> <this IP>:1883 is still required — see the presence plan P2).
+#
+# NOTE: until the broker has auth (Commit B in the plan), keep the IoT->1883
+# firewall CLOSED — this LB IP must not expose an anonymous broker to the LAN.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mosquitto-lb
+  namespace: mosquitto
+  labels:
+    app: mosquitto
+  annotations:
+    lbipam.cilium.io/ip-pool: home-c-pool
+spec:
+  type: LoadBalancer
+  ports:
+    - name: mqtt
+      port: 1883
+      targetPort: mqtt
+  selector:
+    app: mosquitto

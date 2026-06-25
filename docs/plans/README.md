@@ -74,11 +74,10 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (8)
+### Planned (7)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-06-24-control-plane-vip-stable-endpoint.md](2026-06-24-control-plane-vip-stable-endpoint.md) | 2026-06-24 | Add a Talos layer-2 control-plane VIP (10.42.2.26) so kubeconfig/talosconfig reference a floating endpoint instead of hardcoding a single node. talosconfig already fixed client-side (multi-endpoint); this plan covers the operator-led VIP for kubeconfig. |
 | [2026-06-21-bluetooth-presence-system.md](2026-06-21-bluetooth-presence-system.md) | 2026-06-21 | BLE beacon presence/occupancy system (ESPresense → HA → Grafana) for who/how-many is home, per-room |
 | [2026-06-16-burntbytes-mailserver.md](2026-06-16-burntbytes-mailserver.md) | 2026-06-16 | Self-hosted mail for burntbytes.com (<10 accounts): Mailu on the cluster + VPS SMTP gateway + SES smarthost |
 | [2026-06-02-immich-vectorchord-migration.md](2026-06-02-immich-vectorchord-migration.md) | 2026-06-10 | Migrate Immich CNPG from pgvecto.rs to VectorChord |
@@ -87,10 +86,11 @@ see `scripts/plans-index/`).
 | [2026-03-08-drawer-inserts.md](2026-03-08-drawer-inserts.md) | 2026-05-03 | Cardboard drawer insert design (75×32×12 cm) — physical project, no repo artifacts |
 | [2026-02-21-linkding-db-restore-plan.md](2026-02-21-linkding-db-restore-plan.md) | 2026-05-03 | Live DR drill: destroy and restore Linkding staging DB (never executed) |
 
-### Complete (18)
+### Complete (19)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-06-24-control-plane-vip-stable-endpoint.md](2026-06-24-control-plane-vip-stable-endpoint.md) | 2026-06-24 | EXECUTED 2026-06-24 — Talos layer-2 control-plane VIP 10.42.2.26 live on all 3 CP nodes (etcd-elected); apiserver cert regenerated to include all node IPs + the VIP; kubeconfig and talosconfig cut over to the VIP. Nodes were DHCP (not static as drafted); applied per-node in try-mode with no reboots, etcd 3/3 throughout. |
 | [2026-06-19-promote-talos-25-to-controlplane.md](2026-06-19-promote-talos-25-to-controlplane.md) | 2026-06-19 | EXECUTED 2026-06-19 — promoted .23 (not .25) to control-plane and removed dead .22, restoring 3-member etcd; cluster now 4 nodes (3 CP + 1 worker) |
 | [2026-06-18-finance-dashboard-multipage.md](2026-06-18-finance-dashboard-multipage.md) | 2026-06-18 | finance.burntbytes.com expanded from one balance-sheet page to a 4-page static site (balance sheet, cash flow, STR model, retirement runway) with encrypted-YAML data + interactive client-side charts |
 | [2026-06-10-docs-reorg-status-dashboard.md](2026-06-10-docs-reorg-status-dashboard.md) | 2026-06-10 | Docs status legibility: plan frontmatter cleanup, generated index, STATUS.md dashboard, HOMELAB.md migration |

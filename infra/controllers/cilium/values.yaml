@@ -103,14 +103,19 @@ l2announcements:
 bgpControlPlane:
   enabled: true
 
-# -- (string) Kubernetes service host - use "auto" for automatic lookup from the cluster-info ConfigMap
-k8sServiceHost: "10.42.2.20"
+# -- (string) Kubernetes service host. Points at Talos KubePrism — the per-node API
+# load balancer listening on localhost:7445 that fans out to every control-plane
+# apiserver and health-checks dead ones out. This must NOT be a single control-plane
+# node IP: pinning "10.42.2.20" here made that node a SPOF — when it hung on
+# 2026-06-21 the cilium-operator/agents lost the apiserver cluster-wide, which took
+# down CoreDNS and cascaded to storage/DBs/apps. KubePrism survives any single CP loss.
+# See docs/operations/incidents/2026-06-24-cp-node-hang-cilium-k8sservicehost-spof.md
+k8sServiceHost: "localhost"
 # @schema
 # type: [string, integer]
 # @schema
-# -- (string) Kubernetes service port
-# k8sServicePort: "7445"
-k8sServicePort: "6443"
+# -- (string) Kubernetes service port — Talos KubePrism (machine.features.kubePrism.port)
+k8sServicePort: "7445"
 # @schema
 # type: [null, string]
 # @schema

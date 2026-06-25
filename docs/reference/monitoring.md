@@ -48,6 +48,7 @@ Access Grafana and verify that data is populating in the default dashboards.
 - **Kernel Logs**: Vector collects Talos kernel and service logs and sends them to Loki. See [Talos Kernel Log Shipping](kernel-log-shipping.md).
 - **Metric Alerts**: Alertmanager receives alerts from Prometheus via `PrometheusRule` resources. Custom rules are in `infra/configs/alerts/prometheus-rules.yaml`.
 - **Log Alerts**: Loki's built-in ruler evaluates LogQL rules from `infra/controllers/loki/alerting-rules.yaml` and forwards firing alerts to Alertmanager.
+- **Alert delivery**: Alertmanager config lives in `infra/controllers/kube-prometheus-stack/values.yaml` (`alertmanager.config`). `severity = "critical"` alerts route to the `email-critical` receiver, which emails `gjcourt+alerts@gmail.com` via Gmail SMTP (`smtp.gmail.com:587`, STARTTLS, auth `gjcourt@gmail.com`). The app password is the SOPS-encrypted `alertmanager-smtp` secret in the `monitoring` namespace, mounted at `/etc/alertmanager/secrets/alertmanager-smtp/password` via `alertmanagerSpec.secrets` and referenced by `smtp_auth_password_file`. Everything else (warnings, info, Watchdog) still routes to the `null` receiver. See [plans/2026-06-17-alertmanager-smtp-alerting.md](../plans/2026-06-17-alertmanager-smtp-alerting.md).
 
 ## 8. Disaster Recovery
 - **Backup Strategy**:

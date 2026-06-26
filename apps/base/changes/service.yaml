@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: changes
+  namespace: changes
+  labels:
+    app: changes
+spec:
+  type: ClusterIP
+  selector:
+    app: changes
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: 8080

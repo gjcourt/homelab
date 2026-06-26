@@ -18,6 +18,8 @@ spec:
     spec:
       serviceAccountName: changes
       automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-secret
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -27,7 +29,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: changes
-          # Public image (ghcr package set to public); no imagePullSecret needed.
+          # Private ghcr image; pulled via the shared ghcr-secret (above).
           image: ghcr.io/gjcourt/changes:2026-06-25
           ports:
             - containerPort: 8080

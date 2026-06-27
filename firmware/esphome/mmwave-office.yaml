@@ -1,0 +1,140 @@
+# =============================================================================
+# ESPHome mmWave presence node — mmwave-office (READY TO FLASH)
+# =============================================================================
+# Hardware: Seeed XIAO ESP32-C3 + stacked Seeed "24 GHz mmWave for XIAO –
+# Human Static Presence" board (LD2410-class radar, configured via HLKRadarTool,
+# 256000 baud → ESPHome built-in `ld2410` platform).
+#
+# Transport: MQTT → mosquitto LoadBalancer (10.42.2.46), reusing the one broker
+# path. NOT the native ESPHome API. HA auto-discovers the entities.
+#
+# Flash (first time, over USB):   esphome run mmwave-office.yaml
+# Updates after that are wireless (OTA).
+#
+# To make the other 4 nodes later: copy this file, change ONLY the three
+# substitutions below (node/room/friendly_room) and re-flash.
+# =============================================================================
+
+substitutions:
+  node: "mmwave-office"        # DNS-safe; also the MQTT topic_prefix segment
+  room: "office"               # office | master | son | guest | kitchen
+  friendly_room: "Office"      # human-readable, used in entity names
+
+esphome:
+  name: "${node}"
+  friendly_name: "mmWave ${friendly_room}"
+  comment: "Bluetooth-presence mmWave node — room=${room}"
+
+esp32:
+  board: esp32-c3-devkitm-1    # Seeed XIAO ESP32-C3 (seeed_xiao_esp32c3 also works)
+  framework:
+    type: esp-idf
+
+logger:
+  level: INFO
+  # Logs go over the C3's native USB (USB Serial/JTAG); the radar is on a
+  # separate UART (GPIO4/5), so there's no conflict.
+
+# ----- WiFi: IoT VLAN (DHCP) -----
+wifi:
+  ssid: !secret iot_wifi_ssid
+  password: !secret iot_wifi_password
+
+# Fallback AP so you can re-provision WiFi without re-flashing over USB.
+captive_portal:
+
+# Wireless updates after the first USB flash.
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# Live values in a browser at http://<node-ip>/ — handy for the sit-still test
+# and tuning, independent of HA. Drop this block if you want to save flash/RAM.
+web_server:
+  port: 80
+
+# ----- MQTT → mosquitto (P2 'mmwave' user; ACL covers mmwave/# + homeassistant/#) -----
+mqtt:
+  broker: "10.42.2.46"
+  port: 1883
+  username: "mmwave"
+  password: !secret mqtt_mmwave_password
+  topic_prefix: "mmwave/${node}"
+  discovery: true
+  discovery_prefix: "homeassistant"
+  birth_message:
+    topic: "mmwave/${node}/status"
+    payload: "online"
+    retain: true
+  will_message:
+    topic: "mmwave/${node}/status"
+    payload: "offline"
+    retain: true
+
+# ----- UART to the LD2410 radar -----
+# Verified working 2026-06-26 (LD2410 reported fw v2.04.23022511):
+#   rx_pin: GPIO4 (D2)  <- D2 carries data FROM the radar (its TX line)
+#   tx_pin: GPIO5 (D3)  -> D3 carries data TO the radar (its RX line)
+# The Seeed wiki labels these "D2 - TX, D3 - RX" by DATA-FLOW on each line, not
+# the XIAO's pin roles (and never says whose perspective). The trap: reading
+# "D2=TX" as "set the XIAO's TX to D2" gives ZERO radar data — fw-version empty,
+# distances NA, no garbage (silence, not a baud problem). LD2410 frame: 256000 8N1.
+uart:
+  id: ld2410_uart
+  tx_pin: GPIO5
+  rx_pin: GPIO4
+  baud_rate: 256000
+  parity: NONE
+  stop_bits: 1
+
+# ----- LD2410 radar hub -----
+ld2410:
+  id: ld2410_radar
+  uart_id: ld2410_uart
+
+# ----- Presence (the entity HA discovers as binary_sensor.mmwave_office_presence) -----
+binary_sensor:
+  - platform: ld2410
+    has_target:
+      name: "mmWave ${friendly_room} Presence"
+      id: mmwave_${room}_presence
+      device_class: occupancy
+    has_moving_target:
+      name: "mmWave ${friendly_room} Moving"
+      device_class: motion
+    has_still_target:
+      name: "mmWave ${friendly_room} Still"
+      device_class: occupancy
+
+# ----- Distances/energies — visibility for tuning the gates -----
+sensor:
+  - platform: ld2410
+    moving_distance:
+      name: "mmWave ${friendly_room} Moving Distance"
+    still_distance:
+      name: "mmWave ${friendly_room} Still Distance"
+    detection_distance:
+      name: "mmWave ${friendly_room} Detection Distance"
+
+# ----- Live-tunable params (write from HA; persisted on the radar) -----
+# Office = standard tune. For master/son shorten the max gates (aim inward,
+# reject yard movement through the French doors); for kitchen raise thresholds
+# + lengthen timeout to ignore range-hood/dishwasher micro-motion.
+number:
+  - platform: ld2410
+    timeout:
+      name: "mmWave ${friendly_room} Clear Delay"
+    max_move_distance_gate:
+      name: "mmWave ${friendly_room} Max Move Gate"
+    max_still_distance_gate:
+      name: "mmWave ${friendly_room} Max Still Gate"
+
+text_sensor:
+  - platform: ld2410
+    version:
+      name: "mmWave ${friendly_room} Firmware"
+
+button:
+  - platform: ld2410
+    factory_reset:
+      name: "mmWave ${friendly_room} Factory Reset"

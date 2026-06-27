@@ -5,6 +5,7 @@ resources:
   - audiobookshelf
   - authelia
   - certificates
+  - changes
   - excalidraw
   - flashcards
   - flashcards-sync

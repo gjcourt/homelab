@@ -10,9 +10,12 @@ loki:
   limits_config:
     ingestion_rate_mb: 16
     ingestion_burst_size_mb: 32
-    # Retain logs for 30 days then delete via the compactor. Without this,
-    # chunks accumulate indefinitely and the PVC fills up.
-    retention_period: 30d
+    # Retain logs for 7 days then delete via the compactor. 30d did NOT fit the
+    # 40Gi filesystem PVC — it filled to 100%, which wedges Loki (a full disk
+    # means it can't start, so the compactor can't run to free space → permanent
+    # CrashLoop). 7d holds ~24Gi (~60%) in practice. With filesystem storage,
+    # retention MUST be sized to the PVC. See the 2026-06-24 incident doc.
+    retention_period: 7d
   commonConfig:
     replication_factor: 1
   storage:
@@ -56,6 +59,11 @@ singleBinary:
     enabled: true
     storageClass: truenas-iscsi
     size: 40Gi
+    # Do NOT auto-delete the data PVC when the StatefulSet is scaled down or
+    # deleted. The chart default deletes it (whenScaled/whenDeleted: Delete),
+    # so a routine `scale --replicas=0` destroys the log archive. The PV is
+    # Retain, so it's recoverable, but that's a footgun — keep the PVC.
+    enableStatefulSetAutoDeletePVC: false
   resources:
     limits:
       memory: 2Gi

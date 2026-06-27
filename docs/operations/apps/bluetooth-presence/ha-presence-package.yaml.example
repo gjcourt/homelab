@@ -386,6 +386,11 @@ template:
         unit_of_measurement: "people"
         state_class: measurement
         icon: mdi:account-group
+      # TODO(P5): sensor.guests_estimated — the fuzzy guest count referenced by
+      # prometheus-grafana.md and the Grafana dashboard. Define it here at P5
+      # (derive from ESPresense device enumeration: resolved BLE devices that do
+      # NOT match a known household beacon). Left undefined until the derivation is
+      # finalized, so those P5 references are intentionally forward-looking.
   - binary_sensor:
       - name: "Anyone Home"
         unique_id: anyone_home
@@ -435,7 +440,8 @@ automation:
     trigger:
       - platform: state
         entity_id:
-          # TODO(P4): replace with the real ESPresense node status entities.
+          # TODO(P4): replace with the real ESPresense node status entities —
+          # one entry per scanner node (binary_sensor.presence_<node>_status).
           - binary_sensor.presence_kitchen_status
         to: "off"
         for: "00:05:00"

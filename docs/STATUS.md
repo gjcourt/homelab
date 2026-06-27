@@ -46,6 +46,7 @@ Planned, not yet started:
 - [Network resilience + BGP completion](plans/2026-05-06-network-resilience-and-bgp-completion.md) — the consolidated plan that supersedes the earlier BGP rollout.
 - [democratic-csi least-privilege key](plans/2026-05-09-democratic-csi-least-privilege-key.md).
 - [Immich pgvecto.rs → VectorChord](plans/2026-06-02-immich-vectorchord-migration.md).
+- [Alcatraz GitOps Docker workflow](plans/2026-06-26-alcatraz-gitops-docker.md) — feasibility verdict: feasible-with-caveats (runner drives Docker directly, no TrueNAS-style API). Recommendation is build-the-artifacts-but-defer-running given alcatraz is being wound down.
 
 ## Recently completed (last ~60 days)
 

@@ -6,9 +6,20 @@ broker (`10.42.2.46`, `mmwave` user); Home Assistant auto-discovers the entities
 
 ## One-time setup
 ```bash
-brew install esphome                 # toolchain
-cp secrets.yaml.template secrets.yaml
-$EDITOR secrets.yaml                  # fill in WiFi + the mmwave MQTT password
+brew install esphome sops            # toolchain
+
+# Secrets are committed ENCRYPTED as secrets.sops.yaml. Decrypt to the plaintext
+# secrets.yaml that esphome reads (needs the repo age key in $SOPS_AGE_KEY_FILE):
+sops -d secrets.sops.yaml > secrets.yaml
+
+# No key? Fall back to the template and fill values by hand:
+#   cp secrets.yaml.template secrets.yaml && $EDITOR secrets.yaml
+```
+`secrets.yaml` is gitignored (esphome can't read SOPS). To change a secret, edit
+`secrets.yaml` then re-encrypt:
+```bash
+sops -e --age age1lnrpvnhtkmzhfhelxse4798f67l86nct2rjahryvt4rgyfu8zg7samjjuw \
+  secrets.yaml > secrets.sops.yaml
 ```
 
 ## Flash (first time = USB)

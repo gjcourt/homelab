@@ -70,7 +70,7 @@ mmWave rooms are 5 of the 8 scanner rooms — not 5 extra rooms** (still 8 rooms
 | File | Used in | Purpose |
 |---|---|---|
 | [`README.md`](README.md) | — | This index: room map, naming, phase guide. |
-| [`esphome-mmwave-node.yaml`](esphome-mmwave-node.yaml) | **P3b** | Parameterized ESPHome firmware config for the 5 mmWave nodes. Flash one per node, overriding `substitutions:`. |
+| [`firmware/esphome/`](../../../../firmware/esphome/) | **P3b** | Canonical ready-to-flash ESPHome config for the mmWave nodes (LD2410). Copy `mmwave-office.yaml` per node, overriding `substitutions:`. (Office node is live.) |
 | [`espresense-nodes.md`](espresense-nodes.md) | **P2 (PoC), P3 (rollout)** | Runbook for the 8 ESPresense scanners: flashing, MQTT settings, RSSI calibration recipe, hysteresis, HolyIOT beacon → person major/minor map. |
 | [`ha-presence-package.yaml.example`](ha-presence-package.yaml.example) | **P4** | HA package: `mqtt_room` per-person sensors, zone-aware Bayesian `binary_sensor.<room>_occupied` ×8, `sensor.people_home` / `binary_sensor.anyone_home`, node-offline + beacon-stale alerts. Lifted into `apps/base/homeassistant/files/` — see the "how to wire in" note below. |
 | [`prometheus-grafana.md`](prometheus-grafana.md) | **P5** | HA `prometheus:` block, the HA Service `metrics` port, and the authenticated ServiceMonitor (bearer-token + `/api/prometheus`). |
@@ -88,8 +88,9 @@ mmWave rooms are 5 of the 8 scanner rooms — not 5 extra rooms** (still 8 rooms
   for this docs PR).
 - **P3 — Roll out + calibrate 8 scanners:** [`espresense-nodes.md`](espresense-nodes.md)
   calibration recipe + hysteresis.
-- **P3b — mmWave nodes (parallel to P3):** flash 5 nodes from
-  [`esphome-mmwave-node.yaml`](esphome-mmwave-node.yaml).
+- **P3b — mmWave nodes (parallel to P3):** flash the nodes from the canonical
+  config in [`firmware/esphome/`](../../../../firmware/esphome/) (copy
+  `mmwave-office.yaml` per room). Office node is live.
 - **P4 — Identity + fusion:** lift [`ha-presence-package.yaml.example`](ha-presence-package.yaml.example)
   into HA (see below).
 - **P5 — Guest count + history:** wire [`prometheus-grafana.md`](prometheus-grafana.md)

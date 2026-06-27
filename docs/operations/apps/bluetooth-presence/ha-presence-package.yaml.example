@@ -86,7 +86,7 @@ sensor:
 # appear automatically as binary_sensor.mmwave_<room>_presence. What we DO
 # declare is a connectivity sensor per node reading the LWT status topic
 # (mmwave/<node>/status, online|offline from the ESPHome birth/will messages in
-# esphome-mmwave-node.yaml) so the offline alert has something to watch.
+# firmware/esphome/mmwave-office.yaml) so the offline alert has something to watch.
 mqtt:
   binary_sensor:
     - name: "mmWave Office node status"

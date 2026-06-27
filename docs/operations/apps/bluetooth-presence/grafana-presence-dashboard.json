@@ -1,0 +1,239 @@
+{
+  "__inputs": [],
+  "__comment": "REFERENCE / DRAFT — imported during P5 of the Bluetooth-presence build. Shows 'no data' until HA's prometheus: endpoint is live and scraped (expected). Metric names assume HA prometheus integration with `namespace: hass` (hass_* family); confirm emitted series with `curl .../api/prometheus | grep hass_` and adjust queries if they differ. Datasource uid 'prometheus' matches apps/base/truenas-iscsi-monitor/dashboard.json.",
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "People home",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "blue", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 1 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "hass_sensor_unit_people{entity=\"sensor.people_home\"}",
+          "legendFormat": "people home",
+          "refId": "A"
+        }
+      ],
+      "title": "People home (now)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" }
+          },
+          "mappings": [],
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 18, "x": 6, "y": 1 },
+      "id": 3,
+      "options": {
+        "legend": { "calcs": ["min", "max", "mean"], "displayMode": "table", "placement": "right", "showLegend": true },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "hass_sensor_unit_people{entity=\"sensor.people_home\"}",
+          "legendFormat": "people home",
+          "refId": "A"
+        }
+      ],
+      "title": "People home over time",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 },
+      "id": 4,
+      "title": "Per-room occupancy",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 70, "lineWidth": 0 },
+          "mappings": [
+            { "options": { "0": { "color": "dark-blue", "index": 0, "text": "empty" } }, "type": "value" },
+            { "options": { "1": { "color": "green", "index": 1, "text": "occupied" } }, "type": "value" }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "dark-blue", "value": null }, { "color": "green", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 8 },
+      "id": 5,
+      "options": {
+        "alignValue": "left",
+        "legend": { "displayMode": "list", "placement": "right", "showLegend": true },
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "showValue": "never",
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hass_binary_sensor_state{entity=\"binary_sensor.living_occupied\"}", "legendFormat": "Living", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hass_binary_sensor_state{entity=\"binary_sensor.dining_occupied\"}", "legendFormat": "Dining", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hass_binary_sensor_state{entity=\"binary_sensor.foyer_occupied\"}", "legendFormat": "Foyer", "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hass_binary_sensor_state{entity=\"binary_sensor.office_occupied\"}", "legendFormat": "Office", "refId": "D" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hass_binary_sensor_state{entity=\"binary_sensor.master_occupied\"}", "legendFormat": "Master", "refId": "E" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hass_binary_sensor_state{entity=\"binary_sensor.son_occupied\"}", "legendFormat": "Son", "refId": "F" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hass_binary_sensor_state{entity=\"binary_sensor.guest_occupied\"}", "legendFormat": "Guest", "refId": "G" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hass_binary_sensor_state{entity=\"binary_sensor.kitchen_occupied\"}", "legendFormat": "Kitchen", "refId": "H" }
+      ],
+      "title": "Per-room occupancy timeline",
+      "type": "state-timeline"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "id": 6,
+      "title": "Per-person room history",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Each person's nearest room over time. sensor.<person>_room is a string state; HA's prometheus integration exposes the room name as the `state` label on a constant-1 series, so the legend shows which room is active. If your HA build emits it differently, switch this to a table on hass_sensor_state.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 70, "lineWidth": 0 },
+          "mappings": []
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 18 },
+      "id": 7,
+      "options": {
+        "alignValue": "left",
+        "legend": { "displayMode": "list", "placement": "right", "showLegend": true },
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "showValue": "auto",
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hass_sensor_state{entity=\"sensor.george_room\"}", "legendFormat": "George — {{state}}", "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hass_sensor_state{entity=\"sensor.mara_room\"}", "legendFormat": "Mara — {{state}}", "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "hass_sensor_state{entity=\"sensor.niccolo_room\"}", "legendFormat": "Niccolo — {{state}}", "refId": "C" }
+      ],
+      "title": "Per-person room history",
+      "type": "state-timeline"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
+      "id": 8,
+      "title": "Guest count",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "Anonymous, debounced guest-count TREND (distinct non-beacon BLE devices across the 8 ESPresense nodes, heavily smoothed). MAC randomization over-counts — read this as a trend that tracks gatherings, not a precise headcount. Series populated in P5; 'no data' until then.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisCenteredZero": false,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": { "group": "A", "mode": "none" }
+          },
+          "mappings": [],
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 28 },
+      "id": 9,
+      "options": {
+        "legend": { "calcs": ["min", "max", "mean"], "displayMode": "table", "placement": "right", "showLegend": true },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "11.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "hass_sensor_unit_people{entity=\"sensor.guests_estimated\"}",
+          "legendFormat": "estimated guests (trend)",
+          "refId": "A"
+        }
+      ],
+      "title": "Guest-count trend",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "1m",
+  "schemaVersion": 39,
+  "tags": ["presence", "occupancy", "homeassistant", "bluetooth-presence"],
+  "templating": { "list": [] },
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Bluetooth Presence & Occupancy",
+  "uid": "bt-presence-occupancy",
+  "version": 1,
+  "weekStart": ""
+}

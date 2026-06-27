@@ -48,12 +48,17 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # go-librespot (Spotify Connect) connects to Spotify's servers over HTTPS.
+    # go-librespot (Spotify Connect) reaches Spotify over HTTPS (443) for OAuth +
+    # apresolve, and the access-point on 4070 (apresolve hands out :4070 hosts).
+    # Without 4070 the interactive login completes the token exchange but fails the
+    # AP connect, exits, and never persists credentials → the device never appears.
     - toEntities:
         - world
       toPorts:
         - ports:
             - port: "443"
+              protocol: TCP
+            - port: "4070"
               protocol: TCP
     # mopidy sidecar pulls the library from Navidrome's in-cluster Subsonic
     # API (only the blog is exposed via the tunnel, so no hairpin).

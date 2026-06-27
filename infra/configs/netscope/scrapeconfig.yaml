@@ -1,0 +1,24 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: hestia-netscope
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  staticConfigs:
+    - targets:
+        - 10.42.2.10:9101
+      labels:
+        instance: hestia
+  # Force the job label to "netscope-agent" so hestia joins the SAME job as
+  # the cluster DaemonSet targets (scraped via the netscope ServiceMonitor,
+  # apps/base/netscope/servicemonitor.yaml) and the PrometheusRule alerts
+  # (which match on job="netscope-agent"). The operator otherwise auto-names
+  # the job "scrapeConfig/monitoring/hestia-netscope".
+  relabelings:
+    - targetLabel: job
+      replacement: netscope-agent
+  scrapeInterval: 30s
+  scrapeTimeout: 10s
+  metricsPath: /metrics

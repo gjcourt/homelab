@@ -74,10 +74,11 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (7)
+### Planned (8)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-06-28-democratic-csi-ssh-to-api-driver.md](2026-06-28-democratic-csi-ssh-to-api-driver.md) | 2026-06-28 | Migrate democratic-csi from the SSH-based driver to the API driver (freenas-api-iscsi) to remove the SSH+sudo dependency |
 | [2026-06-21-bluetooth-presence-system.md](2026-06-21-bluetooth-presence-system.md) | 2026-06-21 | BLE beacon presence/occupancy system (ESPresense → HA → Grafana) for who/how-many is home, per-room |
 | [2026-06-16-burntbytes-mailserver.md](2026-06-16-burntbytes-mailserver.md) | 2026-06-16 | Self-hosted mail for burntbytes.com (<10 accounts): Mailu on the cluster + VPS SMTP gateway + SES smarthost |
 | [2026-06-02-immich-vectorchord-migration.md](2026-06-02-immich-vectorchord-migration.md) | 2026-06-10 | Migrate Immich CNPG from pgvecto.rs to VectorChord |

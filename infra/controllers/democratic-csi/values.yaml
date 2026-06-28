@@ -3,7 +3,10 @@ csiDriver:
 
 driver:
   config:
-    driver: truenas-iscsi
+    # API-only driver (FreeNASApiDriver): all ops over the TrueNAS middleware API
+    # via the melodic-muse-csi key — no SSH/sudo. (Authoritative config lives in
+    # the existingConfigSecret below; this field is kept in sync for clarity.)
+    driver: freenas-api-iscsi
   existingConfigSecret: democratic-csi-driver-config
   existingConfigSecretKey: driver-config-file.yaml
 

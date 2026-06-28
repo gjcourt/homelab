@@ -53,6 +53,61 @@ storageClasses:
       node-publish-secret:
       controller-expand-secret:
 
+  # xfs variants of the iSCSI StorageClasses above.
+  # Rationale: online PVC *expansion* works on xfs but NOT on ext4 with this
+  # democratic-csi + Talos setup. ext4 node-side resize2fs fails the online
+  # EXT4_IOC_RESIZE_FS ioctl with EPERM against the host-mounted globalmount;
+  # xfs grows via `xfs_growfs <mountpoint>` (mountpoint-based, no block-device
+  # ioctl), which succeeds. Verified end-to-end on melodic-muse 2026-06-28
+  # (1Gi -> 2Gi, df confirmed 2Gi, data preserved).
+  # These are *additive* — existing ext4 volumes keep their fsType and still
+  # require recreate-to-grow. Use the xfs classes for NEW volumes that may
+  # need to expand in place.
+  - name: truenas-iscsi-xfs
+    defaultClass: false
+    reclaimPolicy: Retain
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: xfs
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
+  - name: truenas-iscsi-ssd-xfs
+    defaultClass: false
+    reclaimPolicy: Retain
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: xfs
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
+  - name: truenas-iscsi-ephemeral-xfs
+    defaultClass: false
+    reclaimPolicy: Delete
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: xfs
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
 # Talos: /etc/iscsi is a read-only tmpfs mount — DirectoryOrCreate skips the strict type check.
 # hostPID required for nsenter strategy to find iscsid PID in the host process namespace.
 node:

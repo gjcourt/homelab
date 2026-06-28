@@ -1,0 +1,5 @@
+# Plaintext secrets — local only; this is what `esphome run` reads. NEVER commit.
+# The SOPS-encrypted secrets.sops.yaml IS committed and is safe (values are ENC[...]).
+secrets.yaml
+.esphome/
+*.bin

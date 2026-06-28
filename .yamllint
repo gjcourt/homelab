@@ -54,4 +54,6 @@ ignore: |
   infra/controllers/**
   **/secret-*.yaml
   apps/**/secret-*.yaml
+  # SOPS-encrypted files — the sops metadata block uses its own indentation
+  **/*.sops.yaml
 

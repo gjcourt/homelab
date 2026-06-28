@@ -7,6 +7,21 @@ driver:
   existingConfigSecret: democratic-csi-driver-config
   existingConfigSecretKey: driver-config-file.yaml
 
+# Pin the democratic-csi driver image off the chart default `:latest` — that tag
+# silently left the fleet on a stale v1.9.0 while :latest drifted to v1.9.5.
+# Digest below = the v1.9.0 already running → zero behavior change, just stops
+# the silent drift. (A tested bump to v1.9.5 / chart 0.15.1 is a separate change.)
+#
+# ⚠️ In-place iSCSI ext4 PVC *growth* does NOT work on this Talos cluster: the
+# node-side online resize2fs hits EPERM (EXT4_IOC_RESIZE_FS, cross-namespace,
+# Talos kernel — not a caps/seccomp issue). To grow a volume, RECREATE the PVC
+# (scale workload 0 → flux suspend → delete PVC → scale up → fresh volume) +
+# cut ingestion to fit; never `kubectl patch pvc <grow>`. (xfs may dodge this —
+# untested.) See docs/plans/2026-06-28-democratic-csi-ssh-to-api-driver.md.
+controller:
+  driver:
+    image: democraticcsi/democratic-csi:v1.9.0@sha256:944d0e65077efbd9c1fdf23997eec8fac4b4bfb7c3de400f63e33a0a849c5ced
+
 storageClasses:
   - name: truenas-iscsi
     defaultClass: false
@@ -58,6 +73,7 @@ storageClasses:
 node:
   hostPID: true
   driver:
+    image: democraticcsi/democratic-csi:v1.9.0@sha256:944d0e65077efbd9c1fdf23997eec8fac4b4bfb7c3de400f63e33a0a849c5ced
     iscsiDirHostPathType: DirectoryOrCreate
     extraEnv:
       - name: ISCSIADM_HOST_STRATEGY

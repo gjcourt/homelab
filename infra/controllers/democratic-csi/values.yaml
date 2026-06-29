@@ -20,7 +20,7 @@ driver:
 # untested.) See docs/plans/2026-06-28-democratic-csi-ssh-to-api-driver.md.
 controller:
   driver:
-    image: democraticcsi/democratic-csi:v1.9.0@sha256:944d0e65077efbd9c1fdf23997eec8fac4b4bfb7c3de400f63e33a0a849c5ced
+    image: democraticcsi/democratic-csi:v1.9.0@sha256:cc0b51dd9eda5762e5ca5707e8c233e3fa47d2d870aa92f9ba6acacd37679b58
 
 storageClasses:
   - name: truenas-iscsi
@@ -128,7 +128,7 @@ storageClasses:
 node:
   hostPID: true
   driver:
-    image: democraticcsi/democratic-csi:v1.9.0@sha256:944d0e65077efbd9c1fdf23997eec8fac4b4bfb7c3de400f63e33a0a849c5ced
+    image: democraticcsi/democratic-csi:v1.9.0@sha256:cc0b51dd9eda5762e5ca5707e8c233e3fa47d2d870aa92f9ba6acacd37679b58
     iscsiDirHostPathType: DirectoryOrCreate
     extraEnv:
       - name: ISCSIADM_HOST_STRATEGY

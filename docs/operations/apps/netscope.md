@@ -8,7 +8,7 @@ Netscope is a custom eBPF-based network traffic analyzer running as a DaemonSet 
 - **TCP smoothed RTT** as a histogram (fentry on `tcp_rcv_established`)
 - **DNS query latency** as a histogram (fentry `udp_sendmsg` / fexit `udp_recvmsg` pair)
 
-Source: https://github.com/gjcourt/netscope. Project plan: https://github.com/gjcourt/brainstorm/blob/main/03-homelab-automation/03-001-ebpf-based-network-traffic-analyzer.md.
+Source: https://github.com/gjcourt/netscope. Project plan: https://github.com/gjcourt/lab/blob/main/03-homelab-automation/03-001-ebpf-based-network-traffic-analyzer.md.
 
 The homelab is a single-cluster environment with no separate production environment for netscope; everything ships into the `netscope-stage` namespace and that is the operational target.
 
@@ -53,7 +53,7 @@ Netscope is deployed as a single Kubernetes `DaemonSet` (`netscope-agent`) in th
 - **Dashboard**: https://grafana.burntbytes.com/d/netscope-overview
 - **Prometheus targets**: https://prometheus.burntbytes.com/targets?search=netscope
 - **Source**: https://github.com/gjcourt/netscope
-- **Project plan / brainstorm**: https://github.com/gjcourt/brainstorm/blob/main/03-homelab-automation/03-001-ebpf-based-network-traffic-analyzer.md
+- **Project plan / lab**: https://github.com/gjcourt/lab/blob/main/03-homelab-automation/03-001-ebpf-based-network-traffic-analyzer.md
 - **SRTT verifier postmortem**: https://github.com/gjcourt/netscope/blob/main/docs/postmortems/2026-05-10-srtt-verifier-iterations.md
 
 ## 4. Configuration
@@ -216,5 +216,5 @@ Histogram buckets are denominated in **seconds**, not microseconds, despite the 
 
 ## 10. Related Documents
 - SRTT verifier iteration postmortem (canonical eBPF verifier debugging story for this project): https://github.com/gjcourt/netscope/blob/main/docs/postmortems/2026-05-10-srtt-verifier-iterations.md
-- Brainstorm / project plan: https://github.com/gjcourt/brainstorm/blob/main/03-homelab-automation/03-001-ebpf-based-network-traffic-analyzer.md
+- Lab / project plan: https://github.com/gjcourt/lab/blob/main/03-homelab-automation/03-001-ebpf-based-network-traffic-analyzer.md
 - Source repo: https://github.com/gjcourt/netscope

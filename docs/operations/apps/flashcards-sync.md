@@ -4,7 +4,7 @@
 
 `flashcards-sync` is the server-side companion to the [flashcards](flashcards.md) web app. It persists per-user FSRS card state so the same user can study from multiple devices and converge their review schedule. The web client posts to `/api/sync` on the same hostname; the path is forwarded by the gateway to this service.
 
-Source: https://github.com/gjcourt/flashcards-sync . Plan: brainstorm/04-009 Phase 7 (cross-device sync).
+Source: https://github.com/gjcourt/flashcards-sync . Plan: lab/04-009 Phase 7 (cross-device sync).
 
 ## 2. Architecture
 

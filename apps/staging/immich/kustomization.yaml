@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: immich-stage
 resources:
   - ../../base/immich/
+  - cronjob-photos-30d.yaml
   - database.yaml
   - httproute.yaml
   - nfs-photos.yaml

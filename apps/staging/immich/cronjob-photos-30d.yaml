@@ -1,0 +1,107 @@
+# Maintains the last-30-days slice of the prod photo tree for the Immich staging
+# testbed. Immich's external library indexes EVERY file under its mounted path and has
+# no built-in date window, so we bound the set at the filesystem: this CronJob keeps
+# /mnt/main/family/images/photos-staging-30d equal to "files modified in the last 30
+# days" from the full tree, and prunes anything older so the slice stays small.
+#
+# APPROACH — rsync-style COPY, not symlinks, not hardlinks:
+#   * Symlinks are OUT: Immich explicitly does NOT follow symlinks (docs: "don't use
+#     symlinks in your import libraries") — symlinked files/dirs are not scanned.
+#   * Hardlinks are OUT here: a hardlink can't cross mount points (ln → EXDEV), so they
+#     would only work if we mounted the REAL photos tree read-WRITE and linked within
+#     it — unacceptable risk to irreplaceable originals. Rejected for safety.
+#   * COPY (this job): source mounted READ-ONLY (can't harm originals), slice mounted
+#     RW. Robust across any mount topology; data duplication is bounded to ~30 days,
+#     which is fine for a small testbed. Copied files are indistinguishable from real
+#     files to Immich. cp -p preserves mtime so the age-based prune stays consistent.
+#
+# After a sync, Immich must rescan the external library to index the delta. Immich's
+# built-in scheduled library scan (daily, admin default) handles this; the schedule
+# below runs BEFORE it. A manual/API rescan is documented in immich.md §10.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: immich-photos-30d-sync
+  namespace: immich-stage
+  labels:
+    app: immich
+    component: photos-30d-sync
+    env: staging
+spec:
+  # Daily at 03:00. Immich's default external-library scan runs daily; keep this
+  # earlier so fresh files are present when Immich scans.
+  schedule: "0 3 * * *"
+  timeZone: America/Los_Angeles
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # Cap a hung NFS mount so the job can't run forever.
+      activeDeadlineSeconds: 3600
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: immich
+            component: photos-30d-sync
+            env: staging
+        spec:
+          restartPolicy: OnFailure
+          # Run as root to write into the NFS slice. The slice dir must be writable by
+          # this identity server-side — see the OPERATOR PREREQ in immich.md §10.
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            fsGroup: 0
+          containers:
+            - name: sync
+              # busybox 1.37 (same digest used by the immich init container). Provides
+              # find / cp / mkdir / du — no extra tooling needed.
+              image: busybox@sha256:fd8d9aa63ba2f0982b5304e1ee8d3b90a210bc1ffb5314d980eb6962f1a9715d
+              command:
+                - sh
+                - -eu
+                - -c
+                - |
+                  SRC=/src   # full prod photo tree (read-only)
+                  DST=/dst   # photos-staging-30d slice (read-write)
+                  echo "[30d-sync] $(date -u) start"
+                  cd "$SRC"
+                  # 1. Copy files modified in the last 30 days into the slice, preserving
+                  #    tree + mtime. cp -u skips files already present and up to date.
+                  find . -type f -mtime -30 | while IFS= read -r f; do
+                    rel="${f#./}"
+                    dest="$DST/$rel"
+                    mkdir -p "$(dirname "$dest")"
+                    cp -pu "$SRC/$rel" "$dest"
+                  done
+                  # 2. Prune slice entries older than 30 days (mtime preserved by cp -p)
+                  #    so the slice stays bounded.
+                  find "$DST" -type f -mtime +30 -delete
+                  # 3. Remove now-empty directories (rmdir no-ops on non-empty / the mount root).
+                  find "$DST" -depth -type d -exec rmdir {} + 2>/dev/null || true
+                  echo "[30d-sync] $(date -u) done — slice size:"
+                  du -sh "$DST" 2>/dev/null || true
+              volumeMounts:
+                - name: photos-src
+                  mountPath: /src
+                  readOnly: true
+                - name: photos-30d
+                  mountPath: /dst
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "500m"
+          volumes:
+            - name: photos-src
+              persistentVolumeClaim:
+                claimName: immich-photos-src-pvc
+                readOnly: true
+            - name: photos-30d
+              persistentVolumeClaim:
+                claimName: immich-photos-pvc

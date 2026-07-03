@@ -4,10 +4,17 @@ metadata:
   name: immich-db-staging-cnpg-v1
   namespace: immich-stage
 spec:
-  description: Postgres cluster for Immich with pgvecto.rs for ML search — RECOVERY MODE
-  # Use pgvecto.rs 0.3.0 image (compatible with Immich's requirement >=0.2 <0.4)
-  # Note: pg17 not available with v0.3.0, using pg16 instead
-  imageName: ghcr.io/tensorchord/cloudnative-pgvecto.rs:16-v0.3.0
+  description: Postgres cluster for Immich — pgvecto.rs → VectorChord migration window (RECOVERY MODE)
+  # ==========================================================================
+  # OPERATOR-GATED — see docs/operations/2026-07-02-immich-v3-upgrade.md.
+  # Migrate STAGING first (soak before prod). This "migration" image bundles
+  # BOTH pgvecto.rs (vectors.so) AND VectorChord (vchord.so) + pgvector so the
+  # existing pgvecto.rs vector columns stay readable while Immich (still v2.7.5)
+  # rebuilds them as VectorChord. Rolling to this image only ADDS vchord.so —
+  # non-destructive on its own. Do NOT bump immich to v3.0.1 until the
+  # VectorChord migration here is verified. DROP EXTENSION vectors is one-way.
+  # ==========================================================================
+  imageName: ghcr.io/corentingiraud/cnpg-pgvector-vectorchord:16-migration@sha256:0e4f45d3eacbb948d2f9d229b1cf9018502568bf26b912b9babe77fdf6f5992a
 
   instances: 3
 
@@ -60,8 +67,11 @@ spec:
           policy-type: database
 
   postgresql:
+    # Both preloaded during the migration window (see prod database.yaml).
+    # Post-migration: drop to just "vchord.so" and remove the vectors search_path.
     shared_preload_libraries:
       - "vectors.so"
+      - "vchord.so"
     parameters:
       search_path: '"$user", public, vectors'
 

@@ -177,9 +177,11 @@ Starting state: **ladder live standalone at `ladder.burntbytes.com`; `finance.bu
 
 ---
 
-## Open questions for the owner
+## Owner decisions (resolved 2026-07-03)
 
-1. **How much does "one URL" actually matter vs. cost?** Option A (shared nav, two subdomains) delivers most of the "one product" feel for near-zero effort and zero data-model risk. Is collapsing to a single host (Option B) worth the SPA-under-subpath friction and the same-origin caveat, or is A the durable resting state for a personal tool?
-2. **Gate the dashboard with Authelia now?** Today `finance.burntbytes.com` relies on LAN-only as its only perimeter, while ladder gets `one_factor`. Adding `one_factor` to the dashboard is nearly free and protects the most sensitive data you own — do it in Phase 1, or keep LAN-only as sufficient?
-3. **Do you actually want the Runway/STR sandbox pages to live in ladder (Phase 3)?** That's the only defensible slice of a "merge into the SPA," and it aligns with the planned FI/Scenario module — but it means maintaining those models in TS instead of Python and duplicating the current Chart.js pages. Worth it, or leave the dashboard as the canonical home for all four pages and let ladder's FI module be built fresh/independently?
-4. (Minor) **Retire or redirect `ladder.burntbytes.com` after a Phase-2 cutover?** A 301 to `/workbench` preserves bookmarks; full retirement is cleaner. Preference?
+1. **One URL vs. two subdomains → DECIDED: Option A (two subdomains + shared nav) is the durable resting state.** Not collapsing to a single host — the SPA-under-subpath friction isn't worth "one bookmark" for a personal tool. Only concrete follow-up: a shared nav header across the two sites (when desired).
+2. **Gate the dashboard → DONE.** `finance.burntbytes.com` given Authelia `one_factor` (PR #1034, merged 2026-07-03), matching the other internal apps. LAN still bypasses; off-LAN requires login.
+3. **Runway/STR into ladder → DEFERRED.** Keep all four pages canonical in the Python dashboard for now. Revisit migrating the input-driven Runway/STR pages into ladder only if ladder proves itself as the daily-driver workbench — it's an investment, not a fix.
+4. (Minor) **Retire/redirect `ladder.burntbytes.com`** — moot given decision 1 (two subdomains stay); ladder keeps its own host.
+
+**Net:** light touch — two gated subdomains with shared nav; no data-model merge; TS migration of Runway/STR deferred.

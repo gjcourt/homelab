@@ -4194,8 +4194,11 @@ prometheus:
     prometheusExternalLabelNameClear: false
 
     ## External URL at which Prometheus will be reachable.
+    ## Set to the prometheus.burntbytes.com ingress (HTTPRoute in this dir, behind Authelia)
+    ## so the Source / generatorURL links in alert notification emails resolve, instead of
+    ## defaulting to the in-cluster service DNS (unreachable from email/phone).
     ##
-    externalUrl: ""
+    externalUrl: https://prometheus.burntbytes.com
 
     ## Define which Nodes the Pods are scheduled on.
     ## ref: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#nodeselector

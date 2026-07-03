@@ -159,6 +159,16 @@
                 type: number
                 options:
                   maximumFractionDigits: 1
+    - Prometheus:
+        icon: prometheus.png
+        href: https://prometheus.burntbytes.com
+        description: Metrics & query UI
+        siteMonitor: https://prometheus.burntbytes.com
+    - Alertmanager:
+        icon: alertmanager.png
+        href: https://alerts.burntbytes.com
+        description: Active alerts & silences
+        siteMonitor: https://alerts.burntbytes.com
     - Grafana:
         icon: grafana.png
         href: https://grafana.burntbytes.com

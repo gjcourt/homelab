@@ -23,9 +23,19 @@ spec:
     enablePodMonitor: true
 
   storage:
-    # Expanded from 10Gi to 20Gi after filling up (pgdata ~9.5Gi as of 2026-04-17).
+    # Standard size = 10Gi, a fixed-size mirror of prod (immich-db-prod-cnpg-v3,
+    # live at 10Gi). Staging is a disposable rehearsal testbed; it does not need
+    # to hold a full prod-scale dataset, so we pin it to prod's shape rather than
+    # letting it drift (it had crept to 20Gi on 2026-04-17 while filling up).
+    #
+    # CNPG CANNOT shrink a PVC in-place, so changing this value from 20Gi to 10Gi
+    # does NOT take effect on the live cluster by itself — the staging DB Cluster
+    # must be destroyed and recreated for the new size to apply. Staging data is
+    # disposable/rebuildable, so this is safe to do at the operator's convenience.
+    # See docs/operations/apps/immich.md §10 "Staging DB: fixed 10Gi mirror of prod"
+    # for the exact recreate steps and the orphaned-PV cleanup checklist.
     storageClass: truenas-iscsi
-    size: 20Gi
+    size: 10Gi
 
   resources:
     requests:

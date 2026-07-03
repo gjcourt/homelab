@@ -45,7 +45,7 @@ Planned, not yet started:
 
 - [Network resilience + BGP completion](plans/2026-05-06-network-resilience-and-bgp-completion.md) — the consolidated plan that supersedes the earlier BGP rollout.
 - [democratic-csi least-privilege key](plans/2026-05-09-democratic-csi-least-privilege-key.md).
-- [Immich pgvecto.rs → VectorChord](plans/2026-06-02-immich-vectorchord-migration.md).
+- [Immich pgvecto.rs → VectorChord](plans/2026-06-02-immich-vectorchord-migration.md) — **upgrade staged** in [operations/2026-07-02-immich-v3-upgrade.md](operations/2026-07-02-immich-v3-upgrade.md) (two PRs, not applied). Immich v3.0.0 removed pgvecto.rs, so the v2.7.5→v3.0.1 bump is gated on this DB migration. Rehearsed on `immich-stage` 2026-07-03 → split into **PR-B** (DB → dual-extension migration image `corentingiraud/cnpg-pgvector-vectorchord:16-migration`, ready) and **PR-C** (app → v3.0.1 + DB cleanup, draft; blocked on PR-B + manual superuser `CREATE EXTENSION vchord CASCADE` + v2.7.5 data-migration + verify). Dual-extension image resolves the plan's Constraint A / Open Question 1 → in-place swap (Option 3B). Operator-gated, one-way DB migration.
 
 ## Recently completed (last ~60 days)
 

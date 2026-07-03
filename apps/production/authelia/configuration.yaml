@@ -20,6 +20,8 @@ access_control:
       policy: one_factor
     - domain: "prometheus.burntbytes.com"
       policy: one_factor
+    - domain: "ladder.burntbytes.com"
+      policy: one_factor
     - domain: "auth.burntbytes.com"
       policy: bypass
       resources:

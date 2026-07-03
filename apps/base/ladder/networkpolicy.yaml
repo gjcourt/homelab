@@ -1,0 +1,55 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ladder
+  namespace: ladder
+  labels:
+    app.kubernetes.io/name: ladder
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: |
+    ladder — static SPA + EDGAR proxy serving https://ladder.burntbytes.com on
+    8080. No DB. Ingress from the Cilium gateway proxy only. Egress is DNS plus
+    HTTPS to the two public SEC hosts (Fundamentals tab); nothing else. User
+    financial data never touches the server (client-side localStorage only).
+  endpointSelector:
+    matchLabels:
+      app: ladder
+  ingress:
+    # Cilium Envoy (Gateway API) binds upstream sockets to a dedicated proxy IP
+    # marked as reserved identity 8 ("ingress"). Same-node connections arrive as
+    # "host"; cross-node VXLAN connections as "remote-node". All three required.
+    # Kubelet readiness probes are auto-exempted.
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS via CoreDNS. The L7 dns rule lets Cilium's DNS proxy learn the SEC IPs
+    # so the toFQDNs egress below can resolve — required for FQDN policy to work.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Public SEC data for the Fundamentals tab — these two hosts ONLY, on 443.
+    # No blanket world egress.
+    - toFQDNs:
+        - matchName: "www.sec.gov"
+        - matchName: "data.sec.gov"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

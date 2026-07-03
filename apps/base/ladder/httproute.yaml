@@ -1,0 +1,41 @@
+# LAN-only front door: https://ladder.burntbytes.com via the Cilium gateway.
+# The gateway's *.burntbytes.com listener already terminates TLS with the
+# wildcard cert, and internal DNS resolves *.burntbytes.com to the gateway's
+# LAN IP — so no per-host DNS or cert change is needed. Not tunneled = LAN-only.
+# Authelia ext_authz on the gateway gates every route; the one_factor rule for
+# this host lives in apps/production/authelia/configuration.yaml.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: ladder-http
+  namespace: ladder
+spec:
+  hostnames:
+    - ladder.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: ladder-https
+  namespace: ladder
+spec:
+  hostnames:
+    - ladder.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: ladder
+          port: 8080

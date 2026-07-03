@@ -4,10 +4,18 @@ metadata:
   name: immich-db-staging-cnpg-v1
   namespace: immich-stage
 spec:
-  description: Postgres cluster for Immich with pgvecto.rs for ML search — RECOVERY MODE
-  # Use pgvecto.rs 0.3.0 image (compatible with Immich's requirement >=0.2 <0.4)
-  # Note: pg17 not available with v0.3.0, using pg16 instead
-  imageName: ghcr.io/tensorchord/cloudnative-pgvecto.rs:16-v0.3.0
+  description: Postgres cluster for Immich — pgvecto.rs → VectorChord migration window (RECOVERY MODE)
+  # ==========================================================================
+  # OPERATOR-GATED — see docs/operations/2026-07-02-immich-v3-upgrade.md.
+  # Migrate STAGING first (soak before prod). This "migration" image bundles
+  # BOTH pgvecto.rs (vectors.so) AND VectorChord (vchord.so) + pgvector so the
+  # existing pgvecto.rs vector columns stay readable while Immich (still v2.7.5)
+  # rebuilds them as VectorChord. Rolling to this image only ADDS vchord.so —
+  # non-destructive on its own. Do NOT bump immich to v3.0.1 until the
+  # VectorChord migration here is verified. DROP EXTENSION vectors is one-way.
+  # ==========================================================================
+  # Official VectorChord-only image (Phase 2; config dropped vectors.so in Phase 1).
+  imageName: ghcr.io/tensorchord/cloudnative-vectorchord:16-0.4.2@sha256:649da2df5f079dd1f214e3a877cafd0208eff3779e9c60d14d243fbca5e11c97
 
   instances: 3
 
@@ -23,7 +31,13 @@ spec:
     enablePodMonitor: true
 
   storage:
-    # Expanded from 10Gi to 20Gi after filling up (pgdata ~9.5Gi as of 2026-04-17).
+    # Target standard = 10Gi (mirror of prod). BUT this MUST stay at the live size
+    # (20Gi) until the staging DB Cluster is actually recreated — CNPG's admission
+    # webhook REJECTS a spec whose size is < the live PVCs ("can't shrink existing
+    # storage"), which blocks the ENTIRE apps-staging reconcile (learned the hard
+    # way 2026-07-03 — #1028 set 10Gi against a live 20Gi and broke reconcile).
+    # To reach 10Gi: destroy + recreate the Cluster (disposable data), and set 10Gi
+    # HERE in the same change. See docs/operations/apps/immich.md §10.
     storageClass: truenas-iscsi
     size: 20Gi
 
@@ -60,10 +74,12 @@ spec:
           policy-type: database
 
   postgresql:
+    # Both preloaded during the migration window (see prod database.yaml).
+    # VectorChord-only end state (migration complete; `vectors` dropped).
     shared_preload_libraries:
-      - "vectors.so"
+      - "vchord.so"
     parameters:
-      search_path: '"$user", public, vectors'
+      search_path: '"$user", public'
 
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
   # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).

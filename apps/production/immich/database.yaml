@@ -4,10 +4,25 @@ metadata:
   name: immich-db-prod-cnpg-v3
   namespace: immich-prod
 spec:
-  description: Postgres cluster for Immich with pgvecto.rs for ML search
-  # Use pgvecto.rs 0.3.0 image (compatible with Immich's requirement >=0.2 <0.4)
-  # Note: pg17 not available with v0.3.0, using pg16 instead
-  imageName: ghcr.io/tensorchord/cloudnative-pgvecto.rs:16-v0.3.0
+  description: Postgres cluster for Immich with VectorChord (vchord) for ML search
+  # ==========================================================================
+  # PHASE C (end state) — VectorChord only. Full procedure + ordering:
+  #   docs/operations/2026-07-02-immich-v3-upgrade.md
+  #
+  # This is the post-migration cleanup: the dual-extension migration image
+  # (Phase B / PR-B) has been applied, `CREATE EXTENSION vchord CASCADE` was run
+  # as the postgres superuser, Immich v2.7.5 migrated the embeddings into
+  # VectorChord and dropped the old `vectors` extension, and search/faces were
+  # verified. This PR drops back to the slim VectorChord-only image
+  # (tensorchord/cloudnative-vectorchord) with only vchord.so preloaded and no
+  # `vectors` in the search_path.
+  #
+  # MUST NOT reconcile before Phase B is merged AND its manual migration +
+  # verify have completed — dropping vectors.so while the DB still holds
+  # pgvecto.rs data would break Immich. The vector migration is ONE-WAY: no
+  # downgrade below Immich 1.133 after this.
+  # ==========================================================================
+  imageName: ghcr.io/tensorchord/cloudnative-vectorchord:16-0.4.2@sha256:649da2df5f079dd1f214e3a877cafd0208eff3779e9c60d14d243fbca5e11c97
   instances: 3
   enableSuperuserAccess: true
   inheritedMetadata:
@@ -26,10 +41,13 @@ spec:
     size: 10Gi
     storageClass: truenas-iscsi
   postgresql:
+    # VectorChord only. vectors.so (pgvecto.rs) was dropped in Phase C after the
+    # v2.7.5 migration moved the embeddings into VectorChord and dropped the
+    # `vectors` extension.
     shared_preload_libraries:
-      - "vectors.so"
+      - "vchord.so"
     parameters:
-      search_path: '"$user", public, vectors'
+      search_path: '"$user", public'
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
   # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
   plugins:

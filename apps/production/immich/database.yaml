@@ -18,9 +18,12 @@ spec:
   monitoring:
     enablePodMonitor: true
   storage:
-    # Actual usage: ~994Mi; target = 20% headroom → 2Gi.
-    # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
-    size: 2Gi
+    # Bumped 2Gi → 10Gi (2026-07-03): replica -4 hit 99% (0 bytes free), firing
+    # KubePersistentVolumeFillingUp (critical). 2Gi left no WAL/temp headroom over the
+    # ~1.1Gi dataset (WAL on -4 had grown to ~2Gi). CNPG expands in place online here
+    # (resizeInUseVolumes=true + truenas-iscsi allowVolumeExpansion + democratic-csi
+    # v1.9.5 online resize, PR #1019). NOTE: shrinking still needs cluster recreation.
+    size: 10Gi
     storageClass: truenas-iscsi
   postgresql:
     shared_preload_libraries:

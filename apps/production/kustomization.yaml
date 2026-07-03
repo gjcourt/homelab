@@ -18,6 +18,7 @@ resources:
   - homepage
   - immich
   - jellyfin
+  - ladder
   - linkding
   - mealie
   - memos

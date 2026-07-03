@@ -80,7 +80,7 @@ see `scripts/plans-index/`).
 | :--- | :--- | :--- |
 | [2026-06-21-bluetooth-presence-system.md](2026-06-21-bluetooth-presence-system.md) | 2026-06-21 | BLE beacon presence/occupancy system (ESPresense → HA → Grafana) for who/how-many is home, per-room |
 | [2026-06-16-burntbytes-mailserver.md](2026-06-16-burntbytes-mailserver.md) | 2026-06-16 | Self-hosted mail for burntbytes.com (<10 accounts): Mailu on the cluster + VPS SMTP gateway + SES smarthost |
-| [2026-06-02-immich-vectorchord-migration.md](2026-06-02-immich-vectorchord-migration.md) | 2026-06-10 | Migrate Immich CNPG from pgvecto.rs to VectorChord |
+| [2026-06-02-immich-vectorchord-migration.md](2026-06-02-immich-vectorchord-migration.md) | 2026-07-02 | Migrate Immich CNPG from pgvecto.rs to VectorChord |
 | [2026-05-09-democratic-csi-least-privilege-key.md](2026-05-09-democratic-csi-least-privilege-key.md) | 2026-05-09 | Migrate democratic-csi to a least-privilege TrueNAS API key |
 | [2026-05-06-network-resilience-and-bgp-completion.md](2026-05-06-network-resilience-and-bgp-completion.md) | 2026-05-06 | Unified network resilience + BGP completion plan, phases A-F with GO gates |
 | [2026-03-08-drawer-inserts.md](2026-03-08-drawer-inserts.md) | 2026-05-03 | Cardboard drawer insert design (75×32×12 cm) — physical project, no repo artifacts |

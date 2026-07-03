@@ -4,10 +4,27 @@ metadata:
   name: immich-db-prod-cnpg-v3
   namespace: immich-prod
 spec:
-  description: Postgres cluster for Immich with pgvecto.rs for ML search
-  # Use pgvecto.rs 0.3.0 image (compatible with Immich's requirement >=0.2 <0.4)
-  # Note: pg17 not available with v0.3.0, using pg16 instead
-  imageName: ghcr.io/tensorchord/cloudnative-pgvecto.rs:16-v0.3.0
+  description: Postgres cluster for Immich — pgvecto.rs → VectorChord migration window
+  # ==========================================================================
+  # OPERATOR-GATED — DO NOT let this reconcile blindly. Part of the Immich v3
+  # upgrade (pgvecto.rs is removed in Immich v3.0). Full procedure + ordering:
+  #   docs/operations/2026-07-02-immich-v3-upgrade.md
+  #
+  # This "migration" image bundles BOTH pgvecto.rs (vectors.so) AND VectorChord
+  # (vchord.so) + pgvector, so the cluster can still READ the existing
+  # pgvecto.rs vector columns while Immich (still on v2.7.5, which supports
+  # both) rebuilds the indexes as VectorChord on startup. Rolling to this image
+  # is NON-destructive on its own (it only ADDS vchord.so; nothing is dropped).
+  #
+  # ORDERING (see runbook): (1) back up + verify restore, (2) apply THIS image +
+  # vchord.so preload while Immich is STILL v2.7.5, (3) CREATE EXTENSION vchord
+  # + let immich-server auto-migrate/reindex, (4) verify search, (5) DROP
+  # EXTENSION vectors + drop vectors.so, (6) ONLY THEN bump immich-server/-ml to
+  # v3.0.1. Immich v3 has NO pgvecto.rs support and will NOT perform the
+  # pgvecto.rs→VectorChord data migration — it must be done on v2.x first.
+  # The DROP EXTENSION vectors step is ONE-WAY: no downgrade below Immich 1.133.
+  # ==========================================================================
+  imageName: ghcr.io/corentingiraud/cnpg-pgvector-vectorchord:16-migration@sha256:0e4f45d3eacbb948d2f9d229b1cf9018502568bf26b912b9babe77fdf6f5992a
   instances: 3
   enableSuperuserAccess: true
   inheritedMetadata:
@@ -26,8 +43,12 @@ spec:
     size: 10Gi
     storageClass: truenas-iscsi
   postgresql:
+    # Both preloaded during the migration window so existing pgvecto.rs columns
+    # stay readable while VectorChord is introduced. Post-migration (runbook
+    # step 5) drop back to just "vchord.so" and remove the vectors search_path.
     shared_preload_libraries:
       - "vectors.so"
+      - "vchord.so"
     parameters:
       search_path: '"$user", public, vectors'
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).

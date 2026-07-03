@@ -43,7 +43,11 @@ spec:
           type: RuntimeDefault
       containers:
         - name: immich-server
-          image: ghcr.io/immich-app/immich-server:v2.7.5@sha256:c15bff75068effb03f4355997d03dc7e0fc58720c2b54ad6f7f10d1bc57efaa5
+          # Multi-arch index digest for v3.0.1 (cluster is amd64; containerd
+          # resolves the amd64 sub-manifest). v3 is a MAJOR upgrade: it removes
+          # pgvecto.rs support — the CNPG DB MUST be migrated to VectorChord
+          # BEFORE this image reconciles. See docs/operations/2026-07-02-immich-v3-upgrade.md.
+          image: ghcr.io/immich-app/immich-server:v3.0.1@sha256:46dedfc5848f7313bd6b584ea9f2648057430307aad6de56de968f6710a72cae
           ports:
             - name: http
               containerPort: 2283
@@ -121,7 +125,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: immich-machine-learning
-          image: ghcr.io/immich-app/immich-machine-learning:v2.7.5@sha256:a2501141440f10516d329fdfba2c68082e19eb9ba6016c061ac80d23beadf7f3
+          image: ghcr.io/immich-app/immich-machine-learning:v3.0.1@sha256:cb2128c5cbc554fdaa2a036fb4419c808a9f3e0f27170e569dd9e727243da909
           ports:
             - name: http
               containerPort: 3003

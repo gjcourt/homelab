@@ -24,9 +24,9 @@ spec:
   # pgvecto.rs→VectorChord data migration — it must be done on v2.x first.
   # The DROP EXTENSION vectors step is ONE-WAY: no downgrade below Immich 1.133.
   # ==========================================================================
-  # Phase 1 keeps the migration image; Phase 2 (separate PR) swaps to the official
-  # VectorChord-only image — CNPG forbids changing image + config in one step.
-  imageName: ghcr.io/corentingiraud/cnpg-pgvector-vectorchord:16-migration@sha256:0e4f45d3eacbb948d2f9d229b1cf9018502568bf26b912b9babe77fdf6f5992a
+  # Official VectorChord-only image (Phase 2). Config already dropped vectors.so in
+  # Phase 1 (#1032), so this is an image-only change — CNPG accepts it.
+  imageName: ghcr.io/tensorchord/cloudnative-vectorchord:16-0.4.2@sha256:649da2df5f079dd1f214e3a877cafd0208eff3779e9c60d14d243fbca5e11c97
   instances: 3
   enableSuperuserAccess: true
   inheritedMetadata:

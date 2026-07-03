@@ -1,12 +1,22 @@
 # Incident: Jellyfin cache PVC full + iSCSI PVC expansion broken (`simple-file-writer`)
 
 **Date:** 2026-07-02
-**Status:** Mitigated (cache cleared, alert cleared); durable fix staged in this PR (draft)
+**Status:** **Resolved** — driver bumped v1.9.0 → v1.9.5 ([#1019](https://github.com/gjcourt/homelab/pull/1019), merged 2026-07-03); expand completed online end-to-end
 **Severity:** Low — single app; `KubePersistentVolumeFillingUp` (critical) but no outage
 **Environments affected:** `jellyfin-prod` (production overlay)
 **Authors:** George Courtois
 
 ---
+
+> **Update 2026-07-03 — RESOLVED.** The v1.9.5 bump ([#1019](https://github.com/gjcourt/homelab/pull/1019))
+> fixed the expand **end-to-end**. After the controller rolled to v1.9.5, the stuck
+> `jellyfin-cache-pvc` resize completed on the next retry: `ControllerExpandVolume`
+> succeeded (no more `simple-file-writer`), then **`NodeExpandVolume`/`resize2fs`
+> succeeded too** — `/cache` grew 5 Gi → 20 Gi with the pod Running, no recreate.
+> **Layer 2 below (the node-side EPERM) did NOT materialize on v1.9.5** — it was a
+> v1.9.0-era artifact, not a standing Talos wall. Online iSCSI PVC growth now just
+> works: bump the request, `flux reconcile`. **Keep `truenas_admin` passwordless sudo
+> ON** — the SCST `resync_size` reload runs `sudo sh -c "echo 1 > …"` on every expand.
 
 ## Summary
 
@@ -63,71 +73,54 @@ This is **not** the passwordless-sudo revocation and **not** a SOPS/driver-confi
 `simple-file-writer` appears nowhere in our `driver-config-file.yaml`; it's baked into
 the v1.9.0 image. `truenas_admin` sudo is `NOPASSWD: ALL` and works.
 
-### Layer 2 (node): `resize2fs` EPERM on Talos — pre-existing, still open
+### Layer 2 (node): `resize2fs` EPERM — suspected, but DISPROVEN on v1.9.5
 
-Even with Layer 1 fixed, in-place growth **still won't complete**: the node-side
-`NodeExpandVolume` online `resize2fs` hits **EPERM on `EXT4_IOC_RESIZE_FS`**
-(cross-namespace, Talos kernel — not a caps/seccomp problem). Documented in
-`infra/controllers/democratic-csi/values.yaml` and the SSH→API plan. So **online iSCSI
-ext4 PVC growth does not work on this cluster at all**, independent of driver version.
+The old `values.yaml` comment warned that node-side `NodeExpandVolume` online
+`resize2fs` hits **EPERM on `EXT4_IOC_RESIZE_FS`** (cross-namespace, Talos kernel),
+so the fear was that even with Layer 1 fixed, growth wouldn't complete. **This did not
+happen on v1.9.5** (see the resolution note at the top): the node resize succeeded
+cleanly. The EPERM was a v1.9.0-era artifact, not a standing wall — online growth works.
+Layer 2 is retained here only for the historical record.
 
 ## Current state (as of 2026-07-02)
 
-- `jellyfin-cache-pvc`: request **20 Gi**, status.capacity **5 Gi**, condition `Resizing`
-  (retrying forever on Layer 1). `/cache` usage ~22 M (cleared). **App healthy.**
-- zvol `main/k8s/iscsi/pvc-315c631f-2139-44fa-9e94-0c411d45c756`: **VOLSIZE 20 G** on TrueNAS.
-- Driver image: `democraticcsi/democratic-csi:v1.9.0` (this PR bumps to v1.9.5).
-- You **cannot** walk the request back to 5 Gi (Kubernetes forbids shrinking a PVC request).
+**Final (post-#1019):**
 
-## Remediation
+- `jellyfin-cache-pvc`: request **20 Gi**, status.capacity **20 Gi**, **no conditions**,
+  Bound. `/cache` = 20 G filesystem (22 M used, 1%). **App healthy.** Resizer clean
+  (`Update capacity of PV to 20Gi succeeded`); retry loop stopped.
+- Driver image: `democraticcsi/democratic-csi:v1.9.5`.
+- The alert itself was cleared earlier by deleting the orphaned transcodes.
 
-### Recommended: recreate `jellyfin-cache-pvc` (lossless — it's a cache)
+## How it was resolved
 
-Fresh provisioning at 20 Gi needs no `resize2fs`, so it sidesteps **both** layers.
-Because `/cache` is regenerable, this is zero-risk:
+**Bump democratic-csi v1.9.0 → v1.9.5 ([#1019](https://github.com/gjcourt/homelab/pull/1019)).**
+This removed the `simple-file-writer` call (Layer 1). Once the controller rolled to
+v1.9.5, the external-resizer's next retry of the already-pending expand ran the direct
+`sudo sh -c "echo 1 > .../resync_size"`, `ControllerExpandVolume` succeeded, and the
+node-side `resize2fs` also succeeded — the PVC reached 20 Gi online with the pod up. No
+recreate needed; the feared Layer-2 EPERM never occurred.
 
-```bash
-flux suspend kustomization apps-production -n flux-system
-kubectl -n jellyfin-prod scale deploy/jellyfin --replicas=0
-kubectl -n jellyfin-prod delete pvc jellyfin-cache-pvc     # Retain PV → old zvol orphaned, safe to purge later
-flux resume kustomization apps-production -n flux-system    # re-provisions fresh 20 Gi from the manifest
-kubectl -n jellyfin-prod scale deploy/jellyfin --replicas=1
-# verify: kubectl -n jellyfin-prod get pvc jellyfin-cache-pvc  → 20Gi Bound, no Resizing
-```
+> **Growing a PVC from here on:** bump `spec.resources.requests.storage`, merge,
+> `flux reconcile kustomization apps-production`. Works online. Keep `truenas_admin`
+> passwordless (NOPASSWD) sudo ON — the SCST `resync_size` reload runs
+> `sudo sh -c …` non-interactively over SSH on every expand.
 
-This also clears the stuck `Resizing` condition and the noisy resizer retries.
+### Prevent recurrence (the original alert)
 
-### Staged in this PR: bump driver v1.9.0 → v1.9.5 (fixes Layer 1)
+20 Gi will refill the same way if transcodes keep accumulating. Cap/clean them — e.g. a
+CronJob `find /cache/transcodes -type f -mmin +720 -delete`, or Jellyfin's
+transcode-cleanup scheduled task. (Not yet done — follow-up.)
 
-Removes the `simple-file-writer` blocker so `ControllerExpandVolume` succeeds for all
-future resizes. **Draft** because George earmarked this as a *tested* change paired
-with **chart 0.15.1** (`release.yaml`) — validate the image+chart together in staging
-before merge. Note: v1.9.5 alone does **not** enable online growth (Layer 2 remains).
+## Remaining follow-ups
 
-### Prevent recurrence (regardless of size)
-
-20 Gi will refill the same way. Cap/clean transcodes — e.g. a CronJob:
-`find /cache/transcodes -type f -mmin +720 -delete`, or Jellyfin's transcode-cleanup task.
-
-### Open problem to solve for real online growth
-
-Layer 2 (`resize2fs` EPERM on Talos) is unsolved. Until then, "grow" = "recreate".
-Candidate directions: xfs storage class (untested — xfs grows via a different ioctl),
-or the SSH→API driver migration (`docs/plans/2026-06-28-democratic-csi-ssh-to-api-driver.md`,
-currently blocked — see that plan).
-
-## Pick-up-from-cold checklist
-
-- [ ] Validate v1.9.5 image (+ chart 0.15.1) in staging; merge this PR.
-- [ ] Recreate `jellyfin-cache-pvc` at 20 Gi (steps above) — or leave 5 Gi + add transcode-cleanup CronJob and drop the size back on a future recreate.
-- [ ] Purge the orphaned 20 G zvol `pvc-315c631f-…` on TrueNAS if the PVC is recreated (Retain leaves it behind).
-- [ ] Passwordless `truenas_admin` sudo must be ON for any controller-side resize path (currently ON; George may re-revoke — flip back before retrying).
-- [ ] Decide whether to pursue Layer 2 (xfs trial / SSH→API migration) so online growth works without recreate.
+- [ ] Add a transcode-cleanup CronJob (or Jellyfin task) so `/cache` doesn't refill.
+- [ ] Optional: paired chart bump to 0.15.1 (`release.yaml`) to match the v1.9.5 image.
+- [ ] Keep `truenas_admin` passwordless sudo ON (required for the reload on every expand).
 
 ## References
 
 - Upstream: [democratic-csi #390](https://github.com/democratic-csi/democratic-csi/issues/390) (`simple-file-writer`), [#295](https://github.com/democratic-csi/democratic-csi/issues/295) (predecessor redirect bug)
-- Fix commit: `src/driver/freenas/ssh.js` v1.9.0 vs v1.9.5 (helper removed → direct `echo 1 > resync_size`)
-- [PR #1016](https://github.com/gjcourt/homelab/pull/1016) — the 5 Gi → 20 Gi bump that surfaced this
-- `infra/controllers/democratic-csi/values.yaml` — image pin + the Layer 2 EPERM warning
-- `docs/plans/2026-06-28-democratic-csi-ssh-to-api-driver.md` — SSH→API migration (blocked)
+- Fix: `src/driver/freenas/ssh.js` v1.9.0 vs v1.9.5 (helper removed → `sudo sh -c "echo 1 > …/resync_size"`)
+- [PR #1016](https://github.com/gjcourt/homelab/pull/1016) — the 5 Gi → 20 Gi bump that surfaced this; [PR #1019](https://github.com/gjcourt/homelab/pull/1019) — the v1.9.5 fix
+- `infra/controllers/democratic-csi/values.yaml` — image pin + the (now-resolved) expand notes

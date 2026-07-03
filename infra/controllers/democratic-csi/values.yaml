@@ -8,21 +8,24 @@ driver:
   existingConfigSecretKey: driver-config-file.yaml
 
 # Pin the democratic-csi driver image off the chart default `:latest`.
-# Bumped v1.9.0 → v1.9.5 (2026-07-02): v1.9.0's ControllerExpandVolume reloads the
-# iSCSI target by writing /sys/.../resync_size via a `simple-file-writer` helper
-# that does NOT exist on TrueNAS SCALE (upstream #390) → EVERY PVC expand fails
-# with `sudo: simple-file-writer: command not found`. v1.9.5 drops that helper for a
-# direct `echo 1 > .../resync_size` write (src/driver/freenas/ssh.js). Validate the
-# paired chart bump to 0.15.1 alongside this (see release.yaml).
+# Bumped v1.9.0 → v1.9.5 (2026-07-02, PR #1019): v1.9.0's ControllerExpandVolume
+# reloaded the iSCSI target by writing /sys/.../resync_size via a `simple-file-writer`
+# helper that does NOT exist on TrueNAS SCALE (upstream #390) → every PVC expand failed
+# `sudo: simple-file-writer: command not found`. v1.9.5 uses a direct
+# `sudo sh -c "echo 1 > .../resync_size"` (src/driver/freenas/ssh.js).
 #
-# ⚠️ v1.9.5 fixes only the CONTROLLER half. In-place iSCSI ext4 PVC *growth* still
-# does NOT complete end-to-end on this Talos cluster: the node-side online resize2fs
-# hits EPERM (EXT4_IOC_RESIZE_FS, cross-namespace, Talos kernel — not caps/seccomp).
-# To grow a volume, RECREATE the PVC (scale workload 0 → flux suspend → delete PVC →
-# scale up → fresh volume provisions at the new size, no resize2fs) + cut ingestion
-# to fit; never `kubectl patch pvc <grow>`. (xfs may dodge this — untested.)
-# See docs/operations/incidents/2026-07-02-jellyfin-cache-pvc-expand-simple-file-writer.md
-# and docs/plans/2026-06-28-democratic-csi-ssh-to-api-driver.md.
+# ✅ Online iSCSI PVC growth WORKS on v1.9.5 (verified 2026-07-03: jellyfin-cache
+# grew 5Gi→20Gi live — ControllerExpandVolume + node resize2fs both succeeded, no
+# recreate, pod stayed up). The earlier node-side resize2fs EPERM was a v1.9.0-era
+# artifact, not a standing Talos wall. To grow a PVC now: bump
+# spec.resources.requests.storage, merge, `flux reconcile`.
+#
+# ⚠️ Keep `truenas_admin` passwordless (NOPASSWD) sudo ON: the SCST resync_size
+# reload runs `sudo sh -c "echo 1 > /sys/.../resync_size"` non-interactively over SSH
+# on every expand — revoke it and expand/provisioning break. (zfs.cli.sudoEnabled is
+# false, so the zvol resize itself runs un-sudo'd, but the reload always needs root.)
+# Consider the paired chart bump to 0.15.1 (see release.yaml).
+# See docs/operations/incidents/2026-07-02-jellyfin-cache-pvc-expand-simple-file-writer.md.
 controller:
   driver:
     image: democraticcsi/democratic-csi:v1.9.5@sha256:fc3b7d7ed3a616714139525075312758e23a5d425ffb539ad12c9bd20fb6001f

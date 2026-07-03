@@ -14,6 +14,7 @@ spec:
   # non-destructive on its own. Do NOT bump immich to v3.0.1 until the
   # VectorChord migration here is verified. DROP EXTENSION vectors is one-way.
   # ==========================================================================
+  # Phase 1 keeps the migration image; Phase 2 swaps to VectorChord-only.
   imageName: ghcr.io/corentingiraud/cnpg-pgvector-vectorchord:16-migration@sha256:0e4f45d3eacbb948d2f9d229b1cf9018502568bf26b912b9babe77fdf6f5992a
 
   instances: 3
@@ -30,19 +31,15 @@ spec:
     enablePodMonitor: true
 
   storage:
-    # Standard size = 10Gi, a fixed-size mirror of prod (immich-db-prod-cnpg-v3,
-    # live at 10Gi). Staging is a disposable rehearsal testbed; it does not need
-    # to hold a full prod-scale dataset, so we pin it to prod's shape rather than
-    # letting it drift (it had crept to 20Gi on 2026-04-17 while filling up).
-    #
-    # CNPG CANNOT shrink a PVC in-place, so changing this value from 20Gi to 10Gi
-    # does NOT take effect on the live cluster by itself — the staging DB Cluster
-    # must be destroyed and recreated for the new size to apply. Staging data is
-    # disposable/rebuildable, so this is safe to do at the operator's convenience.
-    # See docs/operations/apps/immich.md §10 "Staging DB: fixed 10Gi mirror of prod"
-    # for the exact recreate steps and the orphaned-PV cleanup checklist.
+    # Target standard = 10Gi (mirror of prod). BUT this MUST stay at the live size
+    # (20Gi) until the staging DB Cluster is actually recreated — CNPG's admission
+    # webhook REJECTS a spec whose size is < the live PVCs ("can't shrink existing
+    # storage"), which blocks the ENTIRE apps-staging reconcile (learned the hard
+    # way 2026-07-03 — #1028 set 10Gi against a live 20Gi and broke reconcile).
+    # To reach 10Gi: destroy + recreate the Cluster (disposable data), and set 10Gi
+    # HERE in the same change. See docs/operations/apps/immich.md §10.
     storageClass: truenas-iscsi
-    size: 10Gi
+    size: 20Gi
 
   resources:
     requests:
@@ -78,12 +75,11 @@ spec:
 
   postgresql:
     # Both preloaded during the migration window (see prod database.yaml).
-    # Post-migration: drop to just "vchord.so" and remove the vectors search_path.
+    # VectorChord-only end state (migration complete; `vectors` dropped).
     shared_preload_libraries:
-      - "vectors.so"
       - "vchord.so"
     parameters:
-      search_path: '"$user", public, vectors'
+      search_path: '"$user", public'
 
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
   # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).

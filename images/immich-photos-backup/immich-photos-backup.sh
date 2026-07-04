@@ -1,5 +1,10 @@
 #!/bin/bash
-# Daily incremental backup of the Immich photo library from alcatraz → hestia.
+# Daily DUPLEX sync of the Immich photo library between alcatraz and hestia.
+# Pull (alcatraz -> hestia): brings phone uploads into hestia (the source of truth).
+# Push-back (hestia -> alcatraz, --ignore-existing): copies anything hestia has that
+# alcatraz lacks (e.g. direct SD-card imports) so alcatraz stays a full backup.
+# No --delete in either direction -> both sides converge to the UNION; neither wipes
+# the other. hestia is authoritative; alcatraz is the phone-upload target + backup.
 #
 # Pulls per-user Photos dirs from alcatraz (Synology NAS, 10.42.2.11) into the
 # local ZFS dataset main/family/images/photos. Snapshots are managed by a
@@ -53,7 +58,9 @@ START_TS=$(date +%s)
 echo "=== $(date -u +%FT%TZ) START ==="
 
 # chacha20-poly1305 + no SSH compression matches the plan's high-throughput
-# configuration. --delete keeps each user's destination tight to its source.
+# configuration. No --delete: hestia is the SOURCE OF TRUTH (superset). The pull is
+# additive, so phone uploads flow in but direct-to-hestia imports (e.g. an SD-card
+# import via import-sd-photos.sh) are NEVER wiped. See docs/plans/2026-06-01-hestia-photos-sot.md.
 #
 # Host-key handling: when run from cron there's no stdin to answer a
 # `Are you sure you want to continue connecting?` prompt — without
@@ -70,8 +77,8 @@ echo "=== $(date -u +%FT%TZ) START ==="
 #                  dir. Synology recreates them on alcatraz as needed.
 #   .DS_Store      macOS Finder metadata; same deal.
 #   Thumbs.db      Windows thumbnail cache.
-# --delete-excluded ensures excludes also remove anything that landed in
-# the destination from earlier runs.
+# (Excluded junk is simply not copied. With no --delete, any junk from an earlier
+#  run stays on hestia -- harmless, and never touches real photos.)
 RSYNC_RSH="ssh -T -i ${SSH_KEY} \
            -o StrictHostKeyChecking=accept-new \
            -o UserKnownHostsFile=${KNOWN_HOSTS} \
@@ -94,7 +101,7 @@ for user in "${USERS[@]}"; do
   # of the loud-failure mode we want. -n exits immediately with
   # "sudo: a password is required", which surfaces in the cron log.
   REMOTE_RSYNC="sudo -n /bin/chmod -R g+rX,o+rX /volume1/homes/${user}/Photos && rsync"
-  if ! rsync -avh --delete --delete-excluded \
+  if ! rsync -avh \
         --exclude='@eaDir' \
         --exclude='.DS_Store' \
         --exclude='Thumbs.db' \
@@ -103,8 +110,25 @@ for user in "${USERS[@]}"; do
         --stats \
         "${src}" "${dst}"; then
     rc=$?
-    echo "!!! ${user} rsync failed rc=${rc}"
+    echo "!!! ${user} PULL rsync failed rc=${rc}"
     FAILED=$((FAILED + 1))
+  fi
+
+  # --- duplex push-back: hestia -> alcatraz, copy only what alcatraz lacks ---
+  # --ignore-existing never overwrites alcatraz's copy (no conflicts, no --delete);
+  # it only adds missing files (e.g. SD-card imports made directly on hestia).
+  # Remote rsync runs via `sudo -n rsync` so it can write into the user's home and
+  # --chown the files to the right owner. This needs a truenas-backup sudoers entry
+  # for rsync on alcatraz (see README, "Sudoers entry on alcatraz"). A push-back
+  # failure is a WARNING only -- the pull above is what the staleness alert keys off.
+  if ! rsync -avh --ignore-existing --chown="${user}:users" \
+        --exclude='@eaDir' \
+        --exclude='.DS_Store' \
+        --exclude='Thumbs.db' \
+        --rsh="${RSYNC_RSH}" \
+        --rsync-path="sudo -n rsync" \
+        "${dst}" "${src}"; then
+    echo "!!! ${user} push-back (hestia->alcatraz backup) failed rc=$? -- pull OK; check alcatraz sudoers for rsync"
   fi
 done
 

@@ -414,3 +414,83 @@ button:
       - remote_transmitter.transmit_nec:
           address: 0xDDEE
           command: 0xEB14
+
+  # ----- TOPPING D30 Pro / D50s (NEC, address 0x7788 — identical remotes) -----
+  - platform: template
+    name: "D30 Pro / D50s Power"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xE718
+  - platform: template
+    name: "D30 Pro / D50s Mute"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xF906
+  - platform: template
+    name: "D30 Pro / D50s Volume Up"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xB946
+  - platform: template
+    name: "D30 Pro / D50s Volume Down"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xE916
+  - platform: template
+    name: "D30 Pro / D50s Previous"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xB847
+  - platform: template
+    name: "D30 Pro / D50s Next"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xEA15
+  - platform: template
+    name: "D30 Pro / D50s Headphones"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xFB04
+  - platform: template
+    name: "D30 Pro / D50s Output"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xBF40
+  - platform: template
+    name: "D30 Pro / D50s FIR"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xAB54
+  - platform: template
+    name: "D30 Pro / D50s M"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xAF50
+  - platform: template
+    name: "D30 Pro / D50s Auto"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xEF10
+  - platform: template
+    name: "D30 Pro / D50s Brightness"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xEB14
+  - platform: template
+    name: "D30 Pro / D50s Menu"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x7788
+          command: 0xAA55

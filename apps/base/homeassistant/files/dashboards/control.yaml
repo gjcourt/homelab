@@ -207,3 +207,217 @@ views:
     - type: tile
       entity: input_number.nightlight_offset_today
       name: Jitter (today)
+- title: Audio / Visual
+  path: av
+  icon: mdi:remote
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Audio / Visual Remotes
+      heading_style: title
+    - type: markdown
+      content: 'IR blaster (ESP32) → Home Assistant. Tap a control to send the IR command to the device it points at. PL200 = SMSL CD player, D90 III Discrete = DAC.'
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: SMSL PL200 — Playback
+      heading_style: title
+    - type: tile
+      entity: button.pl200_power
+      name: Power
+      color: red
+    - type: tile
+      entity: button.pl200_mute
+      name: Mute
+      color: amber
+    - type: tile
+      entity: button.pl200_volume_down
+      name: Vol −
+      color: blue
+    - type: tile
+      entity: button.pl200_volume_up
+      name: Vol +
+      color: blue
+    - type: tile
+      entity: button.pl200_play_pause
+      name: Play / Pause
+    - type: tile
+      entity: button.pl200_stop
+      name: Stop
+    - type: tile
+      entity: button.pl200_previous
+      name: Previous
+    - type: tile
+      entity: button.pl200_next
+      name: Next
+    - type: tile
+      entity: button.pl200_seek_back
+      name: Seek −10s
+      color: green
+    - type: tile
+      entity: button.pl200_seek_forward
+      name: Seek +10s
+      color: green
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: SMSL PL200 — Functions
+      heading_style: title
+    - type: tile
+      entity: button.pl200_menu
+      name: Menu
+    - type: tile
+      entity: button.pl200_display
+      name: Display
+    - type: tile
+      entity: button.pl200_function
+      name: Function
+    - type: tile
+      entity: button.pl200_input
+      name: Input
+    - type: tile
+      entity: button.pl200_shuffle
+      name: Shuffle
+    - type: tile
+      entity: button.pl200_repeat
+      name: Repeat
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: SMSL PL200 — Track Select
+      heading_style: title
+    - type: tile
+      entity: button.pl200_1
+      name: 1
+    - type: tile
+      entity: button.pl200_2
+      name: 2
+    - type: tile
+      entity: button.pl200_3
+      name: 3
+    - type: tile
+      entity: button.pl200_4
+      name: 4
+    - type: tile
+      entity: button.pl200_5
+      name: 5
+    - type: tile
+      entity: button.pl200_6
+      name: 6
+    - type: tile
+      entity: button.pl200_7
+      name: 7
+    - type: tile
+      entity: button.pl200_8
+      name: 8
+    - type: tile
+      entity: button.pl200_9
+      name: 9
+    - type: tile
+      entity: button.pl200_0
+      name: 0
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: D90 III Discrete (DAC)
+      heading_style: title
+    - type: tile
+      entity: button.d90_iii_discrete_power
+      name: Power
+      color: red
+    - type: tile
+      entity: button.d90_iii_discrete_mute
+      name: Mute
+      color: amber
+    - type: tile
+      entity: button.d90_iii_discrete_volume_down
+      name: Vol −
+      color: blue
+    - type: tile
+      entity: button.d90_iii_discrete_volume_up
+      name: Vol +
+      color: blue
+    - type: tile
+      entity: button.d90_iii_discrete_previous
+      name: Previous
+    - type: tile
+      entity: button.d90_iii_discrete_next
+      name: Next
+    - type: tile
+      entity: button.d90_iii_discrete_menu
+      name: Menu
+    - type: tile
+      entity: button.d90_iii_discrete_output
+      name: Line Out
+    - type: tile
+      entity: button.d90_iii_discrete_c1
+      name: C1
+    - type: tile
+      entity: button.d90_iii_discrete_c2
+      name: C2
+    - type: tile
+      entity: button.d90_iii_discrete_fir
+      name: FIR
+    - type: tile
+      entity: button.d90_iii_discrete_auto
+      name: Auto
+    - type: tile
+      entity: button.d90_iii_discrete_brightness
+      name: Brightness
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: DX5 II (DAC / Amp)
+      heading_style: title
+    - type: tile
+      entity: button.dx5_ii_power
+      name: Power
+      color: red
+    - type: tile
+      entity: button.dx5_ii_mute
+      name: Mute
+      color: amber
+    - type: tile
+      entity: button.dx5_ii_volume_down
+      name: Vol −
+      color: blue
+    - type: tile
+      entity: button.dx5_ii_volume_up
+      name: Vol +
+      color: blue
+    - type: tile
+      entity: button.dx5_ii_previous
+      name: Previous
+    - type: tile
+      entity: button.dx5_ii_next
+      name: Next
+    - type: tile
+      entity: button.dx5_ii_menu
+      name: Menu
+    - type: tile
+      entity: button.dx5_ii_a
+      name: A
+    - type: tile
+      entity: button.dx5_ii_b
+      name: B
+    - type: tile
+      entity: button.dx5_ii_c1
+      name: C1
+    - type: tile
+      entity: button.dx5_ii_c2
+      name: C2
+    - type: tile
+      entity: button.dx5_ii_home
+      name: Home
+    - type: tile
+      entity: button.dx5_ii_brightness
+      name: Brightness

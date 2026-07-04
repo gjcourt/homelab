@@ -255,81 +255,81 @@ button:
             times: 4
             wait_time: 100ms
 
-  # ----- TOPPING BC-15A (NEC, address 0x3412) -----
+  # ----- TOPPING D90 III Discrete (BC-15A remote, NEC, address 0x3412) -----
   - platform: template
-    name: "Topping Power"
+    name: "D90 III Discrete Power"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xE718
   - platform: template
-    name: "Topping Mute"
+    name: "D90 III Discrete Mute"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xF906
   - platform: template
-    name: "Topping Volume Up"
+    name: "D90 III Discrete Volume Up"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xB946
   - platform: template
-    name: "Topping Volume Down"
+    name: "D90 III Discrete Volume Down"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xE916
   - platform: template
-    name: "Topping Previous"
+    name: "D90 III Discrete Previous"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xB847
   - platform: template
-    name: "Topping Next"
+    name: "D90 III Discrete Next"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xEA15
   - platform: template
-    name: "Topping Menu"
+    name: "D90 III Discrete Menu"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xAA55
   - platform: template
-    name: "Topping C1"
+    name: "D90 III Discrete C1"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xFB04
   - platform: template
-    name: "Topping C2"
+    name: "D90 III Discrete C2"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xBF40
   - platform: template
-    name: "Topping FIR"
+    name: "D90 III Discrete FIR"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xAB54
   - platform: template
-    name: "Topping Output"
+    name: "D90 III Discrete Output"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xAF50
   - platform: template
-    name: "Topping Auto"
+    name: "D90 III Discrete Auto"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xEF10
   - platform: template
-    name: "Topping Brightness"
+    name: "D90 III Discrete Brightness"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3412

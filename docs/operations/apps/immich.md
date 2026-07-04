@@ -67,53 +67,112 @@ To verify Immich is working:
   - Check the server logs for FFmpeg errors.
 - **Database Connection Issues**: Verify the CNPG cluster is healthy and the credentials secret matches the deployment environment variables.
 
-## 10. Staging DB: fixed 10Gi mirror of prod
+## 10. Staging testbed (fixed 5Gi DB + last-30-days external library)
 
-The staging Postgres cluster (`immich-db-staging-cnpg-v1`, ns `immich-stage`) is intended to be a **stable, fixed-size mirror of prod** for rehearsal — same shape as production (`immich-db-prod-cnpg-v3`, live at **10Gi**), just a smaller-scale disposable copy. The standard staging DB size is therefore **10Gi**, set in `apps/staging/immich/database.yaml` (`spec.storage.size`).
+`immich-stage` is a small, **fixed-size, representative rehearsal environment** — not a mirror of prod. After the Immich v3 + VectorChord migration, staging had 0 photos / 0 embeddings, so it had little rehearsal value. The testbed gives it a **bounded, realistic dataset** (the last ~30 days of the real photo tree) at a **fixed small size**, kept fresh automatically.
 
-### Why a recreate is required to change the size
+Two independent pieces:
 
-**CNPG cannot shrink a PVC in-place.** The staging PVCs had drifted to 20Gi; `apps/staging/immich/database.yaml` now declares 10Gi, but Flux applying that manifest does **not** shrink the live volumes. The size only takes effect when the Cluster (and its PVCs) is destroyed and recreated. Staging data is disposable/rebuildable, so this is safe to do whenever convenient.
+1. **Fixed 5Gi DB, fresh-initdb bootstrap** — the CNPG cluster is 5Gi and initializes **empty** (no S3 recovery), then Immich re-indexes the 30-day library.
+2. **Last-30-days external library** — a daily CronJob maintains a bounded slice of the prod photo tree on hestia; Immich indexes only that slice.
 
-### Recreate procedure (operator, live cluster)
+### 10.1 Fixed 5Gi DB + fresh-bootstrap correctness
 
-Run from a machine with `kubectl` LAN access. Suspend Flux first so it does not race the delete.
+`apps/staging/immich/database.yaml` sets `spec.storage.size: 5Gi`. This is **independent of prod** (prod is 10Gi) — staging holds no real data, so it is sized only for the 30-day metadata + embeddings.
+
+**Why fresh initdb, not recovery.** Staging previously bootstrapped via `bootstrap.recovery` (a 2026-04-18 DR artifact), which re-hydrated the whole pre-migration DB from S3 — large, and pointless for a 30-day testbed. It now uses `bootstrap.initdb`, mirroring prod, so a recreate yields an **empty** DB that Immich repopulates by scanning the slice.
+
+**Why postInitSQL is critical.** The DB runs on the VectorChord-only image (`ghcr.io/tensorchord/cloudnative-vectorchord:16-0.4.2`, `shared_preload_libraries: [vchord.so]`). The `immich` role is **not** a superuser and cannot `CREATE EXTENSION` (this bit prod). `bootstrap.initdb.postInitSQL` runs once at init **as the postgres superuser**, so it creates the extensions a fresh cluster needs:
+
+```yaml
+postInitSQL:
+  - CREATE EXTENSION IF NOT EXISTS vchord CASCADE;      # CASCADEs in pgvector
+  - CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;
+```
+
+Without this, a fresh 5Gi bootstrap would leave Immich unable to create vchord → broken. (The legacy `immich-db-init` Job in `job-patch.yaml` still issues `CREATE EXTENSION vectors` — the *removed* pgvecto.rs extension — and may log errors on the VectorChord-only image. It is redundant now that postInitSQL creates the real extensions and does **not** gate the app; a cleanup of that Job for both prod and staging is a separate follow-up, intentionally not done here to preserve prod/staging parity.)
+
+### 10.2 DB recreate procedure (operator, live cluster) — REQUIRED to apply 5Gi
+
+**CNPG cannot shrink a PVC in-place, and its admission webhook REJECTS a spec whose size is < the live PVCs, which blocks the entire `apps-staging` reconcile** (learned 2026-07-03 — #1028 set 10Gi against a live 20Gi and broke reconcile). So the `20Gi → 5Gi` change in Git **must be paired with a destroy + recreate**. The switch from `bootstrap.recovery → bootstrap.initdb` also only takes effect on (re)create. Run from a machine with `kubectl` LAN access:
 
 ```bash
-# 1. Suspend Flux staging reconciliation so it doesn't recreate mid-delete.
+# 1. Suspend Flux staging reconciliation so it doesn't race the delete
+#    (also avoids the webhook rejecting the 5Gi-vs-live-20Gi spec mid-flight).
 flux suspend kustomization apps-staging -n flux-system
 
 # 2. Scale immich-server down so nothing writes to the DB during teardown.
 kubectl scale deploy -n immich-stage immich-server --replicas=0
 
-# 3. Delete the CNPG Cluster (this removes the managed pods; PVCs are Retain so they persist).
+# 3. Delete the CNPG Cluster (removes managed pods; PVCs are Retain so they persist).
 kubectl delete cluster -n immich-stage immich-db-staging-cnpg-v1
 
-# 4. Delete the live staging DB PVCs (currently 20Gi) so they can be recreated at 10Gi.
-#    Check first, then delete each one that belongs to the cluster:
+# 4. Delete the live staging DB PVCs (currently 20Gi) so they are recreated at 5Gi.
+#    Inspect first, then delete each one that belongs to the cluster:
 kubectl get pvc -n immich-stage | grep immich-db-staging-cnpg-v1
 kubectl delete pvc -n immich-stage <each immich-db-staging-cnpg-v1-N above>
 
-# 5. Resume Flux; it recreates the Cluster from Git at size: 10Gi.
+# 5. Resume Flux; it recreates the Cluster from Git at size: 5Gi with fresh initdb.
 flux resume kustomization apps-staging -n flux-system
 flux reconcile kustomization apps-staging -n flux-system
 
-# 6. Watch the cluster bootstrap (recovery from S3 per bootstrap.recovery in the manifest).
+# 6. Watch the cluster bootstrap (fresh initdb — NOT S3 recovery). postInitSQL creates
+#    vchord + earthdistance. WAL now archives to the empty serverName ...-v5 path.
 kubectl get cluster -n immich-stage -w
 kubectl get pods  -n immich-stage -l cnpg.io/cluster=immich-db-staging-cnpg-v1 -w
 
-# 7. Scale immich-server back up and verify the app.
+# 7. Scale immich-server back up.
 kubectl scale deploy -n immich-stage immich-server --replicas=1
 ```
 
-New PVCs will be created at 10Gi. Verify with:
+Verify:
 
 ```bash
-kubectl get cluster -n immich-stage immich-db-staging-cnpg-v1 -o jsonpath='{.spec.storage.size}'; echo
-kubectl get pvc -n immich-stage | grep immich-db-staging-cnpg-v1   # expect 10Gi
+kubectl get cluster -n immich-stage immich-db-staging-cnpg-v1 -o jsonpath='{.spec.storage.size}'; echo   # 5Gi
+kubectl get pvc -n immich-stage | grep immich-db-staging-cnpg-v1                                          # expect 5Gi
+# Extensions present (fresh initdb):
+kubectl exec -n immich-stage immich-db-staging-cnpg-v1-1 -- \
+  psql -U postgres -d immich -c '\dx' | grep -E 'vchord|vector|earthdistance'
 ```
 
-> Note: the staging cluster bootstraps via `bootstrap.recovery` (rebuilt from backup during the 2026-04-18 DR test). It restores from the S3 ObjectStore, so a recreate re-hydrates staging from the last good backup — no manual data reload needed. If the WAL/serverName path needs bumping during recovery, see the History comments in `database.yaml`.
+> **WAL serverName bump.** A freshly-initdb'd cluster must archive WAL to an **empty** path or `barman-cloud-check-wal-archive` fails ("Expected empty archive"). The manifest bumps the WAL archiver `serverName` to `immich-db-staging-cnpg-v1-v5` (the old `v4` still holds the DR'd cluster's WAL). **Bump this again (`v6`, …) on every future recreate** if the previous path is non-empty.
+
+### 10.3 Last-30-days external library
+
+Immich has **no** built-in date-window filter — an external library indexes *every* file under its mounted path. So the window is enforced at the filesystem: staging's external-library PV points at `photos-staging-30d/`, a directory kept equal to "the last ~30 days" by a daily CronJob.
+
+**Sync mechanism — COPY, not symlinks, not hardlinks.** Research finding + rationale:
+
+- **Symlinks are OUT.** Immich's docs explicitly say *"don't use symlinks in your import libraries,"* and multiple reports confirm symlinked files/directories are **not** followed or scanned (immich-app/immich #6311, #9335). A symlink farm would index nothing.
+- **Hardlinks are OUT (here).** A hardlink cannot cross mount points (`ln` → `EXDEV`), so hardlinks would only work if the CronJob mounted the **real** photo tree read-**write** and linked within it — an unacceptable risk to irreplaceable originals. Rejected for safety.
+- **COPY (chosen).** The CronJob (`cronjob-photos-30d.yaml`) mounts the full tree **read-only** (originals can't be harmed) and the slice read-write, and `cp -p`-copies files with `mtime -30`. Copied files are indistinguishable from real files to Immich; `cp -p` preserves mtime so the age-based prune stays consistent. Data duplication is bounded to ~30 days — fine for a small testbed. Robust regardless of NFS mount topology.
+
+The CronJob (busybox, daily at 03:00) does: (1) `find /src -type f -mtime -30` → `cp -pu` into `/dst`; (2) `find /dst -type f -mtime +30 -delete` to prune; (3) remove empty dirs. `/src` = `immich-photos-src-pvc` (full tree, RO), `/dst` = `immich-photos-pvc` (the slice, RW — the same PVC Immich uses).
+
+> Date basis is file **mtime**, not EXIF capture date. On the hestia SOT tree mtime tracks import and is a good proxy; if precise capture-date windowing is ever needed, switch the `find` to walk the `YYYY/MM` directory layout or read EXIF (not worth the extra tooling today).
+
+**Operator prereqs on hestia (10.42.2.10):**
+
+1. Create the slice directory on the `main` pool:
+   ```bash
+   sudo mkdir -p /mnt/main/family/images/photos-staging-30d
+   ```
+   It sits beside `photos/` under the existing `/mnt/main` NFS export, so **no new export is required** — confirm it is reachable at `10.42.2.10:/mnt/main/family/images/photos-staging-30d`.
+2. Make it **writable by the CronJob's NFS identity.** The job runs as UID 0; if the export root-squashes, `chown` the dir to the mapped identity or open it up (derived data, low sensitivity):
+   ```bash
+   sudo chmod 0777 /mnt/main/family/images/photos-staging-30d   # simplest for a testbed
+   ```
+   Validate after the first run: `kubectl -n immich-stage create job --from=cronjob/immich-photos-30d-sync 30d-manual && kubectl -n immich-stage logs -f job/30d-manual` — expect a non-empty `du -sh` line and no `Permission denied`.
+
+**Trigger a rescan after a sync.** Immich indexes the slice on its **scheduled external-library scan** (daily, admin default — set under Administration → Settings → External Library). The CronJob runs earlier (03:00) so fresh files are present when Immich scans. To force it immediately: click **Scan** on the library in the Immich UI, or `POST /api/libraries/{id}/scan` with an API key.
+
+**Networking note.** The CronJob needs no cluster egress — NFS is mounted by the kubelet (host-side), not the pod network — and no CiliumNetworkPolicy selects it, so it runs in default-allow. Nothing to add.
+
+### 10.4 Refresh cadence
+
+- **Photo set — automatic, daily.** The 03:00 CronJob keeps the slice equal to the last 30 days and prunes older entries, so the dataset stays bounded with no operator action. Immich's daily library scan indexes the delta.
+- **Database — manual recreate, recommended weekly / as-needed.** Do **not** automate a CNPG Cluster deletion (scripting a Cluster-CR delete is too risky). Run §10.2 by hand when you want a clean-slate DB (e.g. before rehearsing a migration, or if staging metadata drifts). Weekly is a reasonable default; there's no urgency since the photo set self-maintains.
+- **Lighter refresh (optional).** Instead of a full recreate you can trim accumulated cruft with Immich's own maintenance jobs (Administration → Jobs): re-run the **Library** scan and **Storage Migration**, and use **asset/orphan cleanup** to drop entries whose files aged out of the slice. Prefer the documented recreate when you want a guaranteed-clean DB.
 
 ### Orphaned Retain PV cleanup (operator, destructive)
 

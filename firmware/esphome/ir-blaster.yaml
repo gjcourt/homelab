@@ -334,3 +334,83 @@ button:
       - remote_transmitter.transmit_nec:
           address: 0x3412
           command: 0xEB14
+
+  # ----- TOPPING DX5 II (NEC, address 0xDDEE) -----
+  - platform: template
+    name: "DX5 II Power"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xE718
+  - platform: template
+    name: "DX5 II Mute"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xF906
+  - platform: template
+    name: "DX5 II Volume Up"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xB946
+  - platform: template
+    name: "DX5 II Volume Down"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xE916
+  - platform: template
+    name: "DX5 II Previous"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xB847
+  - platform: template
+    name: "DX5 II Next"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xEA15
+  - platform: template
+    name: "DX5 II Menu"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xAA55
+  - platform: template
+    name: "DX5 II A"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xFB04
+  - platform: template
+    name: "DX5 II B"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xBF40
+  - platform: template
+    name: "DX5 II C1"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xAB54
+  - platform: template
+    name: "DX5 II C2"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xAF50
+  - platform: template
+    name: "DX5 II Home"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xEF10
+  - platform: template
+    name: "DX5 II Brightness"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0xDDEE
+          command: 0xEB14

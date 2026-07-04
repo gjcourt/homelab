@@ -35,6 +35,7 @@ Active plans (see [docs/plans/](plans/README.md) for the full status-grouped ind
 
 - [Alcatraz → hestia migration](plans/2026-05-20-alcatraz-to-hestia-migration.md) — non-photo data off alcatraz onto hestia ZFS; Phase 1 mostly done, Phase 2 backup pipeline live.
 - [Hestia as photos source-of-truth](plans/2026-06-01-hestia-photos-sot.md) — Immich NFS PV repointed to hestia; soak/verification underway.
+- [Alcatraz pulls photos from hestia](plans/2026-07-04-alcatraz-photos-pull.md) — impossible hestia→alcatraz rsync push-back (Synology setuid-root inbound-uid check) retired; backfill now runs from alcatraz as a DSM Task Scheduler pull job. Repo artifacts landed; DSM operator steps + DSM-Photos-indexing validation pending.
 - [Snapcast / HifiBerry rollout](plans/2026-05-03-snapcast-hifiberry-rollout.md) — server + LB IP live; per-device client setup remaining.
 - [Navidrome → Mopidy → Snapcast audio source](plans/2026-03-14-navidrome-snapcast-mopidy.md) — Mopidy sidecar in draft PR #426; not yet on master.
 - [Hestia memory benchmark](plans/2026-05-15-hestia-memory-benchmark.md) — 6-DIMM baseline captured; 8-DIMM comparison pending a physical DIMM swap.

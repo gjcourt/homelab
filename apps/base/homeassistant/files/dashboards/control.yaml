@@ -372,3 +372,52 @@ views:
     - type: tile
       entity: button.d90_iii_discrete_brightness
       name: Brightness
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: DX5 II (DAC / Amp)
+      heading_style: title
+    - type: tile
+      entity: button.dx5_ii_power
+      name: Power
+      color: red
+    - type: tile
+      entity: button.dx5_ii_mute
+      name: Mute
+      color: amber
+    - type: tile
+      entity: button.dx5_ii_volume_down
+      name: Vol −
+      color: blue
+    - type: tile
+      entity: button.dx5_ii_volume_up
+      name: Vol +
+      color: blue
+    - type: tile
+      entity: button.dx5_ii_previous
+      name: Previous
+    - type: tile
+      entity: button.dx5_ii_next
+      name: Next
+    - type: tile
+      entity: button.dx5_ii_menu
+      name: Menu
+    - type: tile
+      entity: button.dx5_ii_a
+      name: A
+    - type: tile
+      entity: button.dx5_ii_b
+      name: B
+    - type: tile
+      entity: button.dx5_ii_c1
+      name: C1
+    - type: tile
+      entity: button.dx5_ii_c2
+      name: C2
+    - type: tile
+      entity: button.dx5_ii_home
+      name: Home
+    - type: tile
+      entity: button.dx5_ii_brightness
+      name: Brightness

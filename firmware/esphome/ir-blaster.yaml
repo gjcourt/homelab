@@ -43,6 +43,12 @@ ota:
 wifi:
   ssid: !secret iot_wifi_ssid
   password: !secret iot_wifi_password
+  # Disable WiFi modem-sleep: the default delays INCOMING packets (HA->broker->device
+  # commands) by 100ms-1s+, which shows up as button stutter/latency. A command device
+  # needs the radio awake. (mmwave only publishes outbound, so it doesn't need this.)
+  power_save_mode: none
+  # IoT SSID is hidden + effectively single-AP: connect faster and more reliably.
+  fast_connect: true
   ap:
     ssid: "ir-blaster setup"
 
@@ -217,3 +223,34 @@ button:
       - remote_transmitter.transmit_nec:
           address: 0x3712
           command: 0xE619
+
+  # --- Seek: a held remote sends the leading frame once, then NEC "ditto" frames
+  # every ~108ms; the PL200 fast-scans while they arrive. Scan is fast (~8 dittos
+  # ≈ 20s of track), so seek amount = ditto count. times:4 ≈ ~10s per press; tune
+  # to taste, or press repeatedly. (Single-tap Next/Prev above still skips tracks.)
+  - platform: template
+    name: "PL200 Seek Forward"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xFA05 # Next — leading frame
+      - delay: 40ms
+      - remote_transmitter.transmit_raw:
+          carrier_frequency: "38kHz"
+          code: [9000, -2250, 560] # NEC ditto
+          repeat:
+            times: 4
+            wait_time: 100ms
+  - platform: template
+    name: "PL200 Seek Back"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xFC03 # Previous — leading frame
+      - delay: 40ms
+      - remote_transmitter.transmit_raw:
+          carrier_frequency: "38kHz"
+          code: [9000, -2250, 560] # NEC ditto
+          repeat:
+            times: 4
+            wait_time: 100ms

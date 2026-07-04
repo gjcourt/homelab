@@ -104,7 +104,7 @@ button:
           address: 0x3712
           command: 0xF50A
   - platform: template
-    name: "PL200 Play Pause"
+    name: "PL200 Play"
     on_press:
       - remote_transmitter.transmit_nec:
           address: 0x3712
@@ -254,3 +254,83 @@ button:
           repeat:
             times: 4
             wait_time: 100ms
+
+  # ----- TOPPING BC-15A (NEC, address 0x3412) -----
+  - platform: template
+    name: "Topping Power"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xE718
+  - platform: template
+    name: "Topping Mute"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xF906
+  - platform: template
+    name: "Topping Volume Up"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xB946
+  - platform: template
+    name: "Topping Volume Down"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xE916
+  - platform: template
+    name: "Topping Previous"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xB847
+  - platform: template
+    name: "Topping Next"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xEA15
+  - platform: template
+    name: "Topping Menu"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xAA55
+  - platform: template
+    name: "Topping C1"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xFB04
+  - platform: template
+    name: "Topping C2"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xBF40
+  - platform: template
+    name: "Topping FIR"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xAB54
+  - platform: template
+    name: "Topping Output"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xAF50
+  - platform: template
+    name: "Topping Auto"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xEF10
+  - platform: template
+    name: "Topping Brightness"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3412
+          command: 0xEB14

@@ -40,7 +40,7 @@ spec:
           # emitted by that workflow in a follow-up PR (see the workflow's
           # step summary), per the homelab image-discipline rule. This
           # manifest is intentionally NOT applied to the cluster in this PR.
-          image: "ghcr.io/gjcourt/mqttscope:2026-07-03-0000000"
+          image: "ghcr.io/gjcourt/mqttscope:2026-07-04-14e0d87@sha256:0139120ba21957382da9e74daeca810d68bd3b0cbe2f8eaa000463ba92f44d05"
           imagePullPolicy: IfNotPresent
           env:
             # In-cluster broker (ClusterIP). The off-cluster LB IP

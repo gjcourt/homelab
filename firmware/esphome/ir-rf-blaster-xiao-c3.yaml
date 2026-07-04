@@ -1,0 +1,74 @@
+# =============================================================================
+# ESPHome IR + RF Blaster — XIAO ESP32-C3 hat (TX only)
+# =============================================================================
+# IR:  GPIO4 -> 100R -> AO3400A gate -> 3x 940nm LED (5V, active-high).
+# RF:  CC1101 module on SPI (config at boot) + GDO0 as the OOK data line that a
+#      second remote_transmitter drives. CC1101 runs on 3V3.
+#
+# NOTE: ESPHome has no stock CC1101 driver — the SPI-init + GDO0-OOK bridge is a
+# community external_component. The IR half below is complete and stock; the RF
+# half is scaffolded (uncomment + point external_components at the CC1101 repo).
+# =============================================================================
+
+substitutions:
+  node: "ir-rf-blaster"
+
+esphome:
+  name: "${node}"
+  friendly_name: "IR+RF Blaster (C3)"
+
+esp32:
+  board: seeed_xiao_esp32c3
+  framework:
+    type: arduino
+
+logger:
+api:
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret iot_wifi_ssid
+  password: !secret iot_wifi_password
+  power_save_mode: none
+  fast_connect: true
+  ap:
+    ssid: "ir-rf-blaster setup"
+
+mqtt:
+  broker: "10.42.2.46"
+  port: 1883
+  username: "mmwave"
+  password: !secret mqtt_mmwave_password
+  topic_prefix: "mmwave/${node}"
+  discovery: true
+  discovery_prefix: "homeassistant"
+
+# ----- IR transmit (stock, complete) -----
+remote_transmitter:
+  - id: ir_tx
+    pin: GPIO4          # -> AO3400A gate (active-high)
+    carrier_duty_percent: 50%
+# ----- RF transmit (CC1101, scaffold) -----
+# spi:
+#   clk_pin: GPIO7
+#   mosi_pin: GPIO21
+#   miso_pin: GPIO20
+# external_components:
+#   - source: github://<cc1101-esphome-component>   # community CC1101 driver
+# cc1101:
+#   cs_pin: GPIO5
+#   gdo0_pin: GPIO6
+#   frequency: 433920000   # tune to your device band (315/433/868/915)
+# then a 2nd remote_transmitter on GDO0 for the OOK/rc_switch payloads.
+
+# ----- IR buttons: copy the device blocks from ir-blaster.yaml, add transmitter_id -----
+button:
+  - platform: template
+    name: "PL200 Power"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          transmitter_id: ir_tx
+          address: 0x3712
+          command: 0xFE01

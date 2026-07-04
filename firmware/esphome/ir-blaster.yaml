@@ -1,0 +1,219 @@
+# =============================================================================
+# ESPHome IR Blaster — TRANSMIT (SMSL PL200 CD player)   [READY TO FLASH]
+# =============================================================================
+# Hardware: ESP32-C6-DevKitC-1-N8.
+#   IR LED (940 nm) on GPIO6 THROUGH a 2N2222 NPN driver (never straight off GPIO):
+#     GPIO6 --[1 kOhm]--> 2N2222 base ;  emitter --> GND
+#     5V --> IR LED anode --> [~100 Ohm] --> cathode --> 2N2222 collector
+#   IR receiver (optional) on GPIO5: OUT->GPIO5, VS->3V3, GND->GND.
+#
+# HA integration is via MQTT (mosquitto 10.42.2.46), NOT the native API — the
+# device is on the IoT VLAN, which the cluster can't reach on the API port
+# (same reason the mmwave nodes use MQTT). Reuses the `mmwave` MQTT user by
+# publishing under the mmwave/ namespace, so no new broker secret is needed.
+# HA auto-discovers all 24 buttons via MQTT discovery.
+#
+# Flash:  esphome run ir-blaster.yaml   (USB first time; OTA after)
+# =============================================================================
+
+substitutions:
+  node: "ir-blaster"
+  tx_pin: "GPIO6"   # IR LED via 2N2222 (NOT direct)
+  recv_pin: "GPIO5" # optional: physical remote -> HA
+
+esphome:
+  name: "${node}"
+  friendly_name: "IR Blaster"
+  comment: "IR blaster — SMSL PL200 (ESP32-C6), MQTT transport"
+
+esp32:
+  board: esp32-c6-devkitc-1
+  framework:
+    type: esp-idf
+
+logger:
+
+# Native API kept ONLY for local esphome logs/OTA from your Mac (HA uses MQTT).
+api:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret iot_wifi_ssid
+  password: !secret iot_wifi_password
+  ap:
+    ssid: "ir-blaster setup"
+
+# ----- HA integration over MQTT (reuses the mmwave user + ACL) -----
+mqtt:
+  broker: "10.42.2.46"
+  port: 1883
+  username: "mmwave"
+  password: !secret mqtt_mmwave_password
+  topic_prefix: "mmwave/${node}"     # under mmwave/# so the existing ACL covers it
+  discovery: true
+  discovery_prefix: "homeassistant"
+
+# ----- IR transmit (the blaster) -----
+remote_transmitter:
+  pin: ${tx_pin}
+  carrier_duty_percent: 50%
+
+# ----- IR receive (optional): physical remote -> HA -----
+remote_receiver:
+  pin:
+    number: ${recv_pin}
+    inverted: true
+    mode:
+      input: true
+      pullup: true
+  dump: []
+
+# ----- One HA button per PL200 key -----
+button:
+  - platform: template
+    name: "PL200 Power"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xFE01
+  - platform: template
+    name: "PL200 Mute"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xF609
+  - platform: template
+    name: "PL200 Volume Down"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xF40B
+  - platform: template
+    name: "PL200 Volume Up"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xF50A
+  - platform: template
+    name: "PL200 Play Pause"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xFD02
+  - platform: template
+    name: "PL200 Previous"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xFC03
+  - platform: template
+    name: "PL200 Next"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xFA05
+  - platform: template
+    name: "PL200 Menu"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xFB04
+  - platform: template
+    name: "PL200 Stop"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xF906
+  - platform: template
+    name: "PL200 Display"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xF30C
+  - platform: template
+    name: "PL200 Function"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xF708
+  - platform: template
+    name: "PL200 Input"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xF807
+  - platform: template
+    name: "PL200 Shuffle"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xF10E
+  - platform: template
+    name: "PL200 Repeat"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xF20D
+  - platform: template
+    name: "PL200 0"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xEF10
+  - platform: template
+    name: "PL200 1"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xEE11
+  - platform: template
+    name: "PL200 2"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xED12
+  - platform: template
+    name: "PL200 3"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xEC13
+  - platform: template
+    name: "PL200 4"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xEB14
+  - platform: template
+    name: "PL200 5"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xEA15
+  - platform: template
+    name: "PL200 6"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xE916
+  - platform: template
+    name: "PL200 7"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xE817
+  - platform: template
+    name: "PL200 8"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xE718
+  - platform: template
+    name: "PL200 9"
+    on_press:
+      - remote_transmitter.transmit_nec:
+          address: 0x3712
+          command: 0xE619

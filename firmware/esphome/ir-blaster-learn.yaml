@@ -64,6 +64,9 @@ remote_receiver:
     mode:
       input: true
       pullup: true # receiver has an internal pull-up; no external 10k needed
-  dump: all # try every decoder; switch to `raw` to see bare timings
+  dump: nec # this remote is NEC. Use `all` to identify an unknown remote's
+  # protocol (one press → many speculative decodes; the one with a valid
+  # command/complement is real), then set dump to just that protocol for
+  # clean one-line-per-press captures.
   tolerance: 25%
   idle: 25ms

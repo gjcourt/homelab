@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mqttscope
+  namespace: mqttscope
+  labels:
+    app.kubernetes.io/name: mqttscope
+    app.kubernetes.io/component: exporter
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mqttscope
+    app.kubernetes.io/component: exporter
+  ports:
+    - name: metrics
+      port: 9103
+      targetPort: metrics
+      protocol: TCP

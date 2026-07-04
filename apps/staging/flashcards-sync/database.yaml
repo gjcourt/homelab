@@ -6,7 +6,7 @@ metadata:
 spec:
   description: Postgres cluster for the flashcards sync service (staging)
   imageName: ghcr.io/cloudnative-pg/postgresql:17.5
-  instances: 3
+  instances: 1
   inheritedMetadata:
     labels:
       app: flashcards-database
@@ -17,19 +17,6 @@ spec:
   storage:
     size: 2Gi
     storageClass: truenas-iscsi-ssd
-  plugins:
-    - name: barman-cloud.cloudnative-pg.io
-      isWALArchiver: true
-      parameters:
-        barmanObjectName: flashcards-db-staging-cnpg-v1-backup
-        serverName: flashcards-db-staging-cnpg-v1
-  externalClusters:
-    - name: flashcards-db-backup
-      plugin:
-        name: barman-cloud.cloudnative-pg.io
-        parameters:
-          barmanObjectName: flashcards-db-staging-cnpg-v1-backup
-          serverName: flashcards-db-staging-cnpg-v1
   bootstrap:
     initdb:
       database: app

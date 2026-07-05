@@ -74,10 +74,11 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (8)
+### Planned (9)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-07-05-mac-laptop-archive.md](2026-07-05-mac-laptop-archive.md) | 2026-07-05 | Archive a Mac laptop's disk to hestia, mirroring the Windows-PC archive: (1) living photos → Immich george external library (EXIF-sorted, sha256-deduped, then scan), (2) cold archive of everything else → new ZFS dataset main/archive/<mac-hostname> (lz4 + snapshot). macOS specifics: brew GNU rsync over SSH (native is openrsync, no -AX/--partial), Full Disk Access for Mail/Messages/Photos, caffeinate against lid-sleep, wired Ethernet, and downloading iCloud 'Optimize Mac Storage' placeholders before the photo extract. Nothing on the Mac is ever deleted. |
 | [2026-07-03-finance-umbrella-convergence.md](2026-07-03-finance-umbrella-convergence.md) | 2026-07-03 | Design study for converging finance.burntbytes.com (server-rendered encrypted-YAML dashboard) and ladder.burntbytes.com (local-first React SPA) into one finance umbrella WITHOUT breaking either data model — recommends shared-nav-now, path-based-host-later, no forced SPA merge |
 | [2026-06-21-bluetooth-presence-system.md](2026-06-21-bluetooth-presence-system.md) | 2026-06-21 | BLE beacon presence/occupancy system (ESPresense → HA → Grafana) for who/how-many is home, per-room |
 | [2026-06-16-burntbytes-mailserver.md](2026-06-16-burntbytes-mailserver.md) | 2026-06-16 | Self-hosted mail for burntbytes.com (<10 accounts): Mailu on the cluster + VPS SMTP gateway + SES smarthost |

@@ -127,7 +127,13 @@ spec:
           expr: time() - homelabscope_job_last_success_seconds > homelabscope_job_max_age_seconds
           for: 10m
           labels:
-            severity: warning
+            # critical so the alert actually notifies: Alertmanager routes only
+            # severity=critical to the email-critical (Gmail SMTP) receiver;
+            # warning falls through to the 'null' receiver and would be dropped
+            # silently — a monitor that never notifies. Each job's generous
+            # per-job max_age budget + this 10m `for` debounce mean firing
+            # signals a real multi-cycle miss, not a flap.
+            severity: critical
           annotations:
             summary: "Scheduled job {{ $labels.job }} is stale"
             description: >
@@ -139,19 +145,34 @@ spec:
         # nothing to evaluate. absent() over each critical job's exact matcher
         # synthesises a firing series carrying that job label, so the alert
         # names the missing job.
+        #
+        # SCOPE: absent() only guards jobs that HAVE a live data source at merge
+        # time. Guarding a job whose exporter isn't deployed yet turns absent()
+        # into a guaranteed false critical the moment this rule lands. Two
+        # heartbeat-backed jobs are intentionally omitted here and MUST be added
+        # back by the follow-up PR that un-archives the homelabscope-heartbeat
+        # Custom App (flips x-deploy.archived: false):
+        #   - alcatraz-photos-pull
+        #   - zfs-snapshot-main-family / zfs-snapshot-main-homes
+        # Their heartbeat writer ships archived: true in this PR, so their series
+        # cannot exist yet. immich-photos-backup IS kept: its textfile is served
+        # by the node-exporter Custom App that operator step 1 deploys as part of
+        # this rollout, and its absence is the acceptance signal for the orphaned-
+        # metric bug this PR fixes (the 1h `for` covers the deploy window).
         - alert: HomelabscopeJobMetricAbsent
           expr: >
             absent(homelabscope_job_last_success_seconds{job="immich-photos-backup"})
-            or absent(homelabscope_job_last_success_seconds{job="alcatraz-photos-pull"})
-            or absent(homelabscope_job_last_success_seconds{job="zfs-snapshot-main-family"})
-            or absent(homelabscope_job_last_success_seconds{job="zfs-snapshot-main-homes"})
             or absent(homelabscope_job_last_success_seconds{job="pingo"})
             or absent(homelabscope_job_last_success_seconds{job="renovate"})
             or absent(homelabscope_job_last_success_seconds{job="adguard-sync-prod"})
             or absent(homelabscope_job_last_success_seconds{job="adguard-sync-stage"})
           for: 1h
           labels:
-            severity: warning
+            # critical for the same reason as HomelabscopeJobStale: only
+            # severity=critical reaches the email receiver. A vanished heartbeat
+            # on a data-safety job (photo backup, zfs snapshot) is exactly the
+            # failure class this whole family exists to catch, so it must page.
+            severity: critical
           annotations:
             summary: "Homelabscope job {{ $labels.job }} heartbeat is absent"
             description: >

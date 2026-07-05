@@ -64,12 +64,25 @@ Fed from three source types, all normalizing into that family:
    onto the family with `max(...) + labels: {job: <name>}`, and emits each job's
    `homelabscope_job_max_age_seconds` via `vector(N)`.
 
-**Alerting — one templated pair** (`homelabscope.alerts` group):
+**Alerting — one templated pair** (`homelabscope.alerts` group), both
+`severity: critical` so they actually deliver:
 - `HomelabscopeJobStale`: `time() - homelabscope_job_last_success_seconds > homelabscope_job_max_age_seconds`
   — every job checked against its OWN budget with a single rule (last_success and
   max_age share a label set per job, so the comparison joins on `job`).
-- `HomelabscopeJobMetricAbsent`: `absent(...)` per critical job for 1h — catches
-  a heartbeat vanishing entirely, the failure mode the old setup missed.
+- `HomelabscopeJobMetricAbsent`: `absent(...)` for 1h — catches a heartbeat
+  vanishing entirely, the failure mode the old setup missed. Scoped to jobs with
+  a **live data source at merge**: `immich-photos-backup` (node-exporter, operator
+  step 1) plus the four cronjob-backed jobs. The three heartbeat-backed jobs
+  (`alcatraz-photos-pull`, `zfs-snapshot-main-{family,homes}`) are omitted until
+  the follow-up PR un-archives their exporter — guarding a not-yet-deployed
+  exporter would fire a guaranteed false critical on merge.
+
+**Delivery:** `severity: critical` routes through the existing `email-critical`
+receiver (Gmail SMTP, added by the 2026-06-17 alertmanager-smtp plan) to
+`gjcourt+alerts@gmail.com`. Verified with `amtool config routes test`:
+`severity=critical` → `email-critical`, `severity=warning` → `null`. The alerts
+were originally `severity: warning`, which routes to `null` and would have
+dropped every notification silently — the delivery gap this fixes.
 
 The dataless `ImmichPhotoBackupStale` alert is **retired** (superseded), with a
 tombstone comment in `infra/configs/alerts/prometheus-rules.yaml`.
@@ -110,6 +123,10 @@ This PR ships repo artifacts only — no live infra changes. To activate:
 3. **Enable the heartbeat Custom App.** Its compose ships `x-deploy.archived: true`
    (won't deploy against a nonexistent image). In a follow-up PR, pin the
    `@sha256` digest and flip `archived: false`; `deploy-hestia.yml` rolls it out.
+   **In that same follow-up, add `alcatraz-photos-pull`,
+   `zfs-snapshot-main-family`, and `zfs-snapshot-main-homes` back into the
+   `HomelabscopeJobMetricAbsent` `absent(...)` expr** — they are held out of this
+   PR's absent guard precisely because their exporter isn't live until this step.
 4. **Bump the immich-photos-backup image digest.** The edit to
    `images/immich-photos-backup/immich-photos-backup.sh` triggers a rebuild;
    pin the new digest in `hosts/hestia/immich-photos-backup/docker-compose.yml`
@@ -120,8 +137,11 @@ This PR ships repo artifacts only — no live infra changes. To activate:
 - The heartbeat's `.zfs/snapshot` fallback parses snapshot NAMES
   (`auto-YYYY-MM-DD_HH-MM-...`) in `America/Los_Angeles` (the observed schedule
   TZ); it's only used if in-container `zfs list` can't reach `/dev/zfs`.
-- Alert delivery: the monitoring stack's critical receiver is still `null`
-  (Signal decommission) — see the monitoring-enhancement plan. homelabscope
-  alerts evaluate correctly but delivery is gated on a receiver being chosen.
+- Alert delivery: **wired.** The critical receiver is `email-critical` (Gmail
+  SMTP, per the 2026-06-17 alertmanager-smtp plan), not `null` — the earlier
+  Signal-decommission gap was closed before this PR. homelabscope's alerts are
+  `severity: critical` so they route to it (verified with `amtool`). The one
+  operator dependency is the `alertmanager-smtp` secret, which already exists in
+  the cluster; no new secret is required by this PR.
 - `homelabscope_job_last_status` is only meaningful for jobs that report it
   (textfile writers set 0 on success); cronjob-backed rows omit it.

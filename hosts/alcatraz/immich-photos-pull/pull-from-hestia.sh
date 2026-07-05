@@ -46,8 +46,10 @@ GID_USERS=100
 
 # hestia rsync server (source of truth). truenas_admin (uid 950) has read on
 # the photo dirs; the authorized_keys entry there restricts this key to a
-# read-only rrsync rooted at the photos path
-# (command="rrsync -ro /mnt/main/family/images/photos", see README). Because
+# read-only rrsync rooted at the photos path (abbreviated as
+# command="rrsync -ro /mnt/main/family/images/photos" here; the real
+# authorized_keys line wraps it in `sudo -n --preserve-env=SSH_ORIGINAL_COMMAND`
+# — see README for the exact, load-bearing form). Because
 # rrsync confines the client to that root, source paths are RELATIVE to it
 # (e.g. "mara/") — an ABSOLUTE path gets the root prepended a second time and
 # fails ("change_dir ...photos/mnt/.../photos/mara: No such file"). The
@@ -99,28 +101,36 @@ for entry in "${USERS[@]}"; do
   #   a mirror.
   # Excludes: @eaDir (Synology indexer metadata), .DS_Store (macOS),
   #   Thumbs.db (Windows) — junk that should never propagate.
-  if ! rsync -a --ignore-existing \
+  # `|| rc=$?` (not `if ! rsync`) so ${rc} captures rsync's REAL exit code for
+  # the log (23=partial, 12=protocol, etc. — the codes the header cares about);
+  # a plain `if ! rsync` would make $? the negation's status (always 0). The
+  # `|| ...` list also suppresses set -e, so one user's failure never aborts the
+  # loop — we record it and skip to the next user.
+  rc=0
+  rsync -a --ignore-existing \
         --exclude='@eaDir' \
         --exclude='.DS_Store' \
         --exclude='Thumbs.db' \
         --rsh="${RSYNC_RSH}" \
         --stats \
-        "${src}" "${dst}"; then
-    rc=$?
+        "${src}" "${dst}" || rc=$?
+  if [[ ${rc} -ne 0 ]]; then
     echo "!!! ${user} pull rsync failed rc=${rc}"
     FAILED=$((FAILED + 1))
-    # Don't chown a half/failed transfer's tree — skip to the next user so one
-    # user's failure never aborts the other (set -e is scoped by the `if`).
+    # Don't chown a half/failed transfer's tree — skip to the next user.
     continue
   fi
 
   # This Task Scheduler job runs as root SPECIFICALLY so this chown works:
   # rsync-received files may land root-owned (client runs as root), but DSM
   # Photos will only index files owned by the account. Re-own the whole tree
-  # to <uid>:users so newly pulled files match alcatraz's own uploads. Cheap
-  # and idempotent; safe to run every night over the full tree.
-  if ! chown -R "${uid}:${GID_USERS}" "${dst}"; then
-    rc=$?
+  # to <uid>:users so newly pulled files match alcatraz's own uploads.
+  # Idempotent (a no-op re-chown just bumps ctime); runs over the full tree
+  # every night, so cost scales with inode count, not with what was pulled.
+  # `|| rc=$?` for the same real-exit-code + set -e reasons as the rsync above.
+  rc=0
+  chown -R "${uid}:${GID_USERS}" "${dst}" || rc=$?
+  if [[ ${rc} -ne 0 ]]; then
     echo "!!! ${user} chown ${uid}:${GID_USERS} ${dst} failed rc=${rc}"
     FAILED=$((FAILED + 1))
     continue

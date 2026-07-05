@@ -60,10 +60,11 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (9)
+### In progress (10)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-07-04-homelabscope.md](2026-07-04-homelabscope.md) | 2026-07-04 | homelabscope — one Prometheus metric family (homelabscope_job_last_success_seconds{job}) + textfile collector + cronjob recording rules + templated staleness/absence alerts + Grafana table monitoring EVERY scheduled homelab job; fixes the orphaned (unscraped) immich-backup metric |
 | [2026-06-17-alertmanager-smtp-alerting.md](2026-06-17-alertmanager-smtp-alerting.md) | 2026-06-17 | Route critical Alertmanager alerts to email via Gmail SMTP (replaces dead Signal channel) |
 | [2026-06-16-thermalscope-power-and-headroom.md](2026-06-16-thermalscope-power-and-headroom.md) | 2026-06-17 | thermalscope: add power/energy/cost (RAPL), thermal headroom, and throttle/degradation signals — phases 1–3 live; phase 4 pending |
 | [2026-06-01-hestia-photos-sot.md](2026-06-01-hestia-photos-sot.md) | 2026-06-10 | Make hestia the source of truth for family/ + homes/; repoint Immich NFS PV; alcatraz narrows to upload target |

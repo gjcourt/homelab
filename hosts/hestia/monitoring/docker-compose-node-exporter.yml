@@ -1,0 +1,45 @@
+# node-exporter for hestia — homelabscope textfile collector host.
+#
+# Purpose: expose the Prometheus textfile collector at :9100 so the .prom files
+# under /var/lib/node-exporter/textfile actually reach Prometheus. Before this
+# app existed, immich-photos-backup.sh had been writing
+# /var/lib/node-exporter/textfile/immich-backup.prom on every run but NOTHING
+# scraped :9100 on hestia (only thermalscope :9102 and ipmi-exporter :9290 were
+# up) — so the metric was orphaned and its staleness alert could never fire.
+# This node-exporter + the infra/configs/homelabscope ScrapeConfig close that
+# gap and back the whole homelabscope_job_* metric family for hestia/alcatraz
+# shell jobs.
+#
+# Collectors: defaults are DISABLED (--collector.disable-defaults) and ONLY the
+# textfile collector is enabled. This host's general node metrics aren't the
+# goal here (hestia is a bare TrueNAS host outside the Talos node-exporter
+# DaemonSet, and thermalscope/ipmi already cover its thermals/power); keeping
+# the surface to the textfile collector avoids emitting a second, overlapping
+# set of node_* series and keeps the scrape tiny. The textfile writers
+# (immich-photos-backup + homelabscope-heartbeat) drop their .prom files into
+# the shared bind-mounted directory below.
+#
+# No healthcheck: the upstream image is distroless (no shell/curl), so any
+# CMD-SHELL test always fails. Prometheus up{job="homelabscope-node-exporter"}
+# scrape success is the real health signal.
+#
+# Image pinned to an explicit upstream release tag per the homelab image
+# discipline rule. Bump deliberately; never :latest.
+x-deploy:
+  name: node-exporter
+
+services:
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.9.1
+    container_name: node-exporter
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - --collector.disable-defaults
+      - --collector.textfile
+      - --collector.textfile.directory=/var/lib/node-exporter/textfile
+      - --web.listen-address=:9100
+    volumes:
+      # Shared textfile collector dir — written by immich-photos-backup and
+      # homelabscope-heartbeat, read here. Read-only: node-exporter only reads.
+      - /var/lib/node-exporter/textfile:/var/lib/node-exporter/textfile:ro

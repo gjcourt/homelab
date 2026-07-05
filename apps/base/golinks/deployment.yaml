@@ -29,7 +29,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: golinks
-          image: ghcr.io/gjcourt/golinks:2026-07-05
+          image: ghcr.io/gjcourt/golinks:2026-07-05-1
           ports:
             - containerPort: 8080
           env:

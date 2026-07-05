@@ -45,10 +45,14 @@ USERS=("mara:1027" "george:1028")
 GID_USERS=100
 
 # hestia rsync server (source of truth). truenas_admin (uid 950) has read on
-# the photo dirs; the authorized_keys entry there restricts this key to
-# read-only rsync of the photos path (see README).
+# the photo dirs; the authorized_keys entry there restricts this key to a
+# read-only rrsync rooted at the photos path
+# (command="rrsync -ro /mnt/main/family/images/photos", see README). Because
+# rrsync confines the client to that root, source paths are RELATIVE to it
+# (e.g. "mara/") — an ABSOLUTE path gets the root prepended a second time and
+# fails ("change_dir ...photos/mnt/.../photos/mara: No such file"). The
+# authorizing rrsync root on hestia is: /mnt/main/family/images/photos
 SRC_HOST="truenas_admin@10.42.2.10"
-SRC_BASE="/mnt/main/family/images/photos"     # <SRC_BASE>/<user>/
 
 # alcatraz per-user DSM Photos libraries (destination, local).
 DST_BASE="/volume1/homes"                     # <DST_BASE>/<user>/Photos/
@@ -84,7 +88,7 @@ FAILED=0
 for entry in "${USERS[@]}"; do
   user="${entry%%:*}"
   uid="${entry##*:}"
-  src="${SRC_HOST}:${SRC_BASE}/${user}/"
+  src="${SRC_HOST}:${user}/"   # relative to the rrsync root (see SRC_HOST note)
   dst="${DST_BASE}/${user}/Photos/"
   mkdir -p "${dst}"
   echo "--- $(date -u +%FT%TZ) pull ${user} (uid=${uid}): ${src} -> ${dst} ---"

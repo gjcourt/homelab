@@ -72,38 +72,63 @@ cat /volume1/homes/truenas-backup/.ssh/id_ed25519_hestia.pub
 
 ### 2. Authorize the key on hestia (done by someone with hestia access — NOT this runbook's DSM operator)
 
-**A human/assistant with hestia access installs this line — the alcatraz-side
-operator does not touch hestia.** On hestia, append the public key from step 1
-to `truenas_admin`'s `authorized_keys`, restricted to **read-only rsync of the
-photos path** via an `rrsync` forced command:
+**A human/assistant with hestia access installs this key — the alcatraz-side
+operator does not touch hestia.** The public key from step 1 goes into
+`truenas_admin`'s authorized keys with a **forced command** that confines it to
+read-only rsync of the photos path:
 
 ```
-command="rrsync -ro /mnt/main/family/images/photos",no-agent-forwarding,no-port-forwarding,no-pty,no-X11-forwarding ssh-ed25519 AAAA...alcatraz-photos-pull
+command="sudo -n --preserve-env=SSH_ORIGINAL_COMMAND /usr/bin/rrsync -ro /mnt/main/family/images/photos",no-agent-forwarding,no-port-forwarding,no-pty,no-X11-forwarding ssh-ed25519 AAAA...alcatraz-photos-pull
 ```
 
-`rrsync -ro` locks this key to read-only rsync rooted at the photos directory —
-even if the key leaks it can only pull photos, never write or run a shell.
+Two things about this line are load-bearing:
 
-**If `rrsync` isn't present on TrueNAS SCALE** (it ships with rsync but the
-path varies; check `command -v rrsync` and `ls /usr/share/doc/rsync*/support/`):
-either
+- **It runs `rrsync` as root (`sudo -n`).** The photo *files* on hestia are
+  `0700`/owner-only (mara or george — inherited from the SD card by `rsync -a`).
+  `truenas_admin` can traverse the `0755` dirs but cannot read the files, and it
+  **cannot** be added to the owning `users` group — TrueNAS refuses
+  (`membership of this builtin group may not be altered`). So the read has to be
+  as root. `rrsync -ro` still hard-confines it: even as root the key can **only**
+  read-only-rsync this one path — no writes, no other files, no shell. Blast
+  radius if the key leaks ≈ read access to photos that alcatraz (where the key
+  lives) already holds. `--preserve-env=SSH_ORIGINAL_COMMAND` is required so the
+  client's rsync command survives `sudo`'s env reset and reaches `rrsync`.
+- **Paths are relative to the rrsync root.** `rrsync -ro <root>` prepends
+  `<root>` to every client path, so the script requests `mara/` / `george/`
+  (see `SRC_HOST` note in `pull-from-hestia.sh`), NOT the absolute
+  `/mnt/.../photos/mara/` — an absolute path gets the root prepended twice and
+  fails with `change_dir ...photos/mnt/.../photos/mara: No such file`.
 
-- fall back to an **unrestricted** key line on the trusted LAN and accept the
-  trade-off (this key can then run any command as `truenas_admin` — acceptable
-  only because the LAN is trusted and the key never leaves alcatraz), or
-- drop a tiny forced-command wrapper script that execs `rsync --server
-  --sender ...` limited to the photos path and point `command="..."` at it.
+**Install it via the TrueNAS middleware, not by editing the file.** TrueNAS
+manages `~truenas_admin/.ssh/authorized_keys` from the user's `sshpubkey` field;
+a direct file edit is clobbered on the next user update or reboot. Either use the
+UI (Credentials → Local Users → truenas_admin → Authorized Keys, append the line
+above, preserving existing keys) or the API, reading-appending-writing so the
+existing keys are kept:
 
-Verify from alcatraz once installed:
+```bash
+# on hestia (truenas_admin has passwordless sudo). Query current sshpubkey,
+# append the forced-command line, and write it back via user.update.
+sudo midclt call user.query '[["username","=","truenas_admin"]]'   # note the id + current sshpubkey
+sudo midclt call user.update <id> '{"sshpubkey": "<existing keys>\n<forced-command line>"}'
+```
+
+`sudo` NOPASSWD for `rrsync` must be available to `truenas_admin` — on TrueNAS
+its admin account already has passwordless sudo, so no extra sudoers entry is
+needed. (`rrsync` ships at `/usr/bin/rrsync` on TrueNAS SCALE.)
+
+Verify from alcatraz once installed — note the **relative** source path:
 
 ```bash
 rsync -n -a --rsh="ssh -i /volume1/homes/truenas-backup/.ssh/id_ed25519_hestia \
     -o StrictHostKeyChecking=accept-new \
     -o UserKnownHostsFile=/volume1/homes/truenas-backup/.ssh/known_hosts_hestia" \
-    truenas_admin@10.42.2.10:/mnt/main/family/images/photos/george/ /tmp/pull-test/
+    truenas_admin@10.42.2.10:george/ /tmp/pull-test/
 ```
 
 A dry-run (`-n`) file list with no errors means the key + forced command work.
+A real (non-`-n`) pull of a file should transfer bytes; a push attempt must be
+refused with `rrsync error: sending to read-only server is not allowed`.
 
 ### 3. Place the script on alcatraz
 

@@ -14,10 +14,21 @@
 FROM debian:bookworm-slim
 
 # openssh-client — SSH to alcatraz to read the pull log
-# zfsutils-linux  — `zfs list -t snapshot` (read-only; needs host /dev/zfs)
+# zfsutils-linux  — `zfs list -t snapshot` (read-only; needs host /dev/zfs).
+#                   Debian ships the ZFS userland in the `contrib` component,
+#                   which bookworm-slim doesn't enable by default — so enable it
+#                   first (deb822 `Components:` line, with a classic-format
+#                   fallback), else apt reports "no installation candidate".
+#                   --no-install-recommends keeps zfs-dkms (kernel build) out;
+#                   we only need the read-only zfs/zpool CLI.
 # bash, coreutils — the script uses bash-isms + GNU `date -d`
 # ca-certificates — general TLS hygiene
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i 's/^Components: main$/Components: main contrib/' /etc/apt/sources.list.d/debian.sources; \
+    else \
+        echo 'deb http://deb.debian.org/debian bookworm main contrib' > /etc/apt/sources.list.d/contrib.list; \
+    fi \
+    && apt-get update && apt-get install -y --no-install-recommends \
         openssh-client \
         zfsutils-linux \
         bash \

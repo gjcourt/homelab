@@ -101,7 +101,7 @@ Layout under each person is `YYYY/MM` (`george/` has `2013`…`2026`, months
 > `winpc-5600x`. Pick one machine-id and rename before it calcifies (see Open
 > Decision D6).
 
-**Snapshots (121 total).** Auto periodic tasks cover **`main/family`** (and its
+**Snapshots (~120 as of the survey; the exact count drifts as periodic tasks fire).** Auto periodic tasks cover **`main/family`** (and its
 children) and **`main/homes`** only — 21 snapshots each: **daily** 05:00,
 **weekly** 05:30 Sun, **monthly** 06:00 on the 1st.
 **`main/archive` has ZERO snapshots; the `main/media` datasets have ZERO.** Neither
@@ -297,16 +297,21 @@ A manifest of the *destination alone proves nothing* — it faithfully hashes a
 **source manifest == destination manifest**. So take a manifest **on the mounted
 source first**, the destination second, and reconcile before any wipe:
 ```bash
-# 1) SOURCE-SIDE, while the drive is still mounted read-only (e.g. at /src):
-find /src -type f -printf "%s\t%P\n" | sort > /tmp/<id>.src.filelist
+# 1) SOURCE-SIDE, while the drive is still mounted read-only (e.g. at /src).
+#    Write to the PERSISTENT _manifests dir, NOT /tmp: a slow copy can run for DAYS,
+#    and /tmp may be cleared (reboot / tmpwatch) before the reconcile runs — which
+#    would destroy the source-of-truth. (Source mounted on another host? scp it over.)
+find /src -type f -printf "%s\t%P\n" | sort > /mnt/main/archive/_manifests/<id>.src.filelist
 
-# 2) DESTINATION, after the copy completes:
+# 2) DESTINATION, after the copy completes.
+#    NOTE: the reconcile assumes a CONTENTS copy — `rsync /src/ <dst>/` (trailing slash).
+#    A no-trailing-slash copy nests everything under src/ and the diff will mis-report.
 cd /mnt/main/archive/<machine-id>
 sudo find . -type f -printf "%s\t%P\n" | sort > /mnt/main/archive/_manifests/<id>.dst.filelist
 sudo find . -type f -exec sha256sum {} + | sort > /mnt/main/archive/_manifests/<id>.sha256
 
 # 3) RECONCILE — must be empty (identical relative paths + sizes on both sides):
-diff /tmp/<id>.src.filelist /mnt/main/archive/_manifests/<id>.dst.filelist && echo COMPLETE
+diff /mnt/main/archive/_manifests/<id>.src.filelist /mnt/main/archive/_manifests/<id>.dst.filelist && echo COMPLETE
 
 # 4) Only on COMPLETE: write summary + seal snapshot
 { echo "files: $(wc -l < /mnt/main/archive/_manifests/<id>.dst.filelist)";

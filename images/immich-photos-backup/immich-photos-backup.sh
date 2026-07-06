@@ -137,6 +137,14 @@ DURATION=$((END_TS - START_TS))
 
 if [[ ${FAILED} -eq 0 ]]; then
   echo "=== $(date -u +%FT%TZ) END (success, ${DURATION}s) ==="
+  # Emits TWO metric families:
+  #   - immich_photos_backup_*        legacy series (back-compat; predates homelabscope)
+  #   - homelabscope_job_*{job=...}    the unified homelabscope family (see
+  #                                    infra/configs/homelabscope). The
+  #                                    homelabscope_job_max_age_seconds budget
+  #                                    (30h = 108000, daily job) is emitted here
+  #                                    so the generic HomelabscopeJobStale alert
+  #                                    can key off this job like any other.
   cat > "${TEXTFILE}.tmp" <<EOF
 # HELP immich_photos_backup_last_success_seconds Unix timestamp of last successful immich photos rsync
 # TYPE immich_photos_backup_last_success_seconds gauge
@@ -144,6 +152,18 @@ immich_photos_backup_last_success_seconds ${END_TS}
 # HELP immich_photos_backup_duration_seconds Wall-clock duration of last successful rsync
 # TYPE immich_photos_backup_duration_seconds gauge
 immich_photos_backup_duration_seconds ${DURATION}
+# HELP homelabscope_job_last_success_seconds Unix timestamp of the job's last successful run.
+# TYPE homelabscope_job_last_success_seconds gauge
+homelabscope_job_last_success_seconds{job="immich-photos-backup"} ${END_TS}
+# HELP homelabscope_job_last_duration_seconds Wall-clock duration of the job's last run (seconds).
+# TYPE homelabscope_job_last_duration_seconds gauge
+homelabscope_job_last_duration_seconds{job="immich-photos-backup"} ${DURATION}
+# HELP homelabscope_job_last_status Last run status (0=ok, 1=fail).
+# TYPE homelabscope_job_last_status gauge
+homelabscope_job_last_status{job="immich-photos-backup"} 0
+# HELP homelabscope_job_max_age_seconds Staleness budget for this job (seconds).
+# TYPE homelabscope_job_max_age_seconds gauge
+homelabscope_job_max_age_seconds{job="immich-photos-backup"} 108000
 EOF
   mv "${TEXTFILE}.tmp" "${TEXTFILE}"
   exit 0

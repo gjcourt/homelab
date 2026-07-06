@@ -157,7 +157,7 @@ snapshotted).
 │   │   └── _inbox/             transient import staging (rename of photos-staging-30d)
 │   ├── videos/                 [dataset]  home movies WE shot (empty so far — MIGHTY JOE was mis-IDed; it's media/)  ← per-person subdirs later
 │   ├── audio/          (31G)   voice memos, recordings we own   ← propose promote to dataset
-│   ├── documents/      (270M)  scans, PDFs, our paperwork
+│   ├── documents/      (270M)  scans, PDFs, our paperwork  ← sub-folder schema: reference/2026-07-06-family-documents-schema.md
 │   ├── literature/     (10G)   ebooks / writing
 │   ├── projects/       (1.7G)  personal project files
 │   ├── admin/ · misc/          misc household

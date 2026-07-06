@@ -33,13 +33,15 @@ family/documents/
 │   ├── equity-comp/                 83(b), RSUs, comp statements
 │   └── insurance/                   life, umbrella (non-auto)
 │
-├── real-estate/<property>/<year>/   property-first: 3545-washington/2017, 835-dry-creek/2024
+├── real-estate/
+│   ├── owned/<property>/<year>/      properties you own — e.g. 3545-washington/{2017,2022,2024}
+│   └── prospects/<property>/         browsed / comps, never bought — 1923-pierce, 2955-sacramento, 835-dry-creek
 │
 ├── auto/<vehicle>/                  lexus-nx-450h, mazda-cx-5
 │   ├── <year>/
 │   └── insurance/
 │
-├── medical/<person>/<year>/         george/, mara/  (+ provider subfolders as needed)
+├── medical/<year>/                  year-first (matches existing data); person/provider subfolders optional; unclear docs → _review/
 │
 ├── receipts/<year>/<type>/          2024/, "01 Medical", …
 │
@@ -60,9 +62,12 @@ family/documents/
 
 ## Design decisions (recommended answers baked in above)
 
-1. **real-estate → property-first** (`<property>/<year>`), not year-first. Rationale:
-   `3545-washington` appears in *both* 2017 and 2024 — property-first unifies a
-   property's whole history instead of scattering it across year folders.
+1. **real-estate → property-first, split owned vs prospects** (`owned/<property>/<year>`
+   and `prospects/<property>/`). Rationale: `3545-washington` is *owned* and its docs
+   span 2017/2022/2024 — property-first unifies its history; but most 2022 entries
+   (`1923-pierce`, `2955-sacramento`, `3107-warm-springs`, `835-dry-creek`) are one-off
+   house-hunting comps that shouldn't get deep owned-style folders. The owned/prospects
+   split keeps both clean.
 2. **`legal/` holds estate-plan + Trust + IDs/contracts**, pulled out of `finance/`.
    Rationale: estate/legal instruments are referenced independently of tax-year finance.
 3. **`career/` is its own category** (per-person), not folded into `george/`/`mara/`.
@@ -70,6 +75,10 @@ family/documents/
 4. **Dropped `correspondence/`** — the scan showed the people-named Dropbox folders
    (Terri, Howard, Ofer, Andreas) are not letters: they're event photos, music, and app
    source code (see routing below). No real correspondence corpus exists.
+5. **medical stays year-first** (`medical/<year>/`), not person-first. Rationale: the
+   existing data is year-organized and doesn't encode which person each doc belongs to
+   ("patricia ross" is a provider, not a person). Person/provider subfolders are
+   optional; docs with an unclear owner go to `_review/` rather than forcing a guess.
 
 ## Non-document routing (so `family/documents` stays clean)
 
@@ -101,7 +110,10 @@ these Dropbox/machine folders route elsewhere:
 - Ownership follows the plan's per-person model where a person subfolder exists
   (`medical/george`, `career/mara`): owned by that person's uid, world-readable.
 - The consolidation dedupes on **sha256** before landing anything (same doc from
-  multiple machines lands once), per the parent plan's §6.
+  multiple machines lands once), per the parent plan's §6. **Collision rule:** if a
+  candidate's sha256 already exists at the destination → skip (identical). If a file of
+  the **same name but different content** exists → land it in `_review/` for a human to
+  reconcile; never silently overwrite.
 
 ## Basis
 

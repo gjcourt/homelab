@@ -1,16 +1,22 @@
 ---
 status: planned
 last_modified: 2026-07-06
-summary: "Dataset taxonomy and data-organization policy for hestia (TrueNAS pool `main`). Fixes the core family-vs-media-vs-archive confusion after the 2026-07-05/06 machine-recovery session. Defines three buckets — family/ (household's own content → Immich, videos, audio, docs), media/ (consumed Jellyfin media), archive/ (cold per-machine restore-only backups) — with a per-artifact home mapping, per-person uid/gid layout for the photo library, dataset-vs-subdir + ZFS property conventions, and a per-bucket snapshot/replication/integrity policy. Flags real gaps found live: main/archive has NO snapshots and NO quota; media/ is not a ZFS dataset; archive children are plain dirs not per-machine datasets; photo-staging (82G) is transient scratch to reclaim."
+summary: "Dataset taxonomy and data-organization policy for hestia (TrueNAS pool `main`). Fixes the core family-vs-media-vs-archive confusion after the 2026-07-05/06 machine-recovery session. Defines three buckets — family/ (household's own content → Immich, videos, audio, docs), media/ (consumed Jellyfin media), archive/ (cold per-machine restore-only backups) — with a per-artifact home mapping, per-person uid/gid layout for the photo library, dataset-vs-subdir + ZFS property conventions, and a per-bucket snapshot/replication/integrity policy. Flags real gaps found live: main/archive (318G irreplaceable) has NO snapshots and NO quota; the main/media datasets have NO snapshots (media is ALREADY a dataset hierarchy at 1M recordsize — no promotion needed); archive children are plain dirs not per-machine datasets; the archive manifest must diff SOURCE-vs-destination before any drive wipe; photo-staging (82G) is transient scratch to reclaim."
 ---
 
 # hestia data-organization plan
 
 > **Planning doc only.** Large recovery jobs are still writing to
-> `/mnt/main/archive/` and `/mnt/main/family/videos/` as of this writing. This
+> `/mnt/main/archive/` (MIGHTY JOE staging, drive pulls) as of this writing. This
 > document proposes structure and policy; it does **not** authorize moving or
 > deleting anything currently in flight. Execution items are checklisted at the
 > end and gated on George's review + the recovery jobs finishing.
+
+> **Draft 2 (2026-07-06)** — revised after a 3-round critique + live re-survey:
+> corrected the "media isn't a dataset" error (it already is, at 1M), fixed the MIGHTY
+> JOE classification (it's ripped films → `media/`, not home video), hardened the
+> archive manifest to a **source↔destination** diff, and front-loaded the
+> `archive/` snapshot gap ahead of the drive-wipe window.
 
 hestia = the homelab TrueNAS SCALE NAS (`truenas_admin@10.42.2.10`, passwordless
 sudo, TrueNAS 26.x). Single data pool **`main`**, mounted at `/mnt/main`.
@@ -19,9 +25,10 @@ sudo, TrueNAS 26.x). Single data pool **`main`**, mounted at `/mnt/main`.
 
 Numbers below are from a direct `zfs list` / `du` survey, not from memory.
 
-**Pool capacity:** `main` — **2.10 TiB used, 18.5 TiB available** (~20.6 TiB
-usable; the "~26 TB" figure is raw). Plenty of headroom, so the bias throughout is
-*keep faithful copies, snapshot generously* rather than prune aggressively.
+**Pool capacity:** `main` — **2.10 TiB used, 18.5 TiB available** (`zpool`: 29.1T
+raw / 26.1T free / 10% allocated; the raw-vs-usable delta is RAIDZ parity +
+reservation). Plenty of headroom, so the bias throughout is *keep faithful copies,
+snapshot generously* rather than prune aggressively.
 
 **Real ZFS datasets under `main`** (everything else in `/mnt/main` is a plain
 directory inside the root dataset):
@@ -31,20 +38,31 @@ directory inside the root dataset):
 | `main/family` | 334 G | 1M | off | `/mnt/main/family` | **quota 2T**; household's own content |
 | `main/family/images` | 291 G | 1M | off | `/mnt/main/family/images` | Immich external library root |
 | `main/family/images/photos` | 291 G | 1M | off | `/mnt/main/family/images/photos` | `<person>/YYYY/MM` |
-| `main/family/videos` | ~0 | 1M | off | `/mnt/main/family/videos` | **new this session**, receiving MIGHTY JOE now |
-| `main/archive` | 317 G | 1M | off | `/mnt/main/archive` | **no quota, NO snapshots** (gap) |
+| `main/family/videos` | ~0 | 1M | off | `/mnt/main/family/videos` | **new this session**, empty (MIGHTY JOE was reclassified → `media/`) |
+| `main/media` | **1.13 T** | 128K\* | off | `/mnt/main/media` | **already a dataset** — parent holds ~0; data is in 1M children below |
+| `main/media/movies` | 1.03 T | **1M** | off | `/mnt/main/media/movies` | already the correct large-file profile |
+| `main/media/{music,tv-anime,tv-shows}` | 31G / 64G / ~0 | **1M** | off | — | all datasets, all 1M |
+| `main/archive` | 318 G | 1M | off | `/mnt/main/archive` | **no quota, NO snapshots** (gap) |
 | `main/homes` | 65 M | 128K | off | `/mnt/main/homes` | quota 1T; SMB user homes |
 | `main/apps` | 59 M | 128K | off | `/mnt/main/apps` | |
-| `main/k8s/iscsi/*` | 145 G | volumes | — | — | democratic-csi iSCSI PVCs (out of scope) |
+| `main/k8s/*` | 145 G | volumes | — | — | iSCSI PVCs (out of scope) |
 | `main/ix-apps/*` | 18.5 G | 128K | off | `/mnt/.ix-apps` | TrueNAS app engine (out of scope) |
 | `main/backups` | ~0 | 128K | off | `/mnt/main/backups` | empty |
+
+\* `main/media`'s own 128K recordsize is harmless — it stores no direct data
+(`REFER` ~256K); every data-bearing child is already 1M.
 
 **Plain directories in the root `main` dataset (NOT their own datasets):**
 
 | Path | Size | Problem |
 |---|---|---|
-| `/mnt/main/media` | **~1.2 T** (movies 1.1T, tv-anime 65G, music 31G, tv-shows 0) | **Not a dataset** → inherits root's 128K recordsize (wrong for large media), gets **no independent snapshot policy or quota**. |
 | `/mnt/main/ai`, `/mnt/main/downloads`, `/mnt/main/melodic-muse` | small | Loose root dirs; out of scope but noted. |
+
+> **Correction (this was wrong in draft 1):** `media/` is **already** a ZFS dataset
+> hierarchy — `main/media` plus `movies`/`music`/`tv-anime`/`tv-shows` children — and
+> the data-bearing children are **already `recordsize=1M`**. The only real media gap is
+> **no snapshot task**, not "promote to a dataset." All media-promotion language below
+> is struck accordingly.
 
 **`main/family/` subtree** (all plain subdirs unless marked *dataset*):
 `images/` *(dataset, 291G)*, `videos/` *(dataset, new)*, `audio/` (31G),
@@ -83,11 +101,12 @@ Layout under each person is `YYYY/MM` (`george/` has `2013`…`2026`, months
 > `winpc-5600x`. Pick one machine-id and rename before it calcifies (see Open
 > Decision D6).
 
-**Snapshots (122 total).** Auto periodic tasks cover **`main/family`** (and its
+**Snapshots (121 total).** Auto periodic tasks cover **`main/family`** (and its
 children) and **`main/homes`** only — 21 snapshots each: **daily** 05:00,
 **weekly** 05:30 Sun, **monthly** 06:00 on the 1st.
-**`main/archive` has ZERO snapshots. `media` (not a dataset) has zero.** These are
-the two biggest policy gaps this plan closes.
+**`main/archive` has ZERO snapshots; the `main/media` datasets have ZERO.** Neither
+is protected. These are the two biggest policy gaps this plan closes — and both are a
+**snapshot-task** problem, *not* a dataset-creation problem.
 
 ---
 
@@ -136,7 +155,7 @@ snapshotted).
 │   │   │   └── mara/           uid 1027 : gid 100 (users), 755
 │   │   ├── artwork/            shared, non-photo images
 │   │   └── _inbox/             transient import staging (rename of photos-staging-30d)
-│   ├── videos/                 [dataset]  home movies (MIGHTY JOE, etc.)  ← propose per-person subdirs later
+│   ├── videos/                 [dataset]  home movies WE shot (empty so far — MIGHTY JOE was mis-IDed; it's media/)  ← per-person subdirs later
 │   ├── audio/          (31G)   voice memos, recordings we own   ← propose promote to dataset
 │   ├── documents/      (270M)  scans, PDFs, our paperwork
 │   ├── literature/     (10G)   ebooks / writing
@@ -144,8 +163,8 @@ snapshotted).
 │   ├── admin/ · misc/          misc household
 │   └── (iphone-recovery/ — retire; was a transient mount)
 │
-├── media/              (~1.2T) CONSUMED media for Jellyfin   ← PROMOTE to dataset
-│   ├── movies/ (1.1T) · tv-shows/ · tv-anime/ (65G) · music/ (31G)
+├── media/  [dataset 1.13T]  CONSUMED media for Jellyfin   ← already datasets; needs SNAPSHOTS only
+│   ├── movies/ [dataset,1M,1.03T] · music/ [1M] · tv-anime/ [1M] · tv-shows/ [1M]
 │
 ├── archive/            [dataset]  COLD per-machine backups — restore-only
 │   ├── winpc-5800x/    (108G)  ← promote to per-machine dataset (see D6 re: id)
@@ -175,7 +194,7 @@ source of truth, Immich gets a curated projection.
 | Artifact (current location) | Final home | Immich? | Cold archive? | Notes |
 |---|---|---|---|---|
 | Windows PC home `winpc-5800x/George/` | `archive/winpc-5800x/` (→ dataset) | photos only | **yes** | Machine backup. |
-| **iPhone-13 backup** `…/Apple/MobileSync/Backup/` (97G, encrypted) | stays inside `archive/winpc-5800x/` | **yes** (extract camera roll via `ibackup.py`) | **yes** | Encrypted → needs backup password to extract. Keep the raw backup cold. |
+| **iPhone-13 backup** `…/Apple/MobileSync/Backup/` (97G, encrypted) | stays inside `archive/winpc-5800x/` | **done** — camera roll (18,768 items) already extracted → `photo-staging/iphone13-cameraroll/`, awaiting Immich import | **yes** | Decrypt needs the **retained** backup password (`piano-…`); keep the raw backup cold. **If that password is lost, re-extraction is impossible** — gates the staging delete in §7.4. |
 | **2012 iPhone backup** `oldmac-unibody/priority/MobileSync/` | stays inside `archive/oldmac-unibody/` | **yes** (extract) | **yes** | Oldest phone photos. |
 | `gauss/` MacBook home (69G) | `archive/gauss/` (→ dataset) | photos only (`Pictures/`, iPhoto/Aperture) | **yes** | Extract from library packages, not Photos.app. |
 | **Dropbox `Camera Uploads/`** (36G, 2010–2018) | `archive/dropbox-cloud/` | **yes** | **yes** | Prime source of pre-Immich photos. |
@@ -185,8 +204,8 @@ source of truth, Immich gets a curated projection.
 | `oldmac-unibody/priority/Pictures` (2012) | `archive/oldmac-unibody/` | **yes** | **yes** | |
 | `oldmac-salvage/` (keychains, keepassx) | `archive/oldmac-salvage/` | no | **yes** | Secrets — keep, don't index. |
 | **Capsule Time Machine** (Feb-2014 gauss) — *future* | `archive/capsule-tm-2014/` (→ dataset) | photos only, after mounting the sparsebundle | **yes** | May contain photos absent elsewhere. |
-| **MIGHTY JOE videos** (NTFS drive, copying now) | `family/videos/` | n/a (Immich can index videos too — decide D2) | it *is* the primary copy | **OURS**, not `media/`. Home movies. |
-| Jellyfin movies/tv/music (already in `media/`) | `media/` (→ promote to dataset) | no | no | Consumed, replaceable. |
+| **MIGHTY JOE** (NTFS drive) — *turned out to be 125 ripped feature films, **not** home video* | `media/movies/` (dedup vs existing) | no | no | **CONSUMED media**, not `family/`. Draft 1 misclassified this as home movies; live contents are Ocean's Eleven, City of God, the Bourne set, etc. Flow: cold-stage → sha256 byte-compare vs `media/movies` → move net-new → wipe stage. |
+| Jellyfin movies/tv/music (already in `media/`) | `media/` (already a dataset hierarchy at 1M) | no | no | Consumed, replaceable. Needs a snapshot task, **not** promotion. |
 
 ---
 
@@ -206,7 +225,19 @@ source of truth, Immich gets a curated projection.
   sudo find /mnt/main/family/images/photos/george/2014 -type d -exec chmod 755 {} +
   sudo find /mnt/main/family/images/photos/george/2014 -type f -exec chmod 644 {} +
   ```
-- Purge stray `.DS_Store` (SMB/Finder litter) from the library periodically.
+- Purge stray `.DS_Store` (SMB/Finder litter) from the library periodically. One is
+  live at the photos root **mis-owned `george:george`** (not `:users`) — exactly the
+  drift to clean.
+
+### Immich ↔ NFS uid mapping (why the ownership model actually works)
+Immich reads `family/images` as an **external library** over its NFS PV
+(`immich-photos-pv-prod`). The export is **not root-squashed** for the cluster, so the
+container sees on-disk uids directly: files owned **1028**/**1027** with world-readable
+**755 dirs / 644 files** are readable by the Immich pod *regardless of the pod's own
+uid* — which is why "owner correct + 755/644" is sufficient and the month-folder is
+cosmetic (Immich timelines by EXIF). Keep the export non-squashing (or squashed to a
+uid that has read access); if that changes, the per-person ownership stops being
+readable and the library goes dark.
 
 ### Layout
 - Photos/videos: `family/images/photos/<person>/YYYY/MM/<original-name>`, year+month
@@ -217,7 +248,8 @@ source of truth, Immich gets a curated projection.
 ### ZFS properties (defaults per bucket)
 | Bucket | compression | recordsize | atime | rationale |
 |---|---|---|---|---|
-| `family/images`, `family/videos`, `family/audio`, `media/*`, `archive/*` | lz4 | **1M** | off | Large, mostly-immutable files; 1M record + lz4 is the right large-file profile. |
+| `family/images`, `family/videos`, `family/audio`, `media/*` *(already set)* | lz4 | **1M** | off | Large, mostly-immutable files; 1M record + lz4 is the right large-file profile. |
+| `archive/<machine>` — **per content, not blanket** | lz4 | 1M for large-backup machines; **128K** for config/secret dirs (`oldmac-salvage`, `_tools`) | off | Archive is **mixed**; don't 1M a tree full of tiny keychains / `.info` / configs. |
 | Mixed/small (`documents`, `homes`, `apps`) | lz4 | 128K (default) | off | Many small files. |
 
 lz4 everywhere (cheap, never hurts). `atime=off` everywhere (avoids write
@@ -231,8 +263,9 @@ Make a **new child dataset** (not just a `mkdir`) when the child needs an
   finished source can be snapshotted + frozen without touching others. (The
   mac-laptop-archive plan already assumes this for *new* machines; §7 back-fills the
   ones created this session as plain dirs.)
-- **`media` → promote to a dataset** (`main/media`, recordsize 1M, its own light
-  snapshot class). Optionally per-category children if you want per-category quota.
+- **`media` is *already* a dataset** (`main/media` + `movies`/`music`/`tv-anime`/`tv-shows`
+  children, all 1M). It needs only a **light snapshot class** added — no creation, no
+  rsync. Add per-category quotas only if you want to cap a category.
 - **`family/audio` (31G) → consider promoting to a dataset** (media-like large files,
   distinct snapshot value). `documents`/`literature`/`projects` can stay subdirs of
   `family` (they inherit family's strong snapshot policy, which is what you want).
@@ -258,28 +291,42 @@ Make a **new child dataset** (not just a `mkdir`) when the child needs an
 | **`media/*`** | **Light or none** (weekly, short retention) once it's a dataset — it's replaceable. | None needed. | ZFS scrub only. |
 | **`archive/*`** | **Snapshot-on-write**: after a source finishes copying and its **manifest verifies**, take one immutable snapshot per machine dataset (`archive/<id>@sealed-YYYY-MM-DD`) and hold it. Optionally a light periodic on top while a machine is still being appended to. | It *is* a backup; covered by pool-level snapshots. A second offsite of the huge cold set is **Open Decision D1**. | **Manifest per source** (see below) — the load-bearing safety check. |
 
-### Archive manifest (verify completeness before wiping any source drive)
-Before a physical source drive is erased, its `archive/<id>/` copy must have a
-committed manifest so completeness is provable, not assumed:
+### Archive manifest (prove the copy matches the SOURCE before wiping it)
+A manifest of the *destination alone proves nothing* — it faithfully hashes a
+**truncated** copy too (missing files just don't appear). Completeness =
+**source manifest == destination manifest**. So take a manifest **on the mounted
+source first**, the destination second, and reconcile before any wipe:
 ```bash
-# Per machine, once copy is complete:
-cd /mnt/main/archive/<machine-id>
-sudo bash -c '
-  find . -type f -printf "%s\t%p\n" | sort > /mnt/main/archive/_manifests/<machine-id>.filelist
-  find . -type f -exec sha256sum {} + | sort > /mnt/main/archive/_manifests/<machine-id>.sha256
-  { echo "files: $(wc -l < /mnt/main/archive/_manifests/<machine-id>.filelist)";
-    echo "bytes: $(du -sb . | cut -f1)";
-    echo "sealed: $(date -Iseconds)"; } > /mnt/main/archive/_manifests/<machine-id>.summary
-'
-sudo zfs snapshot main/archive/<machine-id>@sealed-$(date +%F)
-```
-Commit `_manifests/` (or a copy) into the repo so the record survives the NAS. Only
-after the manifest exists and matches is the source drive safe to wipe.
+# 1) SOURCE-SIDE, while the drive is still mounted read-only (e.g. at /src):
+find /src -type f -printf "%s\t%P\n" | sort > /tmp/<id>.src.filelist
 
-**Existing gaps to close (execution):**
-1. **Add a periodic snapshot task for `main/archive`** — it currently has **none**.
-2. **Add `main/media`** (as a dataset) to a light snapshot task once promoted.
-3. Confirm alcatraz replication actually includes `main/family` recursively.
+# 2) DESTINATION, after the copy completes:
+cd /mnt/main/archive/<machine-id>
+sudo find . -type f -printf "%s\t%P\n" | sort > /mnt/main/archive/_manifests/<id>.dst.filelist
+sudo find . -type f -exec sha256sum {} + | sort > /mnt/main/archive/_manifests/<id>.sha256
+
+# 3) RECONCILE — must be empty (identical relative paths + sizes on both sides):
+diff /tmp/<id>.src.filelist /mnt/main/archive/_manifests/<id>.dst.filelist && echo COMPLETE
+
+# 4) Only on COMPLETE: write summary + seal snapshot
+{ echo "files: $(wc -l < /mnt/main/archive/_manifests/<id>.dst.filelist)";
+  echo "bytes: $(du -sb . | cut -f1)"; echo "sealed: $(date -Iseconds)"; } \
+  > /mnt/main/archive/_manifests/<id>.summary
+sudo zfs snapshot main/archive/<machine-id>@sealed-$(date +%F)   # per-machine dataset once promoted
+```
+Commit `_manifests/` into the repo so the record survives the NAS. **The drive is safe
+to wipe only when the source↔destination `diff` is empty** — not merely when a
+manifest exists. (`--exclude` any legitimately-unwanted paths *symmetrically* on both
+sides so the diff stays meaningful.)
+
+**Existing gaps to close (execution) — snapshots FIRST, before any wipe:**
+0. **NOW, before anything else: add a periodic snapshot task for `main/archive`.** It
+   holds **318G of irreplaceable recovery data with zero snapshots** while source drives
+   are being wiped this week. This is **decoupled** from the manifest/seal work below and
+   must not wait for it.
+1. **Add the `main/media` datasets to a light snapshot task** — they already exist; they
+   just have zero coverage (no "promotion" needed).
+2. Confirm alcatraz replication actually includes `main/family` recursively.
 
 ---
 
@@ -316,22 +363,30 @@ Immich does not own or move them.
 Ordered, each step gated on the prior verifying. **None of this runs while recovery
 jobs are still writing** (§0 warning).
 
-1. **Finish in-flight copies** (MIGHTY JOE → `family/videos`; any archive writes).
+0. **NOW — snapshot the unprotected data** (`main/archive` + the `main/media`
+   datasets). Irreplaceable cold data must not sit snapshot-less through the wipe
+   window; this is independent of everything below and runs immediately.
+1. **Finish in-flight copies** (MIGHTY JOE → cold stage → dedup into `media/movies`;
+   any archive writes).
 2. **Mine photos** from `photo-staging/` (iphone13 camera roll, messages-gauss) and
    from the archive sources per §3, into Immich via §6 (dedupe on).
 3. **Verify import** (Immich shows the assets; counts reconcile) — *only then*:
-4. **Reclaim `photo-staging/` (82G)** — it is transient scratch. Delete it (or, if
-   nervous, snapshot `archive/photo-staging@pre-delete` first, then remove). The raw
-   iPhone backups and `gauss/` cold copies remain the sources of truth, so nothing
-   unique is lost.
-5. **Write manifests + seal snapshots** for each finished `archive/<machine-id>`
-   (§5) before any source drive is wiped.
-6. **Promote to datasets** (create dataset, rsync-in, swap, verify manifest):
-   `main/media` first (biggest policy win), then per-machine `archive/*`, then
-   optionally `family/audio`.
+4. **Reclaim `photo-staging/` (82G)** — transient scratch. Snapshot
+   `archive@pre-staging-delete` first, then remove. The `gauss/` cold copy and the raw
+   iPhone-13 backup remain the sources of truth — **but** re-extracting the iPhone-13
+   roll depends on the **retained backup password** (`piano-…`); a lost password makes
+   the raw backup inert, so delete only *after* the Immich import is verified (step 3).
+5. **Write source↔destination manifests + seal snapshots** (§5) for each finished
+   `archive/<machine-id>` **before any source drive is wiped** (the `diff` must be empty).
+6. **Promote per-machine `archive/*` to datasets** (create, rsync-in, swap, verify
+   manifest), then optionally `family/audio`. **`media` is already datasets — skip it.**
+   When swapping any dataset under `family/images/*`, the new **mountpoint must equal
+   the old path** or Immich's external-library NFS PV breaks — re-run an Immich Scan and
+   confirm the library is intact after each swap.
 7. **Retire transients:** rename `family/images/photos-staging-30d` → `_inbox`,
-   retire the `iphone-recovery` mount, purge `.DS_Store`.
-8. **Add snapshot tasks** for `main/archive` (and `main/media` post-promotion).
+   retire the `iphone-recovery` mount, purge the (mis-owned) `.DS_Store` litter.
+8. *(folded into step 0)* — the media + archive snapshot tasks are created up front,
+   not last.
 
 ---
 
@@ -354,9 +409,10 @@ jobs are still writing** (§0 warning).
   (31G) exist. Promote `audio` to its own dataset (recommended)? Is there
   *current* (non-archival) paperwork in `dropbox-cloud` that should be lifted into
   `family/documents` as live data rather than left cold?
-- **D5 — media promotion + per-category.** Promote `media` to a dataset (recommended
-  yes). Per-category child datasets (movies/tv/music) for independent quota, or one
-  `media` dataset? One is simpler; children only if you want quotas.
+- **D5 — media per-category quotas.** *(Corrected: `media` is **already** a dataset
+  with per-category children at 1M — nothing to promote.)* Only open question: add
+  per-category **quotas** (movies/tv/music) to cap a category, or leave unquota'd?
+  Unquota'd is simplest given 18.5T free.
 - **D6 — machine-id reconciliation.** `winpc-5800x` (on disk) vs `winpc-5600x` (mac
   plan). Confirm the real CPU and rename the dataset **before** it's referenced
   further.

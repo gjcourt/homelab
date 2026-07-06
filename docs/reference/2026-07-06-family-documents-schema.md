@@ -78,7 +78,14 @@ these Dropbox/machine folders route elsewhere:
 
 | Source folder(s) | What it actually is | Home |
 |---|---|---|
-| Camera Uploads, Nikon Transfer, Photos, Terri, 251 27th Avenue, Dresser and Nightstand, Public, XJ550 photos | photos | → Immich (`family/images/photos/<person>/YYYY/MM`) |
+| Camera Uploads, Nikon Transfer, Photos, 251 27th Avenue, Dresser and Nightstand, Public, XJ550 photos | your photos | → Immich (`family/images/photos/<person>/YYYY/MM`) |
+| **Terri** (ex-partner's photos), and any ambiguous personal photo set | needs a human keep/trash call | → **`_review/` hold — NOT auto-imported**; owner reviews, then keeps-elsewhere or trashes |
+
+> **Review-hold rule:** the consolidation must **not** auto-import photo sets whose
+> ownership or keep/trash status is unclear (an ex-partner's photos, someone else's
+> event dump, unsorted junk). These land in a `family/images/_review/` hold for a human
+> decision, never straight into a person's timeline. Only clearly-yours photos
+> auto-import.
 | Howard, classical albums (Gilels/Moravec), music/ | music/audio | → `media/music` (or `family/audio` for own recordings, e.g. the 2006 piano tracks) |
 | books | ebooks / audiobooks | → `family/literature` |
 | projects, projects_archive, config, disqus, XML, Ofer-George, Andreas | source code / dev config | → `family/projects` (or `archive/` if dead) |

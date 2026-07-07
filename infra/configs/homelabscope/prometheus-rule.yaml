@@ -146,22 +146,37 @@ spec:
         # synthesises a firing series carrying that job label, so the alert
         # names the missing job.
         #
-        # SCOPE: absent() only guards jobs that HAVE a live data source at merge
-        # time. Guarding a job whose exporter isn't deployed yet turns absent()
-        # into a guaranteed false critical the moment this rule lands. Two
-        # heartbeat-backed jobs are intentionally omitted here and MUST be added
-        # back by the follow-up PR that un-archives the homelabscope-heartbeat
-        # Custom App (flips x-deploy.archived: false):
+        # SCOPE: absent() only guards jobs whose series is actually LIVE in
+        # Prometheus. Guarding a job whose series isn't present yet turns
+        # absent() into a guaranteed false critical the moment this rule lands.
+        #
+        # This is the follow-up PR: the homelabscope-heartbeat Custom App is now
+        # un-archived (x-deploy.archived: false) and running on hestia, so its
+        # three heartbeat-backed jobs now emit series (verified live) and are
+        # guarded here:
         #   - alcatraz-photos-pull
         #   - zfs-snapshot-main-family / zfs-snapshot-main-homes
-        # Their heartbeat writer ships archived: true in this PR, so their series
-        # cannot exist yet. immich-photos-backup IS kept: its textfile is served
-        # by the node-exporter Custom App that operator step 1 deploys as part of
-        # this rollout, and its absence is the acceptance signal for the orphaned-
-        # metric bug this PR fixes (the 1h `for` covers the deploy window).
+        #
+        # immich-photos-backup is intentionally NOT guarded here — note the real
+        # reason, because it is a deployment lag, not a design choice: the source
+        # (images/immich-photos-backup/immich-photos-backup.sh) DID migrate to
+        # the homelabscope family in #1052 and emits
+        # homelabscope_job_last_success_seconds{job="immich-photos-backup"}. But
+        # the DEPLOYED image (pinned 2026-07-04, predates #1052) still writes
+        # ONLY the legacy immich_photos_backup_last_success_seconds, so the
+        # homelabscope series is absent in prod today and guarding it here pages
+        # falsely. Its old ImmichPhotoBackupStale alert was RETIRED (see the note
+        # in infra/configs/alerts/prometheus-rules.yaml) and nothing keys off the
+        # legacy series, so immich-photos-backup currently has NO heartbeat/
+        # staleness alert until its image is bumped to a post-#1052 build.
+        # TODO(homelabscope): bump the immich-photos-backup image, then re-add
+        # job="immich-photos-backup" to this absent() list to restore its guard.
+        # (the 1h `for` covers the deploy window.)
         - alert: HomelabscopeJobMetricAbsent
           expr: >
-            absent(homelabscope_job_last_success_seconds{job="immich-photos-backup"})
+            absent(homelabscope_job_last_success_seconds{job="alcatraz-photos-pull"})
+            or absent(homelabscope_job_last_success_seconds{job="zfs-snapshot-main-family"})
+            or absent(homelabscope_job_last_success_seconds{job="zfs-snapshot-main-homes"})
             or absent(homelabscope_job_last_success_seconds{job="pingo"})
             or absent(homelabscope_job_last_success_seconds{job="renovate"})
             or absent(homelabscope_job_last_success_seconds{job="adguard-sync-prod"})

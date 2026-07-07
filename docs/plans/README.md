@@ -60,12 +60,13 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (11)
+### In progress (12)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
 | [2026-07-04-homelabscope.md](2026-07-04-homelabscope.md) | 2026-07-04 | homelabscope — one Prometheus metric family (homelabscope_job_last_success_seconds{job}) + textfile collector + cronjob recording rules + templated staleness/absence alerts + Grafana table monitoring EVERY scheduled homelab job; fixes the orphaned (unscraped) immich-backup metric |
 | [2026-07-04-alcatraz-photos-pull.md](2026-07-04-alcatraz-photos-pull.md) | 2026-07-04 | Retire the impossible hestia→alcatraz rsync push-back; alcatraz pulls from hestia as local root via a DSM Task Scheduler job |
+| [2026-06-26-alcatraz-gitops-docker.md](2026-06-26-alcatraz-gitops-docker.md) | 2026-07-06 | GitOps push-deploy Docker workflow on alcatraz (Synology) mirroring the hestia GHA-runner model; D1–D3 + first workload (immich-photos-pull) implemented, D4 bootstrap operator-gated — **blocked:** operator bootstrap (P1–P7): confirm arch/DSM, create automation account, bring up the runner compose once over SSH, then flip immich-photos-pull archived→false + pin the image digest |
 | [2026-06-17-alertmanager-smtp-alerting.md](2026-06-17-alertmanager-smtp-alerting.md) | 2026-06-17 | Route critical Alertmanager alerts to email via Gmail SMTP (replaces dead Signal channel) |
 | [2026-06-16-thermalscope-power-and-headroom.md](2026-06-16-thermalscope-power-and-headroom.md) | 2026-06-17 | thermalscope: add power/energy/cost (RAPL), thermal headroom, and throttle/degradation signals — phases 1–3 live; phase 4 pending |
 | [2026-06-01-hestia-photos-sot.md](2026-06-01-hestia-photos-sot.md) | 2026-06-10 | Make hestia the source of truth for family/ + homes/; repoint Immich NFS PV; alcatraz narrows to upload target |

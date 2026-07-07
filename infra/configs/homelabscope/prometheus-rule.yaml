@@ -157,24 +157,22 @@ spec:
         #   - alcatraz-photos-pull
         #   - zfs-snapshot-main-family / zfs-snapshot-main-homes
         #
-        # immich-photos-backup is intentionally NOT guarded here — note the real
-        # reason, because it is a deployment lag, not a design choice: the source
-        # (images/immich-photos-backup/immich-photos-backup.sh) DID migrate to
-        # the homelabscope family in #1052 and emits
-        # homelabscope_job_last_success_seconds{job="immich-photos-backup"}. But
-        # the DEPLOYED image (pinned 2026-07-04, predates #1052) still writes
-        # ONLY the legacy immich_photos_backup_last_success_seconds, so the
-        # homelabscope series is absent in prod today and guarding it here pages
-        # falsely. Its old ImmichPhotoBackupStale alert was RETIRED (see the note
-        # in infra/configs/alerts/prometheus-rules.yaml) and nothing keys off the
-        # legacy series, so immich-photos-backup currently has NO heartbeat/
-        # staleness alert until its image is bumped to a post-#1052 build.
-        # TODO(homelabscope): bump the immich-photos-backup image, then re-add
-        # job="immich-photos-backup" to this absent() list to restore its guard.
-        # (the 1h `for` covers the deploy window.)
+        # immich-photos-backup is guarded again. Its source migrated to the
+        # homelabscope family in #1052 and emits
+        # homelabscope_job_last_success_seconds{job="immich-photos-backup"}, but
+        # for a window the DEPLOYED image (pinned 2026-07-04, predating #1052)
+        # still wrote ONLY the legacy immich_photos_backup_last_success_seconds,
+        # so the homelabscope series was absent in prod and this guard was
+        # temporarily dropped (#1066) to avoid a guaranteed false critical. The
+        # image is now bumped to a post-#1052 build (2026-07-07) that emits the
+        # homelabscope series — verified live in
+        # /var/lib/node-exporter/textfile/immich-backup.prom on hestia after a
+        # manual run — so the guard is restored below alongside the compose tag
+        # bump in the same PR. (the 1h `for` covers the deploy window.)
         - alert: HomelabscopeJobMetricAbsent
           expr: >
-            absent(homelabscope_job_last_success_seconds{job="alcatraz-photos-pull"})
+            absent(homelabscope_job_last_success_seconds{job="immich-photos-backup"})
+            or absent(homelabscope_job_last_success_seconds{job="alcatraz-photos-pull"})
             or absent(homelabscope_job_last_success_seconds{job="zfs-snapshot-main-family"})
             or absent(homelabscope_job_last_success_seconds{job="zfs-snapshot-main-homes"})
             or absent(homelabscope_job_last_success_seconds{job="pingo"})

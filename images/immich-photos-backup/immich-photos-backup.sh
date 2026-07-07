@@ -1,10 +1,16 @@
 #!/bin/bash
-# Daily DUPLEX sync of the Immich photo library between alcatraz and hestia.
-# Pull (alcatraz -> hestia): brings phone uploads into hestia (the source of truth).
-# Push-back (hestia -> alcatraz, --ignore-existing): copies anything hestia has that
-# alcatraz lacks (e.g. direct SD-card imports) so alcatraz stays a full backup.
-# No --delete in either direction -> both sides converge to the UNION; neither wipes
-# the other. hestia is authoritative; alcatraz is the phone-upload target + backup.
+# Daily incremental PULL of the Immich photo library from alcatraz -> hestia.
+# Brings phone uploads into hestia (the source of truth); additive, no --delete.
+#
+# The reverse leg (hestia -> alcatraz, so alcatraz stays a full backup and DSM
+# Photos gets direct-to-hestia SD-card imports) is NOT done here. It runs FROM
+# alcatraz as a DSM Task Scheduler pull job — see hosts/alcatraz/immich-photos-pull/.
+# Do NOT re-add a hestia-side sudo-rsync push-back: Synology's setuid-root
+# /bin/rsync authenticates the real uid against the DSM account DB in inbound
+# server mode, so `sudo rsync` (root, disabled account) and `sudo -u <user>
+# rsync` (non-admin) are both rejected, and an admin that isn't the owner can't
+# write the user's private 0700 homes/<user>/Photos. Root cause + decision:
+# docs/plans/2026-07-04-alcatraz-photos-pull.md.
 #
 # Pulls per-user Photos dirs from alcatraz (Synology NAS, 10.42.2.11) into the
 # local ZFS dataset main/family/images/photos. Snapshots are managed by a
@@ -114,22 +120,11 @@ for user in "${USERS[@]}"; do
     FAILED=$((FAILED + 1))
   fi
 
-  # --- duplex push-back: hestia -> alcatraz, copy only what alcatraz lacks ---
-  # --ignore-existing never overwrites alcatraz's copy (no conflicts, no --delete);
-  # it only adds missing files (e.g. SD-card imports made directly on hestia).
-  # Remote rsync runs via `sudo -n rsync` so it can write into the user's home and
-  # --chown the files to the right owner. This needs a truenas-backup sudoers entry
-  # for rsync on alcatraz (see README, "Sudoers entry on alcatraz"). A push-back
-  # failure is a WARNING only -- the pull above is what the staleness alert keys off.
-  if ! rsync -avh --ignore-existing --chown="${user}:users" \
-        --exclude='@eaDir' \
-        --exclude='.DS_Store' \
-        --exclude='Thumbs.db' \
-        --rsh="${RSYNC_RSH}" \
-        --rsync-path="sudo -n rsync" \
-        "${dst}" "${src}"; then
-    echo "!!! ${user} push-back (hestia->alcatraz backup) failed rc=$? -- pull OK; check alcatraz sudoers for rsync"
-  fi
+  # hestia -> alcatraz backup is NOT a push from here. It runs FROM alcatraz as
+  # a DSM Task Scheduler pull job (hosts/alcatraz/immich-photos-pull/). Do not
+  # re-add a `--rsync-path="sudo -n rsync"` push-back: Synology's setuid-root
+  # /bin/rsync rejects it in inbound server mode (real-uid DSM-account check).
+  # See docs/plans/2026-07-04-alcatraz-photos-pull.md.
 done
 
 END_TS=$(date +%s)

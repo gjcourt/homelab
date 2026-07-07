@@ -1,0 +1,277 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homelabscope-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  homelabscope.json: |
+    {
+      "annotations": {"list": []},
+      "editable": true,
+      "graphTooltip": 0,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "collapsed": false,
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
+          "id": 90,
+          "title": "Scheduled jobs — are they all healthy?",
+          "type": "row",
+          "panels": []
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Number of scheduled jobs currently past their own staleness budget (age > max_age). Mirrors the HomelabscopeJobStale alert. 0 = everything is fresh.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 1},
+          "id": 1,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "count(time() - homelabscope_job_last_success_seconds > homelabscope_job_max_age_seconds) or vector(0)",
+              "instant": true,
+              "legendFormat": "over budget"
+            }
+          ],
+          "title": "Jobs over budget",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Total scheduled jobs currently reporting a last-success heartbeat into the homelabscope family.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
+              "unit": "short"
+            }
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 8, "y": 1},
+          "id": 2,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "count(homelabscope_job_last_success_seconds)",
+              "instant": true,
+              "legendFormat": "tracked"
+            }
+          ],
+          "title": "Jobs tracked",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Worst-case freshness across all jobs: the highest age/budget ratio right now. >1 (red) means at least one job is over budget.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 0.75}, {"color": "red", "value": 1}]},
+              "unit": "percentunit",
+              "decimals": 2
+            }
+          },
+          "gridPos": {"h": 4, "w": 8, "x": 16, "y": 1},
+          "id": 3,
+          "options": {
+            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
+            "orientation": "auto",
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "max(( time() - homelabscope_job_last_success_seconds ) / homelabscope_job_max_age_seconds) or vector(0)",
+              "instant": true,
+              "legendFormat": "worst"
+            }
+          ],
+          "title": "Worst freshness ratio",
+          "type": "stat"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "One row per scheduled job. Health = age / max-age budget: green <75%, orange 75-100%, RED when a job is past its budget (the same condition as HomelabscopeJobStale). Covers all three source types — hestia/alcatraz textfile jobs and k8s CronJobs — through the single homelabscope_job_* family.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "thresholds"},
+              "custom": {"align": "auto", "cellOptions": {"type": "auto"}, "inspect": false},
+              "thresholds": {"mode": "absolute", "steps": [{"color": "text", "value": null}]}
+            },
+            "overrides": [
+              {
+                "matcher": {"id": "byName", "options": "Health (age/budget)"},
+                "properties": [
+                  {"id": "unit", "value": "percentunit"},
+                  {"id": "decimals", "value": 2},
+                  {"id": "custom.cellOptions", "value": {"type": "color-background"}},
+                  {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "orange", "value": 0.75}, {"color": "red", "value": 1}]}}
+                ]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Last success age"},
+                "properties": [{"id": "unit", "value": "s"}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Last duration"},
+                "properties": [{"id": "unit", "value": "s"}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Max age budget"},
+                "properties": [{"id": "unit", "value": "s"}]
+              },
+              {
+                "matcher": {"id": "byName", "options": "Status"},
+                "properties": [
+                  {"id": "custom.cellOptions", "value": {"type": "color-background"}},
+                  {"id": "mappings", "value": [{"type": "value", "options": {"0": {"text": "OK", "color": "green"}, "1": {"text": "FAIL", "color": "red"}}}]},
+                  {"id": "thresholds", "value": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}
+                ]
+              }
+            ]
+          },
+          "gridPos": {"h": 14, "w": 24, "x": 0, "y": 5},
+          "id": 10,
+          "options": {
+            "showHeader": true,
+            "sortBy": [{"displayName": "Health (age/budget)", "desc": true}]
+          },
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "time() - homelabscope_job_last_success_seconds",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "homelabscope_job_last_duration_seconds",
+              "format": "table",
+              "instant": true,
+              "refId": "B"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "homelabscope_job_max_age_seconds",
+              "format": "table",
+              "instant": true,
+              "refId": "C"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "( time() - homelabscope_job_last_success_seconds ) / homelabscope_job_max_age_seconds",
+              "format": "table",
+              "instant": true,
+              "refId": "D"
+            },
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "homelabscope_job_last_status",
+              "format": "table",
+              "instant": true,
+              "refId": "E"
+            }
+          ],
+          "transformations": [
+            {"id": "merge", "options": {}},
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {"Time": true, "instance": true},
+                "indexByName": {
+                  "job": 0,
+                  "Value #A": 1,
+                  "Value #B": 2,
+                  "Value #D": 3,
+                  "Value #C": 4,
+                  "Value #E": 5
+                },
+                "renameByName": {
+                  "job": "Job",
+                  "Value #A": "Last success age",
+                  "Value #B": "Last duration",
+                  "Value #C": "Max age budget",
+                  "Value #D": "Health (age/budget)",
+                  "Value #E": "Status"
+                }
+              }
+            }
+          ],
+          "title": "Scheduled job health",
+          "type": "table"
+        },
+        {
+          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "description": "Freshness ratio (age / max-age budget) over time, per job. Crossing 1.0 (the red line) is the HomelabscopeJobStale condition. A daily job saw-tooths up toward its budget then drops to ~0 at each successful run.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "palette-classic"},
+              "custom": {"lineWidth": 2, "spanNulls": false, "fillOpacity": 5},
+              "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]},
+              "unit": "percentunit"
+            }
+          },
+          "gridPos": {"h": 9, "w": 24, "x": 0, "y": 19},
+          "id": 11,
+          "options": {"tooltip": {"mode": "multi", "sort": "desc"}, "legend": {"displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"]}},
+          "targets": [
+            {
+              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "expr": "( time() - homelabscope_job_last_success_seconds ) / homelabscope_job_max_age_seconds",
+              "legendFormat": "{{job}}"
+            }
+          ],
+          "title": "Freshness ratio over time (1.0 = stale)",
+          "type": "timeseries"
+        }
+      ],
+      "refresh": "1m",
+      "schemaVersion": 39,
+      "tags": ["homelabscope", "jobs", "backups", "cron"],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "hide": 0,
+            "includeAll": false,
+            "name": "datasource",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "type": "datasource",
+            "label": "Datasource"
+          }
+        ]
+      },
+      "time": {"from": "now-24h", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Homelabscope — Scheduled Jobs",
+      "uid": "homelabscope",
+      "version": 1
+    }

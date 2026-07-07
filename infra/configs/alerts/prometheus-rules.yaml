@@ -206,22 +206,16 @@ spec:
     # -------------------------------------------------------------------------
     # Backups: alcatraz → hestia immich photos
     #
-    # The /usr/local/bin/immich-photos-backup.sh cron on hestia writes
-    # `immich_photos_backup_last_success_seconds` to the node-exporter
-    # textfile collector at the end of every successful run. Daily runs hit
-    # at ~04:00; 36h tolerates one full missed window before alerting.
-    # -------------------------------------------------------------------------
-    - name: immich-photos-backup
-      rules:
-        - alert: ImmichPhotoBackupStale
-          expr: time() - immich_photos_backup_last_success_seconds > 36 * 3600
-          for: 10m
-          labels:
-            severity: warning
-          annotations:
-            summary: "Immich photo backup hasn't completed in >36h"
-            description: >
-              Last successful immich-photos-backup.sh run on hestia was {{ $value | humanizeDuration }} ago. Daily cron is at 04:00; >36h means at least one full day's backup was missed. Check /var/log/immich-photos-backup.log on hestia and verify the ssh key to alcatraz still works.
+    # RETIRED 2026-07-04 — superseded by homelabscope. The old
+    # ImmichPhotoBackupStale alert keyed off immich_photos_backup_last_success_
+    # seconds, but NOTHING scraped hestia's node-exporter textfile collector
+    # (:9100), so the metric was orphaned and this alert could never fire. The
+    # homelabscope project (infra/configs/homelabscope/) stands up that scraper
+    # and generalizes staleness across every scheduled job: immich-photos-backup
+    # now writes homelabscope_job_last_success_seconds{job="immich-photos-backup"}
+    # and is covered by the generic HomelabscopeJobStale (30h budget) +
+    # HomelabscopeJobMetricAbsent alerts. See
+    # docs/plans/2026-07-04-homelabscope.md.
     # -------------------------------------------------------------------------
     # Flux reconciliation health
     #

@@ -1,0 +1,179 @@
+# homelabscope — unified monitoring for every scheduled/automatic homelab job.
+#
+# One metric family covers ALL scheduled jobs regardless of where they run:
+#
+#   homelabscope_job_last_success_seconds{job="<name>"}   unix ts of last success
+#   homelabscope_job_last_duration_seconds{job="<name>"}  wall-clock of last run
+#   homelabscope_job_last_status{job="<name>"}            0=ok, 1=fail (where known)
+#   homelabscope_job_max_age_seconds{job="<name>"}        per-job staleness budget
+#
+# The family is fed from three source types that all normalize into it:
+#
+#   1. hestia/alcatraz shell jobs → node-exporter textfile collector on hestia
+#      (immich-photos-backup, alcatraz-photos-pull, zfs-snapshot-main-*). These
+#      series arrive via the hestia-homelabscope ScrapeConfig; their max_age is
+#      emitted by the textfile writers themselves.
+#   2. k8s CronJobs → the recording rules in THIS file, which project
+#      kube_cronjob_status_last_successful_time (from kube-state-metrics) onto
+#      the family. No new exporter — kube-state-metrics already exposes it.
+#   3. (future) anything else that can write the family directly.
+#
+# Alerting is a single templated pair over the whole family (see the
+# homelabscope.alerts group): a generic staleness alert that compares each
+# job's age to its own max_age budget, plus an absence alert that catches a
+# heartbeat vanishing entirely (the failure mode the pre-homelabscope setup
+# missed — a job whose textfile stops being written looks identical to "no
+# alert" when nothing scrapes it).
+#
+# Prometheus discovers this rule via the kube-prometheus-stack ruleSelector
+# (release: kube-prometheus-stack).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: homelabscope
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    # -----------------------------------------------------------------------
+    # Recording rules: k8s CronJobs → homelabscope_job_last_success_seconds
+    #
+    # kube_cronjob_status_last_successful_time{namespace,cronjob} is the unix
+    # timestamp of the CronJob's most recent successful completion (verified
+    # present on this cluster's kube-state-metrics). max() strips the source
+    # labels (namespace, cronjob, instance, the kube-state-metrics job label)
+    # down to a bare scalar, and `labels:` re-stamps the canonical homelabscope
+    # `job` label — yielding exactly homelabscope_job_last_success_seconds{job=…}
+    # with no leftover labels to break the family's identity.
+    #
+    # If a CronJob has never succeeded the source series is absent, the record
+    # produces nothing, and HomelabscopeJobMetricAbsent covers it.
+    # -----------------------------------------------------------------------
+    - name: homelabscope.cronjobs
+      rules:
+        - record: homelabscope_job_last_success_seconds
+          expr: max(kube_cronjob_status_last_successful_time{namespace="pingo", cronjob="pingo"})
+          labels:
+            job: pingo
+        - record: homelabscope_job_last_success_seconds
+          expr: max(kube_cronjob_status_last_successful_time{namespace="renovate", cronjob="renovate"})
+          labels:
+            job: renovate
+        - record: homelabscope_job_last_success_seconds
+          expr: max(kube_cronjob_status_last_successful_time{namespace="renovate", cronjob="renovate-automerge"})
+          labels:
+            job: renovate-automerge
+        - record: homelabscope_job_last_success_seconds
+          expr: max(kube_cronjob_status_last_successful_time{namespace="adguard-prod", cronjob="adguard-sync"})
+          labels:
+            job: adguard-sync-prod
+        - record: homelabscope_job_last_success_seconds
+          expr: max(kube_cronjob_status_last_successful_time{namespace="adguard-stage", cronjob="adguard-sync"})
+          labels:
+            job: adguard-sync-stage
+        - record: homelabscope_job_last_success_seconds
+          expr: max(kube_cronjob_status_last_successful_time{namespace="immich-stage", cronjob="immich-photos-30d-sync"})
+          labels:
+            job: immich-photos-30d-sync
+
+        # Per-CronJob staleness budgets. vector(N) yields a single unlabeled
+        # sample; `labels:` stamps the job. Kept alongside the last-success
+        # records so the generic HomelabscopeJobStale alert can join
+        # last_success and max_age on `job` uniformly across all source types.
+        #   5-minute job (pingo)          → 20m  = 1200
+        #   6-hour jobs (adguard ×2,       → 14h  = 50400
+        #     renovate-automerge)
+        #   daily jobs (renovate,          → 30h  = 108000
+        #     immich-photos-30d-sync)
+        - record: homelabscope_job_max_age_seconds
+          expr: vector(1200)
+          labels:
+            job: pingo
+        - record: homelabscope_job_max_age_seconds
+          expr: vector(108000)
+          labels:
+            job: renovate
+        - record: homelabscope_job_max_age_seconds
+          expr: vector(50400)
+          labels:
+            job: renovate-automerge
+        - record: homelabscope_job_max_age_seconds
+          expr: vector(50400)
+          labels:
+            job: adguard-sync-prod
+        - record: homelabscope_job_max_age_seconds
+          expr: vector(50400)
+          labels:
+            job: adguard-sync-stage
+        - record: homelabscope_job_max_age_seconds
+          expr: vector(108000)
+          labels:
+            job: immich-photos-30d-sync
+
+    # -----------------------------------------------------------------------
+    # Alerts: one templated pair over the whole family.
+    # -----------------------------------------------------------------------
+    - name: homelabscope.alerts
+      rules:
+        # Generic staleness: a job hasn't succeeded within its own budget.
+        # last_success and max_age share an identical label set per job
+        # (textfile jobs carry {job,instance="hestia"}; cronjob records carry
+        # {job}), so the vector-to-vector comparison joins cleanly on those
+        # labels — every job is checked against its OWN max_age with a single
+        # rule. `time() - <gauge>` keeps the gauge's labels; the `>` then
+        # matches max_age by the same set.
+        - alert: HomelabscopeJobStale
+          expr: time() - homelabscope_job_last_success_seconds > homelabscope_job_max_age_seconds
+          for: 10m
+          labels:
+            # critical so the alert actually notifies: Alertmanager routes only
+            # severity=critical to the email-critical (Gmail SMTP) receiver;
+            # warning falls through to the 'null' receiver and would be dropped
+            # silently — a monitor that never notifies. Each job's generous
+            # per-job max_age budget + this 10m `for` debounce mean firing
+            # signals a real multi-cycle miss, not a flap.
+            severity: critical
+          annotations:
+            summary: "Scheduled job {{ $labels.job }} is stale"
+            description: >
+              Job {{ $labels.job }} last succeeded {{ $value | humanizeDuration }} ago, exceeding its max-age budget. A scheduled/automatic job has stopped completing on time. Check the job's source: k8s CronJob (kubectl get cronjob -A), hestia textfile (/var/log on hestia), or the alcatraz pull log.
+        # A job's heartbeat has vanished ENTIRELY — the specific failure mode
+        # the pre-homelabscope setup could not see. When a textfile stops being
+        # written (container gone, script crashing before the write) or a
+        # CronJob is deleted, the series disappears and staleness math has
+        # nothing to evaluate. absent() over each critical job's exact matcher
+        # synthesises a firing series carrying that job label, so the alert
+        # names the missing job.
+        #
+        # SCOPE: absent() only guards jobs that HAVE a live data source at merge
+        # time. Guarding a job whose exporter isn't deployed yet turns absent()
+        # into a guaranteed false critical the moment this rule lands. Two
+        # heartbeat-backed jobs are intentionally omitted here and MUST be added
+        # back by the follow-up PR that un-archives the homelabscope-heartbeat
+        # Custom App (flips x-deploy.archived: false):
+        #   - alcatraz-photos-pull
+        #   - zfs-snapshot-main-family / zfs-snapshot-main-homes
+        # Their heartbeat writer ships archived: true in this PR, so their series
+        # cannot exist yet. immich-photos-backup IS kept: its textfile is served
+        # by the node-exporter Custom App that operator step 1 deploys as part of
+        # this rollout, and its absence is the acceptance signal for the orphaned-
+        # metric bug this PR fixes (the 1h `for` covers the deploy window).
+        - alert: HomelabscopeJobMetricAbsent
+          expr: >
+            absent(homelabscope_job_last_success_seconds{job="immich-photos-backup"})
+            or absent(homelabscope_job_last_success_seconds{job="pingo"})
+            or absent(homelabscope_job_last_success_seconds{job="renovate"})
+            or absent(homelabscope_job_last_success_seconds{job="adguard-sync-prod"})
+            or absent(homelabscope_job_last_success_seconds{job="adguard-sync-stage"})
+          for: 1h
+          labels:
+            # critical for the same reason as HomelabscopeJobStale: only
+            # severity=critical reaches the email receiver. A vanished heartbeat
+            # on a data-safety job (photo backup, zfs snapshot) is exactly the
+            # failure class this whole family exists to catch, so it must page.
+            severity: critical
+          annotations:
+            summary: "Homelabscope job {{ $labels.job }} heartbeat is absent"
+            description: >
+              No homelabscope_job_last_success_seconds series exists for job {{ $labels.job }} for >1h. Its heartbeat has vanished entirely (textfile no longer written / exporter down, or the CronJob was removed) — distinct from "stale", which needs the series to still exist. Check the hestia node-exporter (:9100) and the homelabscope-heartbeat Custom App, or `kubectl get cronjob -A` for the CronJob-backed jobs.

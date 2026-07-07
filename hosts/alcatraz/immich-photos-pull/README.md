@@ -1,5 +1,25 @@
 # immich-photos-pull (alcatraz side)
 
+> **Now a GitOps-managed compose service.** `pull-from-hestia.sh` is baked into
+> `ghcr.io/gjcourt/immich-photos-pull` (`images/immich-photos-pull/`) and run by
+> a busybox-crond container defined in [`docker-compose.yml`](docker-compose.yml),
+> deployed by the alcatraz self-hosted runner
+> ([`hosts/alcatraz/actions-runner/`](../actions-runner/README.md)) via
+> `.github/workflows/alcatraz-deploy.yaml`. This **supersedes** the manual DSM
+> Task Scheduler setup described in the "Operator setup" section below: the SSH
+> key + hestia-authorization steps (**1 & 2**) still apply, but steps **3–4**
+> (copy the script onto alcatraz + create a Task Scheduler job) are replaced by
+> the compose service. See
+> [`docs/plans/2026-06-26-alcatraz-gitops-docker.md`](../../../docs/plans/2026-06-26-alcatraz-gitops-docker.md#first-managed-workload-immich-photos-pull).
+>
+> The script also gained a root-cause fix vs the DSM-task version: it now chowns
+> **only newly-transferred files** (numerically) instead of `chown -R` over the
+> whole ~289k-file library each run, and an EXIT trap guarantees the
+> `END (success, Ns)` log trailer always logs — the trailer the hestia-side
+> homelabscope-heartbeat collector keys off. A full-tree chown could exceed the
+> runtime cap and get killed before the trailer wrote, silently staling the
+> freshness metric.
+
 Daily additive **pull** of the Immich photo library from hestia → alcatraz,
 run **on alcatraz** by a DSM Task Scheduler job. This is the backup leg that
 keeps alcatraz a full second copy of the source-of-truth library on hestia —

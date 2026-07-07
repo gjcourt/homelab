@@ -9,3 +9,8 @@ docs/plans/george.md
 
 # Per-session git worktrees (out-of-band scratch space; not tracked content)
 .worktrees/
+
+# Operator-supplied secrets for self-hosted runners (PAT etc.) — never commit.
+# Only the *.env.example templates are tracked.
+hosts/*/actions-runner/.env
+.env

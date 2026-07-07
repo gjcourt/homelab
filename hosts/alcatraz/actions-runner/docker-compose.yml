@@ -1,0 +1,71 @@
+# Self-hosted GitHub Actions runner for alcatraz (Synology DSM, 10.42.2.11).
+#
+# This is the ONE alcatraz compose the operator brings up BY HAND, once, over
+# SSH (or via the Container Manager UI). From its first successful registration
+# onward it applies every OTHER hosts/alcatraz/** compose change via
+# alcatraz-deploy.yaml (`docker compose up -d` against the bind-mounted Docker
+# socket). It deploys itself last / never — alcatraz-deploy.yaml excludes
+# hosts/alcatraz/actions-runner/ from its discover matrix, exactly as
+# deploy-hestia.yml excludes the hestia runner (a runner can't reliably recreate
+# its own container mid-job). Runner upgrades stay a manual `up -d`.
+#
+# Mirrors hosts/hestia/actions-runner/docker-compose.yml, MINUS the
+# TRUENAS_API_KEY (Synology has no TrueNAS WebSocket API — the apply mechanism
+# is direct `docker compose`, not app.update). See
+# docs/plans/2026-06-26-alcatraz-gitops-docker.md.
+#
+# Bootstrap: see ./README.md. Secrets are NEVER committed — the registration
+# PAT is supplied via ./.env (git-ignored; copy from ./.env.example) or as a
+# masked env var in the Container Manager UI.
+
+services:
+  runner:
+    # myoung34/github-runner, digest-pinned. NOTE: this is the amd64 digest
+    # (the same pin hestia uses). alcatraz's CPU arch is UNCONFIRMED from this
+    # workstation (plan prerequisite P3). Before bootstrap the operator MUST
+    # run `uname -m` on alcatraz:
+    #   * x86_64  → this pin is correct AND the stock image ships the Compose
+    #               v2 plugin (needed because alcatraz-deploy-compose.sh runs
+    #               `docker compose` INSIDE this container).
+    #   * aarch64 → re-pin the arm64 digest AND note that myoung34/github-runner
+    #               OMITS docker-compose on arm builds — build a thin derived
+    #               image (FROM myoung34/github-runner + install
+    #               docker-compose-plugin) or the apply step will fail. See the
+    #               plan's "gotchas" + README "Architecture caveats".
+    image: myoung34/github-runner@sha256:155e568e791f11332db5735a3aba41e710e0ef7a071e76e7435653365e4088f9
+    container_name: gha-runner
+    restart: unless-stopped
+    environment:
+      REPO_URL: https://github.com/gjcourt/homelab
+      RUNNER_NAME: alcatraz
+      RUNNER_SCOPE: repo
+      # `runs-on: [self-hosted, alcatraz]` selects this runner; `synology` is a
+      # descriptive second label. Never overlaps the hestia runner's labels.
+      LABELS: alcatraz,synology
+      RUNNER_WORKDIR: /tmp/runner-work
+      EPHEMERAL: "false"
+      DISABLE_AUTO_UPDATE: "true"
+      # A long-lived PAT (classic `repo`, or fine-grained with
+      # `Administration: Read and write` + `Metadata: Read-only` on this repo)
+      # OR a GitHub App installation token. The runner entrypoint exchanges it
+      # for a short-lived registration token at startup, so the operator never
+      # refreshes the 1-hour token by hand.
+      #
+      # Effectively a ROOT-on-alcatraz credential because this container mounts
+      # the Docker socket — guard + rotate it accordingly (plan "security").
+      # NEVER commit a value: supplied via ./.env (git-ignored) or a masked
+      # Container Manager env var. Fail-fast if unset.
+      ACCESS_TOKEN: ${ACCESS_TOKEN:?set ACCESS_TOKEN in hosts/alcatraz/actions-runner/.env (copy .env.example) or as a masked Container Manager env var}
+    volumes:
+      # Runner state (the .runner registration + _work). On /volume1 (BTRFS) so
+      # it survives DSM package updates and container restarts.
+      - /volume1/docker/actions-runner/work:/tmp/runner-work
+      # Docker socket — how the apply job talks to alcatraz's Docker Engine.
+      # Root-equivalent on the host; see plan "security / blast-radius".
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f Runner.Listener > /dev/null || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

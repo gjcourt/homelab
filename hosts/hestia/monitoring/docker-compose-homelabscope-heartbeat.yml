@@ -21,13 +21,13 @@
 # image exists would crash-loop, so we keep it opted-out of auto-deploy.
 x-deploy:
   name: homelabscope-heartbeat
-  archived: true
+  archived: false
   archived-at: 2026-07-04
-  archived-reason: image not yet built — flip false + pin digest after first CI publish
+  archived-reason: ""
 
 services:
   homelabscope-heartbeat:
-    image: ghcr.io/gjcourt/homelabscope-heartbeat:2026-07-04
+    image: ghcr.io/gjcourt/homelabscope-heartbeat:2026-07-07
     container_name: homelabscope-heartbeat
     restart: unless-stopped
     # Root + privileged + /dev/zfs so `zfs list -t snapshot` can talk to the

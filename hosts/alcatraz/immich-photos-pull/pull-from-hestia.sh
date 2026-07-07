@@ -92,8 +92,20 @@ for entry in "${USERS[@]}"; do
   uid="${entry##*:}"
   src="${SRC_HOST}:${user}/"   # relative to the rrsync root (see SRC_HOST note)
   dst="${DST_BASE}/${user}/Photos/"
-  mkdir -p "${dst}"
   echo "--- $(date -u +%FT%TZ) pull ${user} (uid=${uid}): ${src} -> ${dst} ---"
+
+  # Guard mkdir like the rsync/chown below: a bare `mkdir -p` would trip set -e
+  # and abort the WHOLE run mid-loop — skipping the next user AND the final
+  # `=== END ... ===` trailer that the log tail / heartbeat keys off. Record the
+  # failure and skip to the next user instead, preserving the per-user isolation
+  # the rest of the loop is careful to keep.
+  rc=0
+  mkdir -p "${dst}" || rc=$?
+  if [[ ${rc} -ne 0 ]]; then
+    echo "!!! ${user} mkdir ${dst} failed rc=${rc}"
+    FAILED=$((FAILED + 1))
+    continue
+  fi
 
   # -a: archive (recursive, perms/times/symlinks preserved).
   # --ignore-existing: additive — never clobber alcatraz's phone-upload copies;

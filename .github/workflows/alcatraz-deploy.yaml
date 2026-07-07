@@ -50,6 +50,12 @@ concurrency:
   group: deploy-alcatraz
   cancel-in-progress: false
 
+# Least privilege: both jobs only checkout + run docker compose. The apply job
+# runs on the self-hosted alcatraz runner, so the GITHUB_TOKEN is exposed on a
+# root-equivalent host (Docker socket) — scope it to read-only, no write/packages.
+permissions:
+  contents: read
+
 jobs:
   discover:
     runs-on: ubuntu-latest

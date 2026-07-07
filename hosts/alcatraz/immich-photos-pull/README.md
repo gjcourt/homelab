@@ -21,7 +21,7 @@
 > freshness metric.
 
 Daily additive **pull** of the Immich photo library from hestia → alcatraz,
-run **on alcatraz** by a DSM Task Scheduler job. This is the backup leg that
+run **on alcatraz** by the `immich-photos-pull` compose container. This is the backup leg that
 keeps alcatraz a full second copy of the source-of-truth library on hestia —
 in particular it copies back direct-to-hestia SD-card imports (see
 `scripts/import-sd-photos.sh`) that alcatraz's phone-upload libraries never
@@ -52,13 +52,13 @@ setuid patch). Full root cause + decision record:
 
 | Attribute | Value |
 |---|---|
-| Runs on | alcatraz (Synology DSM, `10.42.2.11`), as **root**, via Task Scheduler |
+| Runs on | alcatraz (Synology DSM, `10.42.2.11`), as **root**, via the `immich-photos-pull` compose container (busybox crond) |
 | Source (server) | `truenas_admin@10.42.2.10:/mnt/main/family/images/photos/{mara,george}/` |
 | Destination (local) | `/volume1/homes/{mara,george}/Photos/` (owned `<uid>:100`; mara=1027, george=1028) |
 | Mode | `rsync -a --ignore-existing` (additive; **no `--delete`, ever**) |
 | SSH key | `/volume1/homes/truenas-backup/.ssh/id_ed25519_hestia` (mode 600) |
 | Schedule | Daily ~05:00 local (after hestia's 04:00 pull) |
-| Script (on alcatraz) | `/volume1/homes/truenas-backup/immich-photos-pull/pull-from-hestia.sh` (mode 755) |
+| Script | baked into `ghcr.io/gjcourt/immich-photos-pull` (source: `images/immich-photos-pull/pull-from-hestia.sh`) |
 
 ## Operator setup
 
@@ -150,40 +150,27 @@ A dry-run (`-n`) file list with no errors means the key + forced command work.
 A real (non-`-n`) pull of a file should transfer bytes; a push attempt must be
 refused with `rrsync error: sending to read-only server is not allowed`.
 
-### 3. Place the script on alcatraz
+### 3. Deploy the compose service (replaces the retired manual script + Task Scheduler)
 
-Copy `pull-from-hestia.sh` from this directory onto alcatraz and make it
-executable:
+The script is **no longer copied onto alcatraz by hand**, and there is **no DSM
+Task Scheduler job**. `pull-from-hestia.sh` is baked into
+`ghcr.io/gjcourt/immich-photos-pull` (source of truth:
+`images/immich-photos-pull/pull-from-hestia.sh`) and fired by the image's
+busybox crond at 05:00 local. It ships as
+[`docker-compose.yml`](docker-compose.yml) in this directory and is deployed by
+the alcatraz self-hosted runner ([`hosts/alcatraz/actions-runner/`](../actions-runner/README.md))
+via `.github/workflows/alcatraz-deploy.yaml`. To roll it out:
 
-```bash
-mkdir -p /volume1/homes/truenas-backup/immich-photos-pull
-# copy pull-from-hestia.sh into that dir, then:
-chmod 755 /volume1/homes/truenas-backup/immich-photos-pull/pull-from-hestia.sh
-```
+1. Pre-`touch /var/log/immich-photos-pull.log` on the alcatraz host (the compose
+   bind-mounts this single file; see the compose header).
+2. After the first `build-immich-photos-pull.yml` publish, pin the `@sha256`
+   digest in `docker-compose.yml` and flip `x-deploy.archived` to `false`; the
+   runner then applies it on the next push to master.
 
-### 4. DSM Task Scheduler job
+### 4. First-run validation (the key acceptance test)
 
-DSM Control Panel → **Task Scheduler** → **Create** → **Scheduled Task** →
-**User-defined script**.
-
-- **General**: User = **`root`** (required — the script `chown`s the received
-  files to each DSM account; only root can). Give it a name like
-  `immich-photos-pull`.
-- **Schedule**: Daily, ~**05:00** (after hestia's 04:00 alcatraz→hestia pull,
-  so the SD-card imports it surfaces are already on hestia).
-- **Task Settings**: Run command:
-  ```
-  /volume1/homes/truenas-backup/immich-photos-pull/pull-from-hestia.sh
-  ```
-  Tick "Send run details by email" (and set the notification address in
-  Control Panel → Notification) so a **non-zero exit** — which the script
-  returns if any user's pull or chown fails — lands in your inbox. DSM emails
-  task output on non-zero exit only if this is configured.
-
-### 5. First-run validation (the key acceptance test)
-
-Run the task manually (Task Scheduler → select the task → **Run**), then
-confirm:
+Trigger a run (`docker exec immich-photos-pull /usr/local/bin/pull-from-hestia.sh`
+on alcatraz, or wait for the 05:00 crond fire), then confirm:
 
 1. **Files landed with correct ownership** — the main risk of this approach is
    ownership/ACL of rsync-dropped files:

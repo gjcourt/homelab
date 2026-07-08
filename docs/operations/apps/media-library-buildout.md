@@ -99,14 +99,22 @@ Making Sense*, *The Last Waltz*, *Gimme Shelter*, *Buena Vista Social Club*,
 
 ## Next actions
 
-1. **Rip the owned TV Blu-rays** (Sex and the City, Gilmore Girls) — no
-   dependencies; validates the standard-Blu-ray path end to end.
-2. **Wait for MJ recovery → re-reconcile** → finalize the movie to-borrow list
+**All ripping is gated on the UHD ripper** (lab `03-026`: LG WH16NS40 + OWC
+enclosure, **inbound**) being flashed to LibreDrive. Once flashed, it's the
+single drive for everything — standard Blu-ray (TV + SFPL discs) *and* 4K UHD
+(bought reference titles). Timing converges nicely: **ripper-ready ≈ MJ recovery
+done**, so kick off one clean batch then.
+
+1. **Flash the ripper** when it lands (`03-026`: NS40 → NS60 `1.02-MK` on a
+   native SATA port; verify `LibreDrive: enabled`) — the gate for all ripping.
+2. **Rip the owned TV Blu-rays** (Sex and the City, Gilmore Girls) first —
+   validates the standard-Blu-ray path end to end before the bigger runs.
+3. **Wait for MJ recovery → re-reconcile** → finalize the movie to-borrow list
    (MJ likely covers a chunk of the 92 "missing").
-3. **Batch SFPL holds** for the confirmed gaps: place holds on the in-use
-   titles, grab the available ones in one AV Center run.
-4. **Buy 4K** only for the few reference titles where HDR matters (Planet Earth II).
-5. **Fold the archive's 920 tracks into Navidrome** (assimilation Phase 3).
+4. **Batch SFPL holds** for the confirmed gaps: place holds on the in-use
+   titles, grab the available ones in one AV Center run, rip, return.
+5. **Buy 4K** only for the few reference titles where HDR matters (Planet Earth II).
+6. **Fold the archive's 920 tracks into Navidrome** (assimilation Phase 3).
 
 ## Related
 

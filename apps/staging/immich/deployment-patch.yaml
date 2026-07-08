@@ -155,9 +155,10 @@ spec:
               memory: "8Gi"
               cpu: "4000m"
       volumes:
-        - name: model-cache
-          persistentVolumeClaim:
-            claimName: immich-model-cache-pvc
+        # model-cache is inherited from the base (emptyDir). Do NOT re-declare it
+        # as a PVC here: strategic-merge keys volumes by name and would emit both
+        # an emptyDir and a persistentVolumeClaim on the same volume, which the
+        # API server rejects ("may not specify more than one volume type").
         - name: dri
           hostPath:
             path: /dev/dri

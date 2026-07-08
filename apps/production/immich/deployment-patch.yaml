@@ -140,8 +140,43 @@ metadata:
   name: immich-machine-learning
   namespace: immich
 spec:
+  # Fan-out: 4 ML replicas, one per AMD-iGPU node (all 4 have the amdgpu
+  # extension). immich-server load-balances ML jobs across them, so smart-search
+  # + face-detection run on all 4 iGPUs (ROCm) instead of one.
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # maxSurge:0 — never create a 5th ML pod. With replicas==node-count(4) and
+      # only-soft anti-affinity, a surge pod would have to double up on a node
+      # that already runs an ML replica, putting two privileged ROCm pods on one
+      # /dev/dri iGPU. Drain-one-then-replace instead (one iGPU idle mid-roll).
+      maxSurge: 0
+      maxUnavailable: 1
   template:
     spec:
+      # Soft (preferred) pod anti-affinity spreads the 4 replicas one-per-node.
+      # Kept soft on purpose: this cluster loses nodes often (Talos upgrades,
+      # maintenance) and replicas==node-count, so a `required` rule would leave
+      # the 4th replica Pending whenever a node is down — soft lets it double up
+      # and keep serving instead.
+      #
+      # nodeAffinity is nulled out here (the base prefers cpu-tier=high, which
+      # only kot-7x7 has). At equal weight that pull would fight the anti-affinity
+      # spread — every replica scores +100 toward kot-7x7 — and could land two
+      # ML pods on kot-7x7's single iGPU. For a 4-way fan-out we want an even
+      # one-per-node spread across all nodes, so drop the cpu-tier preference.
+      affinity:
+        nodeAffinity: null
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: immich
+                    component: machine-learning
+                topologyKey: kubernetes.io/hostname
       securityContext:
         runAsUser: 0
         runAsGroup: 0
@@ -171,9 +206,13 @@ spec:
             requests:
               memory: "4Gi"
               cpu: "2000m"
+              # emptyDir model-cache lives on node ephemeral storage; request it
+              # so the scheduler accounts for the model download (see base).
+              ephemeral-storage: "3Gi"
             limits:
               memory: "12Gi"
               cpu: "8000m"
+              ephemeral-storage: "10Gi"
           livenessProbe:
             httpGet:
               path: /ping
@@ -194,9 +233,12 @@ spec:
             timeoutSeconds: 10
             failureThreshold: 6
       volumes:
+        # model-cache is emptyDir in the base now (per-replica, enables the
+        # 4-way GPU fan-out). Download time is tracked in homelabscope; revisit
+        # a StatefulSet + per-replica PVC if the re-download proves costly.
         - name: model-cache
-          persistentVolumeClaim:
-            claimName: immich-model-cache-pvc
+          emptyDir:
+            sizeLimit: 10Gi
         - name: dri
           hostPath:
             path: /dev/dri

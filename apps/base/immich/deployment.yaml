@@ -155,13 +155,25 @@ spec:
             requests:
               cpu: 100m
               memory: 512Mi
+              # model-cache is an emptyDir on node ephemeral storage; request it
+              # so the scheduler accounts for the ~1-2 GB model download and the
+              # node isn't over-committed into disk-pressure eviction.
+              ephemeral-storage: 3Gi
             limits:
               cpu: 4000m
               memory: 2Gi
+              ephemeral-storage: 10Gi
       volumes:
+        # emptyDir per-replica model cache (was an RWO iSCSI PVC). Lets the ML
+        # deployment scale to multiple replicas across nodes (GPU fan-out in
+        # production); each replica re-downloads the ~1-2 GB models on start
+        # (the liveness probe allows 600s). The 10Gi cap is an eviction ceiling,
+        # not a reservation — the ephemeral-storage request above is what the
+        # scheduler uses. The old immich-model-cache-pvc PVC has been removed
+        # from storage.yaml (fully orphaned by this change).
         - name: model-cache
-          persistentVolumeClaim:
-            claimName: immich-model-cache-pvc
+          emptyDir:
+            sizeLimit: 10Gi
 ---
 # Redis for Immich job queue
 apiVersion: apps/v1

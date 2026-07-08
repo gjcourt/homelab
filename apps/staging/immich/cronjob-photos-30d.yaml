@@ -98,8 +98,21 @@ spec:
                   #    SRC, writes only to DST — originals are never modified. NUL delimiting
                   #    ( -print0 / --from0 ) keeps filenames with spaces intact.
                   cd "$SRC"
+                  # rsync exit 24 = "some files vanished before we could transfer them" —
+                  # expected and BENIGN when copying a LIVE prod tree (phones add/remove
+                  # photos mid-run). Tolerate ONLY 24 so a normal concurrent-churn run still
+                  # completes, prunes, and records success (the whole point of this fix —
+                  # otherwise the job would trade DeadlineExceeded for a spurious rsync
+                  # failure and keep the homelabscope alert firing). Any other nonzero — a
+                  # real rsync error, or a failed `find` surfaced through pipefail — is fatal
+                  # so backoffLimit retries and the failure stays visible.
+                  rc=0
                   find . -type f -mtime -30 -print0 \
-                    | rsync -a --from0 --files-from=- "$SRC"/ "$DST"/
+                    | rsync -a --from0 --files-from=- "$SRC"/ "$DST"/ || rc=$?
+                  if [ "$rc" -ne 0 ] && [ "$rc" -ne 24 ]; then
+                    echo "[30d-sync] transfer failed rc=$rc" >&2
+                    exit "$rc"
+                  fi
                   # 2. Prune slice entries older than 30 days (mtime preserved by rsync -a)
                   #    so the slice stays bounded.
                   find "$DST" -type f -mtime +30 -delete

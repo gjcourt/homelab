@@ -3,6 +3,12 @@ kind: Cluster
 metadata:
   name: overture-db-production-cnpg-v1
   namespace: overture-prod
+  annotations:
+    # Hibernated 2026-07-08: the overture app deployment is intentionally scaled
+    # to 0/0, so its 3-instance HA Postgres is shut down to free resources and
+    # keep it out of the storage-outage recovery path. PVCs and data are
+    # preserved; resume by flipping this to "off" when the app is turned back on.
+    cnpg.io/hibernation: "on"
 spec:
   description: Postgres cluster for the overture application (production)
   imageName: ghcr.io/cloudnative-pg/postgresql:17.5

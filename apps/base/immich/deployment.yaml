@@ -52,6 +52,20 @@ spec:
         # failover. Soft means on kot-7x7 loss both pods fall back together (the
         # api lands on a fallback node, microservices follows via its required
         # rule, and the RWO volume reattaches there).
+        #
+        # Accepted residual risk (soft side): on an api-only Recreate roll
+        # (image/config bump), the old api pod is torn down first, then the new
+        # one schedules. Because this pull is only *preferred*, if kot-7x7 has no
+        # free capacity at that instant (microservices + an ML replica + the CNPG
+        # instance resident) the scheduler can place the new api pod on another
+        # node while microservices still holds immich-upload-pvc on kot-7x7 → the
+        # api pod stalls on Multi-Attach until capacity frees or an operator
+        # deletes it to retry. Mitigation is operational: keep CPU/mem headroom on
+        # kot-7x7 for one api pod (its requests are small: 250m/512Mi base). A
+        # hard fix (make this side required too) is rejected above (cold-start
+        # deadlock); the alternative of anchoring the *api* as required→micro is a
+        # design tradeoff (protects the api roll but makes api cold-start wait for
+        # the heavy worker) left for a follow-up if roll stalls are seen in prod.
         podAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100

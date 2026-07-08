@@ -159,9 +159,15 @@ spec:
       # Kept soft on purpose: this cluster loses nodes often (Talos upgrades,
       # maintenance) and replicas==node-count, so a `required` rule would leave
       # the 4th replica Pending whenever a node is down — soft lets it double up
-      # and keep serving instead. The base's soft nodeAffinity (prefer
-      # cpu-tier=high) still nudges one toward kot-7x7.
+      # and keep serving instead.
+      #
+      # nodeAffinity is nulled out here (the base prefers cpu-tier=high, which
+      # only kot-7x7 has). At equal weight that pull would fight the anti-affinity
+      # spread — every replica scores +100 toward kot-7x7 — and could land two
+      # ML pods on kot-7x7's single iGPU. For a 4-way fan-out we want an even
+      # one-per-node spread across all nodes, so drop the cpu-tier preference.
       affinity:
+        nodeAffinity: null
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100

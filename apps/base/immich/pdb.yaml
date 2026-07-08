@@ -11,6 +11,8 @@ spec:
   # un-evictable pod to every node and block all node drains (Talos upgrades,
   # maintenance). ML has its own PDB in the production overlay.
   selector:
+    matchLabels:
+      app: immich
     matchExpressions:
       - key: component
         operator: In

@@ -57,7 +57,7 @@ is ≈ **95 °C**. Install / boot disk on both is **`/dev/nvme0n1`** (~62 GiB no
    ```
    diskutil list                         # identify the USB, e.g. /dev/disk4
    diskutil unmountDisk /dev/diskN
-   sudo dd if=systemrescue-*.iso of=/dev/rdiskN bs=4m status=progress
+   sudo dd if=systemrescue-11.03-amd64.iso of=/dev/rdiskN bs=4m status=progress
    sync
    ```
 2. **Boot the target box from it.** Insert the stick, power on, and open the **UEFI
@@ -149,7 +149,7 @@ Still in SystemRescue Linux. Load `k10temp` and stress all cores while watching 
 temperature:
 
 ```
-modprobe k10temp 2>/dev/null; sensors-detect --auto >/dev/null 2>&1 || true
+modprobe k10temp                            # AMD CPU temp sensor (no sensors-detect needed)
 sensors | grep -iE "k10temp|Tctl"           # note the IDLE Tctl first
 ```
 
@@ -230,12 +230,28 @@ Per-box expectation:
 > there is **no local data to save.** Just confirm you're wiping **`nvme0n1`** (the
 > ~62 GiB install disk), not a stray USB/other disk — re-run `nvme list` if unsure.
 
-Re-image each cleared box as a **plain Talos worker**:
+Re-image each cleared box as a **plain Talos worker** (config source: `~/src/melodic-muse/`
+— `worker.yaml` / `patch.yaml` / `talosconfig`; same tree used in the
+[control-plane promotion runbook](2026-06-19-talos-controlplane-promotion.md)). Do this
+from the Mac **once the box is re-racked and back on the LAN**:
 
-- Machine config install disk: **`machine.install.disk: /dev/nvme0n1`**.
-- Bring it up with the **worker** config (config source: `~/src/melodic-muse/` —
-  `worker.yaml` / `patch.yaml` / `talosconfig`; same tree used in the
-  [control-plane promotion runbook](2026-06-19-talos-controlplane-promotion.md)).
+1. **Confirm `worker.yaml` targets the right disk** — it must set
+   **`machine.install.disk: /dev/nvme0n1`**, not a control-plane profile:
+   ```
+   grep -A2 'install:' ~/src/melodic-muse/worker.yaml     # -> disk: /dev/nvme0n1
+   talosctl validate -c ~/src/melodic-muse/worker.yaml --mode metal
+   ```
+2. **A freshly re-imaged box boots into Talos maintenance mode** (config-less, reachable
+   on its DHCP IP). Verify its install disk from maintenance mode before applying, so you
+   don't wipe the wrong device:
+   ```
+   talosctl -n <box-ip> --insecure get disks     # confirm nvme0n1 is the ~62 GiB disk
+   ```
+3. **Apply the worker config** (this installs to `nvme0n1` and reboots into the worker):
+   ```
+   talosctl -n <box-ip> --insecure apply-config --file ~/src/melodic-muse/worker.yaml
+   ```
+   The node then registers with the cluster and goes `Ready` on its own.
 
 > ### ⛔ Do NOT re-add either box as control-plane / etcd
 > Reprovision **both as workers only.** A box that just came off the bench under
@@ -258,6 +274,10 @@ kubectl taint nodes <node> node.homelab/bench-burnin=true:NoSchedule
 
 - **Leave it UNLABELED** — do **not** apply `cpu-tier=high` (or any workload-steering
   label). It carries no targeted workload during burn-in.
+- **Expect system DaemonSets to still schedule here.** Cilium, kube-proxy, and
+  node-exporter carry broad tolerations (`operator: Exists`), so they run on the node
+  despite the `NoSchedule` taint — that's **intended**: node-exporter is exactly what
+  feeds the burn-in monitoring below. The taint only keeps *regular* workloads off.
 - Let it sit Ready + cordoned + tainted and **watch it under monitoring** (node stays
   Ready, no MCE/EDAC in node logs, temps sane under whatever ambient load, no NVMe
   SMART regressions) for a burn-in window — an hour-plus of stable idle, longer if you

@@ -58,6 +58,12 @@ spec:
         - name: immich-server
           # api worker does not transcode after the split, so it needs neither
           # privileged mode nor /dev/dri (both moved to the microservices worker).
+          securityContext:
+            # Root (uid 0) to write client uploads to the root-owned iSCSI upload
+            # volume — matches prod and removes the pre-split reliance on
+            # privileged mode's CAP_DAC_OVERRIDE for that write.
+            runAsUser: 0
+            runAsGroup: 0
           env:
             # Immich v2.x config file for OAuth/OIDC and ffmpeg settings
             - name: IMMICH_CONFIG_FILE

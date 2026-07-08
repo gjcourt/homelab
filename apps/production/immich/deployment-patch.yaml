@@ -140,8 +140,29 @@ metadata:
   name: immich-machine-learning
   namespace: immich
 spec:
+  # Fan-out: 4 ML replicas, one per AMD-iGPU node (all 4 have the amdgpu
+  # extension). immich-server load-balances ML jobs across them, so smart-search
+  # + face-detection run on all 4 iGPUs (ROCm) instead of one.
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
   template:
     spec:
+      # Pod anti-affinity spreads the replicas one-per-node; the base's soft
+      # nodeAffinity (prefer cpu-tier=high) still nudges one toward kot-7x7.
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: immich
+                    component: machine-learning
+                topologyKey: kubernetes.io/hostname
       securityContext:
         runAsUser: 0
         runAsGroup: 0
@@ -194,9 +215,12 @@ spec:
             timeoutSeconds: 10
             failureThreshold: 6
       volumes:
+        # model-cache is emptyDir in the base now (per-replica, enables the
+        # 4-way GPU fan-out). Download time is tracked in homelabscope; revisit
+        # a StatefulSet + per-replica PVC if the re-download proves costly.
         - name: model-cache
-          persistentVolumeClaim:
-            claimName: immich-model-cache-pvc
+          emptyDir:
+            sizeLimit: 15Gi
         - name: dri
           hostPath:
             path: /dev/dri

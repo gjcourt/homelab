@@ -14,10 +14,13 @@ job:
     concurrency: 6
   videoConversion:
     concurrency: 3
+  # Raised 3 -> 12 to saturate the 4 machine-learning replicas (~3 concurrent
+  # inferences per replica/iGPU). These are the ML-service queues; bump them
+  # together with the immich-machine-learning replica count.
   faceDetection:
-    concurrency: 3
+    concurrency: 12
   smartSearch:
-    concurrency: 3
+    concurrency: 12
   ocr:
     concurrency: 3
 oauth:

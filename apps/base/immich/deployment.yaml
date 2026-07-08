@@ -159,9 +159,14 @@ spec:
               cpu: 4000m
               memory: 2Gi
       volumes:
+        # emptyDir per-replica model cache (was an RWO iSCSI PVC). Lets the ML
+        # deployment scale to multiple replicas across nodes (GPU fan-out in
+        # production); each replica re-downloads the ~1-2 GB models on start
+        # (the liveness probe allows 600s). The old immich-model-cache-pvc in
+        # storage.yaml is now unused and can be pruned in a follow-up.
         - name: model-cache
-          persistentVolumeClaim:
-            claimName: immich-model-cache-pvc
+          emptyDir:
+            sizeLimit: 15Gi
 ---
 # Redis for Immich job queue
 apiVersion: apps/v1

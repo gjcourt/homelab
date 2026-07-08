@@ -1,4 +1,8 @@
-# Immich Server - main API and web UI
+# Immich Server (api worker) - interactive read/serve path: web UI + API only.
+# Background jobs were split out into the immich-microservices Deployment below
+# (IMMICH_WORKERS_INCLUDE=api here / IMMICH_WORKERS_EXCLUDE=api there) so a large
+# scan/transcode backlog can't starve the interactive path. The Service still
+# points at component: server, so the web UI keeps working unchanged.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -38,6 +42,39 @@ spec:
                     operator: In
                     values:
                       - high
+        # Co-location contract with immich-microservices (shared RWO
+        # immich-upload-pvc — see that Deployment). microservices has a *required*
+        # podAffinity onto this pod; this is the reciprocal *soft* pull so that
+        # when the api pod is (re)scheduled it lands on the node already running
+        # microservices + the attached volume. Kept SOFT on purpose: a required
+        # rule here would create a circular required podAffinity (neither could
+        # schedule first → cold-start deadlock) and would also break node-death
+        # failover. Soft means on kot-7x7 loss both pods fall back together (the
+        # api lands on a fallback node, microservices follows via its required
+        # rule, and the RWO volume reattaches there).
+        #
+        # Accepted residual risk (soft side): on an api-only Recreate roll
+        # (image/config bump), the old api pod is torn down first, then the new
+        # one schedules. Because this pull is only *preferred*, if kot-7x7 has no
+        # free capacity at that instant (microservices + an ML replica + the CNPG
+        # instance resident) the scheduler can place the new api pod on another
+        # node while microservices still holds immich-upload-pvc on kot-7x7 → the
+        # api pod stalls on Multi-Attach until capacity frees or an operator
+        # deletes it to retry. Mitigation is operational: keep CPU/mem headroom on
+        # kot-7x7 for one api pod (its requests are small: 250m/512Mi base). A
+        # hard fix (make this side required too) is rejected above (cold-start
+        # deadlock); the alternative of anchoring the *api* as required→micro is a
+        # design tradeoff (protects the api roll but makes api cold-start wait for
+        # the heavy worker) left for a follow-up if roll stalls are seen in prod.
+        podAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: immich
+                    component: microservices
+                topologyKey: kubernetes.io/hostname
       securityContext:
         seccompProfile:
           type: RuntimeDefault
@@ -48,6 +85,11 @@ spec:
             - name: http
               containerPort: 2283
               protocol: TCP
+          env:
+            # Run ONLY the api worker (web UI + API on :2283). All background job
+            # workers now run in the immich-microservices Deployment.
+            - name: IMMICH_WORKERS_INCLUDE
+              value: api
           envFrom:
             - configMapRef:
                 name: immich-config
@@ -68,6 +110,144 @@ spec:
               port: http
             initialDelaySeconds: 10
             periodSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 2Gi
+      volumes:
+        - name: upload
+          persistentVolumeClaim:
+            claimName: immich-upload-pvc
+---
+# Immich Microservices - background write/ingest path: thumbnails, metadata
+# extraction, video transcode, ML job dispatch, storage-template migration,
+# sidecar, library scan. Split out of immich-server (IMMICH_WORKERS_EXCLUDE=api)
+# so this CPU-heavy grind runs in its own process/cgroup and can't starve the
+# interactive api pod. No Service: nothing routes to it; it pulls work off the
+# Redis job queue.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-microservices
+  namespace: immich
+  labels:
+    app: immich
+    component: microservices
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: immich
+      component: microservices
+  strategy:
+    # Recreate (not RollingUpdate): microservices shares the ReadWriteOnce
+    # immich-upload-pvc with the api pod and is pinned to the same node via
+    # podAffinity. A RollingUpdate would spawn the replacement before the old pod
+    # terminates; if the scheduler ever placed the new pod on a different node it
+    # would deadlock on the RWO volume (Multi-Attach). Recreate tears the old pod
+    # down first, so the volume is free when the new one schedules.
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: immich
+        component: microservices
+    spec:
+      serviceAccountName: immich
+      automountServiceAccountToken: false
+      affinity:
+        # Soft node preference matches the api pod (cpu-tier=high) so both land on
+        # the high-airflow worker by default.
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: homelab.gjcourt.dev/cpu-tier
+                    operator: In
+                    values:
+                      - high
+        # REQUIRED co-location with the api pod. Both mount the RWO
+        # immich-upload-pvc, which only admits multiple pods when they are on the
+        # SAME node. This hard rule guarantees microservices schedules onto
+        # whatever node runs immich-server (component: server); relying on the soft
+        # cpu-tier preference alone could lose a scheduling race and split the two
+        # pods across nodes, and the second would fail to mount the volume
+        # (Multi-Attach). If the api pod is not yet scheduled this pod stays
+        # Pending until it is — acceptable for a background worker.
+        #
+        # The api pod carries the reciprocal *soft* podAffinity back onto this
+        # pod, so an api reschedule is pulled to the node already holding the
+        # volume + this worker. The reverse side is kept soft to avoid a circular
+        # required rule (cold-start deadlock) and to preserve node-death failover.
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: immich
+                  component: server
+              topologyKey: kubernetes.io/hostname
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: immich-microservices
+          image: ghcr.io/immich-app/immich-server:v3.0.1@sha256:46dedfc5848f7313bd6b584ea9f2648057430307aad6de56de968f6710a72cae
+          env:
+            # Run every worker EXCEPT api (thumbnails, metadata, transcode, ML
+            # dispatch, storage-template migration, sidecar, library scan).
+            - name: IMMICH_WORKERS_EXCLUDE
+              value: api
+            # A microservices-only worker does NOT bind the API on :2283 — the
+            # Immich docs explicitly say to remove the 2283 port mapping from the
+            # microservices copy, so /api/server/ping is unavailable here.
+            # Enabling OTEL telemetry binds the microservices metrics HTTP server
+            # on IMMICH_MICROSERVICES_METRICS_PORT (default 8082), giving this pod
+            # a real HTTP surface for a readiness probe. That server only starts
+            # after the Nest app bootstraps (DB + Redis connected), so a 200 on
+            # /metrics is a genuine "worker is up" signal — not just a TCP liveness.
+            - name: IMMICH_TELEMETRY_INCLUDE
+              value: all
+          envFrom:
+            - configMapRef:
+                name: immich-config
+            - secretRef:
+                name: immich-db-credentials
+          ports:
+            - name: metrics
+              containerPort: 8082
+              protocol: TCP
+          volumeMounts:
+            - name: upload
+              mountPath: /usr/src/app/upload
+          # readinessProbe only, on the OTEL microservices metrics endpoint (:8082).
+          # This is the pod's sole HTTP surface. Readiness here gates rollout /
+          # availability reporting (there is no Service, so it gates no routing).
+          # No livenessProbe: the metrics endpoint is the only health surface, so a
+          # liveness probe would reuse the identical signal — this repo's rule
+          # (AGENTS.md) is to add liveness only with a signal distinct from
+          # readiness, so it is deliberately omitted. A crash (e.g. DB never
+          # connects) exits the process and is handled by the container restart
+          # policy, not by a probe.
+          #
+          # Scope caveat: /metrics reflects "the worker process is up and its OTEL
+          # server is bound", NOT "the BullMQ job queue is draining". A wedged
+          # worker that stops consuming jobs while its HTTP server stays up would
+          # remain Ready. Detecting a stalled queue is a job for queue-depth
+          # alerting (immich_job_* / Redis queue length), tracked as a follow-up in
+          # observability, not something a k8s probe can express here.
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 12
           resources:
             requests:
               cpu: 250m

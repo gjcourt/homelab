@@ -267,7 +267,8 @@ from the Mac **once the box is re-racked and back on the LAN**:
 schedules onto it until you've watched it under the cluster's own monitoring:
 
 ```
-# after the node registers and goes Ready:
+# as soon as the node registers and goes Ready — cordon PROMPTLY so nothing
+# schedules onto it in the brief window before the guard lands:
 kubectl cordon <node>
 kubectl taint nodes <node> node.homelab/bench-burnin=true:NoSchedule
 ```

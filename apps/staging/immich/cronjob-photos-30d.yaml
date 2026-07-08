@@ -13,7 +13,19 @@
 #   * COPY (this job): source mounted READ-ONLY (can't harm originals), slice mounted
 #     RW. Robust across any mount topology; data duplication is bounded to ~30 days,
 #     which is fine for a small testbed. Copied files are indistinguishable from real
-#     files to Immich. cp -p preserves mtime so the age-based prune stays consistent.
+#     files to Immich. rsync -a preserves mtime so the age-based prune stays consistent.
+#
+# COPY MECHANISM — bulk incremental rsync, NOT a per-file shell loop:
+#   The previous implementation forked `mkdir`+`cp` once PER FILE while walking the
+#   multi-TB prod tree. That fork-storm never finished inside the deadline, so the job
+#   was killed with DeadlineExceeded on every run and never recorded a success. We now
+#   pipe the last-30-days file list into a SINGLE `rsync -a` (one process for the whole
+#   slice): rsync recreates the tree, preserves mtime, and skips files already present
+#   and up to date, so steady-state re-runs only transfer the day's new photos.
+#   Image swapped busybox → the sibling rsync image (ghcr.io/gjcourt/immich-photos-backup,
+#   Alpine + rsync 3.4.3 + bash) that immich-photos-backup / alcatraz-photos-pull use, so
+#   all three photo-sync jobs share one copy mechanism. `find` (busybox applet in that
+#   image) still does the date windowing at the filesystem, which Immich has no API for.
 #
 # After a sync, Immich must rescan the external library to index the delta. Immich's
 # built-in scheduled library scan (daily, admin default) handles this; the schedule
@@ -38,8 +50,14 @@ spec:
   failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
-      # Cap a hung NFS mount so the job can't run forever.
-      activeDeadlineSeconds: 3600
+      # Cap a hung NFS mount so the job can't run forever, but leave enough headroom for
+      # the ONE-TIME initial seed: the first run copies the entire 30-day window into an
+      # empty slice AND rsync must stat every candidate file across the multi-TB prod tree
+      # over NFS. Steady-state runs are minutes (only the day's new photos transfer), but
+      # the cold seed needs hours — the old 1h cap killed it as DeadlineExceeded before it
+      # could ever record a success. 4h gives the seed room without letting a wedged mount
+      # hang indefinitely.
+      activeDeadlineSeconds: 14400
       backoffLimit: 2
       template:
         metadata:
@@ -57,27 +75,45 @@ spec:
             fsGroup: 0
           containers:
             - name: sync
-              # busybox 1.37 (same digest used by the immich init container). Provides
-              # find / cp / mkdir / du — no extra tooling needed.
-              image: busybox@sha256:fd8d9aa63ba2f0982b5304e1ee8d3b90a210bc1ffb5314d980eb6962f1a9715d
+              # Sibling rsync image shared by immich-photos-backup / alcatraz-photos-pull
+              # (Alpine 3.23 + rsync 3.4.3 + bash + busybox find). Pinned by digest to the
+              # published 2026-07-04 build (public ghcr package — no pull secret needed).
+              # We override the image's baked-in crond/backup entrypoint with our own
+              # command; only its rsync + bash + find tooling is used here.
+              image: ghcr.io/gjcourt/immich-photos-backup:2026-07-04@sha256:a4811ef540b0b4b496a9e3970394ff856cceceb4537c80b4f4c75f9c9d7f2673
               command:
-                - sh
-                - -eu
+                - bash
+                - -euo
+                - pipefail
                 - -c
                 - |
                   SRC=/src   # full prod photo tree (read-only)
                   DST=/dst   # photos-staging-30d slice (read-write)
                   echo "[30d-sync] $(date -u) start"
+                  # 1. Select files modified in the last 30 days (filesystem date window —
+                  #    Immich has no date API) and hand the NUL-delimited list to a SINGLE
+                  #    rsync. -a recreates the tree + preserves mtime; --files-from restricts
+                  #    the transfer to exactly that list; rsync skips files already present
+                  #    and up to date, so re-runs only move the day's new photos. Reads from
+                  #    SRC, writes only to DST — originals are never modified. NUL delimiting
+                  #    ( -print0 / --from0 ) keeps filenames with spaces intact.
                   cd "$SRC"
-                  # 1. Copy files modified in the last 30 days into the slice, preserving
-                  #    tree + mtime. cp -u skips files already present and up to date.
-                  find . -type f -mtime -30 | while IFS= read -r f; do
-                    rel="${f#./}"
-                    dest="$DST/$rel"
-                    mkdir -p "$(dirname "$dest")"
-                    cp -pu "$SRC/$rel" "$dest"
-                  done
-                  # 2. Prune slice entries older than 30 days (mtime preserved by cp -p)
+                  # rsync exit 24 = "some files vanished before we could transfer them" —
+                  # expected and BENIGN when copying a LIVE prod tree (phones add/remove
+                  # photos mid-run). Tolerate ONLY 24 so a normal concurrent-churn run still
+                  # completes, prunes, and records success (the whole point of this fix —
+                  # otherwise the job would trade DeadlineExceeded for a spurious rsync
+                  # failure and keep the homelabscope alert firing). Any other nonzero — a
+                  # real rsync error, or a failed `find` surfaced through pipefail — is fatal
+                  # so backoffLimit retries and the failure stays visible.
+                  rc=0
+                  find . -type f -mtime -30 -print0 \
+                    | rsync -a --from0 --files-from=- "$SRC"/ "$DST"/ || rc=$?
+                  if [ "$rc" -ne 0 ] && [ "$rc" -ne 24 ]; then
+                    echo "[30d-sync] transfer failed rc=$rc" >&2
+                    exit "$rc"
+                  fi
+                  # 2. Prune slice entries older than 30 days (mtime preserved by rsync -a)
                   #    so the slice stays bounded.
                   find "$DST" -type f -mtime +30 -delete
                   # 3. Remove now-empty directories (rmdir no-ops on non-empty / the mount root).

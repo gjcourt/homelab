@@ -147,12 +147,20 @@ spec:
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1
+      # maxSurge:0 — never create a 5th ML pod. With replicas==node-count(4) and
+      # only-soft anti-affinity, a surge pod would have to double up on a node
+      # that already runs an ML replica, putting two privileged ROCm pods on one
+      # /dev/dri iGPU. Drain-one-then-replace instead (one iGPU idle mid-roll).
+      maxSurge: 0
       maxUnavailable: 1
   template:
     spec:
-      # Pod anti-affinity spreads the replicas one-per-node; the base's soft
-      # nodeAffinity (prefer cpu-tier=high) still nudges one toward kot-7x7.
+      # Soft (preferred) pod anti-affinity spreads the 4 replicas one-per-node.
+      # Kept soft on purpose: this cluster loses nodes often (Talos upgrades,
+      # maintenance) and replicas==node-count, so a `required` rule would leave
+      # the 4th replica Pending whenever a node is down — soft lets it double up
+      # and keep serving instead. The base's soft nodeAffinity (prefer
+      # cpu-tier=high) still nudges one toward kot-7x7.
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -192,9 +200,13 @@ spec:
             requests:
               memory: "4Gi"
               cpu: "2000m"
+              # emptyDir model-cache lives on node ephemeral storage; request it
+              # so the scheduler accounts for the model download (see base).
+              ephemeral-storage: "3Gi"
             limits:
               memory: "12Gi"
               cpu: "8000m"
+              ephemeral-storage: "10Gi"
           livenessProbe:
             httpGet:
               path: /ping
@@ -220,7 +232,7 @@ spec:
         # a StatefulSet + per-replica PVC if the re-download proves costly.
         - name: model-cache
           emptyDir:
-            sizeLimit: 15Gi
+            sizeLimit: 10Gi
         - name: dri
           hostPath:
             path: /dev/dri

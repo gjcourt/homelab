@@ -5,6 +5,15 @@ metadata:
   namespace: immich
 spec:
   maxUnavailable: 0
+  # Scoped to the user-facing server + redis job queue only. Machine-learning is
+  # deliberately excluded: in production it fans out one replica per node, so a
+  # blanket `app: immich` selector with maxUnavailable:0 would pin an
+  # un-evictable pod to every node and block all node drains (Talos upgrades,
+  # maintenance). ML has its own PDB in the production overlay.
   selector:
-    matchLabels:
-      app: immich
+    matchExpressions:
+      - key: component
+        operator: In
+        values:
+          - server
+          - redis

@@ -129,8 +129,12 @@ spec:
           hostnames:
             - auth.stage.burntbytes.com
       securityContext:
+        # Mirror prod's group set so staging is a faithful rehearsal of the prod
+        # microservices worker: 44 (video) + 109 (render) for /dev/dri VAAPI
+        # transcode, 100 (users) for photo/upload file access.
         supplementalGroups:
           - 44 # video group
+          - 100 # users group
           - 109 # render group
       initContainers:
         - name: oauth-config
@@ -171,6 +175,11 @@ spec:
         - name: immich-microservices
           securityContext:
             privileged: true
+            # Explicit root (matches prod microservices) to write transcode /
+            # thumbnail output to the root-owned iSCSI upload volume, rather than
+            # relying on the image-default user + privileged CAP_DAC_OVERRIDE.
+            runAsUser: 0
+            runAsGroup: 0
           env:
             # Hardware Acceleration for AMD (video transcode runs in this worker).
             - name: LIBVA_DRIVER_NAME

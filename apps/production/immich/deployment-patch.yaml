@@ -17,10 +17,11 @@ spec:
           hostnames:
             - auth.burntbytes.com
       securityContext:
+        # video(44)/render(109) dropped after the split: the api worker doesn't
+        # touch /dev/dri (all ffmpeg/VAAPI transcode moved to the microservices
+        # worker). Keep users(100) for upload/photos file access.
         supplementalGroups:
-          - 44 # video group
           - 100 # users group
-          - 109 # render group
       initContainers:
         - name: oauth-config
           # busybox 1.37
@@ -59,15 +60,13 @@ spec:
       containers:
         - name: immich-server
           securityContext:
-            privileged: true
+            # api worker does not transcode (that moved to the microservices
+            # worker), so it needs neither privileged mode nor /dev/dri. Kept root
+            # (uid 0) only so it can write client uploads to the root-owned iSCSI
+            # upload volume, matching the pre-split behaviour.
             runAsUser: 0
             runAsGroup: 0
           env:
-            # Hardware Acceleration for AMD
-            - name: LIBVA_DRIVER_NAME
-              value: radeonsi
-            - name: LIBVA_DRIVERS_PATH
-              value: /usr/lib/jellyfin-ffmpeg/lib/dri
             # Database connection - use CNPG service and credentials secret
             - name: DB_HOSTNAME
               value: immich-db-prod-cnpg-v3-rw.immich-prod.svc.cluster.local
@@ -90,8 +89,6 @@ spec:
               mountPath: /usr/src/app/upload
             - name: photos
               mountPath: /mnt/photos
-            - name: dri
-              mountPath: /dev/dri
             - name: oauth-config
               mountPath: /etc/immich
               readOnly: true
@@ -127,10 +124,6 @@ spec:
         - name: photos
           persistentVolumeClaim:
             claimName: immich-photos-pvc
-        - name: dri
-          hostPath:
-            path: /dev/dri
-            type: Directory
         - name: oauth-config-template
           configMap:
             name: immich-oauth-config

@@ -17,10 +17,8 @@ spec:
         - ip: "10.42.2.41"
           hostnames:
             - auth.stage.burntbytes.com
-      securityContext:
-        supplementalGroups:
-          - 44 # video group
-          - 109 # render group
+      # No supplementalGroups: the api worker doesn't touch /dev/dri after the
+      # split (transcode moved to the microservices worker).
       initContainers:
         - name: oauth-config
           # busybox 1.37
@@ -58,14 +56,9 @@ spec:
                 - ALL
       containers:
         - name: immich-server
-          securityContext:
-            privileged: true
+          # api worker does not transcode after the split, so it needs neither
+          # privileged mode nor /dev/dri (both moved to the microservices worker).
           env:
-            # Hardware Acceleration for AMD
-            - name: LIBVA_DRIVER_NAME
-              value: radeonsi
-            - name: LIBVA_DRIVERS_PATH
-              value: /usr/lib/jellyfin-ffmpeg/lib/dri
             # Immich v2.x config file for OAuth/OIDC and ffmpeg settings
             - name: IMMICH_CONFIG_FILE
               value: /etc/immich/immich-config.json
@@ -97,8 +90,6 @@ spec:
               mountPath: /usr/src/app/upload
             - name: photos
               mountPath: /mnt/photos
-            - name: dri
-              mountPath: /dev/dri
             - name: config-rendered
               mountPath: /etc/immich
               readOnly: true
@@ -109,10 +100,6 @@ spec:
         - name: photos
           persistentVolumeClaim:
             claimName: immich-photos-pvc
-        - name: dri
-          hostPath:
-            path: /dev/dri
-            type: Directory
         - name: config-template
           configMap:
             name: immich-config-file

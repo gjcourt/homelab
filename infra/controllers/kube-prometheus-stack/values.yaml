@@ -559,6 +559,15 @@ alertmanager:
         matchers:
           - severity = "critical"
         repeat_interval: 4h
+      # Warning alerts also go to email, but with a long repeat so they're a
+      # daily nag rather than a page storm. Before this route existed, everything
+      # non-critical fell through to the default 'null' receiver and was silently
+      # dropped — which is why week-long crashloops went unnoticed
+      # (ContainerCrashLoopBackOff is severity=warning). See #1080.
+      - receiver: 'email-critical'
+        matchers:
+          - severity = "warning"
+        repeat_interval: 24h
     receivers:
     - name: 'null'
     - name: 'email-critical'
@@ -2656,8 +2665,15 @@ prometheus-node-exporter:
     jobLabel: node-exporter
   releaseLabel: true
   extraArgs:
-    - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/)
-    - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs|erofs)$
+    # iSCSI PVCs mount under /var/lib/kubelet, so excluding that path blinded
+    # node_filesystem_readonly to exactly the volumes that go read-only when the
+    # hestia iSCSI target restarts (see #1080 — the NodeFilesystemReadOnly alert
+    # in infra/configs/alerts could never see PVC mounts). Keep the path included
+    # so PVC ext4 read-only remounts are detected; add tmpfs to the fstype-exclude
+    # so the many kubelet secret/projected tmpfs mounts under that path don't
+    # balloon series cardinality — only real block-device (ext4/xfs) mounts remain.
+    - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+)($|/)
+    - --collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tmpfs|tracefs|erofs)$
   service:
     portName: http-metrics
     ipDualStack:

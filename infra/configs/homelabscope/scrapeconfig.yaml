@@ -1,0 +1,44 @@
+# homelabscope — scrape the hestia node-exporter textfile collector.
+#
+# This is the missing scraper that makes the immich-photos-backup textfile
+# metric (and the new alcatraz-photos-pull / zfs-snapshot heartbeats) actually
+# reach Prometheus. Before homelabscope, immich-photos-backup.sh wrote
+# /var/lib/node-exporter/textfile/immich-backup.prom on every run but NOTHING
+# scraped :9100 on hestia (only thermalscope :9102 and ipmi-exporter :9290
+# existed) — so the ImmichPhotoBackupStale alert could never fire. This
+# ScrapeConfig closes that gap.
+#
+# node-exporter runs as a hestia TrueNAS Custom App
+# (hosts/hestia/monitoring/docker-compose-node-exporter.yml) with ONLY the
+# textfile collector enabled, serving :9100 on the host network.
+#
+# honorLabels: true is load-bearing. The textfile .prom files carry an explicit
+# `job` label (job="immich-photos-backup", job="alcatraz-photos-pull",
+# job="zfs-snapshot-main-family", …) — the homelabscope metric family is keyed
+# on `job`. Without honorLabels, Prometheus would rename that exposed label to
+# `exported_job` and stamp its own target job on top, breaking every
+# homelabscope_job_* series' identity. With honorLabels the exposed `job` wins;
+# only series that DON'T carry a job label (node-exporter's own scrape-meta
+# series, `up`) inherit the target job below.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: hestia-homelabscope
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  honorLabels: true
+  staticConfigs:
+    - targets:
+        - 10.42.2.10:9100
+      labels:
+        instance: hestia
+  relabelings:
+    # Applies only to series with no exposed job label (up, scrape meta). The
+    # homelabscope_job_* textfile series keep their own job via honorLabels.
+    - targetLabel: job
+      replacement: homelabscope-node-exporter
+  scrapeInterval: 60s
+  scrapeTimeout: 15s
+  metricsPath: /metrics

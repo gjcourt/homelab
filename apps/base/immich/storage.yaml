@@ -12,18 +12,6 @@ spec:
   resources:
     requests:
       storage: 10Gi
----
-# Model cache for machine learning
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: immich-model-cache-pvc
-  namespace: immich
-  labels:
-    app: immich
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
+# NOTE: immich-model-cache-pvc was removed — the ML model cache is now a
+# per-replica emptyDir (see deployment.yaml) to allow the multi-replica GPU
+# fan-out. No workload references this PVC any more.

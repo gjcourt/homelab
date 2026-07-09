@@ -14,19 +14,5 @@ spec:
   resources:
     requests:
       storage: 100Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: immich-model-cache-pvc
-  namespace: immich
-  labels:
-    app: immich
-    env: staging
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: truenas-iscsi
-  resources:
-    requests:
-      storage: 10Gi
+# immich-model-cache-pvc patch removed — the base PVC is gone (ML model cache is
+# now a per-replica emptyDir; staging ML inherits it from the base).

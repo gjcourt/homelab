@@ -1,8 +1,20 @@
 # immich-photos-backup
 
-Daily DUPLEX sync of the Immich photo library between alcatraz (Synology, 10.42.2.11) and hestia's `main/family/images/photos`. **Pull** (alcatraz→hestia, additive) brings phone uploads in; **push-back** (hestia→alcatraz, `--ignore-existing`) copies anything hestia has that alcatraz lacks (e.g. direct SD-card imports) so alcatraz stays a full backup. No `--delete` in either direction — both sides converge to the union; hestia is authoritative. Always-running container; busybox `crond` fires at 04:00 local.
+Daily incremental **pull** of the Immich photo library from alcatraz (Synology, 10.42.2.11) into hestia's `main/family/images/photos`. Additive — brings phone uploads into hestia (the source of truth); no `--delete`, so direct-to-hestia SD-card imports are never wiped. Always-running container; busybox `crond` fires at 04:00 local.
+
+The reverse leg — hestia→alcatraz, so alcatraz stays a full backup and DSM Photos picks up SD-card imports — is **not** a push from this container. It runs **from alcatraz** as a DSM Task Scheduler pull job: [`hosts/alcatraz/immich-photos-pull/`](../../alcatraz/immich-photos-pull/README.md). See ["Synology inbound-rsync limitation"](#synology-inbound-rsync-limitation) below for why a hestia-side push-back was retired.
 
 Sources are per-user `homes/<user>/Photos/` paths, not `family/images/photos/<user>/`. On the Synology side those family paths are symlinks into each user's home, with per-file ACLs that deny `truenas-backup` file open via the family path — so we sync from the homes path directly and re-map into the canonical hestia `family/images/photos/<user>/` layout.
+
+### Synology inbound-rsync limitation
+
+A hestia→alcatraz **push** (which an earlier "duplex" version attempted via `--rsync-path="sudo -n rsync"`) **cannot work** and has been retired. Synology's `/bin/rsync` is **setuid-root** and, in inbound server mode, authenticates the **real uid** against the DSM account database:
+
+- `sudo rsync` → real uid = **root**, a disabled DSM account → rejected ("user has disabled/expired").
+- `sudo -u mara rsync` → real uid = **mara**, non-admin → rejected (the check gates on the administrators group).
+- Only an **administrator** (e.g. `truenas-backup`) passes the account check — but an admin that isn't the owning user can't write that user's private `0700` `homes/<user>/Photos` with correct ownership.
+
+No sudoers rule squares this. The fix is to reverse the direction: alcatraz **pulls** from hestia as local root (no inbound account check applies, and local root can chown the received files). That job lives in [`hosts/alcatraz/immich-photos-pull/`](../../alcatraz/immich-photos-pull/README.md). **No rsync sudoers entry on alcatraz is needed** — only the chmod sudoers rule (section 3a) that supports this container's pull leg remains.
 
 | Attribute | Value |
 |---|---|
@@ -49,7 +61,7 @@ ssh -i /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz \
 
 Synology DSM Photos uploads new files with POSIX mode `0700`. The owning group is `users` (gid 100) — which `truenas-backup` is also in, so the group bit's `---` denies before POSIX falls through to "other". rsync hits `send_files Permission denied (13)` on every new file and the run fails partially-but-silently (zero bytes transferred for new content; no metric update; the `ImmichPhotoBackupStale` alert eventually fires).
 
-The script's per-user PULL runs a `sudo -n chmod -R g+rX,o+rX` on the source via rsync's `--rsync-path` before each transfer to fix this. The PUSH-BACK additionally runs the remote rsync as `sudo -n rsync` so it can write into the user's home and `--chown` the files — so the sudoers below also permits `rsync` (verify the path with `which rsync` on alcatraz; typically `/bin/rsync`). That requires NOPASSWD sudo for `truenas-backup` on exactly that chmod (and no `requiretty` constraint — see Notes below):
+The script's per-user PULL runs a `sudo -n chmod -R g+rX,o+rX` on the source via rsync's `--rsync-path` before each transfer to fix this. That requires NOPASSWD sudo for `truenas-backup` on exactly that chmod (and no `requiretty` constraint — see Notes below). No `rsync` grant is needed: the retired hestia→alcatraz push-back is gone (see ["Synology inbound-rsync limitation"](#synology-inbound-rsync-limitation)), so the sudoers rule covers only the chmod:
 
 ```bash
 # As a DSM admin (currently: manager) on alcatraz.
@@ -62,7 +74,7 @@ The script's per-user PULL runs a `sudo -n chmod -R g+rX,o+rX` on the source via
 #      via DSM File Station (logged in as a DSM admin) — that skips sudo
 #      entirely and avoids the chicken-and-egg trap.
 cat > /tmp/immich-photos-backup.sudoers <<'EOF'
-truenas-backup ALL=(root) NOPASSWD: /bin/chmod -R g+rX\,o+rX /volume1/homes/george/Photos, /bin/chmod -R g+rX\,o+rX /volume1/homes/mara/Photos, /bin/rsync, /usr/bin/rsync
+truenas-backup ALL=(root) NOPASSWD: /bin/chmod -R g+rX\,o+rX /volume1/homes/george/Photos, /bin/chmod -R g+rX\,o+rX /volume1/homes/mara/Photos
 EOF
 sudo install -m 0440 -o root -g root \
     /tmp/immich-photos-backup.sudoers \
@@ -75,7 +87,7 @@ sudo -n true && echo "sudo still functional"
 
 # Sanity #2: the new rule is visible to truenas-backup. The output
 # displays `\,` literally — that's sudo -l showing the escape, normal.
-sudo -l -U truenas-backup 2>&1 | grep -iE 'chmod|rsync'
+sudo -l -U truenas-backup 2>&1 | grep -i chmod
 ```
 
 Sanity check the paths exist on your DSM (paths differ between Synology firmware versions):

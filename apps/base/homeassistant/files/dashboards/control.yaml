@@ -228,39 +228,39 @@ views:
       heading: SMSL PL200 — Playback
       heading_style: title
     - type: tile
-      entity: button.pl200_power
+      entity: button.ir_blaster_pl200_power
       name: Power
       color: red
     - type: tile
-      entity: button.pl200_mute
+      entity: button.ir_blaster_pl200_mute
       name: Mute
       color: amber
     - type: tile
-      entity: button.pl200_volume_down
+      entity: button.ir_blaster_pl200_volume_down
       name: Vol −
       color: blue
     - type: tile
-      entity: button.pl200_volume_up
+      entity: button.ir_blaster_pl200_volume_up
       name: Vol +
       color: blue
     - type: tile
-      entity: button.pl200_play_pause
+      entity: button.ir_blaster_pl200_play_pause
       name: Play / Pause
     - type: tile
-      entity: button.pl200_stop
+      entity: button.ir_blaster_pl200_stop
       name: Stop
     - type: tile
-      entity: button.pl200_previous
+      entity: button.ir_blaster_pl200_previous
       name: Previous
     - type: tile
-      entity: button.pl200_next
+      entity: button.ir_blaster_pl200_next
       name: Next
     - type: tile
-      entity: button.pl200_seek_back
+      entity: button.ir_blaster_pl200_seek_back
       name: Seek −10s
       color: green
     - type: tile
-      entity: button.pl200_seek_forward
+      entity: button.ir_blaster_pl200_seek_forward
       name: Seek +10s
       color: green
   - type: grid
@@ -270,22 +270,22 @@ views:
       heading: SMSL PL200 — Functions
       heading_style: title
     - type: tile
-      entity: button.pl200_menu
+      entity: button.ir_blaster_pl200_menu
       name: Menu
     - type: tile
-      entity: button.pl200_display
+      entity: button.ir_blaster_pl200_display
       name: Display
     - type: tile
-      entity: button.pl200_function
+      entity: button.ir_blaster_pl200_function
       name: Function
     - type: tile
-      entity: button.pl200_input
+      entity: button.ir_blaster_pl200_input
       name: Input
     - type: tile
-      entity: button.pl200_shuffle
+      entity: button.ir_blaster_pl200_shuffle
       name: Shuffle
     - type: tile
-      entity: button.pl200_repeat
+      entity: button.ir_blaster_pl200_repeat
       name: Repeat
   - type: grid
     column_span: 3
@@ -294,34 +294,34 @@ views:
       heading: SMSL PL200 — Track Select
       heading_style: title
     - type: tile
-      entity: button.pl200_1
+      entity: button.ir_blaster_pl200_1
       name: 1
     - type: tile
-      entity: button.pl200_2
+      entity: button.ir_blaster_pl200_2
       name: 2
     - type: tile
-      entity: button.pl200_3
+      entity: button.ir_blaster_pl200_3
       name: 3
     - type: tile
-      entity: button.pl200_4
+      entity: button.ir_blaster_pl200_4
       name: 4
     - type: tile
-      entity: button.pl200_5
+      entity: button.ir_blaster_pl200_5
       name: 5
     - type: tile
-      entity: button.pl200_6
+      entity: button.ir_blaster_pl200_6
       name: 6
     - type: tile
-      entity: button.pl200_7
+      entity: button.ir_blaster_pl200_7
       name: 7
     - type: tile
-      entity: button.pl200_8
+      entity: button.ir_blaster_pl200_8
       name: 8
     - type: tile
-      entity: button.pl200_9
+      entity: button.ir_blaster_pl200_9
       name: 9
     - type: tile
-      entity: button.pl200_0
+      entity: button.ir_blaster_pl200_0
       name: 0
   - type: grid
     column_span: 3
@@ -330,47 +330,47 @@ views:
       heading: D90 III Discrete (DAC)
       heading_style: title
     - type: tile
-      entity: button.d90_iii_discrete_power
+      entity: button.ir_blaster_d90_iii_discrete_power
       name: Power
       color: red
     - type: tile
-      entity: button.d90_iii_discrete_mute
+      entity: button.ir_blaster_d90_iii_discrete_mute
       name: Mute
       color: amber
     - type: tile
-      entity: button.d90_iii_discrete_volume_down
+      entity: button.ir_blaster_d90_iii_discrete_volume_down
       name: Vol −
       color: blue
     - type: tile
-      entity: button.d90_iii_discrete_volume_up
+      entity: button.ir_blaster_d90_iii_discrete_volume_up
       name: Vol +
       color: blue
     - type: tile
-      entity: button.d90_iii_discrete_previous
+      entity: button.ir_blaster_d90_iii_discrete_previous
       name: Previous
     - type: tile
-      entity: button.d90_iii_discrete_next
+      entity: button.ir_blaster_d90_iii_discrete_next
       name: Next
     - type: tile
-      entity: button.d90_iii_discrete_menu
+      entity: button.ir_blaster_d90_iii_discrete_menu
       name: Menu
     - type: tile
-      entity: button.d90_iii_discrete_output
+      entity: button.ir_blaster_d90_iii_discrete_output
       name: Line Out
     - type: tile
-      entity: button.d90_iii_discrete_c1
+      entity: button.ir_blaster_d90_iii_discrete_c1
       name: C1
     - type: tile
-      entity: button.d90_iii_discrete_c2
+      entity: button.ir_blaster_d90_iii_discrete_c2
       name: C2
     - type: tile
-      entity: button.d90_iii_discrete_fir
+      entity: button.ir_blaster_d90_iii_discrete_fir
       name: FIR
     - type: tile
-      entity: button.d90_iii_discrete_auto
+      entity: button.ir_blaster_d90_iii_discrete_auto
       name: Auto
     - type: tile
-      entity: button.d90_iii_discrete_brightness
+      entity: button.ir_blaster_d90_iii_discrete_brightness
       name: Brightness
   - type: grid
     column_span: 3
@@ -379,45 +379,143 @@ views:
       heading: DX5 II (DAC / Amp)
       heading_style: title
     - type: tile
-      entity: button.dx5_ii_power
+      entity: button.ir_blaster_dx5_ii_power
       name: Power
       color: red
     - type: tile
-      entity: button.dx5_ii_mute
+      entity: button.ir_blaster_dx5_ii_mute
       name: Mute
       color: amber
     - type: tile
-      entity: button.dx5_ii_volume_down
+      entity: button.ir_blaster_dx5_ii_volume_down
       name: Vol −
       color: blue
     - type: tile
-      entity: button.dx5_ii_volume_up
+      entity: button.ir_blaster_dx5_ii_volume_up
       name: Vol +
       color: blue
     - type: tile
-      entity: button.dx5_ii_previous
+      entity: button.ir_blaster_dx5_ii_previous
       name: Previous
     - type: tile
-      entity: button.dx5_ii_next
+      entity: button.ir_blaster_dx5_ii_next
       name: Next
     - type: tile
-      entity: button.dx5_ii_menu
+      entity: button.ir_blaster_dx5_ii_menu
       name: Menu
     - type: tile
-      entity: button.dx5_ii_a
+      entity: button.ir_blaster_dx5_ii_a
       name: A
     - type: tile
-      entity: button.dx5_ii_b
+      entity: button.ir_blaster_dx5_ii_b
       name: B
     - type: tile
-      entity: button.dx5_ii_c1
+      entity: button.ir_blaster_dx5_ii_c1
       name: C1
     - type: tile
-      entity: button.dx5_ii_c2
+      entity: button.ir_blaster_dx5_ii_c2
       name: C2
     - type: tile
-      entity: button.dx5_ii_home
+      entity: button.ir_blaster_dx5_ii_home
       name: Home
     - type: tile
-      entity: button.dx5_ii_brightness
+      entity: button.ir_blaster_dx5_ii_brightness
       name: Brightness
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: D30 Pro / D50s (DAC)
+      heading_style: title
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_power
+      name: Power
+      color: red
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_mute
+      name: Mute
+      color: amber
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_volume_down
+      name: Vol −
+      color: blue
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_volume_up
+      name: Vol +
+      color: blue
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_previous
+      name: Previous
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_next
+      name: Next
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_menu
+      name: Menu
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_output
+      name: Output
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_auto
+      name: Auto
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_fir
+      name: Filter
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_brightness
+      name: Brightness
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_headphones
+      name: Phones
+    - type: tile
+      entity: button.ir_blaster_d30_pro_d50s_m
+      name: M
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: TOPPING BC-15A (generic)
+      heading_style: title
+    - type: tile
+      entity: button.ir_blaster_topping_power
+      name: Power
+      color: red
+    - type: tile
+      entity: button.ir_blaster_topping_mute
+      name: Mute
+      color: amber
+    - type: tile
+      entity: button.ir_blaster_topping_volume_down
+      name: Vol −
+      color: blue
+    - type: tile
+      entity: button.ir_blaster_topping_volume_up
+      name: Vol +
+      color: blue
+    - type: tile
+      entity: button.ir_blaster_topping_previous
+      name: Previous
+    - type: tile
+      entity: button.ir_blaster_topping_next
+      name: Next
+    - type: tile
+      entity: button.ir_blaster_topping_menu
+      name: Menu
+    - type: tile
+      entity: button.ir_blaster_topping_output
+      name: Output
+    - type: tile
+      entity: button.ir_blaster_topping_auto
+      name: Auto
+    - type: tile
+      entity: button.ir_blaster_topping_fir
+      name: Filter
+    - type: tile
+      entity: button.ir_blaster_topping_brightness
+      name: Brightness
+    - type: tile
+      entity: button.ir_blaster_topping_c1
+      name: C1
+    - type: tile
+      entity: button.ir_blaster_topping_c2
+      name: C2

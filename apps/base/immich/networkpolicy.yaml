@@ -84,10 +84,15 @@ spec:
       app: immich
       component: machine-learning
   ingress:
+    # Both the api (search-time CLIP encoding) and microservices (smart-search /
+    # face-detection job dispatch) workers call the ML service.
     - fromEndpoints:
         - matchLabels:
             app: immich
             component: server
+        - matchLabels:
+            app: immich
+            component: microservices
       toPorts:
         - ports:
             - port: "3003"
@@ -120,16 +125,21 @@ metadata:
     app.kubernetes.io/name: immich
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Ingress from server only on 6379; egress DNS only.
+  description: Ingress from api + microservices workers on 6379; egress DNS only.
   endpointSelector:
     matchLabels:
       app: immich
       component: redis
   ingress:
+    # Both workers use Redis: api for cache/session/websocket, microservices for
+    # the BullMQ job queue it consumes.
     - fromEndpoints:
         - matchLabels:
             app: immich
             component: server
+        - matchLabels:
+            app: immich
+            component: microservices
       toPorts:
         - ports:
             - port: "6379"
@@ -144,4 +154,75 @@ spec:
             - port: "53"
               protocol: UDP
             - port: "53"
+              protocol: TCP
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: immich-microservices
+  namespace: immich
+  labels:
+    app.kubernetes.io/name: immich
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: >-
+    Background worker. Ingress: kubelet readiness probe on 8082 (OTEL metrics).
+    Egress: DNS + CNPG + Redis + ML service + HTTPS. Mirrors the server egress.
+  endpointSelector:
+    matchLabels:
+      app: immich
+      component: microservices
+  ingress:
+    # kubelet health probe to the OTEL microservices metrics endpoint (:8082).
+    # The probe originates from the node, so allow host + remote-node.
+    - fromEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "8082"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # CNPG PostgreSQL (pgvecto.rs variant).
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/podRole: instance
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+    # In-namespace Redis for the job queue.
+    - toEndpoints:
+        - matchLabels:
+            app: immich
+            component: redis
+      toPorts:
+        - ports:
+            - port: "6379"
+              protocol: TCP
+    # In-namespace machine-learning service for CLIP / face recognition dispatch.
+    - toEndpoints:
+        - matchLabels:
+            app: immich
+            component: machine-learning
+      toPorts:
+        - ports:
+            - port: "3003"
+              protocol: TCP
+    # External HTTPS for reverse geocoding data, map tiles, metadata enrichment.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP

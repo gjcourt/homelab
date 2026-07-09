@@ -113,11 +113,26 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 ## Phased plan (tasks)
 
 ### P0 — Inventory & long-lead (do first, unblocks everything)
-- [ ] List zigbee2mqtt paired devices (`kubectl exec` / z2m UI); enumerate HA `binary_sensor.*` motion/occupancy entities → fusion inputs for P4 (or note none exist).
-- [ ] Map UniFi Protect **camera coverage** to rooms (which of the 8 are front-half/covered).
-- [ ] Choose the 8 rooms + mark power drops / node mounting points, and assign each a **presence source**: UniFi Protect person (camera rooms) / **C3+mmWave** / Zigbee motion / PIR. Pick the **5 mmWave rooms** (back-half, no camera, people sit still — e.g. office, bedrooms, living).
-- [ ] Confirm a **configurable** iBeacon SKU (major/minor settable) + its config method.
-- [ ] Order **1 scanner + 1 mmWave stack + 1 beacon** for the PoC (and queue the rest: 8 scanners, 5 mmWave nodes + modules, 3 beacons).
+- [x] **Inventoried zigbee2mqtt (2026-06-21):** 8 paired devices, **no motion sensors paired yet** (2 Aqara `lumi.weather`, 3 routers, 1 plug, 2 Tuya `TS0502B` lights). George **has Zigbee motion sensors on hand — not yet paired**; no motion `binary_sensor` exists in HA yet.
+- [ ] **Pair the on-hand Zigbee motion sensors** — z2m coordinator is healthy (ember adapter, MQTT connected). Enable permit-join via the z2m frontend/MQTT **only during pairing, then disable** (security hygiene). Each → an HA `binary_sensor` = back-half presence input for P4 fusion. *(Physical task — do when home.)*
+- [x] **Camera coverage mapped (2026-06-21):** one UniFi Protect camera (mid-west-wall, facing the entry) covers the **front zone = Living + Dining + Foyer/entryway** as a single person-detection sensor (zone-level "someone's in front"; BLE scanners give per-room within the front).
+- [x] **Room → node → presence map LOCKED (2026-06-21).** House is N–S, front = North. 8 scanner rooms, 5 mmWave, 1 camera zone, Zigbee = redundancy:
+
+  | # | Room | ESPresense scanner | Primary presence | Notes |
+  |---|---|---|---|---|
+  | 1 | Living (front) | ✓ | **Camera** (front zone) + BLE per-room | sit-still but camera-covered → no mmWave |
+  | 2 | Dining (front) | ✓ | **Camera** (front zone) + BLE per-room | |
+  | 3 | Foyer / entryway (front) | ✓ | **Camera** (front zone) + BLE per-room | |
+  | 4 | Office | ✓ | **mmWave** | desk = sit-still |
+  | 5 | **Master** (SW corner) | ✓ | **mmWave** | French doors to yard → **aim radar inward, not at the glass** (yard movement = false present) |
+  | 6 | **Son's / Niccolo** (SE corner) | ✓ | **mmWave** | French doors (same aiming caveat) + Niccolo's **clip beacon** |
+  | 7 | **Guest** (mid bedroom) | ✓ | **mmWave** | |
+  | 8 | **Kitchen** | ✓ | **mmWave** | tune out range-hood fan / dishwasher vibration / reflective surfaces via sensitivity+distance gates |
+
+  - **Zigbee motion = redundancy** in this setup (on-hand sensors as backup/extra signal; not the primary for any room). Spares can cover utility/outdoor.
+  - **Out of scope (future iteration):** basement / downstairs presence — not in this build.
+- [x] **Beacon SKU confirmed:** **HolyIOT nRF52810** keyfob — major/minor/UUID settable via the free **Holyiot-beacon** app (iOS/Android); iBeacon, coin-cell, ~$5–8.
+- [ ] Order **1 scanner + 1 mmWave stack + 1 beacon** for the PoC (and queue the rest: 8 scanners, 5 mmWave nodes + modules, 3 beacons). PoC items: XIAO C3 + u.FL antenna; XIAO C3 + Seeed 24 GHz mmWave module; HolyIOT nRF52810.
 
 ### P1 — Home/away (zero new hardware)
 - [ ] Create a UniFi **local read-only** account; add the **UniFi Network integration** (config-flow; creds via SOPS; `.storage`, not committed YAML) for `device_tracker.*`.
@@ -148,7 +163,7 @@ HA config here is a committed ConfigMap, but several integrations are **config-f
 
 ### P3b — mmWave presence nodes (ESPHome, runs parallel to P3)
 - [ ] Flash **ESPHome** to the 5 mmWave C3s: the Seeed 24 GHz mmWave component (UART) + the **`mqtt:`** component (creds from P2's `mmwave` user, **`topic_prefix: mmwave/<node>`** so all 5 fall under the `mmwave/#` ACL) + HA MQTT discovery. Stack the radar module; USB-power; IoT VLAN. *(No mosquitto/firewall work beyond P2 — same broker path.)*
-- [ ] Place per the radar's coverage (ceiling/corner, don't aim through a wall into the next room); tune sensitivity/timeout so a still person reads **present** without bleeding into the adjacent room.
+- [ ] Place per the radar's coverage (ceiling/corner, don't aim through a wall into the next room); tune sensitivity/timeout so a still person reads **present** without bleeding into the adjacent room. **Per-room (from the P0 map):** Master + Son's rooms have **French doors to the yard — aim the radar inward, never at the glass** (yard movement = false present); **Kitchen** needs sensitivity + distance-gate tuning to reject the range-hood fan / dishwasher vibration / reflective appliances.
 - [ ] **Done when:** each mmWave room's `binary_sensor` stays **on** while someone sits still and clears shortly after they leave.
 
 ### P4 — Identity + fusion

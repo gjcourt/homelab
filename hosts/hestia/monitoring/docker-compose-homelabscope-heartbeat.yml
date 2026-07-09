@@ -1,0 +1,56 @@
+# homelabscope-heartbeat — hestia-side collector Custom App.
+#
+# Surfaces two scheduled jobs that can't run their own exporter into the
+# homelabscope metric family, by writing .prom files into the shared
+# node-exporter textfile dir (served by docker-compose-node-exporter.yml on
+# :9100 and scraped by the infra/configs/homelabscope ScrapeConfig):
+#
+#   alcatraz-photos-pull        — SSHes to alcatraz, parses the pull log's last
+#                                 `END (success, Ns)` trailer.
+#   zfs-snapshot-main-family    — newest ZFS snapshot creation time per dataset
+#   zfs-snapshot-main-homes       (last success = last snapshot).
+#
+# READ-ONLY: it reads the alcatraz log + ZFS snapshot list and writes only its
+# own .prom files. It mutates no data on either host.
+#
+# ARCHIVED until the image is built. This app references
+# ghcr.io/gjcourt/homelabscope-heartbeat, which build-homelabscope-heartbeat.yml
+# publishes on the first push of images/homelabscope-heartbeat/** to master.
+# Operator step after that first build: pin the @sha256 digest below and flip
+# archived to false so deploy-hestia.yml rolls it out. Deploying before the
+# image exists would crash-loop, so we keep it opted-out of auto-deploy.
+x-deploy:
+  name: homelabscope-heartbeat
+  archived: false
+  archived-at: 2026-07-04
+  archived-reason: ""
+
+services:
+  homelabscope-heartbeat:
+    image: ghcr.io/gjcourt/homelabscope-heartbeat:2026-07-07
+    container_name: homelabscope-heartbeat
+    restart: unless-stopped
+    # Root + privileged + /dev/zfs so `zfs list -t snapshot` can talk to the
+    # pool (read-only ioctls). If the in-container zfs userland can't reach the
+    # host module, heartbeat.sh falls back to the bind-mounted .zfs/snapshot
+    # control dirs — hence /mnt/main/family + /mnt/main/homes are mounted too.
+    privileged: true
+    user: "0:0"
+    environment:
+      - INTERVAL_SECONDS=600
+      - TZ=America/New_York
+      # TZ that the TrueNAS periodic-snapshot task names its snapshots in —
+      # only used by the .zfs/snapshot fallback (see heartbeat.sh).
+      - ZFS_SNAP_TZ=America/Los_Angeles
+    devices:
+      - /dev/zfs:/dev/zfs
+    volumes:
+      # Reuse the immich-photos-backup app's alcatraz credential — same key,
+      # same truenas-backup@10.42.2.11 account, read-only.
+      - /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz:/root/.ssh/id_ed25519_alcatraz:ro
+      - /mnt/main/apps/immich-photos-backup/ssh/known_hosts:/root/.ssh/known_hosts
+      # Shared textfile collector dir — heartbeat writes homelabscope-*.prom here.
+      - /var/lib/node-exporter/textfile:/var/lib/node-exporter/textfile
+      # ZFS snapshot fallback source (read-only) when `zfs list` is unavailable.
+      - /mnt/main/family:/mnt/main/family:ro
+      - /mnt/main/homes:/mnt/main/homes:ro

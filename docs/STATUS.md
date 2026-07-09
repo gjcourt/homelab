@@ -5,7 +5,7 @@
 > this page links out. **Update this file in the same PR whenever** a plan's
 > status changes, an incident postmortem lands, or hardware/topology changes.
 >
-> Last updated: 2026-06-24
+> Last updated: 2026-07-06
 
 ## Cluster at a glance
 
@@ -27,7 +27,7 @@ Full picture: [AGENTS.md](../AGENTS.md) · architecture in [docs/architecture/](
 |---|---|---|
 | 4× Talos nodes | Kubernetes cluster | `.20`/`.21`/`.23` (control-plane) + `.25` (worker) on the Lab VLAN, `10.42.2.x`. `.22` (bad DIMM) + `.24` physically out. |
 | hestia (`10.42.2.10`) | TrueNAS storage + compute | No GPUs since 2026-05-16. Runs the GHA deploy runner, Immich photo-backup rsync, qBittorrent, thermalscope telemetry, IPMI exporter. See [hosts/hestia/](../hosts/hestia/README.md). |
-| Synology / alcatraz (`10.42.2.11`) | Block + photo storage | iSCSI backing for CNPG PVCs; phone-photo upload target. Role narrowing — see the photos-SOT plan. |
+| Synology / alcatraz (`10.42.2.11`) | Block + photo storage | iSCSI backing for CNPG PVCs; phone-photo upload target. Role narrowing — see the photos-SOT plan. GitOps deploy runner + `immich-photos-pull` compose workload built (operator bootstrap pending — see the alcatraz GitOps plan). |
 
 ## In flight
 
@@ -35,9 +35,12 @@ Active plans (see [docs/plans/](plans/README.md) for the full status-grouped ind
 
 - [Alcatraz → hestia migration](plans/2026-05-20-alcatraz-to-hestia-migration.md) — non-photo data off alcatraz onto hestia ZFS; Phase 1 mostly done, Phase 2 backup pipeline live.
 - [Hestia as photos source-of-truth](plans/2026-06-01-hestia-photos-sot.md) — Immich NFS PV repointed to hestia; soak/verification underway.
+- [Alcatraz GitOps Docker workflow](plans/2026-06-26-alcatraz-gitops-docker.md) — self-hosted runner + `docker compose` deploy mirroring hestia; runner/workflow/guard + first workload (`immich-photos-pull` as a compose service) built, operator bootstrap (P1–P7) + arch confirmation pending.
+- [Alcatraz pulls photos from hestia](plans/2026-07-04-alcatraz-photos-pull.md) — impossible hestia→alcatraz rsync push-back (Synology setuid-root inbound-uid check) retired; backfill now runs from alcatraz as a DSM Task Scheduler pull job. Repo artifacts landed; DSM operator steps + DSM-Photos-indexing validation pending.
 - [Snapcast / HifiBerry rollout](plans/2026-05-03-snapcast-hifiberry-rollout.md) — server + LB IP live; per-device client setup remaining.
 - [Navidrome → Mopidy → Snapcast audio source](plans/2026-03-14-navidrome-snapcast-mopidy.md) — Mopidy sidecar in draft PR #426; not yet on master.
 - [Hestia memory benchmark](plans/2026-05-15-hestia-memory-benchmark.md) — 6-DIMM baseline captured; 8-DIMM comparison pending a physical DIMM swap.
+- [homelabscope — scheduled-job monitoring](plans/2026-07-04-homelabscope.md) — unified `homelabscope_job_*` metric family + hestia node-exporter textfile scraper (fixes the orphaned/unscraped immich-backup metric) + cronjob recording rules + templated staleness/absence alerts + Grafana table. Repo artifacts landed; operator steps remain (deploy node-exporter, build+enable the heartbeat Custom App, bump the immich image digest).
 
 ## Next up
 

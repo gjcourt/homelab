@@ -17,10 +17,8 @@ spec:
         - ip: "10.42.2.41"
           hostnames:
             - auth.stage.burntbytes.com
-      securityContext:
-        supplementalGroups:
-          - 44 # video group
-          - 109 # render group
+      # No supplementalGroups: the api worker doesn't touch /dev/dri after the
+      # split (transcode moved to the microservices worker).
       initContainers:
         - name: oauth-config
           # busybox 1.37
@@ -58,10 +56,132 @@ spec:
                 - ALL
       containers:
         - name: immich-server
+          # api worker does not transcode after the split, so it needs neither
+          # privileged mode nor /dev/dri (both moved to the microservices worker).
+          securityContext:
+            # Root (uid 0) to write client uploads to the root-owned iSCSI upload
+            # volume — matches prod and removes the pre-split reliance on
+            # privileged mode's CAP_DAC_OVERRIDE for that write.
+            runAsUser: 0
+            runAsGroup: 0
+          env:
+            # Immich v2.x config file for OAuth/OIDC and ffmpeg settings
+            - name: IMMICH_CONFIG_FILE
+              value: /etc/immich/immich-config.json
+            # Database connection - use CNPG service and credentials secret
+            - name: DB_HOSTNAME
+              value: immich-db-staging-cnpg-v1-rw.immich-stage.svc.cluster.local
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_DATABASE_NAME
+              value: immich
+            - name: DB_USERNAME
+              value: immich
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: immich-db-credentials
+                  key: password
+          # api-only (interactive serve path); jobs moved to the microservices
+          # deployment. Staging is a small testbed, so keep this modest.
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "2000m"
+          volumeMounts:
+            - name: upload
+              mountPath: /usr/src/app/upload
+            - name: photos
+              mountPath: /mnt/photos
+            - name: config-rendered
+              mountPath: /etc/immich
+              readOnly: true
+      volumes:
+        - name: upload
+          persistentVolumeClaim:
+            claimName: immich-upload-pvc
+        - name: photos
+          persistentVolumeClaim:
+            claimName: immich-photos-pvc
+        - name: config-template
+          configMap:
+            name: immich-config-file
+        - name: config-rendered
+          emptyDir: {}
+---
+# Microservices worker (staging) — rehearses the prod split topology at small
+# size. Same runtime env as the api pod (privileged VAAPI transcode, DB, JSON
+# OAuth/ffmpeg config via the init container) but IMMICH_WORKERS_EXCLUDE=api (base).
+# Co-located with the api pod (podAffinity in base) on staging's RWO upload PVC.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-microservices
+  namespace: immich
+spec:
+  template:
+    spec:
+      hostAliases:
+        - ip: "10.42.2.41"
+          hostnames:
+            - auth.stage.burntbytes.com
+      securityContext:
+        # Mirror prod's group set so staging is a faithful rehearsal of the prod
+        # microservices worker: 44 (video) + 109 (render) for /dev/dri VAAPI
+        # transcode, 100 (users) for photo/upload file access.
+        supplementalGroups:
+          - 44 # video group
+          - 100 # users group
+          - 109 # render group
+      initContainers:
+        - name: oauth-config
+          # busybox 1.37
+          image: busybox@sha256:fd8d9aa63ba2f0982b5304e1ee8d3b90a210bc1ffb5314d980eb6962f1a9715d
+          command:
+            - sh
+            - -c
+            - |
+              sed "s/__CLIENT_SECRET_PLACEHOLDER__/${CLIENT_SECRET}/g" \
+                /config-template/immich-config.json > /config/immich-config.json
+          env:
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: immich-sso-secret
+                  key: client_secret
+          volumeMounts:
+            - name: config-template
+              mountPath: /config-template
+              readOnly: true
+            - name: config-rendered
+              mountPath: /config
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "32Mi"
+              cpu: "50m"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: immich-microservices
           securityContext:
             privileged: true
+            # Explicit root (matches prod microservices) to write transcode /
+            # thumbnail output to the root-owned iSCSI upload volume, rather than
+            # relying on the image-default user + privileged CAP_DAC_OVERRIDE.
+            runAsUser: 0
+            runAsGroup: 0
           env:
-            # Hardware Acceleration for AMD
+            # Hardware Acceleration for AMD (video transcode runs in this worker).
             - name: LIBVA_DRIVER_NAME
               value: radeonsi
             - name: LIBVA_DRIVERS_PATH
@@ -85,11 +205,11 @@ spec:
                   key: password
           resources:
             requests:
-              memory: "2Gi"
-              cpu: "1000m"
+              memory: "1Gi"
+              cpu: "500m"
             limits:
-              memory: "8Gi"
-              cpu: "4000m"
+              memory: "2Gi"
+              cpu: "2000m"
           volumeMounts:
             - name: upload
               mountPath: /usr/src/app/upload

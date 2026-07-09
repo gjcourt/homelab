@@ -4,7 +4,7 @@
 
 Flashcards is a multi-deck spaced-repetition study app using FSRS-4.5 scheduling. It's a static React/TypeScript SPA — entirely client-side, no backend, no database. All scheduling state lives in the user's `localStorage`.
 
-Source: https://github.com/gjcourt/flashcards · Plan: brainstorm/04-009.
+Source: https://github.com/gjcourt/flashcards · Plan: lab/04-009.
 
 ## 2. Architecture
 

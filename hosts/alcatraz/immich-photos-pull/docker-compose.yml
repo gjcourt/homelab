@@ -1,0 +1,77 @@
+# Daily additive pull of the immich photo library hestia → alcatraz, run ON
+# alcatraz (Synology DSM, 10.42.2.11) as the first GitOps-managed compose
+# workload. This SUPERSEDES the manual DSM Task Scheduler job described in
+# ./README.md: the same pull-from-hestia.sh is now baked into
+# ghcr.io/gjcourt/immich-photos-pull (images/immich-photos-pull/) and fired by
+# the image's busybox crond at 05:00 local. The alcatraz self-hosted runner
+# (hosts/alcatraz/actions-runner/) deploys this file via alcatraz-deploy.yaml.
+#
+# Mirrors the hestia-side leg (hosts/hestia/immich-photos-backup/): a
+# crond-in-container scheduled rsync job. Direction + Synology-inbound-rsync
+# rationale: see ./README.md and docs/plans/2026-07-04-alcatraz-photos-pull.md.
+#
+# First-time setup (operator, over SSH — see ./README.md steps 1–2):
+#   1. SSH key at /volume1/homes/truenas-backup/.ssh/id_ed25519_hestia
+#      (private, mode 600) + known_hosts_hestia alongside it. The matching
+#      public key is authorized on hestia as a read-only rrsync forced command.
+#   2. touch /var/log/immich-photos-pull.log on the alcatraz host (so the
+#      single-file bind mount below has a target; the hestia-side
+#      homelabscope-heartbeat collector SSHes in and reads its END trailer).
+#
+# ARCHIVED until the image is built. This app references
+# ghcr.io/gjcourt/immich-photos-pull, which build-immich-photos-pull.yml
+# publishes on the first push of images/immich-photos-pull/** to master.
+# Operator step after that first build: pin the @sha256 digest below and flip
+# archived to false so alcatraz-deploy.yaml rolls it out. Deploying before the
+# image exists would fail the pull, so we keep it opted-out of auto-deploy
+# (same pattern as hosts/hestia/monitoring/docker-compose-homelabscope-heartbeat.yml).
+x-deploy:
+  name: immich-photos-pull
+  archived: true
+  archived-at: 2026-07-06
+  archived-reason: image not yet built — flip false + pin digest after first CI publish
+  # Host paths this reviewed workload is permitted to bind-mount despite the
+  # alcatraz-deploy.yaml protected-path guard. The pull job's whole purpose is
+  # to write the per-user DSM Photos libraries, so it must mount them; the
+  # guard blocks the CATASTROPHIC prefixes (/, /etc, iSCSI, bare /volume1)
+  # unconditionally and everything else only when NOT listed here. See
+  # docs/plans/2026-06-26-alcatraz-gitops-docker.md ("protected-path guard").
+  allow-host-paths:
+    - /volume1/homes/truenas-backup/.ssh
+    - /volume1/homes/george/Photos
+    - /volume1/homes/mara/Photos
+    - /var/log/immich-photos-pull.log
+
+services:
+  immich-photos-pull:
+    image: ghcr.io/gjcourt/immich-photos-pull:2026-07-06
+    container_name: immich-photos-pull
+    restart: unless-stopped
+    # Runs as root (default): the script chowns rsync-received files to each DSM
+    # account's NUMERIC uid (mara=1027, george=1028; gid users=100) so DSM
+    # Photos indexes them. Local root can chown on the local filesystem.
+    environment:
+      # crond's "0 5 * * *" entry only means "05:00 local" if crond reads TZ;
+      # alpine's tzdata package + this env var is what makes that work.
+      - TZ=America/New_York
+    # Resource ceilings (plan security rule 3): a runaway rsync/chown must not
+    # starve iSCSI/NFS I/O or fill the photo volume. rsync of new files is light.
+    mem_limit: 512m
+    cpus: 2.0
+    volumes:
+      # SSH identity to reach hestia — single-file bind mount, read-only, at the
+      # exact path the script's SSH_KEY config var expects.
+      - /volume1/homes/truenas-backup/.ssh/id_ed25519_hestia:/volume1/homes/truenas-backup/.ssh/id_ed25519_hestia:ro
+      # Persisted known_hosts (rw so StrictHostKeyChecking=accept-new can pin the
+      # host key on first run and survive container restarts).
+      - /volume1/homes/truenas-backup/.ssh/known_hosts_hestia:/volume1/homes/truenas-backup/.ssh/known_hosts_hestia
+      # Per-user DSM Photos destinations (rw) — mounted at their real paths so
+      # the script writes and chowns them in place. NOT the whole /volume1/homes
+      # tree: only these two libraries (least privilege; see x-deploy allow-list).
+      - /volume1/homes/george/Photos:/volume1/homes/george/Photos
+      - /volume1/homes/mara/Photos:/volume1/homes/mara/Photos
+      # Pull log — bind-mounted to the host's real /var/log path (the same path
+      # the retired DSM Task Scheduler job wrote) so the hestia-side
+      # homelabscope-heartbeat collector's SSH grep for the `END (success, Ns)`
+      # trailer keeps working unchanged. Operator pre-touches it (see header).
+      - /var/log/immich-photos-pull.log:/var/log/immich-photos-pull.log

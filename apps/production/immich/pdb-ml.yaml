@@ -1,0 +1,15 @@
+# Machine-learning fan-out PDB (production only — staging runs a single ML
+# replica and needs no budget). Allows draining one node at a time (evicting a
+# single ML replica) while keeping the other 3 iGPUs serving, so node
+# maintenance never takes the whole ML pool down at once.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: immich-machine-learning
+  namespace: immich
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: immich
+      component: machine-learning

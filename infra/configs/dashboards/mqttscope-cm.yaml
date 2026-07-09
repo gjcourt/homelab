@@ -1,0 +1,334 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mqttscope-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  mqttscope.json: |
+    {
+      "title": "MQTT / mqttscope",
+      "uid": "mqttscope-overview",
+      "tags": ["homelab", "mqttscope", "mqtt"],
+      "schemaVersion": 38,
+      "refresh": "30s",
+      "time": { "from": "now-6h", "to": "now" },
+      "timepicker": {},
+      "panels": [
+        {
+          "id": 1,
+          "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+          "type": "stat",
+          "title": "Broker Reachable",
+          "description": "mqtt_up — 1 while the exporter holds a live MQTT session to mosquitto, 0 otherwise. This is the honest 'can we reach the broker at all' signal, independent of whether Prometheus can scrape the exporter.",
+          "targets": [
+            { "refId": "A", "expr": "mqtt_up", "legendFormat": "up" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bool_on_off",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "red" },
+                  { "value": 1, "color": "green" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "gridPos": { "x": 4, "y": 0, "w": 4, "h": 4 },
+          "type": "stat",
+          "title": "Clients Connected",
+          "description": "mqtt_clients_connected ($SYS/broker/clients/connected) — MQTT sessions currently connected to the broker.",
+          "targets": [
+            { "refId": "A", "expr": "mqtt_clients_connected", "legendFormat": "connected" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "value",
+            "graphMode": "area"
+          },
+          "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "green" } } }
+        },
+        {
+          "id": 3,
+          "gridPos": { "x": 8, "y": 0, "w": 4, "h": 4 },
+          "type": "stat",
+          "title": "Clients Total",
+          "description": "mqtt_clients_total ($SYS/broker/clients/total) — connected plus persistent (registered) clients the broker is tracking.",
+          "targets": [
+            { "refId": "A", "expr": "mqtt_clients_total", "legendFormat": "total" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "value",
+            "graphMode": "area"
+          },
+          "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "blue" } } }
+        },
+        {
+          "id": 4,
+          "gridPos": { "x": 12, "y": 0, "w": 4, "h": 4 },
+          "type": "stat",
+          "title": "Round-Trip Latency",
+          "description": "mqtt_probe_latency_seconds — round-trip time of the last active probe (exporter publishes a nonce to mqttscope/probe and times its own delivery back through the broker). Amber >100ms, red >500ms. This is the key 'is MQTT laggy right now' signal.",
+          "targets": [
+            { "refId": "A", "expr": "mqtt_probe_latency_seconds", "legendFormat": "latency" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "area"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "green" },
+                  { "value": 0.1, "color": "yellow" },
+                  { "value": 0.5, "color": "red" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "gridPos": { "x": 16, "y": 0, "w": 4, "h": 4 },
+          "type": "stat",
+          "title": "Messages Stored",
+          "description": "mqtt_messages_stored ($SYS/broker/messages/stored) — messages currently held in the broker store (retained + queued-for-persistent-session). A steadily climbing value can indicate a subscriber that is not draining.",
+          "targets": [
+            { "refId": "A", "expr": "mqtt_messages_stored", "legendFormat": "stored" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "value",
+            "graphMode": "area"
+          },
+          "fieldConfig": { "defaults": { "unit": "short" } }
+        },
+        {
+          "id": 6,
+          "gridPos": { "x": 20, "y": 0, "w": 4, "h": 4 },
+          "type": "stat",
+          "title": "Broker Uptime",
+          "description": "mqtt_uptime_seconds ($SYS/broker/uptime) — time since the broker process started. A reset here means mosquitto restarted.",
+          "targets": [
+            { "refId": "A", "expr": "mqtt_uptime_seconds", "legendFormat": "uptime" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "none",
+            "graphMode": "none"
+          },
+          "fieldConfig": { "defaults": { "unit": "s" } }
+        },
+        {
+          "id": 10,
+          "gridPos": { "x": 0, "y": 4, "w": 24, "h": 9 },
+          "type": "timeseries",
+          "title": "Round-Trip Probe Latency",
+          "description": "mqtt_probe_latency_seconds over time — the active publish→self-delivery round trip through the broker. Threshold lines at 100ms (amber) and 500ms (red). Spikes here are the direct 'MQTT is laggy' evidence; correlate with connection churn and broker CPU below.",
+          "targets": [
+            { "refId": "A", "expr": "mqtt_probe_latency_seconds", "legendFormat": "round-trip latency" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "pointSize": 4,
+                "showPoints": "auto",
+                "thresholdsStyle": { "mode": "line" }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "green" },
+                  { "value": 0.1, "color": "yellow" },
+                  { "value": 0.5, "color": "red" }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "id": 11,
+          "gridPos": { "x": 0, "y": 13, "w": 12, "h": 8 },
+          "type": "timeseries",
+          "title": "Message Throughput (1-min avg)",
+          "description": "mqtt_messages_received_per_min / mqtt_messages_sent_per_min ($SYS/broker/load/messages/{received,sent}/1min) — broker message rate, 1-minute moving average.",
+          "targets": [
+            { "refId": "A", "expr": "mqtt_messages_received_per_min", "legendFormat": "received/min" },
+            { "refId": "B", "expr": "mqtt_messages_sent_per_min", "legendFormat": "sent/min" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "id": 12,
+          "gridPos": { "x": 12, "y": 13, "w": 12, "h": 8 },
+          "type": "timeseries",
+          "title": "Byte Throughput (1-min avg)",
+          "description": "mqtt_bytes_received_per_min / mqtt_bytes_sent_per_min ($SYS/broker/load/bytes/{received,sent}/1min) — broker byte rate, 1-minute moving average.",
+          "targets": [
+            { "refId": "A", "expr": "mqtt_bytes_received_per_min", "legendFormat": "received/min" },
+            { "refId": "B", "expr": "mqtt_bytes_sent_per_min", "legendFormat": "sent/min" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "id": 13,
+          "gridPos": { "x": 0, "y": 21, "w": 12, "h": 8 },
+          "type": "timeseries",
+          "title": "Connection Churn (per min)",
+          "description": "mqtt_connections_per_min ($SYS/broker/load/connections/1min) and mqtt_sockets_per_min ($SYS/broker/load/sockets/1min) — new CONNECT packets and new sockets per minute. Healthy ESPHome/HA clients connect once and persist, so a sustained non-zero value is the reconnect-loop signal (bad creds, keepalive mismatch, flapping IoT-VLAN link). Amber threshold at 30/min mirrors the MqttscopeHighConnectionChurn alert.",
+          "targets": [
+            { "refId": "A", "expr": "mqtt_connections_per_min", "legendFormat": "connections/min" },
+            { "refId": "B", "expr": "mqtt_sockets_per_min", "legendFormat": "sockets/min" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "fillOpacity": 10,
+                "thresholdsStyle": { "mode": "dashed" }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "green" },
+                  { "value": 30, "color": "yellow" }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "id": 14,
+          "gridPos": { "x": 12, "y": 21, "w": 12, "h": 8 },
+          "type": "timeseries",
+          "title": "Stored & Dropped Messages",
+          "description": "mqtt_messages_stored ($SYS/broker/messages/stored) and mqtt_messages_dropped ($SYS/broker/publish/messages/dropped) — a rising drop count means the broker is shedding publishes (queue/inflight limits), which pairs with probe failures.",
+          "targets": [
+            { "refId": "A", "expr": "mqtt_messages_stored", "legendFormat": "stored" },
+            { "refId": "B", "expr": "mqtt_messages_dropped", "legendFormat": "dropped (cumulative)" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "id": 15,
+          "gridPos": { "x": 0, "y": 29, "w": 8, "h": 8 },
+          "type": "timeseries",
+          "title": "Probe Failures (rate)",
+          "description": "increase(mqtt_probe_failures_total[5m]) — round-trip probes that were not echoed back within the timeout. Non-zero means the broker is dropping or severely delaying messages (drives the MqttscopeProbeFailing alert).",
+          "targets": [
+            { "refId": "A", "expr": "increase(mqtt_probe_failures_total[5m])", "legendFormat": "failures / 5m" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "drawStyle": "bars", "fillOpacity": 60 },
+              "color": { "mode": "fixed", "fixedColor": "red" }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "single" }
+          }
+        },
+        {
+          "id": 16,
+          "gridPos": { "x": 8, "y": 29, "w": 8, "h": 8 },
+          "type": "timeseries",
+          "title": "Broker CPU",
+          "description": "sum(rate(container_cpu_usage_seconds_total{namespace=\"mosquitto\",container=\"mosquitto\"}[5m])) — mosquitto pod CPU usage in cores (from kubelet cAdvisor metrics). Watch for CPU saturation coinciding with latency spikes.",
+          "targets": [
+            { "refId": "A", "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"mosquitto\",container=\"mosquitto\"}[5m]))", "legendFormat": "cpu cores" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 },
+              "color": { "mode": "fixed", "fixedColor": "orange" }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "single" }
+          }
+        },
+        {
+          "id": 17,
+          "gridPos": { "x": 16, "y": 29, "w": 8, "h": 8 },
+          "type": "timeseries",
+          "title": "Broker Memory",
+          "description": "sum(container_memory_working_set_bytes{namespace=\"mosquitto\",container=\"mosquitto\"}) — mosquitto pod working-set memory (from kubelet cAdvisor metrics).",
+          "targets": [
+            { "refId": "A", "expr": "sum(container_memory_working_set_bytes{namespace=\"mosquitto\",container=\"mosquitto\"})", "legendFormat": "working set" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": { "drawStyle": "line", "lineInterpolation": "linear", "fillOpacity": 10 },
+              "color": { "mode": "fixed", "fixedColor": "purple" }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["mean", "max"] },
+            "tooltip": { "mode": "single" }
+          }
+        }
+      ]
+    }

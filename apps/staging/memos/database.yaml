@@ -8,7 +8,7 @@ spec:
   description: Postgres cluster for the memos application
   imageName: ghcr.io/cloudnative-pg/postgresql:17.5
 
-  instances: 3
+  instances: 1
 
   inheritedMetadata:
     labels:
@@ -36,16 +36,6 @@ spec:
     storageClass: truenas-iscsi
     size: 1Gi
 
-  # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
-  # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
-  # Note: uses /v2 path in S3 to avoid WAL conflicts from previous cluster system ID.
-  plugins:
-    - name: barman-cloud.cloudnative-pg.io
-      isWALArchiver: true
-      parameters:
-        barmanObjectName: memos-db-staging-cnpg-v1-backup
-        serverName: memos-db-staging-cnpg-v1
-
   # Bootstrap from backup if available, otherwise initialize fresh
   # To restore: uncomment recovery section and comment out initdb
   bootstrap:
@@ -56,12 +46,3 @@ spec:
         name: memos-db-credentials
         # recovery:
         #   source: memos-db-backup
-
-  # externalClusters references the ObjectStore via the plugin for PITR/restore.
-  externalClusters:
-    - name: memos-db-backup
-      plugin:
-        name: barman-cloud.cloudnative-pg.io
-        parameters:
-          barmanObjectName: memos-db-staging-cnpg-v1-backup
-          serverName: memos-db-staging-cnpg-v1

@@ -60,10 +60,13 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (9)
+### In progress (12)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-07-04-homelabscope.md](2026-07-04-homelabscope.md) | 2026-07-04 | homelabscope — one Prometheus metric family (homelabscope_job_last_success_seconds{job}) + textfile collector + cronjob recording rules + templated staleness/absence alerts + Grafana table monitoring EVERY scheduled homelab job; fixes the orphaned (unscraped) immich-backup metric |
+| [2026-07-04-alcatraz-photos-pull.md](2026-07-04-alcatraz-photos-pull.md) | 2026-07-04 | Retire the impossible hestia→alcatraz rsync push-back; alcatraz pulls from hestia as local root via a DSM Task Scheduler job |
+| [2026-06-26-alcatraz-gitops-docker.md](2026-06-26-alcatraz-gitops-docker.md) | 2026-07-06 | GitOps push-deploy Docker workflow on alcatraz (Synology) mirroring the hestia GHA-runner model; D1–D3 + first workload (immich-photos-pull) implemented, D4 bootstrap operator-gated — **blocked:** operator bootstrap (P1–P7): confirm arch/DSM, create automation account, bring up the runner compose once over SSH, then flip immich-photos-pull archived→false + pin the image digest |
 | [2026-06-17-alertmanager-smtp-alerting.md](2026-06-17-alertmanager-smtp-alerting.md) | 2026-06-17 | Route critical Alertmanager alerts to email via Gmail SMTP (replaces dead Signal channel) |
 | [2026-06-16-thermalscope-power-and-headroom.md](2026-06-16-thermalscope-power-and-headroom.md) | 2026-06-17 | thermalscope: add power/energy/cost (RAPL), thermal headroom, and throttle/degradation signals — phases 1–3 live; phase 4 pending |
 | [2026-06-01-hestia-photos-sot.md](2026-06-01-hestia-photos-sot.md) | 2026-06-10 | Make hestia the source of truth for family/ + homes/; repoint Immich NFS PV; alcatraz narrows to upload target |
@@ -74,14 +77,15 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (8)
+### Planned (9)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-06-28-democratic-csi-ssh-to-api-driver.md](2026-06-28-democratic-csi-ssh-to-api-driver.md) | 2026-06-28 | Migrate democratic-csi from the SSH-based driver to the API driver (freenas-api-iscsi) to remove the SSH+sudo dependency |
+| [2026-07-06-hestia-data-organization.md](2026-07-06-hestia-data-organization.md) | 2026-07-06 | Dataset taxonomy and data-organization policy for hestia (TrueNAS pool `main`). Fixes the core family-vs-media-vs-archive confusion after the 2026-07-05/06 machine-recovery session. Defines three buckets — family/ (household's own content → Immich, videos, audio, docs), media/ (consumed Jellyfin media), archive/ (cold per-machine restore-only backups) — with a per-artifact home mapping, per-person uid/gid layout for the photo library, dataset-vs-subdir + ZFS property conventions, and a per-bucket snapshot/replication/integrity policy. Flags real gaps found live: main/archive (318G irreplaceable) has NO snapshots and NO quota; the main/media datasets have NO snapshots (media is ALREADY a dataset hierarchy at 1M recordsize — no promotion needed); archive children are plain dirs not per-machine datasets; the archive manifest must diff SOURCE-vs-destination before any drive wipe; photo-staging (82G) is transient scratch to reclaim. |
+| [2026-07-03-finance-umbrella-convergence.md](2026-07-03-finance-umbrella-convergence.md) | 2026-07-03 | Design study for converging finance.burntbytes.com (server-rendered encrypted-YAML dashboard) and ladder.burntbytes.com (local-first React SPA) into one finance umbrella WITHOUT breaking either data model — recommends shared-nav-now, path-based-host-later, no forced SPA merge |
 | [2026-06-21-bluetooth-presence-system.md](2026-06-21-bluetooth-presence-system.md) | 2026-06-21 | BLE beacon presence/occupancy system (ESPresense → HA → Grafana) for who/how-many is home, per-room |
 | [2026-06-16-burntbytes-mailserver.md](2026-06-16-burntbytes-mailserver.md) | 2026-06-16 | Self-hosted mail for burntbytes.com (<10 accounts): Mailu on the cluster + VPS SMTP gateway + SES smarthost |
-| [2026-06-02-immich-vectorchord-migration.md](2026-06-02-immich-vectorchord-migration.md) | 2026-06-10 | Migrate Immich CNPG from pgvecto.rs to VectorChord |
+| [2026-06-02-immich-vectorchord-migration.md](2026-06-02-immich-vectorchord-migration.md) | 2026-07-02 | Migrate Immich CNPG from pgvecto.rs to VectorChord |
 | [2026-05-09-democratic-csi-least-privilege-key.md](2026-05-09-democratic-csi-least-privilege-key.md) | 2026-05-09 | Migrate democratic-csi to a least-privilege TrueNAS API key |
 | [2026-05-06-network-resilience-and-bgp-completion.md](2026-05-06-network-resilience-and-bgp-completion.md) | 2026-05-06 | Unified network resilience + BGP completion plan, phases A-F with GO gates |
 | [2026-03-08-drawer-inserts.md](2026-03-08-drawer-inserts.md) | 2026-05-03 | Cardboard drawer insert design (75×32×12 cm) — physical project, no repo artifacts |

@@ -1,0 +1,143 @@
+# Maintains the last-30-days slice of the prod photo tree for the Immich staging
+# testbed. Immich's external library indexes EVERY file under its mounted path and has
+# no built-in date window, so we bound the set at the filesystem: this CronJob keeps
+# /mnt/main/family/images/photos-staging-30d equal to "files modified in the last 30
+# days" from the full tree, and prunes anything older so the slice stays small.
+#
+# APPROACH — rsync-style COPY, not symlinks, not hardlinks:
+#   * Symlinks are OUT: Immich explicitly does NOT follow symlinks (docs: "don't use
+#     symlinks in your import libraries") — symlinked files/dirs are not scanned.
+#   * Hardlinks are OUT here: a hardlink can't cross mount points (ln → EXDEV), so they
+#     would only work if we mounted the REAL photos tree read-WRITE and linked within
+#     it — unacceptable risk to irreplaceable originals. Rejected for safety.
+#   * COPY (this job): source mounted READ-ONLY (can't harm originals), slice mounted
+#     RW. Robust across any mount topology; data duplication is bounded to ~30 days,
+#     which is fine for a small testbed. Copied files are indistinguishable from real
+#     files to Immich. rsync -a preserves mtime so the age-based prune stays consistent.
+#
+# COPY MECHANISM — bulk incremental rsync, NOT a per-file shell loop:
+#   The previous implementation forked `mkdir`+`cp` once PER FILE while walking the
+#   multi-TB prod tree. That fork-storm never finished inside the deadline, so the job
+#   was killed with DeadlineExceeded on every run and never recorded a success. We now
+#   pipe the last-30-days file list into a SINGLE `rsync -a` (one process for the whole
+#   slice): rsync recreates the tree, preserves mtime, and skips files already present
+#   and up to date, so steady-state re-runs only transfer the day's new photos.
+#   Image swapped busybox → the sibling rsync image (ghcr.io/gjcourt/immich-photos-backup,
+#   Alpine + rsync 3.4.3 + bash) that immich-photos-backup / alcatraz-photos-pull use, so
+#   all three photo-sync jobs share one copy mechanism. `find` (busybox applet in that
+#   image) still does the date windowing at the filesystem, which Immich has no API for.
+#
+# After a sync, Immich must rescan the external library to index the delta. Immich's
+# built-in scheduled library scan (daily, admin default) handles this; the schedule
+# below runs BEFORE it. A manual/API rescan is documented in immich.md §10.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: immich-photos-30d-sync
+  namespace: immich-stage
+  labels:
+    app: immich
+    component: photos-30d-sync
+    env: staging
+spec:
+  # Daily at 03:00. Immich's default external-library scan runs daily; keep this
+  # earlier so fresh files are present when Immich scans.
+  schedule: "0 3 * * *"
+  timeZone: America/Los_Angeles
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # Cap a hung NFS mount so the job can't run forever, but leave enough headroom for
+      # the ONE-TIME initial seed: the first run copies the entire 30-day window into an
+      # empty slice AND rsync must stat every candidate file across the multi-TB prod tree
+      # over NFS. Steady-state runs are minutes (only the day's new photos transfer), but
+      # the cold seed needs hours — the old 1h cap killed it as DeadlineExceeded before it
+      # could ever record a success. 4h gives the seed room without letting a wedged mount
+      # hang indefinitely.
+      activeDeadlineSeconds: 14400
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: immich
+            component: photos-30d-sync
+            env: staging
+        spec:
+          restartPolicy: OnFailure
+          # Run as root to write into the NFS slice. The slice dir must be writable by
+          # this identity server-side — see the OPERATOR PREREQ in immich.md §10.
+          securityContext:
+            runAsUser: 0
+            runAsGroup: 0
+            fsGroup: 0
+          containers:
+            - name: sync
+              # Sibling rsync image shared by immich-photos-backup / alcatraz-photos-pull
+              # (Alpine 3.23 + rsync 3.4.3 + bash + busybox find). Pinned by digest to the
+              # published 2026-07-04 build (public ghcr package — no pull secret needed).
+              # We override the image's baked-in crond/backup entrypoint with our own
+              # command; only its rsync + bash + find tooling is used here.
+              image: ghcr.io/gjcourt/immich-photos-backup:2026-07-04@sha256:a4811ef540b0b4b496a9e3970394ff856cceceb4537c80b4f4c75f9c9d7f2673
+              command:
+                - bash
+                - -euo
+                - pipefail
+                - -c
+                - |
+                  SRC=/src   # full prod photo tree (read-only)
+                  DST=/dst   # photos-staging-30d slice (read-write)
+                  echo "[30d-sync] $(date -u) start"
+                  # 1. Select files modified in the last 30 days (filesystem date window —
+                  #    Immich has no date API) and hand the NUL-delimited list to a SINGLE
+                  #    rsync. -a recreates the tree + preserves mtime; --files-from restricts
+                  #    the transfer to exactly that list; rsync skips files already present
+                  #    and up to date, so re-runs only move the day's new photos. Reads from
+                  #    SRC, writes only to DST — originals are never modified. NUL delimiting
+                  #    ( -print0 / --from0 ) keeps filenames with spaces intact.
+                  cd "$SRC"
+                  # rsync exit 24 = "some files vanished before we could transfer them" —
+                  # expected and BENIGN when copying a LIVE prod tree (phones add/remove
+                  # photos mid-run). Tolerate ONLY 24 so a normal concurrent-churn run still
+                  # completes, prunes, and records success (the whole point of this fix —
+                  # otherwise the job would trade DeadlineExceeded for a spurious rsync
+                  # failure and keep the homelabscope alert firing). Any other nonzero — a
+                  # real rsync error, or a failed `find` surfaced through pipefail — is fatal
+                  # so backoffLimit retries and the failure stays visible.
+                  rc=0
+                  find . -type f -mtime -30 -print0 \
+                    | rsync -a --from0 --files-from=- "$SRC"/ "$DST"/ || rc=$?
+                  if [ "$rc" -ne 0 ] && [ "$rc" -ne 24 ]; then
+                    echo "[30d-sync] transfer failed rc=$rc" >&2
+                    exit "$rc"
+                  fi
+                  # 2. Prune slice entries older than 30 days (mtime preserved by rsync -a)
+                  #    so the slice stays bounded.
+                  find "$DST" -type f -mtime +30 -delete
+                  # 3. Remove now-empty directories (rmdir no-ops on non-empty / the mount root).
+                  find "$DST" -depth -type d -exec rmdir {} + 2>/dev/null || true
+                  echo "[30d-sync] $(date -u) done — slice size:"
+                  du -sh "$DST" 2>/dev/null || true
+              volumeMounts:
+                - name: photos-src
+                  mountPath: /src
+                  readOnly: true
+                - name: photos-30d
+                  mountPath: /dst
+              resources:
+                requests:
+                  memory: "64Mi"
+                  cpu: "50m"
+                limits:
+                  memory: "256Mi"
+                  cpu: "500m"
+          volumes:
+            - name: photos-src
+              persistentVolumeClaim:
+                claimName: immich-photos-src-pvc
+                readOnly: true
+            - name: photos-30d
+              persistentVolumeClaim:
+                claimName: immich-photos-pvc

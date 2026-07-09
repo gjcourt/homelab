@@ -18,9 +18,11 @@ resources:
   - homepage
   - immich
   - jellyfin
+  - ladder
   - linkding
   - mealie
   - memos
+  - mqttscope
   - navidrome
   - openwebui
   - overture

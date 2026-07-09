@@ -1,5 +1,20 @@
-# Static PV for Synology NFS photos share (external library)
-# This allows Immich to access existing photos on NAS
+# Static NFS PVs for the Immich staging external library (hestia, 10.42.2.10).
+#
+# Two volumes back the "last-30-days" staging testbed:
+#   * immich-photos-pv-staging / immich-photos-pvc → the 30-day SLICE
+#     (/mnt/main/family/images/photos-staging-30d). This is BOTH what Immich indexes
+#     as its external library (mounted at /mnt/photos in immich-server) AND the RW
+#     destination the sync CronJob writes into. Bounded by design → keeps staging small.
+#   * immich-photos-src-pv-staging / immich-photos-src-pvc → the FULL prod photo tree,
+#     mounted READ-ONLY. Only the sync CronJob reads it (cronjob-photos-30d.yaml) to
+#     compute the 30-day slice; the RO mount means the real photos can't be harmed.
+#
+# Repointed 2026-07 from Synology (10.42.2.11 /volume1/...) to hestia
+# (10.42.2.10 /mnt/main/family/images/...) — hestia is the photo SOT since 2026-06-01
+# (see apps/production/immich/nfs-photos.yaml and docs/plans/2026-06-01-hestia-photos-sot.md).
+#
+# OPERATOR PREREQ: the photos-staging-30d directory must exist on hestia and be
+# writable by the CronJob's NFS identity. See docs/operations/apps/immich.md §10.
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -15,8 +30,8 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: ""
   nfs:
-    server: 10.42.2.11
-    path: /volume1/family/images/photos
+    server: 10.42.2.10
+    path: /mnt/main/family/images/photos-staging-30d
     readOnly: false
   mountOptions:
     - nfsvers=3
@@ -43,3 +58,51 @@ spec:
   resources:
     requests:
       storage: 1Ti
+---
+# Full prod photo tree, mounted READ-ONLY. Source for the 30-day sync CronJob only —
+# Immich itself never mounts this (it only sees the bounded slice above).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: immich-photos-src-pv-staging
+  labels:
+    app: immich
+    env: staging
+    role: photos-source
+spec:
+  capacity:
+    storage: 5Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 10.42.2.10
+    path: /mnt/main/family/images/photos
+    readOnly: true
+  mountOptions:
+    - nfsvers=3
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+    - nolock
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-photos-src-pvc
+  namespace: immich-stage
+  labels:
+    app: immich
+    env: staging
+    role: photos-source
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  volumeName: immich-photos-src-pv-staging
+  resources:
+    requests:
+      storage: 5Ti

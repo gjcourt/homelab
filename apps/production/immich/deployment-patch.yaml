@@ -17,6 +17,137 @@ spec:
           hostnames:
             - auth.burntbytes.com
       securityContext:
+        # video(44)/render(109) dropped after the split: the api worker doesn't
+        # touch /dev/dri (all ffmpeg/VAAPI transcode moved to the microservices
+        # worker). Keep users(100) for upload/photos file access.
+        supplementalGroups:
+          - 100 # users group
+      initContainers:
+        - name: oauth-config
+          # busybox 1.37
+          image: busybox@sha256:fd8d9aa63ba2f0982b5304e1ee8d3b90a210bc1ffb5314d980eb6962f1a9715d
+          command:
+            - sh
+            - -c
+            - |
+              sed "s/__CLIENT_SECRET_PLACEHOLDER__/${CLIENT_SECRET}/g" \
+                /config-template/immich-config.yaml > /config/immich-config.yaml
+          env:
+            - name: CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: immich-sso-secret
+                  key: client_secret
+          volumeMounts:
+            - name: oauth-config-template
+              mountPath: /config-template
+              readOnly: true
+            - name: oauth-config
+              mountPath: /config
+          resources:
+            requests:
+              memory: "16Mi"
+              cpu: "10m"
+            limits:
+              memory: "32Mi"
+              cpu: "50m"
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: immich-server
+          securityContext:
+            # api worker does not transcode (that moved to the microservices
+            # worker), so it needs neither privileged mode nor /dev/dri. Kept root
+            # (uid 0) only so it can write client uploads to the root-owned iSCSI
+            # upload volume, matching the pre-split behaviour.
+            runAsUser: 0
+            runAsGroup: 0
+          env:
+            # Database connection - use CNPG service and credentials secret
+            - name: DB_HOSTNAME
+              value: immich-db-prod-cnpg-v3-rw.immich-prod.svc.cluster.local
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_DATABASE_NAME
+              value: immich
+            - name: DB_USERNAME
+              value: immich
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: immich-db-credentials
+                  key: password
+            # Immich v2.x config file for OAuth/OIDC settings
+            - name: IMMICH_CONFIG_FILE
+              value: "/etc/immich/immich-config.yaml"
+          volumeMounts:
+            - name: upload
+              mountPath: /usr/src/app/upload
+            - name: photos
+              mountPath: /mnt/photos
+            - name: oauth-config
+              mountPath: /etc/immich
+              readOnly: true
+          # api-only (interactive serve path). Background jobs moved to
+          # immich-microservices, so the api pod no longer needs the old 1-8 CPU
+          # headroom — sized down to leave room on kot-7x7 for the microservices
+          # pod co-located on the same node.
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "4000m"
+          livenessProbe:
+            httpGet:
+              path: /api/server/ping
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /api/server/ping
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 5
+            timeoutSeconds: 5
+      volumes:
+        - name: upload
+          persistentVolumeClaim:
+            claimName: immich-upload-pvc
+        - name: photos
+          persistentVolumeClaim:
+            claimName: immich-photos-pvc
+        - name: oauth-config-template
+          configMap:
+            name: immich-oauth-config
+        - name: oauth-config
+          emptyDir: {}
+---
+# Microservices worker (production) — same runtime environment as the api pod
+# (privileged VAAPI transcode, DB, OAuth/ffmpeg config via the oauth-config init
+# container) but running IMMICH_WORKERS_EXCLUDE=api (set in the base). This is the
+# heavy path, so it gets the bulk of the resources. Co-location with the api pod
+# (podAffinity in the base) keeps both on kot-7x7's RWO immich-upload-pvc.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: immich-microservices
+  namespace: immich
+spec:
+  template:
+    spec:
+      hostAliases:
+        - ip: "10.42.2.40"
+          hostnames:
+            - auth.burntbytes.com
+      securityContext:
         supplementalGroups:
           - 44 # video group
           - 100 # users group
@@ -57,13 +188,13 @@ spec:
               drop:
                 - ALL
       containers:
-        - name: immich-server
+        - name: immich-microservices
           securityContext:
             privileged: true
             runAsUser: 0
             runAsGroup: 0
           env:
-            # Hardware Acceleration for AMD
+            # Hardware Acceleration for AMD (video transcode runs in this worker).
             - name: LIBVA_DRIVER_NAME
               value: radeonsi
             - name: LIBVA_DRIVERS_PATH
@@ -82,7 +213,8 @@ spec:
                 secretKeyRef:
                   name: immich-db-credentials
                   key: password
-            # Immich v2.x config file for OAuth/OIDC settings
+            # Immich v2.x config file for OAuth/OIDC + ffmpeg settings (same file
+            # the api pod reads; every worker must see the same config).
             - name: IMMICH_CONFIG_FILE
               value: "/etc/immich/immich-config.yaml"
           volumeMounts:
@@ -95,27 +227,16 @@ spec:
             - name: oauth-config
               mountPath: /etc/immich
               readOnly: true
+          # Heavy path: metadata, thumbnails, ML dispatch, transcode,
+          # storage-template migration. Sized against kot-7x7 (12 vCPU / 64Gi,
+          # shared with the api pod + a CNPG instance).
           resources:
             requests:
-              memory: "2Gi"
-              cpu: "1000m"
+              memory: "4Gi"
+              cpu: "2000m"
             limits:
               memory: "8Gi"
               cpu: "8000m"
-          livenessProbe:
-            httpGet:
-              path: /api/server/ping
-              port: http
-            initialDelaySeconds: 60
-            periodSeconds: 10
-            timeoutSeconds: 5
-          readinessProbe:
-            httpGet:
-              path: /api/server/ping
-              port: http
-            initialDelaySeconds: 30
-            periodSeconds: 5
-            timeoutSeconds: 5
       volumes:
         - name: upload
           persistentVolumeClaim:
@@ -140,8 +261,43 @@ metadata:
   name: immich-machine-learning
   namespace: immich
 spec:
+  # Fan-out: 4 ML replicas, one per AMD-iGPU node (all 4 have the amdgpu
+  # extension). immich-server load-balances ML jobs across them, so smart-search
+  # + face-detection run on all 4 iGPUs (ROCm) instead of one.
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      # maxSurge:0 — never create a 5th ML pod. With replicas==node-count(4) and
+      # only-soft anti-affinity, a surge pod would have to double up on a node
+      # that already runs an ML replica, putting two privileged ROCm pods on one
+      # /dev/dri iGPU. Drain-one-then-replace instead (one iGPU idle mid-roll).
+      maxSurge: 0
+      maxUnavailable: 1
   template:
     spec:
+      # Soft (preferred) pod anti-affinity spreads the 4 replicas one-per-node.
+      # Kept soft on purpose: this cluster loses nodes often (Talos upgrades,
+      # maintenance) and replicas==node-count, so a `required` rule would leave
+      # the 4th replica Pending whenever a node is down — soft lets it double up
+      # and keep serving instead.
+      #
+      # nodeAffinity is nulled out here (the base prefers cpu-tier=high, which
+      # only kot-7x7 has). At equal weight that pull would fight the anti-affinity
+      # spread — every replica scores +100 toward kot-7x7 — and could land two
+      # ML pods on kot-7x7's single iGPU. For a 4-way fan-out we want an even
+      # one-per-node spread across all nodes, so drop the cpu-tier preference.
+      affinity:
+        nodeAffinity: null
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: immich
+                    component: machine-learning
+                topologyKey: kubernetes.io/hostname
       securityContext:
         runAsUser: 0
         runAsGroup: 0
@@ -156,7 +312,7 @@ spec:
           # When bumping: update both the tag and the digest from
           # `docker manifest inspect ghcr.io/immich-app/immich-machine-learning:vX.Y.Z`
           # → pick the linux/amd64 entry's digest.
-          image: ghcr.io/immich-app/immich-machine-learning:v2.7.5@sha256:a2501141440f10516d329fdfba2c68082e19eb9ba6016c061ac80d23beadf7f3
+          image: ghcr.io/immich-app/immich-machine-learning:v3.0.1@sha256:cb2128c5cbc554fdaa2a036fb4419c808a9f3e0f27170e569dd9e727243da909
           securityContext:
             privileged: true
           env:
@@ -171,9 +327,13 @@ spec:
             requests:
               memory: "4Gi"
               cpu: "2000m"
+              # emptyDir model-cache lives on node ephemeral storage; request it
+              # so the scheduler accounts for the model download (see base).
+              ephemeral-storage: "3Gi"
             limits:
               memory: "12Gi"
               cpu: "8000m"
+              ephemeral-storage: "10Gi"
           livenessProbe:
             httpGet:
               path: /ping
@@ -194,9 +354,12 @@ spec:
             timeoutSeconds: 10
             failureThreshold: 6
       volumes:
+        # model-cache is emptyDir in the base now (per-replica, enables the
+        # 4-way GPU fan-out). Download time is tracked in homelabscope; revisit
+        # a StatefulSet + per-replica PVC if the re-download proves costly.
         - name: model-cache
-          persistentVolumeClaim:
-            claimName: immich-model-cache-pvc
+          emptyDir:
+            sizeLimit: 10Gi
         - name: dri
           hostPath:
             path: /dev/dri

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ladder
+  labels:
+    # Admits the HTTPRoute to the LAN gateway (app-gateway-production), serving
+    # https://ladder.burntbytes.com off the wildcard cert. The gateway only holds
+    # a LAN IP (home-c-pool) and is NOT tunneled to the internet, so ladder
+    # resolves + serves on the local network only. Authelia (ext_authz on the
+    # gateway) additionally gates it at one_factor — see apps/production/authelia.
+    http-ingress: "true"

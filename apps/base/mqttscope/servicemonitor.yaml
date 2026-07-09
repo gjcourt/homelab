@@ -1,0 +1,29 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mqttscope
+  namespace: mqttscope
+  labels:
+    # kube-prometheus-stack's Prometheus selects ServiceMonitors by the
+    # helm-default release label (serviceMonitorSelectorNilUsesHelmValues=true).
+    # Without this label the SM is invisible to it.
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: mqttscope
+    app.kubernetes.io/component: exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mqttscope
+      app.kubernetes.io/component: exporter
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      # Force job="mqttscope" so the PrometheusRule alerts (which match on
+      # job="mqttscope") align with the scraped series — the operator
+      # otherwise auto-derives a job name from the SM metadata
+      # ("mqttscope/mqttscope").
+      relabelings:
+        - targetLabel: job
+          replacement: mqttscope

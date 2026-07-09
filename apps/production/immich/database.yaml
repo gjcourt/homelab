@@ -4,10 +4,29 @@ metadata:
   name: immich-db-prod-cnpg-v3
   namespace: immich-prod
 spec:
-  description: Postgres cluster for Immich with pgvecto.rs for ML search
-  # Use pgvecto.rs 0.3.0 image (compatible with Immich's requirement >=0.2 <0.4)
-  # Note: pg17 not available with v0.3.0, using pg16 instead
-  imageName: ghcr.io/tensorchord/cloudnative-pgvecto.rs:16-v0.3.0
+  description: Postgres cluster for Immich — pgvecto.rs → VectorChord migration window
+  # ==========================================================================
+  # OPERATOR-GATED — DO NOT let this reconcile blindly. Part of the Immich v3
+  # upgrade (pgvecto.rs is removed in Immich v3.0). Full procedure + ordering:
+  #   docs/operations/2026-07-02-immich-v3-upgrade.md
+  #
+  # This "migration" image bundles BOTH pgvecto.rs (vectors.so) AND VectorChord
+  # (vchord.so) + pgvector, so the cluster can still READ the existing
+  # pgvecto.rs vector columns while Immich (still on v2.7.5, which supports
+  # both) rebuilds the indexes as VectorChord on startup. Rolling to this image
+  # is NON-destructive on its own (it only ADDS vchord.so; nothing is dropped).
+  #
+  # ORDERING (see runbook): (1) back up + verify restore, (2) apply THIS image +
+  # vchord.so preload while Immich is STILL v2.7.5, (3) CREATE EXTENSION vchord
+  # + let immich-server auto-migrate/reindex, (4) verify search, (5) DROP
+  # EXTENSION vectors + drop vectors.so, (6) ONLY THEN bump immich-server/-ml to
+  # v3.0.1. Immich v3 has NO pgvecto.rs support and will NOT perform the
+  # pgvecto.rs→VectorChord data migration — it must be done on v2.x first.
+  # The DROP EXTENSION vectors step is ONE-WAY: no downgrade below Immich 1.133.
+  # ==========================================================================
+  # Official VectorChord-only image (Phase 2). Config already dropped vectors.so in
+  # Phase 1 (#1032), so this is an image-only change — CNPG accepts it.
+  imageName: ghcr.io/tensorchord/cloudnative-vectorchord:16-0.4.2@sha256:649da2df5f079dd1f214e3a877cafd0208eff3779e9c60d14d243fbca5e11c97
   instances: 3
   enableSuperuserAccess: true
   inheritedMetadata:
@@ -18,15 +37,20 @@ spec:
   monitoring:
     enablePodMonitor: true
   storage:
-    # Actual usage: ~994Mi; target = 20% headroom → 2Gi.
-    # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
-    size: 2Gi
+    # Bumped 2Gi → 10Gi (2026-07-03): replica -4 hit 99% (0 bytes free), firing
+    # KubePersistentVolumeFillingUp (critical). 2Gi left no WAL/temp headroom over the
+    # ~1.1Gi dataset (WAL on -4 had grown to ~2Gi). CNPG expands in place online here
+    # (resizeInUseVolumes=true + truenas-iscsi allowVolumeExpansion + democratic-csi
+    # v1.9.5 online resize, PR #1019). NOTE: shrinking still needs cluster recreation.
+    size: 10Gi
     storageClass: truenas-iscsi
   postgresql:
+    # VectorChord-only end state (migration to VectorChord complete 2026-07-03;
+    # pgvecto.rs `vectors` extension dropped). Only vchord.so is preloaded now.
     shared_preload_libraries:
-      - "vectors.so"
+      - "vchord.so"
     parameters:
-      search_path: '"$user", public, vectors'
+      search_path: '"$user", public'
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
   # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
   plugins:
@@ -41,12 +65,11 @@ spec:
       owner: immich
       secret:
         name: immich-db-credentials
+      # Fresh-bootstrap only (does NOT re-run on the existing cluster). VectorChord
+      # end state: create vchord (CASCADEs pgvector) — NOT the removed `vectors`.
       postInitSQL:
-        - CREATE EXTENSION IF NOT EXISTS vectors;
+        - CREATE EXTENSION IF NOT EXISTS vchord CASCADE;
         - CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;
-        - GRANT ALL ON SCHEMA vectors TO immich;
-        - GRANT ALL ON ALL TABLES IN SCHEMA vectors TO immich;
-        - ALTER DEFAULT PRIVILEGES IN SCHEMA vectors GRANT ALL ON TABLES TO immich;
   # externalClusters references the ObjectStore via the plugin for PITR/restore.
   externalClusters:
     - name: immich-db-backup

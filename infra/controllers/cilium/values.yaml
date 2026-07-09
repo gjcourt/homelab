@@ -1,6 +1,9 @@
 # Helm values
+# debug logging (left on from the 2026-06 Talos recovery) spewed ~74 GB/day of
+# cilium-agent debug lines (envoy xDS + loadbalancer reconciler), which filled
+# the Loki PVC. Keep at info; flip to true only for active network debugging.
 debug:
-  enabled: true
+  enabled: false
 
 # Cluster-critical: Cilium agent is the network — eviction means everything dies.
 priorityClassName: system-node-critical

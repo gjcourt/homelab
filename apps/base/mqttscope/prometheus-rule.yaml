@@ -1,0 +1,114 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: mqttscope-alerts
+  namespace: mqttscope
+  labels:
+    # kube-prometheus-stack's Prometheus discovers PrometheusRules by this
+    # label (ruleSelector). Same pattern as the netscope PrometheusRule.
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: mqttscope
+    app.kubernetes.io/component: exporter
+spec:
+  groups:
+    # -------------------------------------------------------------------------
+    # Exporter + broker reachability
+    # -------------------------------------------------------------------------
+    - name: mqttscope-exporter
+      rules:
+        - alert: MqttscopeExporterDown
+          expr: up{job="mqttscope"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "mqttscope exporter is unreachable"
+            description: >
+              Prometheus has been unable to scrape the mqttscope exporter for
+              5+ minutes. The pod is down or its /metrics endpoint is failing.
+              Check: kubectl -n mqttscope get pods -l app.kubernetes.io/name=mqttscope
+
+        # Complements the per-target alert above: fires if the metric name
+        # disappears cluster-wide (exporter gone or SM no longer discovered).
+        - alert: MqttscopeMetricsAbsent
+          expr: absent(mqtt_up)
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "mqttscope metrics absent"
+            description: >
+              No `mqtt_up` series has been observed for 10+ minutes. The
+              exporter Deployment is down or the ServiceMonitor is no longer
+              discovering it. Check: kubectl -n mqttscope get servicemonitor,pods
+
+        # The exporter is up and being scraped, but it cannot hold an MQTT
+        # session to the broker — the "broker is actually down / unreachable /
+        # rejecting our creds" signal, distinct from Prometheus scrape health.
+        - alert: MqttscopeBrokerUnreachable
+          expr: mqtt_up == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "mqttscope cannot connect to the mosquitto broker"
+            description: >
+              The mqttscope exporter has been unable to maintain an MQTT
+              session to mosquitto for 5+ minutes (mqtt_up=0). The broker may
+              be down, unreachable, or rejecting the mqttscope credentials
+              (check the ACL grants read on $SYS/#). Check: kubectl -n mosquitto get pods
+
+    # -------------------------------------------------------------------------
+    # MQTT health signals — the things mqttscope exists to detect.
+    # -------------------------------------------------------------------------
+    - name: mqttscope-health
+      rules:
+        # Round-trip probe latency. Amber >100ms, this alert fires on a
+        # sustained >500ms — a genuinely laggy broker path. Thresholds mirror
+        # the dashboard latency panel.
+        - alert: MqttscopeProbeLatencyHigh
+          expr: mqtt_probe_latency_seconds > 0.5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "MQTT round-trip latency is high ({{ $value | humanizeDuration }})"
+            description: >
+              The mqttscope round-trip probe (publish to self-delivery via the
+              broker) has measured >500ms for 10+ minutes (current
+              {{ $value | humanizeDuration }}). The broker path is laggy —
+              check broker CPU/mem, connection churn, and the IoT VLAN link.
+
+        # Probes not echoed back within the timeout window = message loss or a
+        # stalled broker. Any failures in 10m is worth surfacing.
+        - alert: MqttscopeProbeFailing
+          expr: increase(mqtt_probe_failures_total[10m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "MQTT round-trip probes are failing"
+            description: >
+              {{ $value }} mqttscope probe(s) went unanswered within the
+              timeout in the last 10 minutes — the broker is dropping or
+              severely delaying messages. Cross-reference mqtt_messages_dropped
+              and mqtt_probe_latency_seconds.
+
+        # Connection churn — the reconnect-loop signal. Healthy ESPHome/HA
+        # clients connect once and stay. A sustained high CONNECT rate means
+        # something is reconnecting in a loop (bad creds, keepalive, flapping
+        # link). Baseline is near-zero; 30/min sustained is clearly abnormal.
+        # Tune once a real baseline is observed.
+        - alert: MqttscopeHighConnectionChurn
+          expr: mqtt_connections_per_min > 30
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High MQTT connection churn ({{ $value | humanize }}/min)"
+            description: >
+              The broker is seeing {{ $value | humanize }} new connections per
+              minute for 15+ minutes. Healthy clients connect once and persist,
+              so sustained churn indicates a reconnect loop (bad creds,
+              keepalive mismatch, or a flapping IoT-VLAN link). Identify the
+              flapping client in the broker logs.

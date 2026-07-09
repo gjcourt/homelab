@@ -1,0 +1,5 @@
+# Daily additive pull of the immich photo library from hestia → alcatraz.
+# 05:00 local time (TZ env var honored via tzdata in the image), after
+# hestia's 04:00 alcatraz→hestia backup so the SD-card imports it surfaces are
+# already on hestia. Runs a few minutes over gigabit (only NEW files transfer).
+0 5 * * * /usr/local/bin/pull-from-hestia.sh

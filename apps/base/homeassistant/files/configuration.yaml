@@ -98,9 +98,9 @@ input_number:
     mode: box
   laundry_room_light_minutes:
     name: Laundry Room Light Timer
-    min: 5
-    max: 120
-    step: 5
+    min: 4
+    max: 45
+    step: 1
     initial: 30
     unit_of_measurement: min
     mode: slider

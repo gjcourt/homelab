@@ -2,9 +2,9 @@
     - homelab:
         - abbr: HL
           href: https://github.com/gjcourt/homelab
-    - brainstorm:
-        - abbr: BS
-          href: https://github.com/gjcourt/brainstorm
+    - lab:
+        - abbr: LAB
+          href: https://github.com/gjcourt/lab
 
 - Reference:
     - Kubernetes Docs:

@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+  - httproute.yaml
+  # SOPS-encrypted, operator-created from secret-ghcr.yaml.example. CI / kustomize
+  # build fails until it exists — the intended gate (private GHCR image can't be
+  # pulled without it).
+  - secret-ghcr.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: ladder
+      app.kubernetes.io/component: web
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux

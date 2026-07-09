@@ -1,0 +1,92 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ladder
+  namespace: ladder
+  labels:
+    app: ladder
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: ladder
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: ladder
+    spec:
+      serviceAccountName: ladder
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ladder
+          # Private code-only image on GHCR, pulled via the ghcr-secret. Pinned by
+          # digest (immutable) — bumps are explicit tag+digest PRs, never :latest.
+          image: ghcr.io/gjcourt/ladder:2026-07-03-20b7820@sha256:59696ef58170fa3e440714a95bda6e5e1e4d89a2ec30f5578321d5b22efc30ef
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: NODE_ENV
+              value: production
+            - name: PORT
+              value: "8080"
+            - name: STATIC_DIR
+              value: /app/dist
+            - name: EDGAR_USER_AGENT
+              value: "ladder-fundamentals/0.1 (gjcourt@gmail.com)"
+            # The EDGAR proxy writes a disk cache; the container is non-root with a
+            # read-only root fs, so point it at the writable /cache emptyDir below.
+            - name: EDGAR_CACHE_DIR
+              value: /cache
+          resources:
+            requests:
+              cpu: 10m
+              memory: 48Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+          # SPA + EDGAR proxy. /api/edgar/health returns {"ok":true} — an honest
+          # readiness signal. No livenessProbe: it would share path + timing with
+          # readiness and only add restart-flap risk (per
+          # docs/operations/2026-05-02-adding-an-app.md#health-probes).
+          readinessProbe:
+            httpGet:
+              path: /api/edgar/health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: cache
+              mountPath: /cache
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # EDGAR disk cache — ephemeral, rebuilt from public SEC data on restart.
+        - name: cache
+          emptyDir: {}
+        # Scratch for the Node process under a read-only root fs.
+        - name: tmp
+          emptyDir: {}

@@ -1,0 +1,251 @@
+name: Deploy alcatraz compose
+
+# Push-based auto-deploy of alcatraz (Synology Container Manager) compose files.
+#
+# When `hosts/alcatraz/<dir>/docker-compose*.yml` changes on master, the
+# `discover` job enumerates every compose file under `hosts/alcatraz/**/` and
+# emits a matrix of non-archived apps. Each matrix entry runs on the
+# self-hosted runner on alcatraz and applies the compose to the local Docker
+# Engine via `docker compose up -d` (scripts/alcatraz-deploy-compose.sh).
+#
+# The alcatraz analogue of deploy-hestia.yml. The only differences from the
+# hestia workflow: host dir (hosts/alcatraz/**), runner label ([self-hosted,
+# alcatraz]), apply helper (alcatraz-deploy-compose.sh — direct Docker, no
+# TrueNAS API), and a protected-path guard on the discover job (Synology-only:
+# alcatraz holds iSCSI LUNs + the photo library, so a bad host mount is worse).
+#
+# Per-file opt-out: add a top-level `x-deploy.archived: true` block. `x-*` keys
+# are docker-compose extensions — compose ignores them; only this workflow
+# reads them. App name derivation: `docker-compose-<name>.yml` → `<name>`; a
+# plain `docker-compose.yml` uses the parent directory name. Override with
+# `x-deploy.name`.
+#
+# Excluded unconditionally: `hosts/alcatraz/actions-runner/` (chicken-and-egg —
+# the runner can't reliably deploy a compose change that recreates its own
+# container). Runner upgrades stay manual.
+#
+# See: docs/plans/2026-06-26-alcatraz-gitops-docker.md
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'hosts/alcatraz/**/docker-compose*.yml'
+      - '.github/workflows/alcatraz-deploy.yaml'
+      - 'scripts/alcatraz-deploy-compose.sh'
+  workflow_dispatch:
+    inputs:
+      app:
+        description: 'Which app to redeploy (empty / "all" = every non-archived app)'
+        required: false
+        type: string
+        default: all
+      dry_run:
+        description: 'Validate + render config without calling docker compose up'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-alcatraz
+  cancel-in-progress: false
+
+# Least privilege: both jobs only checkout + run docker compose. The apply job
+# runs on the self-hosted alcatraz runner, so the GITHUB_TOKEN is exposed on a
+# root-equivalent host (Docker socket) — scope it to read-only, no write/packages.
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+      count: ${{ steps.gen.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enumerate non-archived compose files (+ protected-path guard)
+        id: gen
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import glob
+          import json
+          import os
+          import sys
+
+          try:
+              import yaml
+          except ImportError:
+              os.system("pip install --quiet pyyaml >&2")
+              import yaml
+
+          # --- Protected-path guard (Synology-only; see plan "security") -------
+          # alcatraz holds live iSCSI LUNs (CNPG PVCs) + the photo library, so a
+          # copy-paste host mount is materially worse than on hestia. The Docker
+          # socket makes this defence-in-depth, NOT a hard sandbox — but it
+          # catches the realistic accident at PR-review/CI time.
+          #
+          # HARD_DENY_EXACT: a bare filesystem/volume root — never mountable.
+          HARD_DENY_EXACT = {"/", "/volume1", "/volume2", "/volumeUSB1"}
+          # HARD_DENY_PREFIX: these paths + everything under them are never
+          # mountable, even via allow-list (system dirs, the Docker socket dir,
+          # the iSCSI LUN store).
+          HARD_DENY_PREFIX = ["/etc", "/proc", "/sys", "/boot", "/dev",
+                              "/var/run", "/run", "/volume1/@iSCSI"]
+          # PROTECTED_PREFIX: mountable ONLY if the compose opts in via
+          # x-deploy.allow-host-paths (an explicit, reviewed exception — e.g.
+          # immich-photos-pull writing the per-user Photos libraries).
+          PROTECTED_PREFIX = ["/volume1/homes", "/volume1/family",
+                              "/volume1/photo", "/volume1/music", "/volume1/video"]
+
+          def is_under(path, prefix):
+              return path == prefix or path.startswith(prefix.rstrip("/") + "/")
+
+          def host_paths(doc):
+              """Yield the host side of every bind mount in the compose."""
+              for svc in (doc.get("services") or {}).values():
+                  for vol in (svc.get("volumes") or []):
+                      if isinstance(vol, str):
+                          # short syntax "host:container[:mode]"; a leading / or .
+                          # or ~ marks a bind mount (named volumes have none).
+                          src = vol.split(":", 1)[0]
+                          if src[:1] in ("/", ".", "~"):
+                              yield os.path.normpath(src)
+                      elif isinstance(vol, dict) and vol.get("type", "bind") == "bind":
+                          src = vol.get("source")
+                          if src and src[:1] in ("/", ".", "~"):
+                              yield os.path.normpath(src)
+
+          def guard(path, name, deploy_meta):
+              allow = [os.path.normpath(a) for a in (deploy_meta.get("allow-host-paths") or [])]
+              with open(path) as f:
+                  doc = yaml.safe_load(f) or {}
+              own = f"/volume1/docker/{name}"          # app's own subtree — always OK
+              violations = []
+              for hp in host_paths(doc):
+                  if is_under(hp, own):
+                      continue                          # own workspace: fine
+                  if hp in HARD_DENY_EXACT or any(is_under(hp, d) for d in HARD_DENY_PREFIX):
+                      violations.append(f"{hp} (hard-denied — never mountable)")
+                  elif any(is_under(hp, p) for p in PROTECTED_PREFIX):
+                      if not any(is_under(hp, a) for a in allow):
+                          violations.append(f"{hp} (protected — add to x-deploy.allow-host-paths if intended)")
+                  # else: some other path (e.g. an unlisted /volume1/misc) — the
+                  # guard targets the KNOWN-dangerous prefixes, so allow it.
+              return violations
+
+          entries = []
+          guard_failures = []
+          for path in sorted(glob.glob("hosts/alcatraz/**/docker-compose*.yml", recursive=True)):
+              # actions-runner deploys itself — exclude unconditionally.
+              if path.startswith("hosts/alcatraz/actions-runner/"):
+                  print(f"skip (runner self-deploy): {path}", file=sys.stderr)
+                  continue
+
+              try:
+                  with open(path) as f:
+                      doc = yaml.safe_load(f) or {}
+              except yaml.YAMLError as e:
+                  print(f"FAIL (yaml parse error): {path}", file=sys.stderr)
+                  print(f"  {e}", file=sys.stderr)
+                  sys.exit(1)
+
+              deploy_meta = doc.get("x-deploy") or {}
+              archived = deploy_meta.get("archived")
+              # Strict `is True`: a quoted "false" string is truthy in Python, so
+              # require a real YAML bool to avoid silently skipping an app.
+              if archived is True:
+                  reason = deploy_meta.get("archived-reason", "no reason given")
+                  print(f"skip (archived): {path}  reason={reason}", file=sys.stderr)
+                  continue
+              if archived is not None and archived is not False:
+                  print(
+                      f"FAIL (bad x-deploy.archived value): {path}  got={archived!r}; "
+                      "must be a YAML bool (true / false).",
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
+
+              fname = os.path.basename(path)
+              if fname.startswith("docker-compose-") and fname.endswith(".yml"):
+                  default_name = fname[len("docker-compose-"):-len(".yml")]
+              else:
+                  default_name = os.path.basename(os.path.dirname(path))
+              name = deploy_meta.get("name") or default_name
+
+              # Protected-path guard runs on the non-archived, to-be-deployed set.
+              v = guard(path, name, deploy_meta)
+              if v:
+                  guard_failures.append((path, v))
+                  for item in v:
+                      print(f"GUARD FAIL: {path}: {item}", file=sys.stderr)
+                  continue
+
+              entries.append({"name": name, "file": path})
+              print(f"include: name={name}  file={path}", file=sys.stderr)
+
+          if guard_failures:
+              print(
+                  f"FAIL: {len(guard_failures)} compose file(s) mount protected host "
+                  "paths; refusing to deploy. Fix the mounts or declare an explicit "
+                  "x-deploy.allow-host-paths exception.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          matrix = {"include": entries}
+          print(f"matrix={json.dumps(matrix)}")
+          print(f"count={len(entries)}")
+          PY
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Discovered apps"
+            echo ""
+            echo "- Count: \`${{ steps.gen.outputs.count }}\`"
+            echo "- Matrix: \`${{ steps.gen.outputs.matrix }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    needs: discover
+    if: needs.discover.outputs.count != '0'
+    runs-on: [self-hosted, alcatraz]
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.discover.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Skip if workflow_dispatch targeted a different app
+        if: |
+          github.event_name == 'workflow_dispatch' &&
+          inputs.app != '' &&
+          inputs.app != 'all' &&
+          inputs.app != matrix.name
+        run: |
+          echo "Skipping ${{ matrix.name }} (workflow_dispatch targeted ${{ inputs.app }})"
+          exit 0
+
+      - name: Apply ${{ matrix.name }}
+        run: |
+          set -euo pipefail
+          DRY_RUN_FLAG=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+          fi
+          ./scripts/alcatraz-deploy-compose.sh "${{ matrix.name }}" "${{ matrix.file }}" $DRY_RUN_FLAG
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### ${{ matrix.name }}"
+            echo ""
+            echo "- File: \`${{ matrix.file }}\`"
+            echo "- Result: \`${{ job.status }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

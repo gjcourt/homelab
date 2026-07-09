@@ -4,10 +4,18 @@ metadata:
   name: immich-db-staging-cnpg-v1
   namespace: immich-stage
 spec:
-  description: Postgres cluster for Immich with pgvecto.rs for ML search — RECOVERY MODE
-  # Use pgvecto.rs 0.3.0 image (compatible with Immich's requirement >=0.2 <0.4)
-  # Note: pg17 not available with v0.3.0, using pg16 instead
-  imageName: ghcr.io/tensorchord/cloudnative-pgvecto.rs:16-v0.3.0
+  description: Postgres cluster for Immich (staging testbed) — VectorChord, fixed 5Gi, fresh initdb bootstrap
+  # ==========================================================================
+  # OPERATOR-GATED — see docs/operations/2026-07-02-immich-v3-upgrade.md.
+  # Migrate STAGING first (soak before prod). This "migration" image bundles
+  # BOTH pgvecto.rs (vectors.so) AND VectorChord (vchord.so) + pgvector so the
+  # existing pgvecto.rs vector columns stay readable while Immich (still v2.7.5)
+  # rebuilds them as VectorChord. Rolling to this image only ADDS vchord.so —
+  # non-destructive on its own. Do NOT bump immich to v3.0.1 until the
+  # VectorChord migration here is verified. DROP EXTENSION vectors is one-way.
+  # ==========================================================================
+  # Official VectorChord-only image (Phase 2; config dropped vectors.so in Phase 1).
+  imageName: ghcr.io/tensorchord/cloudnative-vectorchord:16-0.4.2@sha256:649da2df5f079dd1f214e3a877cafd0208eff3779e9c60d14d243fbca5e11c97
 
   instances: 3
 
@@ -23,9 +31,17 @@ spec:
     enablePodMonitor: true
 
   storage:
-    # Expanded from 10Gi to 20Gi after filling up (pgdata ~9.5Gi as of 2026-04-17).
+    # Staging is a small, disposable rehearsal testbed — it holds NO real data (fresh
+    # initdb + a last-30-days external library that Immich re-indexes), so its size is
+    # fixed at 5Gi and is INDEPENDENT of prod (prod is 10Gi). Do NOT tie this to prod.
+    #
+    # CNPG's admission webhook REJECTS a spec whose size is < the live PVCs ("can't
+    # shrink existing storage"), which blocks the ENTIRE apps-staging reconcile
+    # (learned the hard way 2026-07-03 — #1028 set 10Gi against a live 20Gi and broke
+    # reconcile). Applying 5Gi against the live 20Gi therefore REQUIRES a destroy +
+    # recreate of the Cluster, done in the SAME change. See docs/operations/apps/immich.md §10.
     storageClass: truenas-iscsi
-    size: 20Gi
+    size: 5Gi
 
   resources:
     requests:
@@ -60,10 +76,12 @@ spec:
           policy-type: database
 
   postgresql:
+    # Both preloaded during the migration window (see prod database.yaml).
+    # VectorChord-only end state (migration complete; `vectors` dropped).
     shared_preload_libraries:
-      - "vectors.so"
+      - "vchord.so"
     parameters:
-      search_path: '"$user", public, vectors'
+      search_path: '"$user", public'
 
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
   # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
@@ -72,30 +90,48 @@ spec:
   #   v4 — bumped after disaster recovery test on 2026-04-18; v4 is the live WAL path post-recovery.
   #        During recovery, the WAL archiver serverName MUST differ from the restore source
   #        serverName because barman-cloud-check-wal-archive requires an empty destination.
+  #   v5 — bumped for the 2026-07 fresh-initdb testbed recreate. A freshly-initdb'd cluster
+  #        MUST archive to an EMPTY serverName path, or barman-cloud-check-wal-archive fails
+  #        ("Expected empty archive"). v4 already holds WAL from the DR'd cluster, so the new
+  #        cluster archives to the empty v5 path instead. Bump on every future recreate.
   plugins:
     - name: barman-cloud.cloudnative-pg.io
       isWALArchiver: true
       parameters:
         barmanObjectName: immich-db-staging-cnpg-v1-backup
-        serverName: immich-db-staging-cnpg-v1-v4
+        serverName: immich-db-staging-cnpg-v1-v5
 
-  # This cluster was rebuilt from backup during disaster recovery on 2026-04-18.
-  # CNPG bootstrap mode is creation-time state: once the live cluster exists in
-  # recovery mode, Git must continue to describe bootstrap.recovery rather than
-  # reverting to initdb, or server-side dry-run/apply will fail with:
-  # "Only one bootstrap method can be specified at a time".
+  # Fresh-initdb bootstrap (testbed end state). Staging holds no real data, so we do
+  # NOT recover from S3 — we initialize an EMPTY cluster and let Immich re-index the
+  # last-30-days external library. postInitSQL runs ONCE at init as the postgres
+  # SUPERUSER, so it can create the vchord extension even though the `immich` role is
+  # NOT a superuser and cannot create extensions itself (this bit prod). Mirrors
+  # apps/production/immich/database.yaml. VectorChord end state: create vchord
+  # (CASCADEs in pgvector) + earthdistance — NOT the removed pgvecto.rs `vectors`.
+  #
+  # CNPG bootstrap mode is creation-time state: this initdb block only takes effect
+  # when the Cluster is (re)created from scratch — it does NOT re-run on an existing
+  # cluster. The switch from bootstrap.recovery → bootstrap.initdb therefore MUST be
+  # paired with the destroy + recreate in docs/operations/apps/immich.md §10; applying
+  # it against the live recovery-mode cluster fails with "Only one bootstrap method can
+  # be specified at a time".
   bootstrap:
-    recovery:
-      source: immich-db-backup
+    initdb:
+      database: immich
+      owner: immich
+      secret:
+        name: immich-db-credentials
+      postInitSQL:
+        - CREATE EXTENSION IF NOT EXISTS vchord CASCADE;
+        - CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;
 
-  # externalClusters references the ObjectStore via the plugin for PITR/restore.
-  # During normal operation: points to v4 (current WAL path) for replica clone bootstrap.
-  # During disaster recovery: change to point at the last-known-good serverName (e.g. v4)
-  #   while setting the WAL archiver serverName to v5 (incremented, fresh empty path).
+  # externalClusters references the ObjectStore via the plugin for PITR/manual restore.
+  # Points at the current live WAL path (v5). Not used by fresh initdb bootstrap, but
+  # kept in sync so a future point-in-time restore targets the live archive.
   externalClusters:
     - name: immich-db-backup
       plugin:
         name: barman-cloud.cloudnative-pg.io
         parameters:
           barmanObjectName: immich-db-staging-cnpg-v1-backup
-          serverName: immich-db-staging-cnpg-v1-v4
+          serverName: immich-db-staging-cnpg-v1-v5

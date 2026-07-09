@@ -4,6 +4,8 @@ resources:
   - application-health-cm.yaml
   - cluster-overview-cm.yaml
   - control-plane-cm.yaml
+  - homelabscope-cm.yaml
+  - mqttscope-cm.yaml
   - netscope-cm.yaml
   - networking-gateway-cm.yaml
   - node-details-cm.yaml

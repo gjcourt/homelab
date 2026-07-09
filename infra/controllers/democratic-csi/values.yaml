@@ -7,6 +7,29 @@ driver:
   existingConfigSecret: democratic-csi-driver-config
   existingConfigSecretKey: driver-config-file.yaml
 
+# Pin the democratic-csi driver image off the chart default `:latest`.
+# Bumped v1.9.0 → v1.9.5 (2026-07-02, PR #1019): v1.9.0's ControllerExpandVolume
+# reloaded the iSCSI target by writing /sys/.../resync_size via a `simple-file-writer`
+# helper that does NOT exist on TrueNAS SCALE (upstream #390) → every PVC expand failed
+# `sudo: simple-file-writer: command not found`. v1.9.5 uses a direct
+# `sudo sh -c "echo 1 > .../resync_size"` (src/driver/freenas/ssh.js).
+#
+# ✅ Online iSCSI PVC growth WORKS on v1.9.5 (verified 2026-07-03: jellyfin-cache
+# grew 5Gi→20Gi live — ControllerExpandVolume + node resize2fs both succeeded, no
+# recreate, pod stayed up). The earlier node-side resize2fs EPERM was a v1.9.0-era
+# artifact, not a standing Talos wall. To grow a PVC now: bump
+# spec.resources.requests.storage, merge, `flux reconcile`.
+#
+# ⚠️ Keep `truenas_admin` passwordless (NOPASSWD) sudo ON: the SCST resync_size
+# reload runs `sudo sh -c "echo 1 > /sys/.../resync_size"` non-interactively over SSH
+# on every expand — revoke it and expand/provisioning break. (zfs.cli.sudoEnabled is
+# false, so the zvol resize itself runs un-sudo'd, but the reload always needs root.)
+# Consider the paired chart bump to 0.15.1 (see release.yaml).
+# See docs/operations/incidents/2026-07-02-jellyfin-cache-pvc-expand-simple-file-writer.md.
+controller:
+  driver:
+    image: democraticcsi/democratic-csi:v1.9.5@sha256:fc3b7d7ed3a616714139525075312758e23a5d425ffb539ad12c9bd20fb6001f
+
 storageClasses:
   - name: truenas-iscsi
     defaultClass: false
@@ -53,11 +76,67 @@ storageClasses:
       node-publish-secret:
       controller-expand-secret:
 
+  # xfs variants of the iSCSI StorageClasses above.
+  # Rationale: online PVC *expansion* works on xfs but NOT on ext4 with this
+  # democratic-csi + Talos setup. ext4 node-side resize2fs fails the online
+  # EXT4_IOC_RESIZE_FS ioctl with EPERM against the host-mounted globalmount;
+  # xfs grows via `xfs_growfs <mountpoint>` (mountpoint-based, no block-device
+  # ioctl), which succeeds. Verified end-to-end on melodic-muse 2026-06-28
+  # (1Gi -> 2Gi, df confirmed 2Gi, data preserved).
+  # These are *additive* — existing ext4 volumes keep their fsType and still
+  # require recreate-to-grow. Use the xfs classes for NEW volumes that may
+  # need to expand in place.
+  - name: truenas-iscsi-xfs
+    defaultClass: false
+    reclaimPolicy: Retain
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: xfs
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
+  - name: truenas-iscsi-ssd-xfs
+    defaultClass: false
+    reclaimPolicy: Retain
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: xfs
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
+  - name: truenas-iscsi-ephemeral-xfs
+    defaultClass: false
+    reclaimPolicy: Delete
+    volumeBindingMode: Immediate
+    allowVolumeExpansion: true
+    parameters:
+      fsType: xfs
+    mountOptions: []
+    secrets:
+      provisioner-secret:
+      controller-publish-secret:
+      node-stage-secret:
+      node-publish-secret:
+      controller-expand-secret:
+
 # Talos: /etc/iscsi is a read-only tmpfs mount — DirectoryOrCreate skips the strict type check.
 # hostPID required for nsenter strategy to find iscsid PID in the host process namespace.
 node:
   hostPID: true
   driver:
+    image: democraticcsi/democratic-csi:v1.9.5@sha256:fc3b7d7ed3a616714139525075312758e23a5d425ffb539ad12c9bd20fb6001f
     iscsiDirHostPathType: DirectoryOrCreate
     extraEnv:
       - name: ISCSIADM_HOST_STRATEGY

@@ -31,6 +31,9 @@ spec:
   storageClassName: truenas-iscsi
   resources:
     requests:
-      # Actual usage: ~32Mi. Jellyfin 10.11+ requires 2GiB free in /cache;
-      # bumped from 1Gi to 5Gi to satisfy that check.
-      storage: 5Gi
+      # /cache holds transcode segments + image/metadata cache and grows with use.
+      # Hit 5Gi (99.6% full, 0 bytes free) on 2026-07-02, firing
+      # KubePersistentVolumeFillingUp (critical). Bumped 5Gi -> 20Gi for transcode
+      # headroom; storageClassName truenas-iscsi has allowVolumeExpansion=true so
+      # this expands online.
+      storage: 20Gi

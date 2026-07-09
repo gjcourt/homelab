@@ -5,6 +5,9 @@ resources:
   - namespace.yaml
   - release.yaml
   - repository.yaml
+  # SOPS-encrypted; operator-created from secret-alertmanager-smtp.yaml.example.
+  # kustomize build fails until it exists — intended gate (see the .example header).
+  - secret-alertmanager-smtp.yaml
 
 configMapGenerator:
   - name: kube-prometheus-stack-helm-values

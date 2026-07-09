@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ladder
+  namespace: ladder
+  labels:
+    app: ladder
+spec:
+  # ClusterIP — the LAN gateway (HTTPRoute → https://ladder.burntbytes.com)
+  # routes to it. Fallback for debugging without DNS:
+  #   kubectl -n ladder port-forward svc/ladder 8080:8080
+  type: ClusterIP
+  selector:
+    app: ladder
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: 8080

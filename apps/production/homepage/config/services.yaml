@@ -46,6 +46,13 @@
         href: https://finance.burntbytes.com
         description: Net worth + IPS allocation dashboard
         siteMonitor: https://finance.burntbytes.com
+    - Ladder:
+        icon: mdi-ladder
+        href: https://ladder.burntbytes.com
+        description: Bond ladder + SEC fundamentals workbench
+        # /api/edgar/health returns {"ok":true}; the root path is a SPA, so probe
+        # the health endpoint for the status dot.
+        siteMonitor: https://ladder.burntbytes.com/api/edgar/health
     - Vitals:
         icon: mdi-heart-pulse
         href: https://vitals.burntbytes.com
@@ -159,6 +166,16 @@
                 type: number
                 options:
                   maximumFractionDigits: 1
+    - Prometheus:
+        icon: prometheus.png
+        href: https://prometheus.burntbytes.com
+        description: Metrics & query UI
+        siteMonitor: https://prometheus.burntbytes.com
+    - Alertmanager:
+        icon: alertmanager.png
+        href: https://alerts.burntbytes.com
+        description: Active alerts & silences
+        siteMonitor: https://alerts.burntbytes.com
     - Grafana:
         icon: grafana.png
         href: https://grafana.burntbytes.com

@@ -1,5 +1,30 @@
 ffmpeg:
   accel: vaapi
+# Job concurrency bumped above Immich defaults to speed up large library scans.
+# immich-server runs on the 12-vCPU worker (talos-kot-7x7) with hardware-
+# accelerated video transcode on that node's Radeon iGPU (accel: vaapi, /dev/dri
+# passed in), so raising videoConversion off 1 lets the iGPU work in parallel
+# rather than serially draining the transcode backlog. Machine-learning now fans
+# out to 4 replicas (one iGPU per node) — see faceDetection/smartSearch below.
+# Defaults were
+# metadataExtraction=5, thumbnailGeneration=3, videoConversion=1, faceDetection=2,
+# smartSearch=2, ocr=1.
+job:
+  metadataExtraction:
+    concurrency: 8
+  thumbnailGeneration:
+    concurrency: 6
+  videoConversion:
+    concurrency: 3
+  # Raised 3 -> 12 to saturate the 4 machine-learning replicas (~3 concurrent
+  # inferences per replica/iGPU). These are the ML-service queues; bump them
+  # together with the immich-machine-learning replica count.
+  faceDetection:
+    concurrency: 12
+  smartSearch:
+    concurrency: 12
+  ocr:
+    concurrency: 3
 oauth:
   enabled: true
   issuerUrl: "https://auth.burntbytes.com"

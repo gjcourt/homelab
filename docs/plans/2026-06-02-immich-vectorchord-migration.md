@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-06-10
+last_modified: 2026-07-02
 summary: "Migrate Immich CNPG from pgvecto.rs to VectorChord"
 ---
 
@@ -205,9 +205,26 @@ Risk: relies on the image supporting both extensions simultaneously (most CNPG-V
 | 5 | `apps/production/immich/database.yaml` v3 → v4 (new cluster, VectorChord) | Phase 3 |
 | 6 | `apps/production/immich/database.yaml` remove old v3 cluster | Phase 4 cleanup |
 
+## Update 2026-07-02 — Constraint A + Q1/Q2 resolved; forced by Immich v3
+
+Immich **v3.0.0 removed pgvecto.rs entirely**, so this migration is now a hard
+prerequisite for the v2.7.5 → v3.0.1 app upgrade (no longer "defer" — option 4
+is off the table). Constraint A is resolved: `ghcr.io/corentingiraud/cnpg-pgvector-vectorchord:16-migration`
+is a CNPG image bundling pgvecto.rs + VectorChord + pgvector, so the in-place
+extension swap (**Option 3B**) is viable and embedding-preserving — no fresh
+cluster, no hours of ML recompute. Execution runbook + exact ordered steps:
+[`docs/operations/2026-07-02-immich-v3-upgrade.md`](../operations/2026-07-02-immich-v3-upgrade.md).
+The v3 bump is split across **two ordered PRs** (proven necessary by the
+2026-07-03 staging rehearsal — a combined PR crashloops v3 on un-migrated data):
+**PR-B** (`feat/immich-phase-b-vectorchord-db`, ready) swaps only the CNPG
+`database.yaml` to the dual-extension migration image; **PR-C**
+(`feat/immich-phase-c-app-v3`, draft) bumps the app to v3.0.1 and cleans up the
+DB, and must not merge until PR-B is merged and the manual superuser
+`CREATE EXTENSION vchord CASCADE` + v2.7.5 data-migration + verify have completed.
+
 ## Open questions
 
-1. **Image source**: community CNPG-VectorChord vs. build our own? (Phase 0 deliverable.)
-2. **Cutover shape**: 3A (fresh cluster, regenerate embeddings) or 3B (in-place extension swap)? (Decided after Phase 0 + staging experience.)
+1. ~~**Image source**~~ **Resolved:** `corentingiraud/cnpg-pgvector-vectorchord:16-migration` (dual-extension) for the migration window; `tensorchord/cloudnative-vectorchord:16-0.4.2` (VectorChord-only) for the end state.
+2. ~~**Cutover shape**~~ **Resolved: 3B** (in-place extension swap) — the dual-extension image makes it safe and preserves embeddings.
 3. **Timing**: prod cutover during a low-traffic window (weekend morning)? Or coordinate around someone's Immich usage pattern?
 4. **Snapshot consideration**: should we ZFS-snapshot the staging iSCSI volume before Phase 1, in case Flux ordering surprises us? (Cheap; recommended.)

@@ -1,0 +1,42 @@
+# netscope — hestia per-node network telemetry agent (eBPF).
+#
+# Image is built from https://github.com/gjcourt/netscope. The tag here is
+# pinned to the SAME digest the cluster DaemonSet runs
+# (apps/base/netscope/daemonset.yaml) so hestia and the 6 Talos nodes report
+# from identical agent code. Bump both together.
+#
+# Runs with host networking and privileged because it is a CO-RE / libbpf
+# eBPF agent: it attaches tcx programs and reads kernel state.
+#   - /sys/fs/bpf      BPF filesystem (pinned maps/programs)
+#   - /sys/kernel/btf  kernel BTF for CO-RE relocation (vmlinux present on
+#                      hestia's 6.18.13 kernel — verified)
+#
+# Coexists with the host's existing networking (returns TC_ACT_UNSPEC, so it
+# observes without dropping). hestia runs no Cilium — it's a standalone
+# TrueNAS box, not a Kubernetes node — so the agent simply attaches at the
+# default-route NIC.
+#
+# Metrics are exposed on :9101 over host networking; Prometheus scrapes
+# hestia directly (infra/configs/netscope/scrapeconfig.yaml), joining the
+# same `netscope-agent` job as the cluster targets.
+#
+# Interface selection: the agent auto-discovers the IPv4 default-route NIC
+# from /proc/net/route at startup. hestia has MULTIPLE NICs — if discovery
+# picks the wrong one, pin it explicitly with the NETSCOPE_IFACE env below
+# (e.g. NETSCOPE_IFACE=eno1). See README.md.
+
+services:
+  netscope:
+    image: ghcr.io/gjcourt/netscope:2e20747@sha256:75d159d39a7e4498c537bd2e6739d4f722f63c880ab6bb91e8fd372d9ab6ce36
+    container_name: netscope
+    network_mode: host
+    privileged: true
+    restart: unless-stopped
+    # environment:
+    #   # Uncomment + set if default-route NIC auto-discovery picks the wrong
+    #   # interface on hestia (multiple NICs). Find the right one with:
+    #   #   ssh truenas_admin@10.42.2.10 'ip -o -4 route show default'
+    #   NETSCOPE_IFACE: eno1
+    volumes:
+      - /sys/fs/bpf:/sys/fs/bpf
+      - /sys/kernel/btf:/sys/kernel/btf:ro

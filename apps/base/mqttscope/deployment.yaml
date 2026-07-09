@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mqttscope
+  namespace: mqttscope
+  labels:
+    app.kubernetes.io/name: mqttscope
+    app.kubernetes.io/component: exporter
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mqttscope
+      app.kubernetes.io/component: exporter
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mqttscope
+        app.kubernetes.io/component: exporter
+    spec:
+      serviceAccountName: mqttscope
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: exporter
+          # PLACEHOLDER TAG — the image is built + pushed by
+          # .github/workflows/build-mqttscope.yml only after this lands on
+          # master. Repin to the real `YYYY-MM-DD-<sha7>@sha256:<digest>`
+          # emitted by that workflow in a follow-up PR (see the workflow's
+          # step summary), per the homelab image-discipline rule. This
+          # manifest is intentionally NOT applied to the cluster in this PR.
+          image: "ghcr.io/gjcourt/mqttscope:2026-07-04-14e0d87@sha256:0139120ba21957382da9e74daeca810d68bd3b0cbe2f8eaa000463ba92f44d05"
+          imagePullPolicy: IfNotPresent
+          env:
+            # In-cluster broker (ClusterIP). The off-cluster LB IP
+            # (10.42.2.46) is for IoT-VLAN ESP nodes; the exporter runs in
+            # the cluster and uses the internal Service.
+            - name: MQTT_HOST
+              value: mosquitto.mosquitto.svc.cluster.local
+            - name: MQTT_PORT
+              value: "1883"
+            - name: MQTT_CLIENT_ID
+              value: mqttscope
+            - name: MQTT_PROBE_INTERVAL
+              value: "15"
+            - name: LISTEN_PORT
+              value: "9103"
+          # MQTT_USERNAME / MQTT_PASSWORD for the dedicated `mqttscope` broker
+          # user (ACL: read $SYS/#, readwrite mqttscope/#). Operator-created,
+          # SOPS-encrypted — see secret-mqtt.yaml.example.
+          envFrom:
+            - secretRef:
+                name: mqttscope-mqtt
+          ports:
+            - name: metrics
+              containerPort: 9103
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            # /healthz is 200 only while the exporter holds a live broker
+            # session — so readiness tracks broker reachability, not just
+            # "HTTP server is up".
+            httpGet:
+              path: /healthz
+              port: 9103
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # No livenessProbe: the exporter auto-reconnects to the broker on its
+          # network thread (reconnect_delay_set), so a dropped broker session
+          # recovers without a pod restart. A liveness probe sharing /healthz
+          # would just restart-flap the pod during a broker outage without
+          # fixing anything — readiness already stops scrapes and fires the
+          # up/mqtt_up alerts. (Matches the thermalscope no-liveness rationale.)
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

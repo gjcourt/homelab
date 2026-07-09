@@ -7,7 +7,9 @@ resources:
   - dashboards
   - flux-monitoring
   - gateway
+  - homelabscope
   - ipmi-exporter
+  - netscope
   - network-policies
   - thermalscope
   - unpoller

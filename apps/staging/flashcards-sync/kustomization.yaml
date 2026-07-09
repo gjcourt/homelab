@@ -5,9 +5,6 @@ resources:
   - ../../base/flashcards-sync/
   - configmap.yaml
   - database.yaml
-  - objectstore.yaml
-  - scheduledbackup.yaml
-  - secret-aws-creds.yaml
   - secret-db-credentials.yaml
 
 labels:

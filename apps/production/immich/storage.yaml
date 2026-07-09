@@ -14,19 +14,5 @@ spec:
   resources:
     requests:
       storage: 500Gi
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: immich-model-cache-pvc
-  namespace: immich
-  labels:
-    app: immich
-    env: production
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: truenas-iscsi
-  resources:
-    requests:
-      storage: 20Gi
+# immich-model-cache-pvc patch removed — the base PVC is gone (ML model cache is
+# now a per-replica emptyDir for the GPU fan-out).

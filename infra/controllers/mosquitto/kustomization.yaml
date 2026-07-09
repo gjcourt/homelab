@@ -5,4 +5,8 @@ resources:
   - deployment.yaml
   - namespace.yaml
   - service.yaml
+  - service-lb.yaml
+  # SOPS-encrypted; operator-created from secret-mqtt-auth.yaml.example
+  # (validate-kustomize fails until it exists — the intended gate).
+  - secret-mqtt-auth.yaml
   - storage.yaml

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mqttscope
+  labels:
+    app: mqttscope
+    # Unlike netscope/thermalscope, mqttscope needs no host access — it is a
+    # plain in-cluster Deployment that talks to the broker over the pod network
+    # and runs as an unprivileged, read-only-rootfs, non-root container. The
+    # restricted PSA level is fully satisfiable here, so enforce it.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

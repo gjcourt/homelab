@@ -31,7 +31,11 @@ spec:
     - nolock
   nfs:
     server: 10.42.2.10
-    path: /mnt/main/media/music
+    # Repointed from /mnt/main/media/music (curated-only) to the merged
+    # family/media/music tree per assimilation-plan Phase 4a (curated FLAC +
+    # archive dump). PV nfs.path is immutable, so applying this requires a
+    # one-time PV+PVC delete/recreate (the PV is Retain — the NFS data is safe).
+    path: /mnt/main/family/media/music
     readOnly: true
 ---
 apiVersion: v1

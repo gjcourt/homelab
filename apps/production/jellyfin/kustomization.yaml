@@ -31,6 +31,12 @@ patches:
       - op: replace
         path: /metadata/name
         value: jellyfin-movies-pv-prod
+      # Prod movies consolidated into the family tree (assimilation Phase 4);
+      # the media/movies dataset was zfs-remounted here. Staging stays on the
+      # base path. nfs.path is immutable -> one-time PV+PVC delete/recreate.
+      - op: replace
+        path: /spec/nfs/path
+        value: /mnt/main/family/media/video/movies
   - target:
       kind: PersistentVolumeClaim
       name: jellyfin-movies-pvc

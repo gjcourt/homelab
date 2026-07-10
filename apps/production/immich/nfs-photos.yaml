@@ -17,7 +17,14 @@ spec:
   storageClassName: ""
   nfs:
     server: 10.42.2.10
-    path: /mnt/main/family/images/photos
+    # Repointed images/photos -> media/photos per assimilation-plan Phase 4c.
+    # METADATA-SAFE: the container mountPath (/mnt/photos, in deployment-patch)
+    # is UNCHANGED and media/photos has an identical <owner>/<year>/<month>
+    # substructure, so every asset's originalPath (/mnt/photos/...) stays the
+    # same and Immich matches all 141k assets — no re-import, albums/faces/people
+    # preserved. nfs.path is immutable, so applying needs a PV+PVC delete/recreate
+    # (Retain — NFS data safe); do it with immich scaled to 0.
+    path: /mnt/main/family/media/photos
     readOnly: false
   mountOptions:
     - nfsvers=3

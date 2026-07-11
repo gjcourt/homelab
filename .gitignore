@@ -10,6 +10,10 @@ docs/plans/george.md
 # Per-session git worktrees (out-of-band scratch space; not tracked content)
 .worktrees/
 
+# Claude Code local project config (per-user; not shared). Ignored so `git clean`
+# won't wipe it — it did once (2026-07). Force-add if a shared config is ever needed.
+.claude/
+
 # Operator-supplied secrets for self-hosted runners (PAT etc.) — never commit.
 # Only the *.env.example templates are tracked.
 hosts/*/actions-runner/.env

@@ -7,7 +7,7 @@
   decode: "NEC: address=0x3712, command=0xF40B"
 - name: "volume-up"
   decode: "NEC: address=0x3712, command=0xF50A"
-- name: "play-pause"
+- name: "play"
   decode: "NEC: address=0x3712, command=0xFD02"
 - name: "previous"
   decode: "NEC: address=0x3712, command=0xFC03"

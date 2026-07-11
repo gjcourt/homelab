@@ -43,8 +43,9 @@ Usage:
   cnpgscope.py -o json              # machine-readable
   cnpgscope.py --context <ctx>      # target a specific kube-context
 
-Exit code is the worst verdict found: 0 OK, 1 WARN, 2 CRITICAL (handy for cron
-/ CI gating). --exit-zero forces 0.
+Exit code is the worst verdict found: 0 OK, 1 WARN or UNKNOWN, 2 CRITICAL (handy
+for cron / CI gating — an unprobeable fleet fails the gate too). --exit-zero
+forces 0.
 """
 
 from __future__ import annotations
@@ -242,6 +243,7 @@ class Cluster:
     continuous_archiving: str | None = None   # condition status: True/False/None
     last_backup_succeeded: str | None = None
     last_backup_age: float | None = None
+    backup_ts_bad: bool = False   # lastSuccessfulBackup present but unparseable
     backup_configured: bool = False
     instances: list[Instance] = field(default_factory=list)
     slots: list[Slot] = field(default_factory=list)
@@ -306,7 +308,13 @@ def discover(kc: Kubectl, ns: str | None, name: str | None) -> list[Cluster]:
         )
         lb = status.get("lastSuccessfulBackup")
         if lb:
-            c.last_backup_age = now - _parse_ts(lb)
+            ts = _parse_ts(lb)
+            if ts is not None:
+                c.last_backup_age = now - ts
+            else:
+                # Present-but-unparseable timestamp: DON'T render age~0 ("fresh"),
+                # which would mask a genuinely stale backup. Surface it instead.
+                c.backup_ts_bad = True
 
         # Instances from pods (authoritative for phase/readiness/role).
         for p in pods_by_cluster.get((cns, cname), []):
@@ -336,8 +344,10 @@ def discover(kc: Kubectl, ns: str | None, name: str | None) -> list[Cluster]:
     return clusters
 
 
-def _parse_ts(ts: str) -> float:
+def _parse_ts(ts: str) -> float | None:
     # CNPG timestamps: "2026-07-09T05:23:01Z" or with offset.
+    # Returns None on an unrecognized format — the caller must treat a missing
+    # age as UNKNOWN, never as "just backed up" (which would hide a stale backup).
     import datetime as _dt
     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S%z"):
         try:
@@ -347,7 +357,7 @@ def _parse_ts(ts: str) -> float:
             return dt.timestamp()
         except ValueError:
             continue
-    return time.time()
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -379,10 +389,29 @@ def enrich(kc: Kubectl, clusters: list[Cluster]) -> None:
                 inst_jobs.append((c, inst))
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=EXEC_WORKERS) as ex:
-        list(ex.map(lambda j: _enrich_instance(kc, *j), inst_jobs))
+        list(ex.map(lambda j: _enrich_instance_safe(kc, *j), inst_jobs))
         prim_jobs = [c for c in clusters if c.primary_instance
                      and c.primary_instance.phase == "Running"]
-        list(ex.map(lambda c: _enrich_primary(kc, c), prim_jobs))
+        list(ex.map(lambda c: _enrich_primary_safe(kc, c), prim_jobs))
+
+
+def _enrich_instance_safe(kc: Kubectl, c: Cluster, inst: Instance) -> None:
+    # A worker exception (unexpected output shape, kube-client edge case) must
+    # NOT abort the whole fleet scan via ex.map re-raising — degrade this one
+    # instance to a failed probe and keep going.
+    try:
+        _enrich_instance(kc, c, inst)
+    except Exception as exc:  # noqa: BLE001 — intentional: never abort the fleet
+        c.exec_ok = False
+        print(f"warn: probe failed for {c.key}/{inst.name}: {exc}", file=sys.stderr)
+
+
+def _enrich_primary_safe(kc: Kubectl, c: Cluster) -> None:
+    try:
+        _enrich_primary(kc, c)
+    except Exception as exc:  # noqa: BLE001 — intentional: never abort the fleet
+        c.exec_ok = False
+        print(f"warn: primary probe failed for {c.key}: {exc}", file=sys.stderr)
 
 
 def _enrich_instance(kc: Kubectl, c: Cluster, inst: Instance) -> None:
@@ -391,9 +420,7 @@ def _enrich_instance(kc: Kubectl, c: Cluster, inst: Instance) -> None:
         c.exec_ok = False
         return
     lines = [ln for ln in out.splitlines() if ln.strip()]
-    if not lines:
-        return
-    parts = lines[0].split()
+    parts = lines[0].split() if lines else []
     if len(parts) >= 3:
         try:
             inst.pvc_size_bytes = int(parts[0])
@@ -406,6 +433,12 @@ def _enrich_instance(kc: Kubectl, c: Cluster, inst: Instance) -> None:
             inst.wal_bytes = int(lines[1].strip())
         except ValueError:
             pass
+    if inst.pvc_pct is None:
+        # The exec SUCCEEDED but produced no usable df output — an unexpected pod
+        # layout (PGDATA elsewhere) or empty result. Surface it as a failed probe
+        # so the cluster degrades to UNKNOWN with a note, rather than silently
+        # rendering "?" and reading as healthy.
+        c.exec_ok = False
 
 
 def _enrich_primary(kc: Kubectl, c: Cluster) -> None:
@@ -530,7 +563,15 @@ def evaluate(c: Cluster) -> str:
             sev = worst(sev, WARN)
             c.notes.append((WARN, f"last successful backup {human_age(c.last_backup_age)} ago"))
 
-    if not c.exec_ok and sev == OK:
+    if c.backup_configured and c.backup_ts_bad:
+        sev = worst(sev, WARN)
+        c.notes.append((WARN, "last-backup timestamp unparseable — backup age unknown"))
+
+    # A failed probe is ALWAYS surfaced (raised to at least UNKNOWN, note added),
+    # regardless of the verdict from the signals that DID land. Previously this
+    # only fired when the verdict was still OK, so a WARN/CRIT cluster could hide
+    # that its PVC/WAL/slot data was never actually collected.
+    if not c.exec_ok:
         sev = worst(sev, UNKNOWN)
         c.notes.append((UNKNOWN, "some instance probes failed (exec) — data partial"))
 
@@ -773,7 +814,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.exit_zero:
         return 0
     overall = worst(*verdicts.values())
-    return {OK: 0, UNKNOWN: 0, WARN: 1, CRIT: 2}.get(overall, 0)
+    # UNKNOWN → 1 (not 0): a fleet we couldn't actually probe must NOT pass a CI
+    # or cron gate as if it were healthy. --exit-zero is the explicit opt-out.
+    return {OK: 0, UNKNOWN: 1, WARN: 1, CRIT: 2}.get(overall, 0)
 
 
 if __name__ == "__main__":

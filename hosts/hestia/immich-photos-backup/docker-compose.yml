@@ -1,5 +1,5 @@
 # Daily rsync of /volume1/family/images/photos on alcatraz (Synology DSM,
-# 10.42.2.11) into the local ZFS dataset main/family/images/photos.
+# 10.42.2.11) into the local ZFS dataset main/family/media/photos.
 # (Renamed from main/backups/immich-photos in the 2026-06-01 hestia-SOT plan
 #  — see docs/plans/2026-06-01-hestia-photos-sot.md.)
 #
@@ -23,7 +23,7 @@
 
 services:
   immich-photos-backup:
-    image: ghcr.io/gjcourt/immich-photos-backup:2026-07-07@sha256:53caa6d3ae3a27e9d48c0c605412a1de736599e76a05df193eead7a7232360a5
+    image: ghcr.io/gjcourt/immich-photos-backup:2026-07-10@sha256:fd518899ac049ce1ba2c978eeba9bfc3ee64399895be5873aaa12732f600249e
     container_name: immich-photos-backup
     restart: unless-stopped
     environment:
@@ -43,7 +43,7 @@ services:
       # Backup destination — bind-mounted the whole main/family parent so the
       # same container can later extend to sync other family/ subdirs (audio,
       # literature, documents, etc.) without a compose change. Today the script
-      # only writes to family/images/photos.
+      # only writes to family/media/photos.
       - /mnt/main/family:/mnt/main/family
       # Prometheus textfile collector dir — script writes
       # immich-backup.prom on each successful run for the

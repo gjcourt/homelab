@@ -45,10 +45,23 @@ spec:
         matchLabels:
           policy-type: database
   storage:
-    # Actual usage: ~488Mi; target = 20% headroom → 1Gi.
-    # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
+    # The DB itself is ~8Mi; the ~0.5Gi of prior "usage" was almost entirely WAL
+    # (CNPG defaults wal_keep_size=512MB + max_wal_size=1GB on a 1Gi volume). WAL is
+    # right-sized via postgresql.parameters below, so 1Gi is now generous. Shrinking
+    # a PVC still needs cluster recreation (CNPG can't shrink in-place), so 1Gi stays.
     size: 1Gi
     storageClass: truenas-iscsi
+  postgresql:
+    parameters:
+      # Tiny DB (~8Mi) on a 1Gi volume. CNPG's defaults — wal_keep_size 512MB +
+      # max_wal_size 1GB — size WAL for a large database and let pg_wal grow to ~60%
+      # of the volume in steady state (the WAL-fraction WARN). Right-size the WAL
+      # working set to the volume, and hard-cap slot retention as the backstop against
+      # the 2026-07-10 immich slot-pinning failure mode. All three are reloadable
+      # (SIGHUP) GUCs — no restart; pg trims excess WAL on the next checkpoint.
+      max_wal_size: "256MB"
+      wal_keep_size: "128MB"
+      max_slot_wal_keep_size: "256MB"
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
   # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).
   plugins:

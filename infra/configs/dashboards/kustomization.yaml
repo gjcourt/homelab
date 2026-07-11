@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - application-health-cm.yaml
   - cluster-overview-cm.yaml
+  - cnpg-cm.yaml
   - control-plane-cm.yaml
   - homelabscope-cm.yaml
   - mqttscope-cm.yaml

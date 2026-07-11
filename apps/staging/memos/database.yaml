@@ -31,10 +31,24 @@ spec:
           policy-type: database
 
   storage:
-    # Actual usage: ~634Mi; target = 20% headroom → 1Gi.
-    # Requires cluster recreation (CNPG cannot shrink PVCs in-place).
+    # The DB itself is ~8Mi; the ~0.6Gi of prior "usage" was almost entirely WAL
+    # (CNPG defaults wal_keep_size=512MB + max_wal_size=1GB on a 1Gi volume). WAL is
+    # right-sized via postgresql.parameters below, so 1Gi is now generous. Shrinking
+    # a PVC still needs cluster recreation (CNPG can't shrink in-place), so 1Gi stays.
     storageClass: truenas-iscsi
     size: 1Gi
+
+  postgresql:
+    parameters:
+      # Tiny DB (~8Mi) on a 1Gi volume. CNPG's defaults — wal_keep_size 512MB +
+      # max_wal_size 1GB — size WAL for a large database and let pg_wal grow to ~60%
+      # of the volume in steady state (the WAL-fraction WARN). Right-size the WAL
+      # working set to the volume. Single-instance (no replica slots), but the slot
+      # cap is a harmless backstop. All reloadable (SIGHUP) GUCs — no restart; pg
+      # trims excess WAL on the next checkpoint.
+      max_wal_size: "256MB"
+      wal_keep_size: "128MB"
+      max_slot_wal_keep_size: "256MB"
 
   # Bootstrap from backup if available, otherwise initialize fresh
   # To restore: uncomment recovery section and comment out initdb

@@ -36,7 +36,7 @@
 # stays stale. Loud failure is intentional — silent perm-denied was the
 # original bug.
 #
-# Deployed as a TrueNAS Custom App; cron at 04:00 daily is fired by the
+DST_BASE="${DST_BASE:-/mnt/main/family/media/photos}"
 # container's busybox crond (see hosts/hestia/immich-photos-backup/).
 #
 # Reports backup freshness to node-exporter's textfile collector at

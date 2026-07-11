@@ -31,15 +31,24 @@ spec:
     - name: cnpg
       rules:
         - alert: CNPGClusterDegraded
+          # Fires when a cluster's primary has fewer streaming replicas than it
+          # should. The expected count is derived per-cluster ((instances − 1) via
+          # count of in_recovery series), so single-instance clusters (expected 0)
+          # never trip. max() picks the primary's value (replicas always report 0).
+          # NB: the previous expr used cnpg_collector_replica_mode==0 to try to
+          # select the primary, but replica_mode is the cross-cluster replica-CLUSTER
+          # flag (0 on every normal pod), so it fired on every replica and every
+          # single-instance cluster — 19 false positives once metrics began flowing.
           expr: >
-            (cnpg_pg_replication_streaming_replicas < 2) * on(namespace, pod) (cnpg_collector_replica_mode == 0)
+            max by (namespace) (cnpg_pg_replication_streaming_replicas)
+            < (count by (namespace) (cnpg_pg_replication_in_recovery) - 1)
           for: 10m
           labels:
             severity: warning
           annotations:
-            summary: "CNPG cluster {{ $labels.namespace }} has fewer than 2 streaming replicas"
+            summary: "CNPG cluster in {{ $labels.namespace }} is missing streaming replicas"
             description: >
-              The primary pod {{ $labels.pod }} in namespace {{ $labels.namespace }} reports {{ $value }} streaming replica(s). Expected 2 for a 3-instance cluster. A replica may be in CrashLoopBackOff or experiencing iSCSI I/O errors. Check: kubectl get cluster -n {{ $labels.namespace }} #magic___^_^___line
+              The primary in namespace {{ $labels.namespace }} reports {{ $value }} streaming replica(s), fewer than the (instances − 1) expected for this cluster. A replica may be down, in CrashLoopBackOff, lagging, or hitting iSCSI I/O errors. Check: kubectl get cluster -n {{ $labels.namespace }} #magic___^_^___line
     # -------------------------------------------------------------------------
     # Node filesystem read-only
     #

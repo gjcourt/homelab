@@ -31,12 +31,15 @@ spec:
     storageClass: truenas-iscsi
   postgresql:
     parameters:
-      # Safety valve against a runaway/inactive replication slot pinning WAL and
-      # filling this small 1Gi PVC — the failure mode behind the 2026-07-10 immich
-      # incident (stale slots pinned ~13Gi of WAL → CrashLoop + blocked reconcile).
-      # Past this cap CNPG invalidates the lagging slot instead of retaining WAL
-      # unbounded. Kept conservative (baseline usage + cap stays well under 1Gi).
-      # Reloadable GUC (SIGHUP, no restart).
+      # Tiny DB on a 1Gi volume. CNPG's defaults — wal_keep_size 512MB + max_wal_size
+      # 1GB — size WAL for a large database and can let pg_wal grow to ~60% of the
+      # volume (the WAL-fraction WARN). Right-size the WAL working set to the volume,
+      # and hard-cap slot retention as the backstop against the 2026-07-10 immich
+      # slot-pinning failure mode. All three are reloadable (SIGHUP) GUCs — no restart;
+      # pg trims excess WAL on the next checkpoint. Matches the other 1Gi clusters
+      # (golinks/memos, #1096).
+      max_wal_size: "256MB"
+      wal_keep_size: "128MB"
       max_slot_wal_keep_size: "256MB"
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
   # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).

@@ -1,0 +1,72 @@
+# =============================================================================
+# ESPHome IR Blaster — LEARN phase (capture remote codes)   [READY TO FLASH]
+# =============================================================================
+# Hardware: ESP32-C6-DevKitC-1-N8 + IR receiver (TSOP38238 / VS1838B / KY-022).
+#
+# Wiring (receiver only, this phase):
+#   receiver OUT  -> GPIO5      (safe C6 GPIOs: 2,3,4,5,6,7)
+#   receiver GND  -> GND
+#   receiver VS   -> 3V3        (NOT 5V for the receiver)
+#   optional supply filter: 0.1 uF across VS<->GND + ~100 R in the VS supply line
+#   AVOID GPIO 8/9/15 (strapping / onboard RGB LED), 12/13 (native USB), 16/17 (UART0).
+#
+# Purpose: point each remote at the receiver and press buttons. ESPHome decodes
+# and prints the protocol + code (or raw timings) at DEBUG. Record each into your
+# code book, then move them into a blaster.yaml transmit config later.
+#
+# Flash (first time, over USB-C):   esphome run ir-blaster-learn.yaml
+#   then watch the dumps:           esphome logs ir-blaster-learn.yaml
+#   (USB serial works too; WiFi/API below just lets you watch wirelessly + OTA.)
+#
+# Secrets: reuses this dir's shared secrets.yaml (iot_wifi_*, ota_password) —
+#   sops -d secrets.sops.yaml > secrets.yaml   (or fill secrets.yaml.template).
+#
+# Project: gjcourt/lab  03-019-esp32-based-ir-blaster-for-legacy-devices.md
+# =============================================================================
+
+substitutions:
+  node: "ir-blaster"
+  recv_pin: "GPIO5" # IR receiver OUT (see wiring note above)
+
+esphome:
+  name: "${node}"
+  friendly_name: "IR Blaster (learning)"
+  comment: "IR code-capture node — ESP32-C6 + TSOP/VS1838B receiver"
+
+esp32:
+  board: esp32-c6-devkitc-1 # ESP32-C6-DevKitC-1-N8
+  framework:
+    type: esp-idf # the C6 requires esp-idf (not arduino); ESPHome 2024.x+
+
+logger:
+  level: DEBUG # IR dumps print at DEBUG
+
+# Native ESPHome API — stream logs wirelessly now, adopt into Home Assistant later.
+api:
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+# ----- WiFi: IoT VLAN (DHCP) — same network the other nodes join -----
+wifi:
+  ssid: !secret iot_wifi_ssid
+  password: !secret iot_wifi_password
+  # Fallback AP so you can re-provision WiFi without re-flashing over USB.
+  ap:
+    ssid: "ir-blaster setup"
+
+# ----- IR receiver: capture + decode every protocol -----
+remote_receiver:
+  pin:
+    number: ${recv_pin}
+    inverted: true # TSOP / VS1838B idles HIGH, pulls LOW on a mark
+    mode:
+      input: true
+      pullup: true # receiver has an internal pull-up; no external 10k needed
+  dump: all # this remote is NEC. Use `all` to identify an unknown remote's
+  # protocol (one press → many speculative decodes; the one with a valid
+  # command/complement is real), then set dump to just that protocol for
+  # clean one-line-per-press captures.
+  tolerance: 25%
+  idle: 25ms

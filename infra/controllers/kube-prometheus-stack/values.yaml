@@ -4284,7 +4284,14 @@ prometheus:
     ## prometheus resource to be created with selectors based on values in the helm deployment,
     ## which will also match the podmonitors created
     ##
-    podMonitorSelectorNilUsesHelmValues: true
+    ## Set to FALSE so the {} podMonitorSelector below matches ALL PodMonitors, not just those
+    ## labeled `release: kube-prometheus-stack`. The CNPG operator auto-generates a PodMonitor per
+    ## Cluster (enablePodMonitor: true) and there is no clean way to stamp the release label onto
+    ## it — so with the default (true) all ~13 CNPG PodMonitors were silently orphaned and NEVER
+    ## scraped (0 cnpg_* series). Our own exporters (netscope/thermalscope) use ServiceMonitors,
+    ## which stay release-scoped; PodMonitors are only ever CNPG's, so matching all is exactly right
+    ## and future CNPG clusters are scraped automatically.
+    podMonitorSelectorNilUsesHelmValues: false
 
     ## PodMonitors to be selected for target discovery.
     ## If {}, select all PodMonitors

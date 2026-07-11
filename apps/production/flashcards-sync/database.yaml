@@ -17,6 +17,14 @@ spec:
   storage:
     size: 5Gi
     storageClass: truenas-iscsi-ssd
+  postgresql:
+    parameters:
+      # Safety valve against a runaway/inactive replication slot pinning WAL and
+      # filling this PVC — the failure mode behind the 2026-07-10 immich incident
+      # (stale slots pinned ~13Gi of WAL → CrashLoop + blocked operator reconcile).
+      # Past this cap CNPG invalidates the lagging slot instead of retaining WAL
+      # unbounded. Sized well under the 5Gi volume. Reloadable GUC (SIGHUP).
+      max_slot_wal_keep_size: "2GB"
   plugins:
     - name: barman-cloud.cloudnative-pg.io
       isWALArchiver: true

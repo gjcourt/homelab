@@ -82,6 +82,12 @@ spec:
       - "vchord.so"
     parameters:
       search_path: '"$user", public'
+      # Safety valve against a runaway/inactive replication slot pinning WAL and
+      # filling this 5Gi PVC — the failure mode behind the 2026-07-10 immich-PROD
+      # incident (stale slots pinned ~13Gi of WAL → CrashLoop + blocked reconcile).
+      # Past this cap CNPG invalidates the lagging slot instead of retaining WAL
+      # unbounded. Reloadable GUC (SIGHUP, no restart).
+      max_slot_wal_keep_size: "2GB"
 
   # WAL archiving and base backups via the Barman Cloud Plugin (v0.11.0).
   # S3 configuration is defined in objectstore.yaml (ObjectStore CRD).

@@ -123,21 +123,46 @@ spec:
         # labels — every job is checked against its OWN max_age with a single
         # rule. `time() - <gauge>` keeps the gauge's labels; the `>` then
         # matches max_age by the same set.
+        # Severity is now split by tier. Historically this was hardcoded
+        # `critical` because Alertmanager dropped every warning to the 'null'
+        # receiver — a warning monitor never notified. PR #1081 added a
+        # warning->email route (24h daily-nag repeat), so warnings DO notify
+        # now, and staleness can carry a severity that matches the job's blast
+        # radius instead of paging everything at the 4h critical cadence.
+        #
+        # PROD / data-safety jobs (photo backups, zfs snapshots, prod syncs)
+        # stay critical: a missed run is a real risk that warrants the 4h nag.
         - alert: HomelabscopeJobStale
-          expr: time() - homelabscope_job_last_success_seconds > homelabscope_job_max_age_seconds
+          expr: >
+            time() - homelabscope_job_last_success_seconds{job!~"immich-photos-30d-sync|adguard-sync-stage"}
+            > homelabscope_job_max_age_seconds
           for: 10m
           labels:
-            # critical so the alert actually notifies: Alertmanager routes only
-            # severity=critical to the email-critical (Gmail SMTP) receiver;
-            # warning falls through to the 'null' receiver and would be dropped
-            # silently — a monitor that never notifies. Each job's generous
-            # per-job max_age budget + this 10m `for` debounce mean firing
+            # Generous per-job max_age budget + 10m `for` debounce mean firing
             # signals a real multi-cycle miss, not a flap.
             severity: critical
           annotations:
             summary: "Scheduled job {{ $labels.job }} is stale"
             description: >
               Job {{ $labels.job }} last succeeded {{ $value | humanizeDuration }} ago, exceeding its max-age budget. A scheduled/automatic job has stopped completing on time. Check the job's source: k8s CronJob (kubectl get cronjob -A), hestia textfile (/var/log on hestia), or the alcatraz pull log.
+        # STAGING / preview jobs (immich-photos-30d-sync, adguard-sync-stage) run
+        # in the ephemeral `*-stage` env and are rehearsals, not data-safety
+        # backups. They churn/fail during active work (e.g. the in-flight immich
+        # v3 migration) and are NOT worth a 4h critical page. Downgraded to
+        # warning: still surfaced as a once-a-day email nag via the #1081 warning
+        # route, without the critical cadence. Promote a job back to the critical
+        # block above if it ever becomes load-bearing.
+        - alert: HomelabscopeJobStale
+          expr: >
+            time() - homelabscope_job_last_success_seconds{job=~"immich-photos-30d-sync|adguard-sync-stage"}
+            > homelabscope_job_max_age_seconds
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Staging job {{ $labels.job }} is stale"
+            description: >
+              Staging/preview job {{ $labels.job }} last succeeded {{ $value | humanizeDuration }} ago, exceeding its max-age budget. This is a rehearsal job in the ephemeral `*-stage` environment, not a data-safety backup — expected to churn during active development. Check: kubectl get cronjob -A.
         # A job's heartbeat has vanished ENTIRELY — the specific failure mode
         # the pre-homelabscope setup could not see. When a textfile stops being
         # written (container gone, script crashing before the write) or a

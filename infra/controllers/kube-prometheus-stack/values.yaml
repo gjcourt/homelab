@@ -552,6 +552,28 @@ alertmanager:
       - receiver: 'null'
         matchers:
           - alertname = "Watchdog"
+      # overture is intentionally OFF: the Deployment is scaled 0/0 and its CNPG
+      # cluster is hibernated (cnpg.io/hibernation=on), so the PodDisruptionBudget
+      # (minAvailable=1) permanently reports 0 healthy pods and
+      # KubePdbNotEnoughHealthyPods fires forever. This is expected, not an
+      # outage — mute it for overture-prod only. If overture is ever brought back
+      # up, delete this route so the PDB signal returns. See docs/STATUS.md.
+      - receiver: 'null'
+        matchers:
+          - alertname = "KubePdbNotEnoughHealthyPods"
+          - namespace = "overture-prod"
+      # Staging is an ephemeral PREVIEW environment, continuously rebuilt by CI
+      # from `master + open PRs` (see AGENTS.md). Warning-severity alerts there
+      # (failed/one-shot Jobs during a migration rehearsal, transient crashloops,
+      # CNPG churn on redeploy) are expected development noise and are validated
+      # interactively via the PR/staging workflow, NOT by email paging. Mute
+      # warnings from `*-stage` namespaces; staging CRITICALS still fall through
+      # to email below. This stops the immich-stage KubeJobFailed day-nag from
+      # the in-flight immich v3 migration rehearsal. Prod is unaffected.
+      - receiver: 'null'
+        matchers:
+          - namespace =~ ".+-stage"
+          - severity = "warning"
       # Critical alerts (Flux not-ready, NodeFilesystemReadOnly, LokiPushErrors)
       # go to email. repeat_interval is shorter than the global default because
       # email has no ack — re-nag every 4h while still firing.

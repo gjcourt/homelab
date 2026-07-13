@@ -37,6 +37,19 @@ spec:
             # (cast.burntbytes.com) or the LB IP directly.
             - port: "6680"
               protocol: TCP
+    # HASS Snapcast integration runs in-cluster; its pod identity isn't a
+    # world/host/ingress entity, so the rule above never matches it. Allow the
+    # homeassistant namespaces to reach the control port (1705) so each snapclient
+    # surfaces as a media_player with a volume slider.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homeassistant-prod
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homeassistant-stage
+      toPorts:
+        - ports:
+            - port: "1705"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:

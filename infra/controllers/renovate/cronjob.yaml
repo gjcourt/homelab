@@ -8,6 +8,9 @@ spec:
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
+      # Auto-delete finished jobs after 1h so a stray failure doesn't linger as a
+      # persistent KubeJobFailed alert.
+      ttlSecondsAfterFinished: 3600
       template:
         spec:
           containers:

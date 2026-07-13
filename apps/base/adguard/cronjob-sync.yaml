@@ -10,9 +10,12 @@ spec:
   schedule: "0 */6 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
-  failedJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
   jobTemplate:
     spec:
+      # Auto-delete finished jobs after 1h so a stray failure doesn't linger as a
+      # persistent KubeJobFailed alert.
+      ttlSecondsAfterFinished: 3600
       activeDeadlineSeconds: 120
       backoffLimit: 1
       template:

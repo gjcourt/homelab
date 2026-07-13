@@ -10,6 +10,9 @@ spec:
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
+      # Auto-delete finished jobs after 1h so a stray failure doesn't linger as a
+      # persistent KubeJobFailed alert (a 21h-old failed job spammed email 2026-07).
+      ttlSecondsAfterFinished: 3600
       template:
         metadata:
           labels:

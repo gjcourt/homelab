@@ -22,7 +22,7 @@
 x-deploy:
   name: homelabscope-heartbeat
   archived: false
-  archived-at: 2026-07-04
+  archived-at: "2026-07-04"
   archived-reason: ""
 
 services:

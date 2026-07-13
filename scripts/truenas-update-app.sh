@@ -176,6 +176,14 @@ async def main() -> None:
         # TrueNAS app.update expects custom_compose_config as a parsed dict
         # (not a YAML string).  Pydantic validation rejects raw strings.
         compose_dict = yaml.safe_load(new_yaml)
+        # Drop compose extension keys (x-*). They're deploy-tooling metadata
+        # (e.g. x-deploy), not part of the app's runtime compose, and can hold
+        # non-JSON-serializable scalars — an unquoted YAML date in
+        # x-deploy.archived-at parses to datetime.date and breaks json.dumps in
+        # the app.update call.
+        compose_dict = {
+            k: v for k, v in compose_dict.items() if not str(k).startswith("x-")
+        }
         log(f"calling app.update for '{APP_NAME}'")
         update = await call(
             ws,

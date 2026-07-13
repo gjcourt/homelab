@@ -78,7 +78,11 @@ spec:
   storageClassName: ""
   nfs:
     server: 10.42.2.10
-    path: /mnt/main/family/images/photos
+    # Canonical photo library (george:users, full tree). The old
+    # family/images/photos path broke the 30d-sync when that dataset was created
+    # root-owned 2026-07-11; media/photos is what prod Immich reads. See
+    # docs/plans/2026-07-13-immich-photos-images-to-media.md.
+    path: /mnt/main/family/media/photos
     readOnly: true
   mountOptions:
     - nfsvers=3

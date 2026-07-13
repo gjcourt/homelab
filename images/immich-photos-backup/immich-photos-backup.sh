@@ -36,7 +36,6 @@
 # stays stale. Loud failure is intentional — silent perm-denied was the
 # original bug.
 #
-DST_BASE="${DST_BASE:-/mnt/main/family/media/photos}"
 # container's busybox crond (see hosts/hestia/immich-photos-backup/).
 #
 # Reports backup freshness to node-exporter's textfile collector at
@@ -47,7 +46,7 @@ DST_BASE="${DST_BASE:-/mnt/main/family/media/photos}"
 set -euo pipefail
 
 USERS=(george mara)
-DST_BASE="/mnt/main/family/images/photos"
+DST_BASE="${DST_BASE:-/mnt/main/family/media/photos}"
 SSH_KEY="/root/.ssh/id_ed25519_alcatraz"
 # Bind-mounted from host so first-run host-key acceptance survives
 # container restarts; see docker-compose.yml.

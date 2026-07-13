@@ -12,8 +12,8 @@
 #   1. SSH key at /mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz
 #      (private key, mode 600, owned by root). The matching public key
 #      lives in truenas-backup@10.42.2.11:~/.ssh/authorized_keys.
-#   2. ZFS dataset main/family/images/photos (created by midclt
-#      pool.dataset.create — see README for the exact command).
+#   2. Destination path main/family/media/photos (dataset-vs-dir promotion
+#      tracked in docs/plans/2026-07-13-immich-photos-images-to-media.md).
 #   3. node-exporter textfile collector at /var/lib/node-exporter/textfile
 #      so the Prometheus metric the script writes is scraped.
 #

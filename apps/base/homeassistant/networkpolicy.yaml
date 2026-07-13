@@ -79,3 +79,14 @@ spec:
         - ports:
             - port: "1705"
               protocol: TCP
+    # ESPHome native API on the IoT VLAN (10.42.7.0/24) — IR blaster, presence
+    # sensors, etc. Discovery is inbound mDNS, so devices appear; but the "Add"
+    # flow (and steady-state control) needs HASS to reach the device on 6053.
+    # LAN hosts are classified as world by Cilium, so — like the Lutron bridge —
+    # a CIDR rule is required (the world rule above only opens 443/80).
+    - toCIDR:
+        - 10.42.7.0/24
+      toPorts:
+        - ports:
+            - port: "6053"
+              protocol: TCP

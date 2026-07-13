@@ -13,15 +13,17 @@
 # docs/plans/2026-07-04-alcatraz-photos-pull.md.
 #
 # Pulls per-user Photos dirs from alcatraz (Synology NAS, 10.42.2.11) into the
-# local ZFS dataset main/family/images/photos. Snapshots are managed by a
-# TrueNAS periodic-snapshot task scheduled after this rsync completes.
+# canonical photo path main/family/media/photos (all media under family/media/;
+# dataset-vs-dir promotion tracked in
+# docs/plans/2026-07-13-immich-photos-images-to-media.md). Snapshots are managed
+# by a TrueNAS periodic-snapshot task scheduled after this rsync completes.
 #
 # Source-path note: on alcatraz, /volume1/family/images/photos/<user> is a
 # symlink into /volume1/homes/<user>/Photos (the real bytes live in each
 # user's home). truenas-backup has share-level read on family/ but per-file
 # ACLs from each user's Synology account deny file open via the family path —
 # so we sync from the homes path directly, mapping into the canonical hestia
-# layout family/images/photos/<user>/.
+# layout family/media/photos/<user>/.
 #
 # Mode-fix note: Synology DSM Photos uploads new files with POSIX mode 0700
 # (owner-only). truenas-backup is in gid=100(users), which matches the file

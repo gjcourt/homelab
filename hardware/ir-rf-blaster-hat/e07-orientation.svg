@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -40 460 780" font-family="Helvetica,Arial,sans-serif">
+  <style>
+    .lbl{font-size:15px;fill:#111}.sm{font-size:12px;fill:#333}.dim{font-size:12px;fill:#888}
+    .hdr{font-size:17px;font-weight:bold}
+  </style>
+  <!-- scale: 10 px per mm; board 23 x 54 mm at origin -->
+  <g transform="translate(0,0)">
+    <!-- module overhang + antenna (south, off board) -->
+    <rect x="40" y="300" width="150" height="300" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="7 5"/>
+    <text class="sm" x="115" y="470" fill="#c0392b" text-anchor="middle">E07 CC1101</text>
+    <text class="sm" x="115" y="488" fill="#c0392b" text-anchor="middle">module (on BACK)</text>
+    <text class="sm" x="115" y="506" fill="#c0392b" text-anchor="middle">15 x 30 mm</text>
+    <!-- header pins: 4 across x 2 rows, at the NORTH end of the module -->
+    <g fill="#e67e22">
+      <circle cx="76.9" cy="300" r="7"/><circle cx="102.3" cy="300" r="7"/><circle cx="127.7" cy="300" r="7"/><circle cx="153.1" cy="300" r="7"/>
+      <circle cx="76.9" cy="325.4" r="7"/><circle cx="102.3" cy="325.4" r="7"/><circle cx="127.7" cy="325.4" r="7"/><circle cx="153.1" cy="325.4" r="7"/>
+    </g>
+    <text class="sm" x="200" y="308" fill="#e67e22">2x4 header (pins 1-8)</text>
+    <text class="sm" x="200" y="324" fill="#e67e22">4 across the 15 mm width</text>
+    <!-- SMA + antenna south -->
+    <rect x="103" y="595" width="24" height="24" fill="#7f8c8d"/>
+    <line x1="115" y1="600" x2="115" y2="700" stroke="#7f8c8d" stroke-width="5"/>
+    <text class="hdr" x="140" y="670" fill="#c0392b">ANTENNA (south) ↓</text>
+    <text class="sm" x="140" y="690" fill="#666">off the south edge, in free air</text>
+
+    <!-- board outline 23 x 54 mm -->
+    <rect x="0" y="0" width="230" height="540" fill="#16603a" fill-opacity="0.12" stroke="#16603a" stroke-width="2.5"/>
+    <text class="dim" x="-8" y="270" text-anchor="end">54 mm</text>
+    <text class="dim" x="115" y="-14" text-anchor="middle">23 mm</text>
+
+    <!-- LEDs north -->
+    <g fill="#7f8c8d" stroke="#555">
+      <circle cx="45" cy="60" r="24"/><circle cx="115" cy="60" r="24"/><circle cx="185" cy="60" r="24"/>
+    </g>
+    <text class="lbl" x="115" y="-2" text-anchor="middle" fill="#16603a">▲ 3x IR LED (north)</text>
+
+    <!-- XIAO front, horizontal, USB west -->
+    <rect x="8" y="205" width="205" height="215" fill="#2c3e79" fill-opacity="0.14" stroke="#2c3e79" stroke-width="2"/>
+    <rect x="-22" y="295" width="30" height="40" fill="#2c3e79" fill-opacity="0.5" stroke="#2c3e79" stroke-width="2"/>
+    <text class="sm" x="-40" y="320" text-anchor="end" fill="#2c3e79">USB-C</text>
+    <text class="lbl" x="112" y="380" text-anchor="middle" fill="#2c3e79">XIAO ESP32-C3</text>
+    <text class="sm" x="112" y="398" text-anchor="middle" fill="#2c3e79">(front) — USB off WEST</text>
+    <!-- XIAO pin rows -->
+    <g fill="#2c3e79"><circle cx="38.8" cy="230" r="4"/><circle cx="64.2" cy="230" r="4"/><circle cx="89.6" cy="230" r="4"/><circle cx="115" cy="230" r="4"/><circle cx="140.4" cy="230" r="4"/><circle cx="165.8" cy="230" r="4"/><circle cx="191.2" cy="230" r="4"/>
+      <circle cx="38.8" cy="402" r="4"/><circle cx="64.2" cy="402" r="4"/><circle cx="89.6" cy="402" r="4"/><circle cx="115" cy="402" r="4"/><circle cx="140.4" cy="402" r="4"/><circle cx="165.8" cy="402" r="4"/><circle cx="191.2" cy="402" r="4"/>
+    </g>
+
+    <!-- south board edge callout -->
+    <line x1="-20" y1="540" x2="250" y2="540" stroke="#16603a" stroke-width="1" stroke-dasharray="3 3"/>
+    <text class="dim" x="250" y="536" text-anchor="end" fill="#16603a">board south edge (y=54)</text>
+  </g>
+  <text class="hdr" x="115" y="735" text-anchor="middle" fill="#111">Current layout — antenna faces SOUTH ✓</text>
+</svg>

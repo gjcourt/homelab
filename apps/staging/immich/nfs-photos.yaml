@@ -2,7 +2,7 @@
 #
 # Two volumes back the "last-30-days" staging testbed:
 #   * immich-photos-pv-staging / immich-photos-pvc → the 30-day SLICE
-#     (/mnt/main/family/images/photos-staging-30d). This is BOTH what Immich indexes
+#     (/mnt/main/family/media/photos-staging-30d). This is BOTH what Immich indexes
 #     as its external library (mounted at /mnt/photos in immich-server) AND the RW
 #     destination the sync CronJob writes into. Bounded by design → keeps staging small.
 #   * immich-photos-src-pv-staging / immich-photos-src-pvc → the FULL prod photo tree,
@@ -10,10 +10,16 @@
 #     compute the 30-day slice; the RO mount means the real photos can't be harmed.
 #
 # Repointed 2026-07 from Synology (10.42.2.11 /volume1/...) to hestia
-# (10.42.2.10 /mnt/main/family/images/...) — hestia is the photo SOT since 2026-06-01
+# (10.42.2.10 /mnt/main/family/...) — hestia is the photo SOT since 2026-06-01
 # (see apps/production/immich/nfs-photos.yaml and docs/plans/2026-06-01-hestia-photos-sot.md).
 #
-# OPERATOR PREREQ: the photos-staging-30d directory must exist on hestia and be
+# Moved 2026-07-13 from family/images/photos-staging-30d → family/media/photos-staging-30d
+# as part of retiring the legacy family/images tree (all media now lives under
+# family/media/). The slice is its own ZFS dataset (main/family/photos-staging-30d,
+# 20G quota) mounted at /mnt/main/family/media/photos-staging-30d — quota keeps the
+# staging testbed fixed-size. See docs/plans/2026-07-13-immich-photos-images-to-media.md.
+#
+# OPERATOR PREREQ: the photos-staging-30d dataset must exist on hestia and be
 # writable by the CronJob's NFS identity. See docs/operations/apps/immich.md §10.
 apiVersion: v1
 kind: PersistentVolume
@@ -31,7 +37,7 @@ spec:
   storageClassName: ""
   nfs:
     server: 10.42.2.10
-    path: /mnt/main/family/images/photos-staging-30d
+    path: /mnt/main/family/media/photos-staging-30d
     readOnly: false
   mountOptions:
     - nfsvers=3

@@ -118,9 +118,10 @@ for pin, net in [(1,"GND"),(2,"+3V3"),(3,"CC_GDO0"),(4,"CC_CSN"),(5,"CC_SCK"),
                  (6,"CC_MOSI"),(7,"CC_MISO"),(8,"CC_GDO2")]:
     setnet(M1, pin, net)
 # XIAO official pad map (pad#=signal): 1 D0, 2 D1, 3 D2, 4 D3, 5 D4, 6 D5, 7 D6, 8 D7, 9 D8,
-#   10 D9, 11 D10, 12 3V3, 13 GND, 14 5V(VBUS). Strapping = D0/D8/D9 (pads 1/9/10) -> kept off
-#   critical lines (IR_TX on D0 is safe: 10k gate pulldown holds the FET off through boot).
-XIAO = {1:"IR_TX", 3:"CC_CSN", 4:"CC_MOSI", 5:"CC_GDO2", 7:"CC_MISO", 8:"CC_SCK",
+#   10 D9, 11 D10, 12 3V3, 13 GND, 14 5V(VBUS). Strapping pins = D0/D8/D9 (pads 1/9/10) are ALL
+#   left spare: IR_TX is on D1/GPIO3 (non-strapping). D0 avoided because the 10k gate pulldown
+#   would drag GPIO2 low at reset (~0.6V via the ~45k internal pull-up), against ESP32-C3 guidance.
+XIAO = {2:"IR_TX", 3:"CC_CSN", 4:"CC_MOSI", 5:"CC_GDO2", 7:"CC_MISO", 8:"CC_SCK",
         11:"CC_GDO0", 12:"+3V3", 13:"GND", 14:"+5V"}
 for pad, net in XIAO.items(): setnet(A1, pad, net)
 
@@ -182,8 +183,9 @@ via(g, "Q_GATE"); via(r51, "Q_GATE")
 route([g, r51], "Q_GATE", "B.Cu")                                 # gate -> R5 (B.Cu, clears drain)
 # IR_TX: XIAO D0 (south-west) up the west edge, in along y17.5 (south of the driver row and
 # clear of C1's GND via), then up into R4.1 (B.Cu)
-r41 = abspad(R4, 1); d0 = abspad(A1, 1)
-route([d0, (1.6, 37.0), (1.6, 17.5), (r41[0], 17.5), r41], "IR_TX", "B.Cu")
+r41 = abspad(R4, 1); d1 = abspad(A1, 2)   # IR_TX on D1/GPIO3 (non-strapping)
+# drop south of the XIAO pad row first (clears the spare D0 pad) then up the west edge to R4
+route([d1, (d1[0], 41.0), (1.6, 41.0), (1.6, 17.5), (r41[0], 17.5), r41], "IR_TX", "B.Cu")
 via(r41, "IR_TX")                                                 # B.Cu IR_TX -> F.Cu R4.1 pad
 
 # --- SPI: E07 NORTH row from XIAO NORTH (from north, F.Cu); SOUTH row from XIAO SOUTH (from

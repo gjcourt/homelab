@@ -67,13 +67,14 @@ GND/VCC pins are THT and land directly on the planes.
 
 **XIAO ESP32-C3** (official pad numbers) — the E07 **north row** (odd pins, datasheet order)
 fans from the XIAO **north** row; the **south row** (even pins) from the XIAO **south** row.
-`MISO` is the one north-row net fed from the south (a clean east-side dogleg). Strapping pins
-GPIO8/9 (D8/D9, pads 9/10) are spares. `IR_TX` sits on GPIO2 (D0, a strapping pin) — safe here
-because the 10 kΩ gate pulldown holds the MOSFET off through boot.
+`MISO` is the one north-row net fed from the south (a clean east-side dogleg). **All three
+strapping pins are left spare** — D0/GPIO2 (pad 1), D8/GPIO8 (pad 9), D9/GPIO9 (pad 10). `IR_TX`
+is on **D1/GPIO3** (non-strapping): D0 was avoided because the 10 kΩ gate pulldown would drag
+GPIO2 low at reset (~0.6 V through the ~45 kΩ internal pull-up), against ESP32-C3 guidance.
 
 | Net      | XIAO pin | GPIO | pad # | → E07 pin      |
 | -------- | -------- | ---- | ----- | -------------- |
-| IR_TX    | D0       | 2    | 1     | (to MOSFET)    |
+| IR_TX    | D1       | 3    | 2     | (to MOSFET)    |
 | CC_GDO0  | D10      | 10   | 11    | 3 (N row)      |
 | CC_SCK   | D7       | 20   | 8     | 5 (N row)      |
 | CC_MISO  | D6       | 21   | 7     | 7 (N, dogleg)  |
@@ -84,7 +85,7 @@ because the 10 kΩ gate pulldown holds the MOSFET off through boot.
 | GND      | GND      | —    | 13    | 1              |
 | +5V      | VBUS     | —    | 14    | —              |
 
-Power: IR LEDs → **5V (VBUS)**; CC1101 → **3V3**; common GND. D1/D5/D8/D9 (pads 2/6/9/10) spare.
+Power: IR LEDs → **5V (VBUS)**; CC1101 → **3V3**; common GND. D0/D5/D8/D9 (pads 1/6/9/10) spare.
 
 **Hand-solder polarity (THT):**
 - **D1–D3 IR LEDs** — footprint **pad 1 (square, west, flat-silk side) = CATHODE**; pad 2
@@ -159,6 +160,6 @@ docker run --rm --platform linux/amd64 -v "$PWD:/w" -w /w kicad/kicad:9.0 sh -c 
 ## Firmware (ESPHome)
 
 `../../firmware/esphome/ir-rf-blaster-xiao-c3.yaml`: `remote_transmitter` (IR) — note IR_TX is
-now **GPIO2 (D0)** (was GPIO4); update the YAML pin. The CC1101 needs an **external component**
+now **GPIO3 (D1)** (was GPIO4); update the YAML pin. The CC1101 needs an **external component**
 (SPI init + GDO0 OOK bridge) — a known community pattern, not stock ESPHome. Match the pin map
 above: **SCK=GPIO20, MISO=GPIO21, MOSI=GPIO5, CSN=GPIO4, GDO0=GPIO10, GDO2=GPIO6**.

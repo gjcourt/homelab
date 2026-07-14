@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""4-layer XIAO ESP32-C3 IR+RF blaster hat -- back-side RF re-layout.
-Floorplan: LEDs NORTH; XIAO horizontal with USB-C off the WEST edge (front);
-E07-M1101D CC1101 on a swappable 2x04 FEMALE socket flipped to the BACK, module body
-over the XIAO back, SMA/antenna off the SOUTH edge. 4-layer:
+"""4-layer XIAO ESP32-C3 IR+RF blaster hat -- official-footprint re-layout.
+Floorplan: LEDs NORTH; XIAO (official Seeed XIAO-ESP32-C3-DIP footprint) horizontal with
+USB-C off the WEST edge (front); E07-M1101D CC1101 on a swappable 2x04 FEMALE socket flipped
+to the BACK, module body over the XIAO back, SMA/antenna off the SOUTH edge. 4-layer:
 F.Cu (parts+sig) / In1.Cu (GND) / In2.Cu (+5V) / B.Cu (sig+E07 socket).
 Zones written UNFILLED; fill with fill.py (pcbnew LoadBoard) after."""
 import math, sys, uuid
@@ -45,40 +45,38 @@ def place(name, ref, val, x, y, rot=0):
     return fp
 def flip_to_back(fp):
     """Move a THT footprint to the bottom side. THT holes are all-layer so positions are
-    unchanged; KiCad mirrors local X for B.Cu footprints -> abspad() accounts for that."""
+    unchanged (kicad-cli uses the plain rotated local coords -- abspad must NOT mirror)."""
     fp.layer = "B.Cu"
     def sw(l):
         if l.startswith("F."): return "B." + l[2:]
         if l.startswith("B."): return "F." + l[2:]
         return l
+    for p in fp.pads:
+        if p.layers: p.layers = [sw(l) for l in p.layers]   # SMD copper F<->B (THT is *.Cu)
     for gi in fp.graphicItems:
         if getattr(gi, "layer", None): gi.layer = sw(gi.layer)
-        if hasattr(gi, "effects"):                               # mirror any text on the back
+        if hasattr(gi, "effects"):
             if gi.effects is None: gi.effects = Effects()
             if gi.effects.justify is None: gi.effects.justify = Justify()
             gi.effects.justify.mirror = True
     return fp
 def setnet(fp, num, netname):
-    for p in fp.pads:
-        if p.number == str(num): p.net = Net(NUM[netname], netname); return
-    raise SystemExit(f"{fp.properties['Reference']}: no pad {num}")
+    hit = False
+    for p in fp.pads:                       # hybrid footprints have >1 pad per number
+        if p.number == str(num): p.net = Net(NUM[netname], netname); hit = True
+    if not hit: raise SystemExit(f"{fp.properties['Reference']}: no pad {num}")
 def abspad(fp, num):
-    # NOTE: kicad-cli places even a B.Cu THT footprint's pads at the plain rotated local
-    # coords (verified against DRC item positions) -- no X mirror. Keep this un-mirrored.
-    for p in fp.pads:
-        if p.number == str(num):
-            a = math.radians(fp.position.angle or 0)
-            px, py = p.position.X, p.position.Y
-            return (round(fp.position.X + px*math.cos(a) + py*math.sin(a), 4),
-                    round(fp.position.Y - px*math.sin(a) + py*math.cos(a), 4))
-    raise SystemExit("no pad")
+    cand = [p for p in fp.pads if p.number == str(num)]
+    if not cand: raise SystemExit(f"no pad {num}")
+    p = next((q for q in cand if str(q.type) == "thru_hole"), cand[0])  # prefer the hole
+    a = math.radians(fp.position.angle or 0); px, py = p.position.X, p.position.Y
+    return (round(fp.position.X + px*math.cos(a) + py*math.sin(a), 4),
+            round(fp.position.Y - px*math.sin(a) + py*math.cos(a), 4))
 
 # ================= placement (board 23 x 54 mm) =================
 BW, BH = 23.0, 54.0
-# --- IR: 3 LEDs NORTH (y6), current R (y11), MOSFET + gate parts (y14.5) ---
+# --- IR: 3 LEDs NORTH (y6), current R (y11), MOSFET + gate parts (y15.5) ---
 LEDX = [4.5, 11.5, 18.5]
-# LEDs rotated 180 so cathode sits toward R (straight cathode traces); origin is pin1, so
-# offset +1.27 (half the 2.54 pin gap) keeps the body centered on LEDX.
 D = [place("LED_D5.0mm", f"D{i+1}", "940nm", x+1.27, 6.0, 180) for i, x in enumerate(LEDX)]
 R = [place("R_1206_3216Metric", f"R{i+1}", "15R", x, 11.0) for i, x in enumerate(LEDX)]
 C1 = place("C_0603_1608Metric", "C1", "100nF", 2.5, 15.5)
@@ -86,18 +84,23 @@ R4 = place("R_0603_1608Metric", "R4", "100R", 6.5, 15.5)
 Q1 = place("SOT-23", "Q1", "AO3400A", 11.5, 15.5)
 R5 = place("R_0603_1608Metric", "R5", "10k", 16.5, 15.5)
 C2 = place("C_0805_2012Metric", "C2", "22uF", 20.5, 15.5)
-# --- XIAO socket: two 1x7 rows running E-W (rot90), USB-C overhangs the WEST edge.
-#     pad1 at west; row spacing 17.2mm (provisional -- swap Seeed's footprint in GUI). ---
-J1 = place("PinSocket_1x07_P2.54mm_Vertical", "J1", "XIAO_top", 3.88, 23.0, 90)
-J2 = place("PinSocket_1x07_P2.54mm_Vertical", "J2", "XIAO_bot", 3.88, 40.2, 90)
-# --- E07-M1101D (CC1101) on a swappable 2x04 female socket, flipped to the BACK.
-#     rot90 -> physical 2 rows x 4 cols matching the datasheet (top 1357 / bot 2468).
-#     module body extends SOUTH over the XIAO back; antenna/SMA off the south edge. ---
+# --- XIAO: official Seeed XIAO-ESP32-C3-DIP footprint, rot180 so USB-C exits the WEST edge.
+#     Rows 15.24 mm apart; NORTH row (y23.38) = 5V/GND/3V3/D10/D9/D8/D7 (power west, D7 east);
+#     SOUTH row (y38.62) = D0..D6. ---
+A1 = place("XIAO-ESP32-C3-DIP", "A1", "XIAO_ESP32C3", 11.5, 31.0, 180)
+# strip the vendor footprint's own silk (it overhangs the west edge at the USB end and crosses
+# its castellated pads -> cosmetic silk DRC noise); pads + our own labels are enough
+A1.graphicItems = [gi for gi in A1.graphicItems
+                   if not str(getattr(gi, "layer", "")).endswith("SilkS")]
+# --- E07-M1101D CC1101 on a swappable 2x04 female socket, flipped to the BACK. rot90 ->
+#     antenna south. NORTH row (y30) = odd pins GND/GDO0/SCK/MISO; SOUTH row (y32.54) = even
+#     pins VCC/CSN/MOSI/GDO2 (module body is on the even side -> extends south). ---
 M1 = place("PinSocket_2x04_P2.54mm_Vertical", "M1", "E07-M1101D", 7.69, 30.0, 90)
 flip_to_back(M1)
-# 3V3 decaps west of E07's SOUTH-row VCC pin; rot180 so pin1 (+3V3) faces EAST toward VCC
-C3 = place("C_0603_1608Metric", "C3", "100nF", 5.5, 32.54, 180)  # 3V3 decap by E07 VCC
-C4 = place("C_0805_2012Metric", "C4", "10uF", 5.5, 36.0, 180)    # 3V3 bulk
+# 3V3 decaps in the front SOUTH strip (below the XIAO, above the antenna keepout); rot270 puts
+# pin1 (+3V3) north toward the bus, GND south -> plane via.
+C3 = place("C_0603_1608Metric", "C3", "100nF", 9.0, 44.0, 270)
+C4 = place("C_0805_2012Metric", "C4", "10uF", 12.5, 44.0, 270)
 
 # --- net assignment ---
 for i in range(3):
@@ -108,22 +111,16 @@ setnet(R4, 1, "IR_TX"); setnet(R4, 2, "Q_GATE")
 setnet(R5, 1, "Q_GATE"); setnet(R5, 2, "GND")
 setnet(C1, 1, "+5V"); setnet(C1, 2, "GND"); setnet(C2, 1, "+5V"); setnet(C2, 2, "GND")
 setnet(C3, 1, "+3V3"); setnet(C3, 2, "GND"); setnet(C4, 1, "+3V3"); setnet(C4, 2, "GND")
-# E07-M1101D FIXED DIP pinout (CDEBYTE datasheet): 1 GND 2 VCC(3V3) 3 GDO0 4 CSN 5 SCK
-#   6 MOSI 7 MISO 8 GDO2. After flip+rot90: odd pins on the SOUTH row, even on the NORTH row.
+# E07-M1101D FIXED CDEBYTE pinout: 1 GND 2 VCC(3V3) 3 GDO0 4 CSN 5 SCK 6 MOSI 7 MISO 8 GDO2
 for pin, net in [(1,"GND"),(2,"+3V3"),(3,"CC_GDO0"),(4,"CC_CSN"),(5,"CC_SCK"),
                  (6,"CC_MOSI"),(7,"CC_MISO"),(8,"CC_GDO2")]:
     setnet(M1, pin, net)
-# E07 rows after flip+rot90 (verified vs DRC): NORTH row y30 = odd pins GND/GDO0/SCK/MISO;
-#   SOUTH row y32.54 = even pins VCC/CSN/MOSI/GDO2.
-# XIAO J1 (NORTH row, D0..D6) feeds the E07 NORTH-row signals from the north. D0=GPIO2 is a
-#   strapping pin -> only IR_TX (10k gate pulldown holds the FET off at boot). GDO2 is the one
-#   south-row net taken from J1 (short dogleg through the east pad gap).
-for k, net in enumerate(["IR_TX","CC_GDO0","CC_SCK","CC_MISO","CC_GDO2","",""]):
-    if net: setnet(J1, k+1, net)
-# XIAO J2 (SOUTH row: D7,D8,D9,D10,3V3,GND,5V). D8/D9 strapping -> spares; CSN/MOSI on D7/D10
-#   feed the E07 SOUTH-row pins from the south. MOSI lands on real HW-SPI GPIO10. Power on 5/6/7.
-for k, net in enumerate(["CC_CSN","","","CC_MOSI","+3V3","GND","+5V"]):
-    if net: setnet(J2, k+1, net)
+# XIAO official pad map (pad#=signal): 1 D0, 2 D1, 3 D2, 4 D3, 5 D4, 6 D5, 7 D6, 8 D7, 9 D8,
+#   10 D9, 11 D10, 12 3V3, 13 GND, 14 5V(VBUS). Strapping = D0/D8/D9 (pads 1/9/10) -> kept off
+#   critical lines (IR_TX on D0 is safe: 10k gate pulldown holds the FET off through boot).
+XIAO = {1:"IR_TX", 3:"CC_CSN", 4:"CC_MOSI", 5:"CC_GDO2", 7:"CC_MISO", 8:"CC_SCK",
+        11:"CC_GDO0", 12:"+3V3", 13:"GND", 14:"+5V"}
+for pad, net in XIAO.items(): setnet(A1, pad, net)
 
 # ---- stitch every SMD GND pad -> In1 plane, every SMD +5V pad -> In2 plane
 #      (THT pads already span all layers so the pour connects to them directly) ----
@@ -132,6 +129,7 @@ def via(p, netname, layers=("F.Cu","B.Cu")):
                                 size=0.7, drill=0.35, layers=list(layers),
                                 net=NUM[netname], tstamp=uid()))
 for fp in board.footprints:
+    if fp is A1: continue                   # XIAO power pins are THT -> straight to the planes
     for p in fp.pads:
         n = getattr(p.net, "name", None)
         if n in ("GND", "+5V") and str(p.type) == "smd":
@@ -164,8 +162,7 @@ def route(points, net, layer="F.Cu", w=0.3):
 
 if DEBUG:
     for fp in board.footprints:
-        r = fp.properties["Reference"]
-        print(r, getattr(fp, "layer", "F.Cu"),
+        print(fp.properties["Reference"], getattr(fp, "layer", "F.Cu"),
               {p.number: abspad(fp, p.number) for p in fp.pads})
     sys.exit(0)
 
@@ -181,26 +178,27 @@ g = abspad(Q1, 1); r51 = abspad(R5, 1)
 route([abspad(R4, 2), g], "Q_GATE")                               # R4.2 -> gate (F.Cu)
 via(g, "Q_GATE"); via(r51, "Q_GATE")
 route([g, r51], "Q_GATE", "B.Cu")                                 # gate -> R5 (B.Cu, clears drain)
-# IR_TX: R4.1 down the west side to XIAO D0 (J1.1)
-r41 = abspad(R4, 1); j11 = abspad(J1, 1)
-route([r41, (j11[0], 17.0), (j11[0], j11[1])], "IR_TX")
+# IR_TX: XIAO D0 (south-west) up the west edge, in along y17.5 (south of the driver row and
+# clear of C1's GND via), then up into R4.1 (B.Cu)
+r41 = abspad(R4, 1); d0 = abspad(A1, 1)
+route([d0, (1.6, 37.0), (1.6, 17.5), (r41[0], 17.5), r41], "IR_TX", "B.Cu")
+via(r41, "IR_TX")                                                 # B.Cu IR_TX -> F.Cu R4.1 pad
 
-# --- SPI: E07 NORTH row (odd pins) fed from J1 above; SOUTH row (even pins) from J2 below.
-#     Each row entered from its own side -> no trace clips the opposite-row pads. ---
-route([abspad(J1,2), abspad(M1,3)], "CC_GDO0", "F.Cu")           # J1.D1 -> E07.3 GDO0 (N row)
-route([abspad(J1,3), abspad(M1,5)], "CC_SCK",  "F.Cu")           # J1.D2 -> E07.5 SCK  (N row)
-route([abspad(J1,4), abspad(M1,7)], "CC_MISO", "F.Cu")           # J1.D3 -> E07.7 MISO (N row)
-route([abspad(J2,1), abspad(M1,4)], "CC_CSN",  "B.Cu")           # J2.D7 -> E07.4 CSN  (S row)
-route([abspad(J2,4), abspad(M1,6)], "CC_MOSI", "B.Cu")           # J2.D10-> E07.6 MOSI (S row)
-# GDO2 is the one SOUTH-row net fed from J1: dogleg around the EAST side to the S row pad.
-j15 = abspad(J1,5); m8 = abspad(M1,8)
-route([j15, (16.5, 28.0), (16.5, m8[1]), m8], "CC_GDO2", "B.Cu")
+# --- SPI: E07 NORTH row from XIAO NORTH (from north, F.Cu); SOUTH row from XIAO SOUTH (from
+#     south, B.Cu). MISO is the one north-row net fed from the south -> clean EAST-side dogleg. ---
+route([abspad(A1,11), abspad(M1,3)], "CC_GDO0", "F.Cu")           # D10 -> E07.3 GDO0 (N row)
+route([abspad(A1,8),  abspad(M1,5)], "CC_SCK",  "F.Cu")           # D7  -> E07.5 SCK  (N row)
+route([abspad(A1,3),  abspad(M1,4)], "CC_CSN",  "B.Cu")           # D2  -> E07.4 CSN  (S row)
+route([abspad(A1,4),  abspad(M1,6)], "CC_MOSI", "B.Cu")           # D3  -> E07.6 MOSI (S row)
+route([abspad(A1,5),  abspad(M1,8)], "CC_GDO2", "B.Cu")           # D4  -> E07.8 GDO2 (S row)
+d6 = abspad(A1,7); m7 = abspad(M1,7)                              # D6 -> E07.7 MISO (N row)
+route([d6, (20.6, 34.0), (20.6, m7[1]), m7], "CC_MISO", "B.Cu")   # up the east side, in from E
 
-# --- +3V3 (all F.Cu): clean diagonal from XIAO 3V3 (J2.5) up to the E07 SOUTH-row VCC pin,
-#     then a short local rail west to the two decaps. F.Cu keeps it off the B.Cu CSN/MOSI. ---
-vcc = abspad(M1,2); c31 = abspad(C3,1); c41 = abspad(C4,1); j25 = abspad(J2,5)
-route([j25, vcc], "+3V3")                                        # J2.3V3 -> E07 VCC
-route([vcc, c31], "+3V3")                                        # VCC -> C3
+# --- +3V3 (F.Cu): XIAO 3V3 down the west side of the E07 to VCC, then straight south through
+#     the XIAO D1/D2 pad gap (x=7.69) to the two decaps in the south strip. ---
+vcc = abspad(M1,2); c31 = abspad(C3,1); c41 = abspad(C4,1); v33 = abspad(A1,12)
+route([v33, (5.6, 26.0), (5.6, 32.54), vcc], "+3V3")            # 3V3 -> west of E07 -> VCC
+route([vcc, (7.69, 41.0), c31], "+3V3")                         # VCC -> south (XIAO gap) -> C3
 route([c31, c41], "+3V3")                                        # C3 -> C4
 
 # ================= board outline 23 x 54 =================
@@ -209,13 +207,12 @@ for a, b in zip(corners, corners[1:]+corners[:1]):
     board.graphicItems.append(GrLine(start=Position(*a),end=Position(*b),
                                      layer="Edge.Cuts",width=0.15,tstamp=uid()))
 # silk hints
-board.graphicItems.append(GrText(text="USB", position=Position(1.5, 31.6, 90),
+board.graphicItems.append(GrText(text="USB", position=Position(1.5, 21.0, 90),
                                  layer="F.SilkS", tstamp=uid()))
 board.graphicItems.append(GrText(text="E07 CC1101 -> BACK",
-                                 position=Position(11.5, 44.0), layer="F.SilkS", tstamp=uid()))
-# E07 module body footprint on the BACK (15 x 30 mm): header at y30-32.5, body extends SOUTH
-# over the XIAO back; SMA/antenna off the south edge. Drawn on Dwgs.User (no silk DRC), plus a
-# fab outline clear of the header pads so it renders without silk-over-copper.
+                                 position=Position(11.5, 49.0), layer="F.SilkS", tstamp=uid()))
+# E07 module body footprint on the BACK (15 x 30 mm), header at y30-32.5, body extends SOUTH;
+# on B.Fab (no silk DRC), clear of the header pads.
 mb = [(4.0,33.4),(19.0,33.4),(19.0,53.4),(4.0,53.4)]
 for a, b in zip(mb, mb[1:]+mb[:1]):
     board.graphicItems.append(GrLine(start=Position(*a),end=Position(*b),

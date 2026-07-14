@@ -58,21 +58,21 @@ def is_smd(fp, num):
 
 # ================= placement (board 21 x 50 mm) =================
 # --- IR: 3 LEDs (front y6), current R (y10), MOSFET + gate parts (y14) ---
-LEDX = [4.0, 11.0, 18.0]
+LEDX = [4.5, 11.5, 18.5]
 D = [place("LED_D5.0mm", f"D{i+1}", "940nm", x, 6.0) for i, x in enumerate(LEDX)]
 R = [place("R_1206_3216Metric", f"R{i+1}", "15R", x, 12.0) for i, x in enumerate(LEDX)]
-Q1 = place("SOT-23", "Q1", "AO3400A", 11.0, 17.0)
-R4 = place("R_0603_1608Metric", "R4", "100R", 7.0, 17.0)
-R5 = place("R_0603_1608Metric", "R5", "10k", 15.0, 17.0)
-C1 = place("C_0603_1608Metric", "C1", "100nF", 3.0, 17.0)
-C2 = place("C_0805_2012Metric", "C2", "22uF", 19.0, 17.0)
+Q1 = place("SOT-23", "Q1", "AO3400A", 11.5, 17.0)
+R4 = place("R_0603_1608Metric", "R4", "100R", 7.5, 17.0)
+R5 = place("R_0603_1608Metric", "R5", "10k", 15.5, 17.0)
+C1 = place("C_0603_1608Metric", "C1", "100nF", 3.5, 17.0)
+C2 = place("C_0805_2012Metric", "C2", "22uF", 19.5, 17.0)
 # --- RF: CC1101 module (2x4 header) + decoupling; antenna off the y~19 edge region ---
-M1 = place("PinHeader_2x04_P2.54mm_Vertical", "M1", "CC1101", 9.73, 25.0)
-C3 = place("C_0603_1608Metric", "C3", "100nF", 4.0, 21.0)
-C4 = place("C_0805_2012Metric", "C4", "10uF", 18.0, 21.0)
+M1 = place("PinHeader_2x04_P2.54mm_Vertical", "M1", "CC1101", 10.23, 25.0)
+C3 = place("C_0603_1608Metric", "C3", "100nF", 4.5, 21.0)
+C4 = place("C_0805_2012Metric", "C4", "10uF", 18.5, 21.0)
 # --- XIAO socket: two 1x7 (provisional 17.2mm row spacing; verify vs Seeed) ---
-J1 = place("PinSocket_1x07_P2.54mm_Vertical", "J1", "XIAO_L", 2.4, 32.0)
-J2 = place("PinSocket_1x07_P2.54mm_Vertical", "J2", "XIAO_R", 19.6, 32.0)
+J1 = place("PinSocket_1x07_P2.54mm_Vertical", "J1", "XIAO_L", 2.9, 32.0)
+J2 = place("PinSocket_1x07_P2.54mm_Vertical", "J2", "XIAO_R", 20.1, 32.0)
 
 # --- net assignment ---
 for i in range(3):
@@ -176,7 +176,7 @@ route([abspad(J1,7), abspad(M1,8)], "CC_MOSI", "F.Cu")  # F.Cu so it can't cross
 route([abspad(J2,1), abspad(M1,4)], "CC_MISO", "B.Cu")
 
 # ================= board outline 21 x 50 =================
-BW, BH = 22.0, 50.0
+BW, BH = 23.0, 50.0
 corners = [(0,0),(BW,0),(BW,BH),(0,BH)]
 for a, b in zip(corners, corners[1:]+corners[:1]):
     board.graphicItems.append(GrLine(start=Position(*a),end=Position(*b),
@@ -195,9 +195,6 @@ full = [(INSET,INSET),(BW-INSET,INSET),(BW-INSET,BH-INSET),(INSET,BH-INSET)]
 zone("GND", "In1.Cu", full)     # inner GND plane
 zone("+5V", "In2.Cu", full)     # inner +5V plane
 
-# One silk note near the RF edge (antenna keepout is added in GUI per the module - see README).
-board.graphicItems.append(GrText(text="RF: keep copper clear", position=Position(11, 20.0),
-                                 layer="F.SilkS", tstamp=uid()))
 
 board.to_file(OUT)
 print(f"wrote {OUT}: {len(board.footprints)} fps, {len(board.zones)} zones, "

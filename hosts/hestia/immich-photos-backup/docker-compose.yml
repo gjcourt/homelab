@@ -3,7 +3,7 @@
 # (Renamed from main/backups/immich-photos in the 2026-06-01 hestia-SOT plan
 #  — see docs/plans/2026-06-01-hestia-photos-sot.md.)
 #
-# Always-running container; busybox crond fires the script at 04:00 local
+# Always-running container; busybox crond fires the script at 01:00 local
 # (TZ honored via the image's tzdata + the TZ env var below). Snapshots
 # are managed by a TrueNAS periodic-snapshot task on the dataset, not by
 # this stack.
@@ -27,7 +27,7 @@ services:
     container_name: immich-photos-backup
     restart: unless-stopped
     environment:
-      # Cron's "0 4 * * *" entry only means "04:00 local" if crond reads TZ;
+      # Cron's "0 1 * * *" entry only means "01:00 local" if crond reads TZ;
       # alpine's tzdata package + this env var is what makes that work.
       - TZ=America/New_York
     volumes:

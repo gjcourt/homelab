@@ -1,6 +1,6 @@
 # immich-photos-backup
 
-Daily incremental **pull** of the Immich photo library from alcatraz (Synology, 10.42.2.11) into hestia's `main/family/images/photos`. Additive — brings phone uploads into hestia (the source of truth); no `--delete`, so direct-to-hestia SD-card imports are never wiped. Always-running container; busybox `crond` fires at 04:00 local.
+Daily incremental **pull** of the Immich photo library from alcatraz (Synology, 10.42.2.11) into hestia's `main/family/media/photos`. Additive — brings phone uploads into hestia (the source of truth); no `--delete`, so direct-to-hestia SD-card imports are never wiped. Always-running container; busybox `crond` fires at 01:00 local.
 
 The reverse leg — hestia→alcatraz, so alcatraz stays a full backup and DSM Photos picks up SD-card imports — is **not** a push from this container. It runs **from alcatraz** as a DSM Task Scheduler pull job: [`hosts/alcatraz/immich-photos-pull/`](../../alcatraz/immich-photos-pull/README.md). See ["Synology inbound-rsync limitation"](#synology-inbound-rsync-limitation) below for why a hestia-side push-back was retired.
 
@@ -19,9 +19,9 @@ No sudoers rule squares this. The fix is to reverse the direction: alcatraz **pu
 | Attribute | Value |
 |---|---|
 | Image | `ghcr.io/gjcourt/immich-photos-backup` (built from `images/immich-photos-backup/`) |
-| Schedule | `0 4 * * *` (after CNPG S3 backups at 02:00) |
+| Schedule | `0 1 * * *` (01:00 ET / 05:00 UTC — before the 07:00 UTC Immich scan; CNPG S3 backup follows at 02:00 ET) |
 | Sources | `truenas-backup@10.42.2.11:/volume1/homes/{george,mara}/Photos/` |
-| Destinations | `/mnt/main/family/images/photos/{george,mara}/` (ZFS, lz4, recordsize=1M, atime=off) |
+| Destinations | `/mnt/main/family/media/photos/{george,mara}/` (ZFS, lz4, recordsize=1M, atime=off) |
 | SSH key | `/mnt/main/apps/immich-photos-backup/ssh/id_ed25519_alcatraz` (mode 600, root) |
 | Metric | `immich_photos_backup_last_success_seconds` via node-exporter textfile collector |
 | Alert | `ImmichPhotoBackupStale` (fires after >36h) |
@@ -31,9 +31,9 @@ No sudoers rule squares this. The fix is to reverse the direction: alcatraz **pu
 Run on hestia as root (TrueNAS Web UI → System Settings → Shell).
 
 ### 1. ZFS datasets + snapshot tasks
-The destination dataset is `main/family/images/photos` (renamed from `main/backups/immich-photos` in the 2026-06-01 hestia-SOT migration — see `docs/plans/2026-06-01-hestia-photos-sot.md`). Snapshot tasks (daily/14, weekly/8, monthly/12) run on the `main/family` parent. To verify:
+The destination dataset is `main/family/media/photos` (renamed from `main/backups/immich-photos` in the 2026-06-01 hestia-SOT migration — see `docs/plans/2026-06-01-hestia-photos-sot.md`). Snapshot tasks (daily/14, weekly/8, monthly/12) run on the `main/family` parent. To verify:
 ```bash
-midclt call pool.dataset.query '[["id", "=", "main/family/images/photos"]]' \
+midclt call pool.dataset.query '[["id", "=", "main/family/media/photos"]]' \
   | jq '.[0] | {compression: .compression.value, recordsize: .recordsize.value, atime: .atime.value, mountpoint}'
 midclt call pool.snapshottask.query '[["dataset", "=", "main/family"]]' \
   | jq '.[] | {lifetime_value, lifetime_unit, schedule: .schedule | "\(.hour):\(.minute) dow=\(.dow) dom=\(.dom)"}'
@@ -100,7 +100,7 @@ Should print `/usr/bin/sudo` (or `/bin/sudo`) and `/bin/chmod`. If `chmod` resol
 Notes:
 - Commas inside the command args must be escaped (`g+rX\,o+rX`); unescaped commas separate multiple commands in sudoers.
 - Adding a third user (e.g. `kid1`) requires extending this file with another comma-separated command — same pattern.
-- DSM major-version upgrades may stomp on `/etc/sudoers.d/` entries. If a future DSM upgrade silently re-disables this, the next 04:00 cron will fail loudly: `sudo -n` exits immediately, `&&` short-circuits, rsync exits with code `12` (protocol data stream error). Re-add the file post-upgrade.
+- DSM major-version upgrades may stomp on `/etc/sudoers.d/` entries. If a future DSM upgrade silently re-disables this, the next 01:00 cron will fail loudly: `sudo -n` exits immediately, `&&` short-circuits, rsync exits with code `12` (protocol data stream error). Re-add the file post-upgrade.
 - If a future DSM update sets `Defaults requiretty` in `/etc/sudoers`, NOPASSWD alone won't be enough — sudo will reject all non-tty invocations including this one. Confirm `sudo -l` from a non-interactive ssh continues to work after any DSM upgrade.
 
 Verify after install:
@@ -120,18 +120,18 @@ If not already running, node-exporter on hestia must be invoked with `--collecto
 - Paste the contents of `docker-compose.yml` from this directory
 - Install. Wait for state=RUNNING.
 
-### 6. Kick the first run manually (don't wait for 04:00)
+### 6. Kick the first run manually (don't wait for 01:00)
 ```bash
 docker exec -it ix-immich-photos-backup-immich-photos-backup-1 \
   /usr/local/bin/immich-photos-backup.sh
 ```
-First run pulls ~425 GB over gigabit (~30-60 min). Detach-safe via `docker logs -f` in another shell. On success the textfile metric is written and the container goes back to waiting for the next 04:00.
+First run pulls ~425 GB over gigabit (~30-60 min). Detach-safe via `docker logs -f` in another shell. On success the textfile metric is written and the container goes back to waiting for the next 01:00.
 
 ## Subsequent updates
 
 Every change to `images/immich-photos-backup/**` on `master` triggers `.github/workflows/build-immich-photos-backup.yml` → publishes `ghcr.io/gjcourt/immich-photos-backup:YYYY-MM-DD` (with `:latest` mirror). Bump the digest in `docker-compose.yml` in a follow-up PR; `.github/workflows/deploy-hestia.yml` then auto-applies via `truenas-update-app.sh`.
 
-The sudoers entry in section 3a is a **prerequisite** for any image whose script invokes `sudo -n /bin/chmod` (currently: all images since 2026-06-09). If the entry was wiped by a DSM upgrade and the script is updated in the meantime, the next 04:00 cron will fail until the entry is restored — verify before each digest bump if alcatraz had recent firmware updates.
+The sudoers entry in section 3a is a **prerequisite** for any image whose script invokes `sudo -n /bin/chmod` (currently: all images since 2026-06-09). If the entry was wiped by a DSM upgrade and the script is updated in the meantime, the next 01:00 cron will fail until the entry is restored — verify before each digest bump if alcatraz had recent firmware updates.
 
 To roll back: revert the digest in `docker-compose.yml` and merge; auto-deploy applies the prior image.
 

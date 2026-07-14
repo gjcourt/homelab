@@ -18,6 +18,102 @@ Immich is deployed as a set of microservices in the `immich-prod` (and `immich-s
 ### Hardware Acceleration
 Both the `immich-server` and `immich-machine-learning` pods mount `/dev/dri` from the host node to utilize the AMD GPU for hardware-accelerated video transcoding (VAAPI) and machine learning inference (ROCm).
 
+## 2a. Photo ingest pipeline (phone → Immich)
+
+**How a phone photo reaches Immich, end to end.** Immich does **not** receive uploads from the
+phone directly — the phone uploads to Synology Photos on **alcatraz**, and Immich indexes the
+files after they are pulled to **hestia** and a scheduled **external-library scan** runs.
+
+```
+ iPhone (Synology Photos app, auto-backup)
+   │  upload
+   ▼
+ alcatraz (Synology, 10.42.2.11)      /volume1/homes/<user>/Photos/YYYY/MM/…
+   │  nightly rsync PULL  (immich-photos-backup container ON hestia; additive, no --delete)
+   ▼
+ hestia (TrueNAS, 10.42.2.10)         /mnt/main/family/media/photos/<user>/YYYY/MM/…   ← SOT
+   │  NFS export (nfsvers=3)  →  immich-photos-pv-prod  →  mounted read-only at /mnt/photos
+   ▼
+ Immich external library "New External Library" (id beff0dc3-801a-4a07-b2c9-55d8a7e3a77b)
+   importPaths = {/mnt/photos/george, /mnt/photos/mara}
+   │  Immich indexes files on its scheduled EXTERNAL-LIBRARY SCAN (not on file arrival)
+   ▼
+ Photo appears in the Immich UI (photos.burntbytes.com)
+```
+
+Users pulled: **george, mara** (`USERS=(george mara)` in the backup script).
+The `family/images/photos` path is **retired** — everything is under `family/media/photos`
+since the 2026-07-13 images→media migration (feeder #1108). The NFS PV path was repointed to
+`media/photos` metadata-safely (same `<user>/<year>/<month>` substructure, so Immich matched all
+141k assets — no re-import).
+
+### Timing (this is the usual "my photos aren't in Immich yet" cause)
+
+Two independent nightly jobs, in **different** timezones:
+
+| Job | Where | Schedule | UTC |
+|-----|-------|----------|-----|
+| alcatraz→hestia rsync | `immich-photos-backup` container on hestia (TZ America/New_York) | `0 4 * * *` (04:00 ET) → **fixed to `0 1 * * *`** | 08:00 → **05:00** |
+| Immich external-library scan | immich-server (TZ America/Los_Angeles) | nightly 00:00 PT (Immich default) | **07:00** |
+| CNPG DB → S3 backup | in-cluster | 02:00 ET | 06:00 |
+
+**Root cause of the lag (fixed 2026-07-14):** the rsync used to run at 08:00 UTC — *one hour
+after* the 07:00 UTC scan. So each night the scan ingested the *previous* night's pull, then the
+rsync landed the new files, which then waited for the *next* night's scan → a photo took **~24 h+**
+to appear. Moving the rsync to 01:00 ET (05:00 UTC) puts it before both the CNPG backup and the
+scan, so the same night's scan ingests it. (Staging's 30-day sync already runs at 03:00 for the
+same reason — see §10.3.) Note a photo can still take up to ~a day to appear because pull+scan are
+once-nightly; for lower latency see "Faster ingest" below.
+
+### Verify each hop
+
+```sh
+# 1. on alcatraz — newest phone upload (run from the backup container, which holds the SSH key)
+ssh truenas_admin@10.42.2.10 'sudo docker exec immich-photos-backup sh -c \
+  "ssh -i /root/.ssh/id_ed25519_alcatraz truenas-backup@10.42.2.11 \
+   \"find /volume1/homes/george/Photos -type f -newermt today -printf %T+\ %p\\n | sort -r | head\""'
+
+# 2. on hestia — did it get pulled? + when did the rsync last succeed?
+ssh truenas_admin@10.42.2.10 'find /mnt/main/family/media/photos/george -type f -printf "%T+ %p\n" | sort -r | head
+  cat /var/lib/node-exporter/textfile/immich-backup.prom | grep last_success   # epoch of last OK run
+  sudo tail -5 /var/log/immich-photos-backup.log'                              # inside the container
+
+# 3. in Immich — is it indexed? + when did the library last scan?
+PG=pod/immich-db-prod-cnpg-v3-5
+kubectl exec -n immich-prod $PG -c postgres -- psql -d immich -tAc \
+  "SELECT name, \"refreshedAt\" FROM library;"                                 # last scan time
+kubectl exec -n immich-prod $PG -c postgres -- psql -d immich -tAc \
+  "SELECT \"originalPath\" FROM asset WHERE \"originalPath\" LIKE '%/george/2026/07/%' \
+   ORDER BY \"originalPath\" DESC LIMIT 5;"                                     # newest indexed
+```
+
+Immich v3 uses **singular** table names (`asset`, `library`); connect as the `postgres` OS user
+(`kubectl exec … -c postgres -- psql -d immich`) — the `immich` role is peer-auth only.
+
+### Force an immediate scan (photos already on hestia, waiting for the nightly scan)
+
+- **UI:** Administration → Libraries → *New External Library* → **⋯ → Scan**. Takes a few minutes.
+- **API:** `POST https://photos.burntbytes.com/api/libraries/beff0dc3-801a-4a07-b2c9-55d8a7e3a77b/scan`
+  with header `x-api-key: <admin API key>` (create one under Account Settings → API Keys).
+
+### Faster ingest (optional future work)
+
+The ~daily latency is inherent to once-nightly pull+scan. To cut it: (a) run the rsync more often
+(e.g. hourly) and (b) have the backup script **trigger the library scan via the API on successful
+rsync** (the robust, timezone-independent fix — it makes photos appear minutes after they land).
+That needs an admin API key mounted into the backup container + a reachable
+`photos.burntbytes.com/api`.
+
+### Where it can break (checklist)
+
+- **rsync FAILED** (metric `homelabscope_job_last_status{job="immich-photos-backup"}=1`): usually
+  the alcatraz NOPASSWD sudoers entry (needed for the source-side `chmod` that clears DSM's 0700
+  upload mode) or SSH host-key. See `hosts/hestia/immich-photos-backup/README.md`. Alert:
+  `ImmichPhotoBackupStale`.
+- **Files on hestia but not in Immich**: the scan hasn't run since they landed → force a scan.
+- **Wrong path**: photos must be under `family/media/photos/<user>/…` (NOT the retired
+  `family/images/…`); the NFS PV `nfs.path` must be `/mnt/main/family/media/photos`.
+
 ## 3. URLs
 - **Staging**: https://photos.stage.burntbytes.com
 - **Production**: https://photos.burntbytes.com

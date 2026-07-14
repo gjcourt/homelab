@@ -1,5 +1,5 @@
-# Daily rsync of /volume1/family/images/photos on alcatraz (Synology DSM,
-# 10.42.2.11) into the local ZFS dataset main/family/media/photos.
+# Daily rsync of alcatraz phone uploads — /volume1/homes/<user>/Photos (Synology
+# DSM, 10.42.2.11) — into the local ZFS dataset main/family/media/photos.
 # (Renamed from main/backups/immich-photos in the 2026-06-01 hestia-SOT plan
 #  — see docs/plans/2026-06-01-hestia-photos-sot.md.)
 #

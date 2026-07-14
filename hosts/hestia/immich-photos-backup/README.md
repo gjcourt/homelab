@@ -4,7 +4,7 @@ Daily incremental **pull** of the Immich photo library from alcatraz (Synology, 
 
 The reverse leg — hestia→alcatraz, so alcatraz stays a full backup and DSM Photos picks up SD-card imports — is **not** a push from this container. It runs **from alcatraz** as a DSM Task Scheduler pull job: [`hosts/alcatraz/immich-photos-pull/`](../../alcatraz/immich-photos-pull/README.md). See ["Synology inbound-rsync limitation"](#synology-inbound-rsync-limitation) below for why a hestia-side push-back was retired.
 
-Sources are per-user `homes/<user>/Photos/` paths, not `family/images/photos/<user>/`. On the Synology side those family paths are symlinks into each user's home, with per-file ACLs that deny `truenas-backup` file open via the family path — so we sync from the homes path directly and re-map into the canonical hestia `family/images/photos/<user>/` layout.
+Sources are per-user `homes/<user>/Photos/` paths, not `family/images/photos/<user>/`. On the Synology side those family paths are symlinks into each user's home, with per-file ACLs that deny `truenas-backup` file open via the family path — so we sync from the homes path directly and re-map into the canonical hestia `family/media/photos/<user>/` layout.
 
 ### Synology inbound-rsync limitation
 

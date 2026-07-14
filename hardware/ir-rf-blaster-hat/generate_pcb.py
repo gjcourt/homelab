@@ -59,8 +59,9 @@ def is_smd(fp, num):
 # ================= placement (board 21 x 50 mm) =================
 # --- IR: 3 LEDs (front y6), current R (y10), MOSFET + gate parts (y14) ---
 LEDX = [4.5, 11.5, 18.5]
-# LED footprint origin is pin 1, so shift left by half the 2.54mm pin gap to center the body on LEDX
-D = [place("LED_D5.0mm", f"D{i+1}", "940nm", x-1.27, 6.0) for i, x in enumerate(LEDX)]
+# LEDs rotated 180 so the cathode sits above R's LED_K pad (straight cathode traces);
+# origin is pin 1, so offset +1.27 (half the 2.54mm pin gap) keeps the body centered on LEDX
+D = [place("LED_D5.0mm", f"D{i+1}", "940nm", x+1.27, 6.0, 180) for i, x in enumerate(LEDX)]
 R = [place("R_1206_3216Metric", f"R{i+1}", "15R", x, 12.0) for i, x in enumerate(LEDX)]
 Q1 = place("SOT-23", "Q1", "AO3400A", 11.5, 17.0)
 R4 = place("R_0603_1608Metric", "R4", "100R", 7.5, 17.0)

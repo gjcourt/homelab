@@ -58,21 +58,21 @@ def is_smd(fp, num):
 
 # ================= placement (board 21 x 50 mm) =================
 # --- IR: 3 LEDs (front y6), current R (y10), MOSFET + gate parts (y14) ---
-LEDX = [3.5, 10.5, 17.5]
+LEDX = [4.0, 11.0, 18.0]
 D = [place("LED_D5.0mm", f"D{i+1}", "940nm", x, 6.0) for i, x in enumerate(LEDX)]
 R = [place("R_1206_3216Metric", f"R{i+1}", "15R", x, 12.0) for i, x in enumerate(LEDX)]
-Q1 = place("SOT-23", "Q1", "AO3400A", 10.5, 17.0)
-R4 = place("R_0603_1608Metric", "R4", "100R", 6.0, 17.0)
+Q1 = place("SOT-23", "Q1", "AO3400A", 11.0, 17.0)
+R4 = place("R_0603_1608Metric", "R4", "100R", 7.0, 17.0)
 R5 = place("R_0603_1608Metric", "R5", "10k", 15.0, 17.0)
-C1 = place("C_0603_1608Metric", "C1", "100nF", 2.5, 17.0)
-C2 = place("C_0805_2012Metric", "C2", "22uF", 18.5, 17.0)
+C1 = place("C_0603_1608Metric", "C1", "100nF", 3.0, 17.0)
+C2 = place("C_0805_2012Metric", "C2", "22uF", 19.0, 17.0)
 # --- RF: CC1101 module (2x4 header) + decoupling; antenna off the y~19 edge region ---
-M1 = place("PinHeader_2x04_P2.54mm_Vertical", "M1", "CC1101", 8.5, 25.0)
+M1 = place("PinHeader_2x04_P2.54mm_Vertical", "M1", "CC1101", 9.73, 25.0)
 C3 = place("C_0603_1608Metric", "C3", "100nF", 4.0, 21.0)
-C4 = place("C_0805_2012Metric", "C4", "10uF", 16.0, 21.0)
+C4 = place("C_0805_2012Metric", "C4", "10uF", 18.0, 21.0)
 # --- XIAO socket: two 1x7 (provisional 17.2mm row spacing; verify vs Seeed) ---
-J1 = place("PinSocket_1x07_P2.54mm_Vertical", "J1", "XIAO_L", 1.9, 32.0)
-J2 = place("PinSocket_1x07_P2.54mm_Vertical", "J2", "XIAO_R", 19.1, 32.0)
+J1 = place("PinSocket_1x07_P2.54mm_Vertical", "J1", "XIAO_L", 2.4, 32.0)
+J2 = place("PinSocket_1x07_P2.54mm_Vertical", "J2", "XIAO_R", 19.6, 32.0)
 
 # --- net assignment ---
 for i in range(3):
@@ -110,7 +110,26 @@ for fp in board.footprints:
             via(abspad(fp, p.number), "+5V", ("F.Cu","B.Cu"))
 
 # ================= signal routing =================
+def chamfer45(pts, cmax=1.0):
+    """Replace each 90 degree orthogonal corner with two 45 degree bends."""
+    if len(pts) < 3: return pts
+    out = [pts[0]]
+    for i in range(1, len(pts)-1):
+        a, v, b = pts[i-1], pts[i], pts[i+1]
+        vin = (v[0]-a[0], v[1]-a[1]); vout = (b[0]-v[0], b[1]-v[1])
+        lin = math.hypot(*vin); lout = math.hypot(*vout)
+        perp = abs(vin[0]*vout[0] + vin[1]*vout[1]) < 1e-6
+        ortho = min(abs(vin[0]),abs(vin[1])) < 1e-6 and min(abs(vout[0]),abs(vout[1])) < 1e-6
+        if perp and ortho and lin > 1e-6 and lout > 1e-6:
+            c = min(cmax, lin/2, lout/2)
+            out.append((v[0]-vin[0]/lin*c, v[1]-vin[1]/lin*c))
+            out.append((v[0]+vout[0]/lout*c, v[1]+vout[1]/lout*c))
+        else:
+            out.append(v)
+    out.append(pts[-1])
+    return out
 def route(points, net, layer="F.Cu", w=0.3):
+    points = chamfer45(points)
     for a, b in zip(points, points[1:]):
         board.traceItems.append(Segment(start=Position(round(a[0],4),round(a[1],4)),
                                          end=Position(round(b[0],4),round(b[1],4)),
@@ -122,15 +141,14 @@ def via_pt(p, net, layers=("F.Cu","B.Cu")):
     board.traceItems.append(Via(position=Position(round(p[0],4),round(p[1],4)),
                                 size=0.7, drill=0.35, layers=list(layers), net=NUM[net], tstamp=uid()))
 
-# --- IR section (F.Cu). LED cathode drops below the LED then over to R.left pad. ---
+# --- IR section (F.Cu): straight diagonals wherever the line is clear ---
 for i in range(3):
-    d2 = abspad(D[i], 2); r1 = abspad(R[i], 1)
-    route([d2, (d2[0], 10.0), (r1[0], 10.0), r1], f"LED{i+1}_K")
-# Q_DRAIN bus runs BELOW the resistors (y13.3) with stubs up into each R.right pad
+    route([abspad(D[i], 2), abspad(R[i], 1)], f"LED{i+1}_K")       # LED cathode -> R (straight)
+# Q_DRAIN: straight bus below the resistors + short perpendicular stubs (clears the gate pad)
 qd = abspad(Q1, 3); r2 = [abspad(R[i], 2) for i in range(3)]
-route([(r2[0][0], 13.3), (r2[2][0], 13.3)], "Q_DRAIN")             # bus
-for p in r2: route([(p[0], 13.3), p], "Q_DRAIN")                   # stubs up to R.2
-route([qd, (qd[0], 13.3)], "Q_DRAIN")                             # Q1 drain down to bus
+route([(r2[0][0], 13.4), (r2[2][0], 13.4)], "Q_DRAIN")            # straight bus
+for p in r2: route([(p[0], 13.4), p], "Q_DRAIN")                  # stubs up to each R
+route([qd, (qd[0], 13.4)], "Q_DRAIN")                            # drain down to bus
 # Q_GATE: R4.2 -> Q1.gate (F.Cu); gate -> R5.1 on B.Cu (clears the drain pad between them)
 g = abspad(Q1, 1); r51 = abspad(R5, 1)
 route([abspad(R4, 2), g], "Q_GATE")
@@ -145,14 +163,15 @@ route([r41, (r41[0], 19.5), (0.9, 19.5), (0.9, j13[1]), j13], "IR_TX", "B.Cu")
 m11 = abspad(M1,1); c31 = abspad(C3,1); c41 = abspad(C4,1); j25 = abspad(J2,5)
 route([m11, (m11[0], 23.0), (c31[0], 23.0), c31], "+3V3")          # M1.VCC up + over to C3 (above M1)
 route([c31, (c31[0], 19.5), (c41[0], 19.5), c41], "+3V3")          # C3 -> C4 via y19.5 (clears cap GND pads)
-route([c41, (c41[0], 23.0), (17.5, 23.0), (17.5, j25[1]), j25], "+3V3")  # C4 -> XIAO 3V3 (F.Cu right side)
+route([c41, (c41[0], j25[1]-(j25[0]-c41[0])), j25], "+3V3")        # C4 -> XIAO 3V3: straight drop + one 45 into the pad
 
 # --- SPI: monotonic fan -> straight lines don't cross. Left col F.Cu, right col + MISO B.Cu ---
 route([abspad(J1,2), abspad(M1,3)], "CC_GDO2", "F.Cu")            # upper J1 -> upper M1 (monotonic)
 route([abspad(J1,4), abspad(M1,5)], "CC_CSN",  "F.Cu")
 route([abspad(J1,5), abspad(M1,7)], "CC_GDO0", "F.Cu")
 _j16 = abspad(J1,6); _m6 = abspad(M1,6)
-route([_j16, (13.0, _j16[1]), (13.0, _m6[1]), _m6], "CC_SCK", "B.Cu")  # around M1's right side, clear of the left-col THT pads
+_lane = abspad(M1,8)[0] + 1.6
+route([_j16, (_lane, _j16[1]), (_lane, _m6[1]), _m6], "CC_SCK", "B.Cu")  # around M1's right side, clear of the left-col THT pads
 route([abspad(J1,7), abspad(M1,8)], "CC_MOSI", "F.Cu")  # F.Cu so it can't cross SCK (B.Cu); clears the left-col fan (stays below GDO0)
 route([abspad(J2,1), abspad(M1,4)], "CC_MISO", "B.Cu")
 
@@ -177,8 +196,8 @@ zone("GND", "In1.Cu", full)     # inner GND plane
 zone("+5V", "In2.Cu", full)     # inner +5V plane
 
 # One silk note near the RF edge (antenna keepout is added in GUI per the module - see README).
-board.graphicItems.append(GrText(text="CC1101 antenna edge - keep copper clear (set keepout in GUI)",
-                                 position=Position(11, 20.0), layer="F.SilkS", tstamp=uid()))
+board.graphicItems.append(GrText(text="RF: keep copper clear", position=Position(11, 20.0),
+                                 layer="F.SilkS", tstamp=uid()))
 
 board.to_file(OUT)
 print(f"wrote {OUT}: {len(board.footprints)} fps, {len(board.zones)} zones, "

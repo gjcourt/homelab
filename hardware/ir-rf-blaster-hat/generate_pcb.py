@@ -77,7 +77,9 @@ def abspad(fp, num):
 BW, BH = 23.0, 54.0
 # --- IR: 3 LEDs NORTH (y6), current R (y11), MOSFET + gate parts (y15.5) ---
 LEDX = [4.5, 11.5, 18.5]
-D = [place("LED_D5.0mm", f"D{i+1}", "940nm", x+1.27, 6.0, 180) for i, x in enumerate(LEDX)]
+# LED_D5.0mm: pad1 = CATHODE (the flat-silk side), pad2 = anode. Place rot0 offset -1.27 so the
+# cathode (pad1) sits WEST toward R (straight cathode traces) and the body centers on LEDX.
+D = [place("LED_D5.0mm", f"D{i+1}", "940nm", x-1.27, 6.0) for i, x in enumerate(LEDX)]
 R = [place("R_1206_3216Metric", f"R{i+1}", "15R", x, 11.0) for i, x in enumerate(LEDX)]
 C1 = place("C_0603_1608Metric", "C1", "100nF", 2.5, 15.5)
 R4 = place("R_0603_1608Metric", "R4", "100R", 6.5, 15.5)
@@ -104,7 +106,7 @@ C4 = place("C_0805_2012Metric", "C4", "10uF", 12.5, 44.0, 270)
 
 # --- net assignment ---
 for i in range(3):
-    setnet(D[i], 1, "+5V"); setnet(D[i], 2, f"LED{i+1}_K")
+    setnet(D[i], 1, f"LED{i+1}_K"); setnet(D[i], 2, "+5V")   # pad1=cathode->R, pad2=anode->+5V
     setnet(R[i], 1, f"LED{i+1}_K"); setnet(R[i], 2, "Q_DRAIN")
 setnet(Q1, 1, "Q_GATE"); setnet(Q1, 2, "GND"); setnet(Q1, 3, "Q_DRAIN")
 setnet(R4, 1, "IR_TX"); setnet(R4, 2, "Q_GATE")
@@ -168,7 +170,7 @@ if DEBUG:
 
 # --- IR driver (F.Cu) ---
 for i in range(3):
-    route([abspad(D[i], 2), abspad(R[i], 1)], f"LED{i+1}_K")        # cathode -> R (straight)
+    route([abspad(D[i], 1), abspad(R[i], 1)], f"LED{i+1}_K")        # cathode (pad1) -> R (straight)
 qd = abspad(Q1, 3); r2 = [abspad(R[i], 2) for i in range(3)]
 BUS = 13.0
 route([(r2[0][0], BUS), (r2[2][0], BUS)], "Q_DRAIN")               # straight drain bus

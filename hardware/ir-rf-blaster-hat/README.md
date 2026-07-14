@@ -86,6 +86,12 @@ because the 10 kΩ gate pulldown holds the MOSFET off through boot.
 
 Power: IR LEDs → **5V (VBUS)**; CC1101 → **3V3**; common GND. D1/D5/D8/D9 (pads 2/6/9/10) spare.
 
+**Hand-solder polarity (THT):**
+- **D1–D3 IR LEDs** — footprint **pad 1 (square, west, flat-silk side) = CATHODE**; pad 2
+  (round, east) = anode = +5 V. Solder each LED with its **flat / short lead (cathode) to the
+  square pad**. (The cathode goes to the current-limit resistor → MOSFET; the anode to +5 V.)
+- **A1 XIAO** and **M1 E07** — keyed by pad 1 (square) on their footprints; match pin 1.
+
 **E07-M1101D socket (M1, 2×4 female)** — **fixed CDEBYTE pinout**, the module plugs straight in:
 
 ```

@@ -1,4 +1,7 @@
 # Daily immich photo library rsync from alcatraz → hestia.
-# 04:00 local time (TZ env var honored via tzdata in the image).
-# Runs ~30-60 min for the current ~425 GB library over gigabit.
-0 4 * * * /usr/local/bin/immich-photos-backup.sh
+# 01:00 ET (05:00 UTC) — MUST finish before the Immich external-library scan at
+# 00:00 PT (07:00 UTC), or freshly-pulled photos wait a full extra day for the
+# next night's scan. TZ (America/New_York) honored via tzdata in the image.
+# Sequencing: 01:00 rsync (~30-60 min) → 02:00 ET CNPG S3 backup → 03:00 ET
+# (07:00 UTC) Immich scan. See docs/operations/apps/immich.md §2a.
+0 1 * * * /usr/local/bin/immich-photos-backup.sh

@@ -1,7 +1,9 @@
 # Daily rsync of the immich photo library from alcatraz → hestia.
 #
 # Always-running container; busybox crond fires immich-photos-backup.sh
-# at 04:00 local time (after CNPG S3 backups complete at 02:00). The
+# at 01:00 ET (05:00 UTC) — before the CNPG S3 backup (02:00 ET) and, crucially,
+# before the Immich external-library scan (00:00 PT / 07:00 UTC), so same-night
+# photos are indexed that night, not a day later. See docs .../apps/immich.md §2a. The
 # script tees output to stdout (captured by `docker logs`) and writes
 # Prometheus textfile metrics on success.
 #
@@ -15,7 +17,7 @@ FROM alpine:3.23
 #   - openssh-client — for `ssh -i ${SSH_KEY} ...`
 #   - bash           — the script uses bash-isms (process substitution `>(tee ...)`)
 #   - tzdata         — so cron honors TZ env var; otherwise crond runs in UTC
-#                      and the "04:00" entry would fire at 20:00 ET
+#                      and the "01:00" entry would fire at 20:00 ET
 RUN apk add --no-cache \
         rsync \
         openssh-client \

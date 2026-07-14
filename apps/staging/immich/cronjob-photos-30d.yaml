@@ -1,7 +1,7 @@
 # Maintains the last-30-days slice of the prod photo tree for the Immich staging
 # testbed. Immich's external library indexes EVERY file under its mounted path and has
 # no built-in date window, so we bound the set at the filesystem: this CronJob keeps
-# /mnt/main/family/images/photos-staging-30d equal to "files modified in the last 30
+# /mnt/main/family/media/photos-staging-30d equal to "files modified in the last 30
 # days" from the full tree, and prunes anything older so the slice stays small.
 #
 # APPROACH — rsync-style COPY, not symlinks, not hardlinks:

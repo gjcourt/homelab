@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: modemscope
+  namespace: modemscope
+  labels:
+    app.kubernetes.io/name: modemscope
+    app.kubernetes.io/component: exporter
+spec:
+  # Single replica on purpose. Two would double the poll rate against the
+  # modem's small embedded GoAhead server for no redundancy benefit — if this
+  # pod is down the only loss is modem telemetry, and Prometheus already
+  # alerts on that via ModemscopeExporterDown.
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: modemscope
+      app.kubernetes.io/component: exporter
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: modemscope
+        app.kubernetes.io/component: exporter
+    spec:
+      serviceAccountName: modemscope
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: exporter
+          image: "ghcr.io/gjcourt/modemscope:ea9d82a@sha256:758696f601ec5cd1e60590719ed4f5ff41bba4a179aad4bdfb0740d1d6da3c76"
+          imagePullPolicy: IfNotPresent
+          env:
+            # The DOCSIS modem's management address. Reachable from the pod
+            # network via the UCGF; endpoints are unauthenticated, so no secret.
+            - name: MODEMSCOPE_MODEM_URL
+              value: "https://192.168.100.1"
+            - name: MODEMSCOPE_LISTEN_ADDR
+              value: ":9104"
+            # Total modem-I/O budget per scrape. Must stay below the
+            # ServiceMonitor's scrapeTimeout (10s) or a slow modem times the
+            # scrape out before modemscope_up=0 can be delivered.
+            - name: MODEMSCOPE_TIMEOUT
+              value: "8s"
+          ports:
+            - name: metrics
+              containerPort: 9104
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            # /healthz reports that the exporter is running, deliberately NOT
+            # whether the modem is reachable. This modem reboots often, and
+            # that is the very thing being measured: if readiness tracked modem
+            # health, the pod would go unready on every reboot, Prometheus would
+            # stop scraping, and modemscope_up=0 — the signal we care most about
+            # — would never be recorded. An unreachable modem is a metric, not
+            # an unready pod.
+            httpGet:
+              path: /healthz
+              port: 9104
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # No livenessProbe: it would share /healthz with readiness and so
+          # carry no distinct signal. The exporter has no persistent connection
+          # to wedge — each scrape is an independent HTTP fetch — so there is no
+          # failure mode a restart fixes that readiness doesn't already surface.
+          # (Matches the thermalscope/mqttscope rationale.)
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

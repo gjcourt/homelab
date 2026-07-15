@@ -1,0 +1,175 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: modemscope-alerts
+  namespace: modemscope
+  labels:
+    # kube-prometheus-stack's Prometheus discovers PrometheusRules by this
+    # label (ruleSelector). Same pattern as the netscope/mqttscope rules.
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: modemscope
+    app.kubernetes.io/component: exporter
+spec:
+  groups:
+    # -------------------------------------------------------------------------
+    # Exporter + modem reachability
+    # -------------------------------------------------------------------------
+    - name: modemscope-exporter
+      rules:
+        - alert: ModemscopeExporterDown
+          expr: up{job="modemscope"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "modemscope exporter is unreachable"
+            description: >
+              Prometheus has been unable to scrape the modemscope exporter for
+              5+ minutes. The pod is down or its /metrics endpoint is failing.
+              Check: kubectl -n modemscope get pods -l app.kubernetes.io/name=modemscope
+
+        # Complements the per-target alert above: fires if the metric name
+        # disappears cluster-wide (exporter gone or SM no longer discovered).
+        - alert: ModemscopeMetricsAbsent
+          expr: absent(modemscope_up)
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "modemscope metrics absent"
+            description: >
+              No `modemscope_up` series has been observed for 10+ minutes. The
+              exporter Deployment is down or the ServiceMonitor is no longer
+              discovering it. Check: kubectl -n modemscope get servicemonitor,pods
+
+        # The exporter is up and being scraped, but cannot read the modem —
+        # the modem is unreachable or mid-reboot. Distinct from scrape health.
+        - alert: ModemUnreachable
+          expr: modemscope_up == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Cannot read the cable modem's status endpoints"
+            description: >
+              modemscope has been unable to read https://192.168.100.1 for 5+
+              minutes (modemscope_up=0). The modem is unreachable, wedged, or
+              stuck rebooting. Sustained beyond a few minutes this is an outage,
+              not a reboot.
+
+    # -------------------------------------------------------------------------
+    # DOCSIS line health — what modemscope exists to detect.
+    # -------------------------------------------------------------------------
+    - name: modemscope-docsis
+      rules:
+        # THE headline alert. Every error counter the modem exposes resets on
+        # reboot, so a silently rebooting modem looks *healthier* the more it
+        # reboots — counters keep returning to zero. Uptime going backwards is
+        # the only signal that catches it. A healthy cable modem's uptime is
+        # measured in weeks; more than two reboots in an hour is pathological.
+        - alert: ModemRebooting
+          expr: resets(modemscope_uptime_seconds[1h]) > 2
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Cable modem has rebooted {{ $value }} times in the last hour"
+            description: >
+              The modem's uptime went backwards {{ $value }} times in an hour.
+              A healthy modem does not reboot at all. Each reboot drops the WAN
+              for 30-60s and wipes every DOCSIS error counter. Suspect the modem
+              itself (overheating, failing hardware) or a plant fault forcing
+              re-registration. This graph is the evidence to hand the ISP.
+
+        - alert: ModemRebootedRecently
+          expr: resets(modemscope_uptime_seconds[24h]) > 0
+          for: 10m
+          labels:
+            severity: info
+          annotations:
+            summary: "Cable modem rebooted in the last 24h"
+            description: >
+              The modem's uptime went backwards {{ $value }} time(s) in 24h.
+              Informational — one reboot may be an ISP config push. Recurrences
+              are what matter; see ModemRebooting.
+
+        # Uncorrectables are unrecoverable data: FEC could not repair the
+        # codeword, so it is lost and TCP must retransmit. This is what is
+        # actually felt as latency spikes and stalls. Correcteds are NOT
+        # alerted on: they are repaired and lossless, and a busy line always
+        # has some.
+        #
+        # Both carriers are summed on purpose. On DOCSIS 3.1 the OFDM carrier
+        # does most of the work, so watching only the QAM channels can report a
+        # clean line while the carrier that matters is losing data.
+        - alert: ModemUncorrectableErrors
+          expr: |
+            sum(rate(modemscope_downstream_uncorrectables_total[15m]))
+              + sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) > 1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Cable line is losing data ({{ $value | humanize }} uncorrectable codewords/sec)"
+            description: >
+              Sustained uncorrectable codewords for 15+ minutes — unrecoverable
+              data, felt as packet loss and latency spikes. Note this fires on a
+              *rate*, not a total: a burst of uncorrectables around each modem
+              reboot is expected re-lock noise, whereas a sustained rate between
+              reboots means the plant is genuinely degraded. Check SNR/power and
+              cross-reference ModemRebooting.
+
+        # The DOCSIS 3.1 carrier dropping lock is a major capacity loss and an
+        # ISP-side/plant signal, not a LAN one.
+        - alert: ModemOFDMUnlocked
+          expr: max(modemscope_downstream_ofdm_locked) == 0
+          for: 10m
+          labels:
+            severity: warning
+
+          annotations:
+            summary: "No DOCSIS 3.1 OFDM receiver is locked"
+            description: >
+              Every OFDM receiver has lost lock for 10+ minutes, so the modem is
+              running on legacy QAM channels only — a large bandwidth loss. This
+              is a plant/ISP-side condition.
+
+        # The modem re-running its registration state machine means it dropped
+        # off the CMTS and is re-joining — an ISP/line event, never a LAN one.
+        - alert: ModemReregistering
+          expr: min(modemscope_docsis_init_state) == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Modem is not fully registered on the CMTS"
+            description: >
+              A DOCSIS registration stage (ranging/dhcp/registration/bpi) has
+              been unhealthy for 10+ minutes. The modem is struggling to join or
+              stay joined to the CMTS — an ISP-side or line condition.
+
+        - alert: ModemDownstreamSNRLow
+          expr: min(modemscope_downstream_snr_db) < 33
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Downstream SNR is low ({{ $value | humanize }} dB)"
+            description: >
+              A downstream channel has been below 33 dB for 15+ minutes, the
+              point at which 256QAM starts producing uncorrectable errors.
+              Suspect a physical plant fault: loose/corroded connector, a
+              splitter, or water ingress.
+
+        - alert: ModemUpstreamPowerHigh
+          expr: max(modemscope_upstream_power_dbmv) > 51
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Upstream transmit power is high ({{ $value | humanize }} dBmV)"
+            description: >
+              The modem has been transmitting above 51 dBmV for 15+ minutes — it
+              is shouting to be heard, which means excessive loss on the line
+              (long run, too many splitters, or a bad connection). Above ~54 dBmV
+              it will start dropping off the network entirely.

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: modemscope
+  labels:
+    app: modemscope
+    # Like mqttscope, this is a plain in-cluster Deployment with no host
+    # access — it reads the cable modem's HTTP status endpoints over the
+    # network and runs unprivileged, non-root, read-only-rootfs. The
+    # restricted PSA level is fully satisfiable, so enforce it.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

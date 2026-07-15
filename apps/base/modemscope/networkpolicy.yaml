@@ -1,0 +1,57 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: modemscope
+  namespace: modemscope
+  labels:
+    app.kubernetes.io/name: modemscope
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: |
+    DOCSIS cable-modem health exporter. Ingress: Prometheus scrape on 9104 +
+    host/remote-node for kubectl port-forward. Egress: DNS + the cable modem's
+    management address (192.168.100.1) on 443.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: modemscope
+  ingress:
+    # kubectl port-forward arrives via the kubelet/API path = host + remote-node.
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "9104"
+              protocol: TCP
+    # Prometheus scrape.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9104"
+              protocol: TCP
+  egress:
+    # DNS.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # The cable modem's management interface, off-cluster on the DOCSIS
+    # management subnet and routed via the UCGF. Scoped to /32 rather than the
+    # whole /24: only the modem itself is ever polled, and this subnet is
+    # otherwise not ours.
+    - toCIDR:
+        - 192.168.100.1/32
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

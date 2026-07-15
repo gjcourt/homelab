@@ -1,0 +1,31 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: modemscope
+  namespace: modemscope
+  labels:
+    # kube-prometheus-stack's Prometheus selects ServiceMonitors by the
+    # helm-default release label (serviceMonitorSelectorNilUsesHelmValues=true).
+    # Without this label the SM is invisible to it.
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: modemscope
+    app.kubernetes.io/component: exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: modemscope
+      app.kubernetes.io/component: exporter
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      # Must stay above the exporter's MODEMSCOPE_TIMEOUT (8s): if Prometheus
+      # gives up first, a slow-but-alive modem never gets to report
+      # modemscope_up=0 — the signal is lost exactly when it matters.
+      scrapeTimeout: 10s
+      # Force job="modemscope" so the PrometheusRule alerts (which match on
+      # job="modemscope") align with the scraped series — the operator
+      # otherwise auto-derives "modemscope/modemscope".
+      relabelings:
+        - targetLabel: job
+          replacement: modemscope

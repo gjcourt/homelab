@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: modemscope
+  namespace: modemscope
+  labels:
+    app.kubernetes.io/name: modemscope
+    app.kubernetes.io/component: exporter
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: modemscope
+    app.kubernetes.io/component: exporter
+  ports:
+    - name: metrics
+      port: 9104
+      targetPort: metrics
+      protocol: TCP

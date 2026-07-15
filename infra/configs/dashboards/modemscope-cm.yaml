@@ -48,7 +48,7 @@ data:
           "gridPos": { "x": 4, "y": 0, "w": 5, "h": 4 },
           "type": "stat",
           "title": "Reboots (24h)",
-          "description": "resets(modemscope_uptime_seconds[24h]) — how many times the modem's uptime went backwards. THE headline number. A healthy cable modem does not reboot at all; its uptime is measured in weeks. Every DOCSIS error counter resets on reboot, so a silently rebooting modem looks healthier the more it reboots — this is the only signal that catches it, and it is the evidence to hand the ISP. CAVEAT: resets() over a window younger than 24h returns 0, not 'no data' — so a green 0 here means 'healthy' ONLY once there is a full day of history. Until then, read the uptime sawtooth below, which shows data age honestly. Summed so an exporter redeploy (new pod/instance labels) does not split the count across tiles.",
+          "description": "resets(modemscope_uptime_seconds[24h]) — how many times the modem's uptime went backwards. THE headline number. A healthy cable modem does not reboot at all; its uptime is measured in weeks. Every DOCSIS error counter resets on reboot, so a silently rebooting modem looks healthier the more it reboots — this is the only signal that catches it, and it is the evidence to hand the ISP. CAVEAT: resets() over a window younger than 24h returns 0, not 'no data' — so a green 0 here means 'healthy' ONLY once there is a full day of history. Until then, read the uptime sawtooth below, which shows data age honestly. Summed so an exporter redeploy (new pod/instance labels) does not split the count across tiles. Red at 3 matches the ModemRebootingRepeatedly alert (>3 per 24h).",
           "targets": [
             { "refId": "A", "expr": "sum(resets(modemscope_uptime_seconds[24h]))", "legendFormat": "reboots" }
           ],
@@ -104,11 +104,11 @@ data:
           "gridPos": { "x": 14, "y": 0, "w": 5, "h": 4 },
           "type": "stat",
           "title": "Uncorrectables /sec",
-          "description": "Rate of unrecoverable codewords across BOTH carriers (QAM + OFDM). Uncorrectables are data the modem could not repair — real loss, felt as packet loss and latency spikes. Shown as a RATE, not a total: a burst around each reboot is expected re-lock noise, whereas a sustained rate between reboots means the plant is genuinely degraded. Correcteds are deliberately excluded — they are repaired and lossless. The OFDM term is wrapped in `or vector(0)`: only a locked receiver emits those counters, and a bare `sum(A) + sum(B)` returns an EMPTY vector if either side is absent — so an unlocked OFDM carrier would blank this panel, which reads as 'nothing wrong'.",
+          "description": "Rate of unrecoverable codewords across BOTH carriers (QAM + OFDM). Uncorrectables are data the modem could not repair — real loss, felt as packet loss and latency spikes. Shown as a RATE, not a total: a burst around each reboot is expected re-lock noise, whereas a sustained rate between reboots means the plant is genuinely degraded. Correcteds are deliberately excluded — they are repaired and lossless. BOTH terms are wrapped in `or vector(0)`: a bare `sum(A) + sum(B)` returns an EMPTY vector if EITHER side is absent, and either can vanish (only a locked receiver emits OFDM counters; the exporter drops any field the modem reports as NA). An absent side would blank this panel, which reads as 'nothing wrong'.",
           "targets": [
             {
               "refId": "A",
-              "expr": "sum(rate(modemscope_downstream_uncorrectables_total[15m])) + (sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) or vector(0))",
+              "expr": "(sum(rate(modemscope_downstream_uncorrectables_total[15m])) or vector(0)) + (sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) or vector(0))",
               "legendFormat": "uncorrectables/sec"
             }
           ],
@@ -194,7 +194,7 @@ data:
             {
               "refId": "A",
               "expr": "sum(rate(modemscope_downstream_uncorrectables_total[5m]))",
-              "legendFormat": "QAM (31ch)"
+              "legendFormat": "QAM"
             },
             {
               "refId": "B",
@@ -203,7 +203,7 @@ data:
             },
             {
               "refId": "C",
-              "expr": "sum(rate(modemscope_downstream_correcteds_total[5m])) + (sum(rate(modemscope_downstream_ofdm_correcteds_total[5m])) or vector(0))",
+              "expr": "(sum(rate(modemscope_downstream_correcteds_total[5m])) or vector(0)) + (sum(rate(modemscope_downstream_ofdm_correcteds_total[5m])) or vector(0))",
               "legendFormat": "correcteds (repaired, lossless)"
             }
           ],
@@ -243,7 +243,7 @@ data:
           "gridPos": { "x": 0, "y": 22, "w": 12, "h": 8 },
           "type": "timeseries",
           "title": "Signal-to-Noise Ratio",
-          "description": "Downstream SNR. Below ~33 dB, 256QAM starts producing uncorrectable errors — the red threshold line. Min/max bracket all 31 QAM channels; OFDM is plotted separately. Low SNR with high uncorrectables points at a physical plant fault (loose/corroded connector, splitter, water ingress).",
+          "description": "Downstream SNR. Below ~33 dB, 256QAM starts producing uncorrectable errors — the red threshold line. Min/max bracket every bonded QAM channel; OFDM is plotted separately. Low SNR with high uncorrectables points at a physical plant fault (loose/corroded connector, splitter, water ingress).",
           "targets": [
             { "refId": "A", "expr": "min(modemscope_downstream_snr_db)", "legendFormat": "QAM min" },
             { "refId": "B", "expr": "max(modemscope_downstream_snr_db)", "legendFormat": "QAM max" },

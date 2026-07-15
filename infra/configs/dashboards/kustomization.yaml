@@ -6,6 +6,7 @@ resources:
   - cnpg-cm.yaml
   - control-plane-cm.yaml
   - homelabscope-cm.yaml
+  - modemscope-cm.yaml
   - mqttscope-cm.yaml
   - netscope-cm.yaml
   - networking-gateway-cm.yaml

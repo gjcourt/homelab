@@ -48,9 +48,9 @@ data:
           "gridPos": { "x": 4, "y": 0, "w": 5, "h": 4 },
           "type": "stat",
           "title": "Reboots (24h)",
-          "description": "resets(modemscope_uptime_seconds[24h]) — how many times the modem's uptime went backwards. THE headline number. A healthy cable modem does not reboot at all; its uptime is measured in weeks. Every DOCSIS error counter resets on reboot, so a silently rebooting modem looks healthier the more it reboots — this is the only signal that catches it, and it is the evidence to hand the ISP.",
+          "description": "resets(modemscope_uptime_seconds[24h]) — how many times the modem's uptime went backwards. THE headline number. A healthy cable modem does not reboot at all; its uptime is measured in weeks. Every DOCSIS error counter resets on reboot, so a silently rebooting modem looks healthier the more it reboots — this is the only signal that catches it, and it is the evidence to hand the ISP. CAVEAT: resets() over a window younger than 24h returns 0, not 'no data' — so a green 0 here means 'healthy' ONLY once there is a full day of history. Until then, read the uptime sawtooth below, which shows data age honestly. Summed so an exporter redeploy (new pod/instance labels) does not split the count across tiles.",
           "targets": [
-            { "refId": "A", "expr": "resets(modemscope_uptime_seconds[24h])", "legendFormat": "reboots" }
+            { "refId": "A", "expr": "sum(resets(modemscope_uptime_seconds[24h]))", "legendFormat": "reboots" }
           ],
           "options": {
             "reduceOptions": { "calcs": ["lastNotNull"] },
@@ -104,11 +104,11 @@ data:
           "gridPos": { "x": 14, "y": 0, "w": 5, "h": 4 },
           "type": "stat",
           "title": "Uncorrectables /sec",
-          "description": "Rate of unrecoverable codewords across BOTH carriers (QAM + OFDM). Uncorrectables are data the modem could not repair — real loss, felt as packet loss and latency spikes. Shown as a RATE, not a total: a burst around each reboot is expected re-lock noise, whereas a sustained rate between reboots means the plant is genuinely degraded. Correcteds are deliberately excluded — they are repaired and lossless.",
+          "description": "Rate of unrecoverable codewords across BOTH carriers (QAM + OFDM). Uncorrectables are data the modem could not repair — real loss, felt as packet loss and latency spikes. Shown as a RATE, not a total: a burst around each reboot is expected re-lock noise, whereas a sustained rate between reboots means the plant is genuinely degraded. Correcteds are deliberately excluded — they are repaired and lossless. The OFDM term is wrapped in `or vector(0)`: only a locked receiver emits those counters, and a bare `sum(A) + sum(B)` returns an EMPTY vector if either side is absent — so an unlocked OFDM carrier would blank this panel, which reads as 'nothing wrong'.",
           "targets": [
             {
               "refId": "A",
-              "expr": "sum(rate(modemscope_downstream_uncorrectables_total[15m])) + sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m]))",
+              "expr": "sum(rate(modemscope_downstream_uncorrectables_total[15m])) + (sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) or vector(0))",
               "legendFormat": "uncorrectables/sec"
             }
           ],
@@ -203,7 +203,7 @@ data:
             },
             {
               "refId": "C",
-              "expr": "sum(rate(modemscope_downstream_correcteds_total[5m])) + sum(rate(modemscope_downstream_ofdm_correcteds_total[5m]))",
+              "expr": "sum(rate(modemscope_downstream_correcteds_total[5m])) + (sum(rate(modemscope_downstream_ofdm_correcteds_total[5m])) or vector(0))",
               "legendFormat": "correcteds (repaired, lossless)"
             }
           ],
@@ -262,8 +262,8 @@ data:
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  { "value": null, "color": "red" },
-                  { "value": 33, "color": "transparent" }
+                  { "value": null, "color": "transparent" },
+                  { "value": 33, "color": "red" }
                 ]
               }
             }
@@ -278,7 +278,7 @@ data:
           "gridPos": { "x": 12, "y": 22, "w": 12, "h": 8 },
           "type": "timeseries",
           "title": "Signal Power",
-          "description": "Downstream receive power should sit in -7..+7 dBmV; upstream transmit power in 35..51 dBmV. Rising upstream power means the modem is shouting to be heard — excessive line loss (long run, too many splitters, bad connection). Above ~54 dBmV it drops off the network entirely.",
+          "description": "Downstream receive power should sit in -7..+7 dBmV; upstream transmit power in 35..51 dBmV. Rising upstream power means the modem is shouting to be heard — excessive line loss (long run, too many splitters, bad connection). Above ~54 dBmV it drops off the network entirely. Upstream is on the RIGHT axis: its 35..51 dBmV range is disjoint from downstream's -7..+7, and sharing one axis flattens the downstream lines into an unreadable band.",
           "targets": [
             { "refId": "A", "expr": "min(modemscope_downstream_power_dbmv)", "legendFormat": "DS min" },
             { "refId": "B", "expr": "max(modemscope_downstream_power_dbmv)", "legendFormat": "DS max" },
@@ -287,14 +287,23 @@ data:
           ],
           "fieldConfig": {
             "defaults": {
-              "unit": "dBm",
+              "unit": "suffix:dBmV",
               "custom": {
                 "drawStyle": "line",
                 "lineWidth": 2,
                 "fillOpacity": 0,
                 "showPoints": "auto"
               }
-            }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "US max" },
+                "properties": [
+                  { "id": "custom.axisPlacement", "value": "right" },
+                  { "id": "custom.axisLabel", "value": "upstream TX (dBmV)" }
+                ]
+              }
+            ]
           },
           "options": {
             "legend": { "displayMode": "list", "placement": "bottom" },
@@ -370,7 +379,7 @@ data:
             {
               "id": "organize",
               "options": {
-                "excludeByName": { "Time": true, "Value": true, "__name__": true, "job": true, "instance": true, "container": true, "endpoint": true, "namespace": true, "pod": true, "service": true, "env": true }
+                "excludeByName": { "Time": true, "Value": true, "__name__": true, "job": true, "instance": true, "container": true, "endpoint": true, "namespace": true, "pod": true, "service": true }
               }
             }
           ]

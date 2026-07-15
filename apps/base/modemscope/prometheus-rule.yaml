@@ -102,10 +102,15 @@ spec:
         # Both carriers are summed on purpose. On DOCSIS 3.1 the OFDM carrier
         # does most of the work, so watching only the QAM channels can report a
         # clean line while the carrier that matters is losing data.
+        #
+        # The OFDM term needs `or vector(0)`: only a LOCKED receiver emits those
+        # counters, and a bare `sum(A) + sum(B)` yields an empty vector if either
+        # side is absent. Without it this alert would go silent exactly when the
+        # OFDM carrier drops out — failing safe-looking instead of loud.
         - alert: ModemUncorrectableErrors
           expr: |
             sum(rate(modemscope_downstream_uncorrectables_total[15m]))
-              + sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) > 1
+              + (sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) or vector(0)) > 1
           for: 15m
           labels:
             severity: warning

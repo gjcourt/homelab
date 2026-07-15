@@ -22,6 +22,7 @@ resources:
   - linkding
   - mealie
   - memos
+  - modemscope
   - mqttscope
   - navidrome
   - openwebui

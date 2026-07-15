@@ -1,0 +1,388 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: modemscope-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  modemscope.json: |
+    {
+      "title": "Cable Modem / modemscope",
+      "uid": "modemscope-overview",
+      "tags": ["homelab", "modemscope", "docsis", "wan"],
+      "schemaVersion": 38,
+      "refresh": "30s",
+      "time": { "from": "now-24h", "to": "now" },
+      "timepicker": {},
+      "panels": [
+        {
+          "id": 1,
+          "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
+          "type": "stat",
+          "title": "Modem Reachable",
+          "description": "modemscope_up — 1 while the exporter can read the modem's status endpoints. 0 means the modem is unreachable, wedged, or mid-reboot. Independent of whether Prometheus can scrape the exporter (see up{job=\"modemscope\"}).",
+          "targets": [
+            { "refId": "A", "expr": "modemscope_up", "legendFormat": "up" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bool_on_off",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "red" },
+                  { "value": 1, "color": "green" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "gridPos": { "x": 4, "y": 0, "w": 5, "h": 4 },
+          "type": "stat",
+          "title": "Reboots (24h)",
+          "description": "resets(modemscope_uptime_seconds[24h]) — how many times the modem's uptime went backwards. THE headline number. A healthy cable modem does not reboot at all; its uptime is measured in weeks. Every DOCSIS error counter resets on reboot, so a silently rebooting modem looks healthier the more it reboots — this is the only signal that catches it, and it is the evidence to hand the ISP. CAVEAT: resets() over a window younger than 24h returns 0, not 'no data' — so a green 0 here means 'healthy' ONLY once there is a full day of history. Until then, read the uptime sawtooth below, which shows data age honestly. Summed so an exporter redeploy (new pod/instance labels) does not split the count across tiles. Red at 3 matches the ModemRebootingRepeatedly alert (>= 3 per 24h).",
+          "targets": [
+            { "refId": "A", "expr": "sum(resets(modemscope_uptime_seconds[24h]))", "legendFormat": "reboots" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "green" },
+                  { "value": 1, "color": "yellow" },
+                  { "value": 3, "color": "red" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 3,
+          "gridPos": { "x": 9, "y": 0, "w": 5, "h": 4 },
+          "type": "stat",
+          "title": "Modem Uptime",
+          "description": "modemscope_uptime_seconds — time since the modem last booted. Weeks is healthy. Minutes means it is thermal-cycling or crashing.",
+          "targets": [
+            { "refId": "A", "expr": "modemscope_uptime_seconds", "legendFormat": "uptime" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "area"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "red" },
+                  { "value": 3600, "color": "yellow" },
+                  { "value": 86400, "color": "green" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "gridPos": { "x": 14, "y": 0, "w": 5, "h": 4 },
+          "type": "stat",
+          "title": "Uncorrectables /sec",
+          "description": "Rate of unrecoverable codewords across BOTH carriers (QAM + OFDM). Uncorrectables are data the modem could not repair — real loss, felt as packet loss and latency spikes. Shown as a RATE, not a total: a burst around each reboot is expected re-lock noise, whereas a sustained rate between reboots means the plant is genuinely degraded. Correcteds are deliberately excluded — they are repaired and lossless. BOTH terms are wrapped in `or vector(0)`: a bare `sum(A) + sum(B)` returns an EMPTY vector if EITHER side is absent, and either can vanish (only a locked receiver emits OFDM counters; the exporter drops any field the modem reports as NA). An absent side would otherwise blank this panel, which reads as 'nothing wrong'. Note the guard converts 'unknown' into 'zero': if a carrier stops reporting, this tile goes GREENER, so cross-check the OFDM Lock State panel before trusting a low number.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(sum(rate(modemscope_downstream_uncorrectables_total[15m])) or vector(0)) + (sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) or vector(0))",
+              "legendFormat": "uncorrectables/sec"
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "area"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "green" },
+                  { "value": 0.5, "color": "yellow" },
+                  { "value": 1, "color": "red" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "gridPos": { "x": 19, "y": 0, "w": 5, "h": 4 },
+          "type": "stat",
+          "title": "Bonded Channels",
+          "description": "modemscope_downstream_channels / _upstream_channels — bonded channel counts. A drop means channels fell off the bond, which costs bandwidth directly.",
+          "targets": [
+            { "refId": "A", "expr": "modemscope_downstream_channels", "legendFormat": "downstream" },
+            { "refId": "B", "expr": "modemscope_upstream_channels", "legendFormat": "upstream" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "value",
+            "graphMode": "none"
+          },
+          "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "blue" } } }
+        },
+        {
+          "id": 10,
+          "gridPos": { "x": 0, "y": 4, "w": 24, "h": 9 },
+          "type": "timeseries",
+          "title": "Modem Uptime — every drop to zero is a reboot",
+          "description": "modemscope_uptime_seconds over time. A healthy modem draws one straight line climbing forever. A sawtooth means it is rebooting: each tooth is a WAN outage of 30-60s plus a burst of uncorrectables as it re-locks. This panel is the before/after for any cooling change — pull the cover or add a fan, then watch whether the teeth stop.",
+          "targets": [
+            { "refId": "A", "expr": "modemscope_uptime_seconds", "legendFormat": "uptime" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "pointSize": 4,
+                "showPoints": "auto",
+                "thresholdsStyle": { "mode": "line" }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "transparent" },
+                  { "value": 3600, "color": "yellow" }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "single" }
+          }
+        },
+        {
+          "id": 11,
+          "gridPos": { "x": 0, "y": 13, "w": 24, "h": 9 },
+          "type": "timeseries",
+          "title": "Uncorrectable Codewords /sec — QAM vs OFDM",
+          "description": "rate() of uncorrectables on each carrier. Both are plotted because on DOCSIS 3.1 the OFDM carrier does most of the work: watching only the QAM channels can report a clean line while the carrier that actually matters is losing data. Read the SHAPE: spikes aligned with the uptime sawtooth above are reboot re-lock noise; a sustained plateau between reboots is genuine plant degradation.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(rate(modemscope_downstream_uncorrectables_total[5m]))",
+              "legendFormat": "QAM"
+            },
+            {
+              "refId": "B",
+              "expr": "sum(rate(modemscope_downstream_ofdm_uncorrectables_total[5m]))",
+              "legendFormat": "OFDM"
+            },
+            {
+              "refId": "C",
+              "expr": "(sum(rate(modemscope_downstream_correcteds_total[5m])) or vector(0)) + (sum(rate(modemscope_downstream_ofdm_correcteds_total[5m])) or vector(0))",
+              "legendFormat": "correcteds (repaired, lossless)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "auto"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "correcteds (repaired, lossless)" },
+                "properties": [
+                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "text" } },
+                  { "id": "custom.fillOpacity", "value": 0 }
+                ]
+              },
+              {
+                "matcher": { "id": "byName", "options": "OFDM" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 12,
+          "gridPos": { "x": 0, "y": 22, "w": 12, "h": 8 },
+          "type": "timeseries",
+          "title": "Signal-to-Noise Ratio",
+          "description": "Downstream SNR. Below ~33 dB, 256QAM starts producing uncorrectable errors — the red threshold line. Min/max bracket every bonded QAM channel; OFDM is plotted separately. Low SNR with high uncorrectables points at a physical plant fault (loose/corroded connector, splitter, water ingress).",
+          "targets": [
+            { "refId": "A", "expr": "min(modemscope_downstream_snr_db)", "legendFormat": "QAM min" },
+            { "refId": "B", "expr": "max(modemscope_downstream_snr_db)", "legendFormat": "QAM max" },
+            { "refId": "C", "expr": "modemscope_downstream_ofdm_snr_db", "legendFormat": "OFDM rx{{receiver}}" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "dB",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 0,
+                "showPoints": "auto",
+                "thresholdsStyle": { "mode": "line" }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "transparent" },
+                  { "value": 33, "color": "red" }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 13,
+          "gridPos": { "x": 12, "y": 22, "w": 12, "h": 8 },
+          "type": "timeseries",
+          "title": "Signal Power",
+          "description": "Downstream receive power should sit in -7..+7 dBmV; upstream transmit power in 35..51 dBmV. Rising upstream power means the modem is shouting to be heard — excessive line loss (long run, too many splitters, bad connection). Above ~54 dBmV it drops off the network entirely. Upstream is on the RIGHT axis: its 35..51 dBmV range is disjoint from downstream's -7..+7, and sharing one axis flattens the downstream lines into an unreadable band.",
+          "targets": [
+            { "refId": "A", "expr": "min(modemscope_downstream_power_dbmv)", "legendFormat": "DS min" },
+            { "refId": "B", "expr": "max(modemscope_downstream_power_dbmv)", "legendFormat": "DS max" },
+            { "refId": "C", "expr": "max(modemscope_upstream_power_dbmv)", "legendFormat": "US max" },
+            { "refId": "D", "expr": "modemscope_downstream_ofdm_plc_power_dbmv", "legendFormat": "OFDM PLC rx{{receiver}}" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "suffix:dBmV",
+              "custom": {
+                "drawStyle": "line",
+                "lineWidth": 2,
+                "fillOpacity": 0,
+                "showPoints": "auto"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "US max" },
+                "properties": [
+                  { "id": "custom.axisPlacement", "value": "right" },
+                  { "id": "custom.axisLabel", "value": "upstream TX (dBmV)" }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 14,
+          "gridPos": { "x": 0, "y": 30, "w": 12, "h": 7 },
+          "type": "timeseries",
+          "title": "DOCSIS Registration State",
+          "description": "modemscope_docsis_init_state — each stage of the DOCSIS registration state machine (1 = healthy). A stage dropping to 0 means the modem fell off the CMTS and is re-joining. This is unambiguously an ISP-side or line event: nothing on your LAN can make a modem re-range.",
+          "targets": [
+            { "refId": "A", "expr": "modemscope_docsis_init_state", "legendFormat": "{{stage}}" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bool_on_off",
+              "max": 1,
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "fillOpacity": 5,
+                "showPoints": "never"
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 15,
+          "gridPos": { "x": 12, "y": 30, "w": 12, "h": 7 },
+          "type": "timeseries",
+          "title": "OFDM Lock State",
+          "description": "modemscope_downstream_ofdm_lock — the three OFDM lock stages. plc=1 with ncp=0 or mdc1=0 is a PARTIAL lock: the receiver reports plausible values while carrying nothing, so its error counters freeze and the uncorrectables rate above misreads as a clean carrier. That is why the stages are broken out rather than collapsed into one number.",
+          "targets": [
+            { "refId": "A", "expr": "modemscope_downstream_ofdm_lock", "legendFormat": "rx{{receiver}} {{stage}}" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bool_on_off",
+              "max": 1,
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "stepAfter",
+                "lineWidth": 2,
+                "fillOpacity": 5,
+                "showPoints": "never"
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 16,
+          "gridPos": { "x": 0, "y": 37, "w": 24, "h": 5 },
+          "type": "table",
+          "title": "Modem",
+          "description": "modemscope_info — identity of the modem being polled, and the DOCSIS config file it booted with (a d11_* config means it is provisioned for DOCSIS 3.1).",
+          "targets": [
+            { "refId": "A", "expr": "modemscope_info", "instant": true, "format": "table" }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": { "Time": true, "Value": true, "__name__": true, "job": true, "instance": true, "container": true, "endpoint": true, "namespace": true, "pod": true, "service": true }
+              }
+            }
+          ]
+        }
+      ]
+    }

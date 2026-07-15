@@ -20,6 +20,7 @@ spec:
           expr: up{job="modemscope"} == 0
           for: 5m
           labels:
+            namespace: modemscope
             severity: warning
           annotations:
             summary: "modemscope exporter is unreachable"
@@ -34,6 +35,7 @@ spec:
           expr: absent(modemscope_up)
           for: 10m
           labels:
+            namespace: modemscope
             severity: warning
           annotations:
             summary: "modemscope metrics absent"
@@ -48,6 +50,7 @@ spec:
           expr: modemscope_up == 0
           for: 5m
           labels:
+            namespace: modemscope
             severity: warning
           annotations:
             summary: "Cannot read the cable modem's status endpoints"
@@ -67,10 +70,18 @@ spec:
         # reboots — counters keep returning to zero. Uptime going backwards is
         # the only signal that catches it. A healthy cable modem's uptime is
         # measured in weeks; more than two reboots in an hour is pathological.
+        # Summed: resets() is per-series, and the Deployment rolls with
+        # maxUnavailable:0/maxSurge:1, so a redeploy briefly yields two series.
+        # Unsummed, 3 reboots/hour split 2+1 across them would trip neither.
+        # The trade runs both ways — during that same rollout overlap both pods
+        # scrape the modem, so one reboot lands as a reset on each series and
+        # sum() reports 2. Overcounting a redeploy window is the lesser evil
+        # against missing a genuinely rebooting modem.
         - alert: ModemRebooting
-          expr: resets(modemscope_uptime_seconds[1h]) > 2
+          expr: sum(resets(modemscope_uptime_seconds[1h])) > 2
           for: 5m
           labels:
+            namespace: modemscope
             severity: critical
           annotations:
             summary: "Cable modem has rebooted {{ $value }} times in the last hour"
@@ -81,10 +92,30 @@ spec:
               itself (overheating, failing hardware) or a plant fault forcing
               re-registration. This graph is the evidence to hand the ISP.
 
-        - alert: ModemRebootedRecently
-          expr: resets(modemscope_uptime_seconds[24h]) > 0
+        # Bridges the gap between ModemRebooting (>2 in one hour) and
+        # ModemRebootedRecently (>0 in a day, info). A modem rebooting steadily
+        # at ~2/hour never trips the hourly rule but is plainly broken, and this
+        # threshold matches the dashboard tile, which paints red at >= 3.
+        - alert: ModemRebootingRepeatedly
+          expr: sum(resets(modemscope_uptime_seconds[24h])) >= 3
           for: 10m
           labels:
+            namespace: modemscope
+            severity: warning
+          annotations:
+            summary: "Cable modem has rebooted {{ $value }} times in the last 24h"
+            description: >
+              The modem's uptime went backwards {{ $value }} times in 24h. A
+              healthy modem does not reboot at all. Sustained low-rate rebooting
+              never trips the hourly rule but drops the WAN every time. Suspect
+              the modem itself (overheating, failing hardware) or a plant fault
+              forcing re-registration.
+
+        - alert: ModemRebootedRecently
+          expr: sum(resets(modemscope_uptime_seconds[24h])) > 0
+          for: 10m
+          labels:
+            namespace: modemscope
             severity: info
           annotations:
             summary: "Cable modem rebooted in the last 24h"
@@ -102,12 +133,32 @@ spec:
         # Both carriers are summed on purpose. On DOCSIS 3.1 the OFDM carrier
         # does most of the work, so watching only the QAM channels can report a
         # clean line while the carrier that matters is losing data.
+        #
+        # BOTH terms need `or vector(0)`: a bare `sum(A) + sum(B)` yields an empty
+        # vector if EITHER side is absent, and either can vanish — only a LOCKED
+        # receiver emits the OFDM counters, and the exporter drops any field the
+        # modem reports as "NA". Guarding one side is not enough; without both,
+        # this alert goes silent exactly when a carrier drops out, failing
+        # safe-looking instead of loud.
+        #
+        # Note this guard is deliberately NOT applied to the min()/max() alerts
+        # below: `(min(snr) or vector(0)) < 33` would evaluate 0 < 33 and fire on
+        # every modem outage. Their empty-on-absence behaviour is correct there,
+        # and ModemUnreachable covers the up==0 outage.
+        #
+        # It is not a complete backstop, though: the exporter drops any field the
+        # modem reports as "NA", so an all-NA channel table with up==1 would
+        # silently disable ModemDownstreamSNRLow — the same hole
+        # ModemOFDMMetricsAbsent closes for OFDM. Accepted as low-probability
+        # (all 31 channels would have to go NA at once, and
+        # modemscope_downstream_channels would read 0) rather than papered over.
         - alert: ModemUncorrectableErrors
           expr: |
-            sum(rate(modemscope_downstream_uncorrectables_total[15m]))
-              + sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) > 1
+            (sum(rate(modemscope_downstream_uncorrectables_total[15m])) or vector(0))
+              + (sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) or vector(0)) > 1
           for: 15m
           labels:
+            namespace: modemscope
             severity: warning
           annotations:
             summary: "Cable line is losing data ({{ $value | humanize }} uncorrectable codewords/sec)"
@@ -125,6 +176,7 @@ spec:
           expr: max(modemscope_downstream_ofdm_locked) == 0
           for: 10m
           labels:
+            namespace: modemscope
             severity: warning
 
           annotations:
@@ -134,12 +186,33 @@ spec:
               running on legacy QAM channels only — a large bandwidth loss. This
               is a plant/ISP-side condition.
 
+        # max() over the lock series is empty — and so cannot fire — if the OFDM
+        # table disappears entirely rather than reporting rows with locked=0.
+        # absent() is the backstop for that case. (`or vector(0)` would be wrong
+        # here for the same reason as on the min()/max() alerts: it would fire on
+        # every outage.)
+        - alert: ModemOFDMMetricsAbsent
+          expr: absent(modemscope_downstream_ofdm_locked) and on() modemscope_up == 1
+          for: 15m
+          labels:
+            namespace: modemscope
+            severity: warning
+          annotations:
+            summary: "OFDM lock metrics have disappeared"
+            description: >
+              The modem is reachable (modemscope_up=1) but reports no OFDM
+              receivers at all for 15+ minutes, so ModemOFDMUnlocked cannot
+              evaluate. Either the modem stopped exposing dsofdminfo.asp (a
+              firmware change) or the exporter's OFDM fetch is failing — it is
+              tolerated rather than fatal by design.
+
         # The modem re-running its registration state machine means it dropped
         # off the CMTS and is re-joining — an ISP/line event, never a LAN one.
         - alert: ModemReregistering
           expr: min(modemscope_docsis_init_state) == 0
           for: 10m
           labels:
+            namespace: modemscope
             severity: warning
           annotations:
             summary: "Modem is not fully registered on the CMTS"
@@ -152,6 +225,7 @@ spec:
           expr: min(modemscope_downstream_snr_db) < 33
           for: 15m
           labels:
+            namespace: modemscope
             severity: warning
           annotations:
             summary: "Downstream SNR is low ({{ $value | humanize }} dB)"
@@ -165,6 +239,7 @@ spec:
           expr: max(modemscope_upstream_power_dbmv) > 51
           for: 15m
           labels:
+            namespace: modemscope
             severity: warning
           annotations:
             summary: "Upstream transmit power is high ({{ $value | humanize }} dBmV)"

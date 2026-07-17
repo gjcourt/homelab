@@ -31,4 +31,5 @@ resources:
   - thermalscope
   - thermalscope-smart
   - truenas-iscsi-monitor
+  - vibrato
   - vitals

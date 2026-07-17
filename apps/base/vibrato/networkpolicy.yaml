@@ -1,0 +1,57 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: vibrato
+  namespace: vibrato
+  labels:
+    app.kubernetes.io/name: vibrato
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: >-
+    Gateway ingress on 8080. Egress for DNS, the ito module's control port over
+    the LAN/IoT VLAN (10.42.7.x:23, reached as `world` like homepage's HifiBerry
+    probes), and mosquitto (1883, in-cluster) for the Home Assistant bridge.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: vibrato
+  ingress:
+    # Cilium Envoy (Gateway API) upstreams arrive as host / remote-node / ingress.
+    # All three required; kubelet probes are auto-exempted.
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    # DNS via CoreDNS.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # ito module control/telemetry port on the LAN/IoT VLAN. The ito is off-cluster
+    # (10.42.7.11:23), so it is reached via the `world` entity — the same pattern
+    # homepage uses for its HifiBerry LAN probes.
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "23"
+              protocol: TCP
+    # mosquitto (Home Assistant MQTT bridge) — in-cluster Service in ns mosquitto.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: mosquitto
+      toPorts:
+        - ports:
+            - port: "1883"
+              protocol: TCP

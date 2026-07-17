@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vibrato
+  namespace: vibrato
+spec:
+  template:
+    spec:
+      containers:
+        - name: vibrato
+          image: ghcr.io/gjcourt/vibrato:815d25632689a7afdd53ee9704d7e7e3a8106714
+          env:
+            - name: LEVA_NODE_ID
+              value: "espresso"

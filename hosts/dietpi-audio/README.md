@@ -24,9 +24,18 @@ This is the "convert all audio nodes to one setup" bundle — the design record 
      installs it if missing).
 3. Copy **`Automation_Custom_Script.sh`** to the boot partition root as
    `/boot/Automation_Custom_Script.sh`.
-4. **Boot.** DietPi installs snapclient, then runs the script: go-librespot, the
-   dmix `asound.conf`, the auto-detect wrapper + systemd overrides, and the udev
+4. **Boot.** DietPi installs snapclient, then runs the script: it dual-homes the
+   node (both NICs — see below), then sets up go-librespot, the dmix
+   `asound.conf`, the auto-detect wrapper + systemd overrides, and the udev
    rule. When you plug a USB DAC in, both services bind automatically.
+
+**Networking — dual-homed by default.** DietPi only configures its "primary"
+adapter and comments out the other, so a WiFi-provisioned node comes up
+WiFi-only (`#allow-hotplug eth0`). Step 0 of the script uncomments the disabled
+NIC so **both wired and WiFi come up** — a node then works in any room whether or
+not there's an ethernet drop; the unused NIC just sits with no carrier. So you
+can hand a node WiFi creds and still drop it on wired later with no changes. (It
+takes effect on DietPi's end-of-first-run reboot.)
 
 ## What it installs
 

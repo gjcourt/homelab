@@ -25,6 +25,23 @@ NODE_NAME="$(hostname)"                            # Spotify/Snapcast device nam
 
 log() { echo "[dietpi-audio] $*"; }
 
+# ---- 0. dual-home: bring up BOTH wired + WiFi -------------------------------
+# DietPi configures only the "primary" adapter and comments out the other in
+# /etc/network/interfaces — on a WiFi-provisioned node that leaves eth0 as
+# `#allow-hotplug eth0`, so wired stays dead. Uncomment it (and wlan0 if WiFi is
+# set up) so a node works in any room, cabled or not; the unused NIC just has no
+# carrier and doesn't block boot (allow-hotplug, not auto). Idempotent; the
+# change takes effect on DietPi's end-of-first-run reboot.
+IFACES=/etc/network/interfaces
+if [ -f "$IFACES" ]; then
+  grep -q '^allow-hotplug eth0' "$IFACES" || \
+    { sed -i 's/^#[[:space:]]*allow-hotplug eth0/allow-hotplug eth0/' "$IFACES"; log "enabled eth0 (dual-homed with wlan0)"; }
+  if [ -f /etc/wpa_supplicant/wpa_supplicant.conf ]; then
+    grep -q '^allow-hotplug wlan0' "$IFACES" || \
+      { sed -i 's/^#[[:space:]]*allow-hotplug wlan0/allow-hotplug wlan0/' "$IFACES"; log "enabled wlan0 (dual-homed with eth0)"; }
+  fi
+fi
+
 # ---- 1. snapclient (DietPi software id 192) ---------------------------------
 if ! command -v snapclient >/dev/null 2>&1; then
   log "installing Snapcast Client (dietpi-software 192)"

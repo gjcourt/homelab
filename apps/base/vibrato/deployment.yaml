@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vibrato
+  namespace: vibrato
+  labels:
+    app.kubernetes.io/name: vibrato
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vibrato
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: vibrato
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: vibrato
+          # Public ghcr package; overlays pin the date tag (see deployment-patch.yaml).
+          image: ghcr.io/gjcourt/vibrato:latest
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: PORT
+              value: "8080"
+            - name: LEVA_HOST
+              value: "10.42.7.11" # bench ito; repoint to the installed machine's ito later
+            - name: LEVA_PORT
+              value: "23"
+            - name: LEVA_MQTT_URL
+              value: "mqtt://mosquitto.mosquitto.svc:1883" # anonymous listener (allow_anonymous true)
+            - name: LEVA_NODE_ID
+              value: "vibrato" # overlays override per env
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Liveness uses a distinct signal (TCP accept) from readiness (HTTP /healthz)
+          # so a single ito-connection blip on /healthz can't co-restart the pod.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 5m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 192Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

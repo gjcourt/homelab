@@ -72,3 +72,11 @@ spec:
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            # tsx writes its transform cache to os.tmpdir(); readOnlyRootFilesystem
+            # leaves no writable /tmp, so provide one.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

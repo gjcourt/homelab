@@ -1,5 +1,5 @@
-# Static PV for Synology NFS movies share
-# PVs are cluster-scoped, so this is a separate resource file
+# Static PV for the hestia NFS movies library (canonical: family/media/video/*).
+# PVs are cluster-scoped, so this is a separate resource file.
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -15,7 +15,7 @@ spec:
   storageClassName: ""
   nfs:
     server: 10.42.2.10
-    path: /mnt/main/media/movies
+    path: /mnt/main/family/media/video/movies
     readOnly: true
   mountOptions:
     - nfsvers=3
@@ -42,7 +42,7 @@ spec:
     requests:
       storage: 1Ti
 ---
-# Static PV for Synology NFS TV shows share
+# Static PV for the hestia NFS TV library.
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -58,7 +58,7 @@ spec:
   storageClassName: ""
   nfs:
     server: 10.42.2.10
-    path: /mnt/main/media/tv-shows
+    path: /mnt/main/family/media/video/tv
     readOnly: true
   mountOptions:
     - nfsvers=3
@@ -85,7 +85,7 @@ spec:
     requests:
       storage: 1Ti
 ---
-# Static PV for Synology NFS TV anime share
+# Static PV for the hestia NFS anime library.
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -101,7 +101,7 @@ spec:
   storageClassName: ""
   nfs:
     server: 10.42.2.10
-    path: /mnt/main/media/tv-anime
+    path: /mnt/main/family/media/video/tv-anime
     readOnly: true
   mountOptions:
     - nfsvers=3

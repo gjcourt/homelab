@@ -23,7 +23,9 @@ patches:
       - op: replace
         path: /metadata/name
         value: jellyfin-prod
-  # Rename PVs to avoid conflict with staging
+  # Rename PVs to avoid conflict with staging. The canonical media paths
+  # (family/media/video/*) now live in the base PVs, so no path patch here —
+  # prod and staging share the same read-only NFS libraries.
   - target:
       kind: PersistentVolume
       name: jellyfin-movies-pv
@@ -31,12 +33,6 @@ patches:
       - op: replace
         path: /metadata/name
         value: jellyfin-movies-pv-prod
-      # Prod movies consolidated into the family tree (assimilation Phase 4);
-      # the media/movies dataset was zfs-remounted here. Staging stays on the
-      # base path. nfs.path is immutable -> one-time PV+PVC delete/recreate.
-      - op: replace
-        path: /spec/nfs/path
-        value: /mnt/main/family/media/video/movies
   - target:
       kind: PersistentVolumeClaim
       name: jellyfin-movies-pvc
@@ -51,11 +47,6 @@ patches:
       - op: replace
         path: /metadata/name
         value: jellyfin-tvshows-pv-prod
-      # Consolidated (Phase 4): serve the family/media/video/tv content (the old
-      # media/tv-shows was empty). Prod-only; staging keeps the base path.
-      - op: replace
-        path: /spec/nfs/path
-        value: /mnt/main/family/media/video/tv
   - target:
       kind: PersistentVolumeClaim
       name: jellyfin-tvshows-pvc
@@ -70,11 +61,6 @@ patches:
       - op: replace
         path: /metadata/name
         value: jellyfin-tvanime-pv-prod
-      # Consolidated (Phase 4): media/tv-anime dataset zfs-remounted here.
-      # Prod-only; staging keeps the base path.
-      - op: replace
-        path: /spec/nfs/path
-        value: /mnt/main/family/media/video/tv-anime
   - target:
       kind: PersistentVolumeClaim
       name: jellyfin-tvanime-pvc

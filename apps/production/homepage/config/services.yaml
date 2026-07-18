@@ -89,6 +89,12 @@
         description: Spaced-repetition flashcards (FSRS)
         # nginx /healthz returns 200 "ok"; root path is a SPA so probe the healthz endpoint.
         siteMonitor: https://flashcards.burntbytes.com/healthz
+    - Vibrato:
+        icon: mdi-coffee-maker
+        href: https://vibrato.burntbytes.com
+        description: Espresso machine monitor & control (ito + leva!)
+        # Root path is a SPA (tabbed UI); /healthz returns {"status":"ok"} in one hop.
+        siteMonitor: https://vibrato.burntbytes.com/healthz
 
 - Infrastructure:
     - Hestia:

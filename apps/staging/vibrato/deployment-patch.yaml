@@ -12,3 +12,10 @@ spec:
           env:
             - name: LEVA_NODE_ID
               value: "vibrato-stage"
+            # Staging runs against the simulator, never the real ito. The ito is a
+            # single physical machine with limited TCP connection slots; a staging
+            # preview sharing it (a) starves prod of the telemetry stream and
+            # (b) could send commands to the real machine (trigger a shot). Prod
+            # owns the ito; staging validates the app stack on canned frames.
+            - name: LEVA_TRANSPORT
+              value: "sim"

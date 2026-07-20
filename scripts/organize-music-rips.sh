@@ -1,56 +1,68 @@
 #!/usr/bin/env bash
-# organize-music-rips.sh — transfer XLD/CD rips off this Mac into the homelab
-# music library and lay them out as Artist/Album/## Track.ext, tag-driven.
+# organize-music-rips.sh — organize XLD/CD rips into Artist/Album/## Track layout
+# and push them to the homelab music library over SSH (rsync -> hestia dataset).
 #
 # Pipeline position: this is steps 4 (transfer) + 5 (organize) of the CD-rip
 # runbook (docs/plans/2026-07-20-cd-rip-music-library-pipeline.md). Rip (XLD),
 # verify (AccurateRip), and tag (MusicBrainz Picard) happen BEFORE this script;
 # the library scan (Navidrome) happens AFTER.
 #
+# Transport = rsync over SSH (NOT the SMB mount). The SMB share /Volumes/family
+# is flaky and, worse, blocked by macOS TCC for non-interactive/agent processes
+# ("Operation not permitted" on ls), so a mount-based path can't run from a
+# plain shell. rsync-over-SSH removes SMB entirely: source is local ~/Music
+# (readable everywhere), destination is the TrueNAS dataset over SSH. This
+# mirrors the sibling photo pipeline (scripts/import-sd-photos.sh): stage to a
+# truenas_admin-writable scratch dir, then one `sudo rsync --chown` places the
+# files into the owner-only-writable library with correct ownership.
+#
 # What it does:
 #   1. Reads embedded tags (album artist / album / disc / track / title) from
 #      every audio file under --src via ffprobe.
-#   2. Computes the canonical destination path for each file:
-#         <AlbumArtist>/<Album>/[Disc D/]## Title.ext
+#   2. Computes the canonical layout for each file:
+#         <AlbumArtist>/<Album>/[Disc NN/]## Title.ext
 #      Various-Artists / compilation albums land under "Various Artists/".
-#   3. rsyncs each file to its computed path under the library root — idempotent
-#      (checksum compare, never overwrites a byte-identical file), resumable
-#      (rsync --partial), and it VERIFIES the destination afterwards by counting
-#      files + bytes actually present (guards the low-bytes/high-speedup silent
-#      -skip trap).
+#   3. Builds that tree locally (hardlinks — near-free, same filesystem as the
+#      source), rsyncs it to a scratch dir on the dataset host, then
+#      `sudo rsync --chown`s it into the library. VERIFIES the destination over
+#      SSH afterwards (du + file-count + every-planned-file-present) — guards the
+#      low-bytes/high-speedup silent-skip trap.
 #
 # Safe by design:
-#   - the source is only ever READ (rsync copies; nothing is moved or deleted)
+#   - the source is only ever READ (hardlink/rsync copies; nothing is moved)
 #   - DRY-RUN by default; nothing is written until you pass --commit
 #   - files that cannot be placed (missing album/artist/title tags) are REPORTED
 #     and skipped, never dumped into a wrong folder. Fix them in Picard and
-#     re-run — the script is idempotent so re-runs are cheap.
+#     re-run — the script is idempotent (rsync --checksum) so re-runs are cheap.
 #
 # Usage:
-#   # dry-run the existing ~/Music backlog against the mounted family share:
-#   organize-music-rips.sh --src ~/Music --dest /Volumes/family/media/music
+#   # dry-run the existing ~/Music backlog (prints layout + skip list, no writes):
+#   organize-music-rips.sh --src ~/Music
 #
-#   # actually write:
-#   organize-music-rips.sh --src ~/Music --dest /Volumes/family/media/music --commit
+#   # actually write (stage over SSH + sudo rsync --chown into the library):
+#   organize-music-rips.sh --src ~/Music --commit
 #
-#   # a single freshly-ripped album folder:
-#   organize-music-rips.sh --src "~/Music/Giant Steps" --dest /Volumes/family/media/music --commit
+#   # a single freshly-ripped album folder, custom host/path:
+#   organize-music-rips.sh --src "~/Music/Giant Steps" \
+#     --host truenas_admin@10.42.2.10 --dest /mnt/main/family/media/music --commit
 #
-# The default --dest is the SMB mount of hestia's `family` share
-# (//george@hestia/family -> /Volumes/family); the subdir media/music is the
-# same tree Navidrome scans read-only over NFS at
-# 10.42.2.10:/mnt/main/family/media/music. Writing over SMB as the logged-in
-# user gives correct ownership with no SSH/sudo (mirrors import-sd-photos.sh).
+# The default --host/--dest point at the TrueNAS dataset that prod Navidrome
+# reads read-only over NFS (10.42.2.10:/mnt/main/family/media/music, mounted at
+# /music, ND_MUSICFOLDER=/music). The library is owned by uid 1028 (george):users
+# mode 755; this script derives that owner uid dynamically and applies it via
+# `sudo rsync --chown`, exactly like import-sd-photos.sh.
 #
-# Requires: ffprobe (brew install ffmpeg), rsync.
+# Requires: ffprobe (brew install ffmpeg), rsync, ssh (key-based access to --host).
 set -euo pipefail
 
 # ---- config -------------------------------------------------------------
 SRC=""
-DEST="${MUSIC_DEST:-/Volumes/family/media/music}"
+HESTIA="${MUSIC_HOST:-truenas_admin@10.42.2.10}"
+DEST="${MUSIC_DEST:-/mnt/main/family/media/music}"
+SCRATCH_ROOT="${MUSIC_SCRATCH:-/mnt/main/downloads/music-import}"
 COMMIT=0
-# Audio containers we place. Case-insensitive. Sidecars (.log/.cue/album art)
-# ride along per-album via the album-folder copy at the end.
+# Audio containers we place. Case-insensitive. (Sidecars like .log/.cue/cover.*
+# are handled per-album by Picard/XLD; this script places audio.)
 EXTS="flac alac m4a aac mp3 aiff aif wav ogg opus wv ape"
 
 usage() { grep '^#' "$0" | sed 's/^# \?//'; }
@@ -59,6 +71,7 @@ usage() { grep '^#' "$0" | sed 's/^# \?//'; }
 while [ $# -gt 0 ]; do
   case "$1" in
     --src)    SRC="$2"; shift 2;;
+    --host)   HESTIA="$2"; shift 2;;
     --dest)   DEST="$2"; shift 2;;
     --commit) COMMIT=1; shift;;
     -h|--help) usage; exit 0;;
@@ -68,19 +81,16 @@ done
 
 # Expand a leading ~ that survived unquoted (e.g. --src ~/Music in some shells).
 SRC="${SRC/#\~/$HOME}"
-DEST="${DEST/#\~/$HOME}"
 
 [ -n "$SRC" ] || { echo "ERROR: --src <dir> required (e.g. ~/Music)" >&2; exit 2; }
 [ -d "$SRC" ] || { echo "ERROR: --src '$SRC' is not a directory" >&2; exit 1; }
 command -v ffprobe >/dev/null 2>&1 || { echo "ERROR: ffprobe not found (brew install ffmpeg)" >&2; exit 1; }
 command -v rsync   >/dev/null 2>&1 || { echo "ERROR: rsync not found" >&2; exit 1; }
-
-if [ "$COMMIT" = 1 ]; then
-  [ -d "$DEST" ] || { echo "ERROR: --dest '$DEST' not found — is the family share mounted? (smb://hestia/family -> /Volumes/family)" >&2; exit 1; }
-fi
+command -v ssh     >/dev/null 2>&1 || { echo "ERROR: ssh not found" >&2; exit 1; }
 
 echo "Source:      $SRC"
-echo "Destination: $DEST"
+echo "Dest host:   $HESTIA"
+echo "Dest path:   $DEST   (prod Navidrome reads this RO over NFS)"
 echo "Mode:        $( [ "$COMMIT" = 1 ] && echo 'COMMIT (will write)' || echo 'DRY-RUN (no writes)')"
 echo
 
@@ -118,8 +128,9 @@ pad2() {
 # ---- plan ---------------------------------------------------------------
 # Build a newline-delimited plan: "<relative-dest>\t<source>" for placeable
 # files; collect unplaceable ones separately for the report.
-PLAN="$(mktemp)"; SKIPS="$(mktemp)"
-trap 'rm -f "$PLAN" "$SKIPS"' EXIT
+PLAN="$(mktemp)"; SKIPS="$(mktemp)"; STAGE=""
+cleanup() { rm -f "$PLAN" "$SKIPS"; [ -n "$STAGE" ] && rm -rf "$STAGE"; }
+trap cleanup EXIT
 
 find_expr=()
 for e in $EXTS; do find_expr+=(-iname "*.$e" -o); done
@@ -201,44 +212,62 @@ echo
 
 # ---- transfer -----------------------------------------------------------
 if [ "$COMMIT" != 1 ]; then
-  echo "DRY-RUN complete. Re-run with --commit to write to: $DEST"
+  echo "DRY-RUN complete. Re-run with --commit to write to: $HESTIA:$DEST"
   echo "(Nothing was copied. Source untouched.)"
   exit 0
 fi
 
-echo "=== COMMIT: rsync -> $DEST ==="
-# Snapshot destination usage before, for the after-verify delta.
-before_files=$(find "$DEST" -type f 2>/dev/null | wc -l | tr -d ' ')
-before_bytes=$(du -sk "$DEST" 2>/dev/null | awk '{print $1}')
-copied=0
+# Confirm SSH + destination reachability, and derive the library owner uid.
+echo "=== COMMIT: rsync over SSH -> $HESTIA:$DEST ==="
+OWNER_UID="$(ssh -o BatchMode=yes "$HESTIA" "stat -c %u '$DEST'" 2>/dev/null || true)"
+[ -n "$OWNER_UID" ] || { echo "ERROR: cannot stat '$DEST' on $HESTIA — is the host reachable and the path present?" >&2; exit 1; }
+echo "Destination owner uid: $OWNER_UID (files will be chowned to ${OWNER_UID}:users)"
+
+# 1) Build the organized tree locally via hardlinks (same filesystem as the
+#    source => near-instant, no extra disk). Falls back to copy across devices.
+STAGE="$(mktemp -d "${TMPDIR:-/tmp}/music-organize.XXXXXX")"
+echo "Staging organized tree locally: $STAGE"
 while IFS=$'\t' read -r rel src; do
-  dst="$DEST/$rel"
-  mkdir -p "$(dirname "$dst")"
-  # --checksum = idempotent (byte-identical file is skipped, not re-sent).
-  # --partial  = resumable across interrupted runs.
-  # --ignore-times pairs with --checksum so SMB mtime skew can't fool the skip.
-  rsync --archive --partial --checksum --ignore-times --no-perms --no-owner --no-group \
-        "$src" "$dst"
-  copied=$((copied+1))
+  mkdir -p "$STAGE/$(dirname "$rel")"
+  ln "$src" "$STAGE/$rel" 2>/dev/null || cp "$src" "$STAGE/$rel"
 done < "$PLAN"
 
+# 2) rsync the tree to a truenas_admin-writable scratch dir on the dataset host.
+#    --checksum = idempotent (byte-identical files skipped), --partial +
+#    --append-verify = resumable across interrupted runs.
+SCRATCH="$SCRATCH_ROOT"
+echo "Staging to scratch on host: $HESTIA:$SCRATCH"
+ssh -o BatchMode=yes "$HESTIA" "mkdir -p '$SCRATCH'"
+rsync -a --checksum --partial --append-verify -e "ssh -o BatchMode=yes" \
+      "$STAGE/" "$HESTIA:$SCRATCH/"
+
+# 3) sudo rsync --chown into the owner-only-writable library (mirrors the photo
+#    pipeline). --checksum keeps it idempotent; ownership is set inline so the
+#    files land as the library owner, not truenas_admin. ssh -t so sudo can
+#    prompt if this host ever lacks passwordless sudo.
+echo "Placing into library with correct ownership (sudo rsync --chown)..."
+ssh -t "$HESTIA" \
+  "sudo rsync -a --checksum --partial --chown=${OWNER_UID}:users '$SCRATCH/' '$DEST/'"
+
+# ---- verify (silent-skip guard) -----------------------------------------
 echo
-echo "=== VERIFY DESTINATION ==="
-after_files=$(find "$DEST" -type f 2>/dev/null | wc -l | tr -d ' ')
-after_bytes=$(du -sk "$DEST" 2>/dev/null | awk '{print $1}')
-echo "  files at dest: $before_files -> $after_files"
-echo "  KiB at dest:   ${before_bytes:-?} -> ${after_bytes:-?}"
-echo "  rsync invocations: $copied"
+echo "=== VERIFY DESTINATION (over SSH) ==="
+ssh -o BatchMode=yes "$HESTIA" \
+  "printf '  du -sh: %s\n' \"\$(du -sh '$DEST' | cut -f1)\"; printf '  files: %s\n' \"\$(find '$DEST' -type f | wc -l | tr -d ' ')\""
 # Confirm every planned file is actually present at its computed path.
-missing=0
-while IFS=$'\t' read -r rel _; do
-  [ -f "$DEST/$rel" ] || { echo "  MISSING: $rel"; missing=$((missing+1)); }
-done < "$PLAN"
+ssh -o BatchMode=yes "$HESTIA" "cd '$DEST' && find . -type f | sed 's#^\\./##'" \
+  | sort > "$STAGE/.remote-list"
+cut -f1 "$PLAN" | sort > "$STAGE/.planned-list"
+missing="$(comm -23 "$STAGE/.planned-list" "$STAGE/.remote-list" | tee "$STAGE/.missing" | wc -l | tr -d ' ')"
 if [ "$missing" -gt 0 ]; then
-  echo "  FAIL: $missing planned file(s) not present at destination." >&2
+  echo "  FAIL: $missing planned file(s) NOT present at destination:" >&2
+  sed 's#^#    #' "$STAGE/.missing" | head -20 >&2
   exit 1
 fi
-echo "  OK: all $placeable planned file(s) present at destination."
+echo "  OK: all $placeable planned file(s) present at $HESTIA:$DEST."
+echo
+echo "Scratch left at $HESTIA:$SCRATCH — remove when satisfied:"
+echo "  ssh $HESTIA 'rm -rf $SCRATCH'"
 echo
 echo "Next: trigger the Navidrome scan and confirm the albums appear"
 echo "(see docs/plans/2026-07-20-cd-rip-music-library-pipeline.md, step 6)."

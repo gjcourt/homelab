@@ -35,11 +35,20 @@ spec:
             summary: "TrueNAS iSCSI extents do not match democratic-csi name pattern"
             description: "{{ $value }} extents in the last 15m did not match csi-pvc-<UUID>-k8s. Either democratic-csi changed its naming template or someone created a non-CSI extent. Update EXTENT_NAME_RE in the exporter script if naming changed."
 
+        # De-tuned 2026-07-21: ~20% of scrape cycles hit a transient
+        # "timed out while waiting for handshake response" on the wss://
+        # connection, then self-recover on the next cycle (exporter keeps
+        # publishing fresh metrics). At `> 5 for 5m` this flapped ~180x/week
+        # by email. The REAL "exporter can't reach TrueNAS" signal is
+        # TrueNASISCSIScraperStale (no successful scrape in 10m) above — that
+        # is unaffected by transient blips. This rule now fires only on a
+        # sustained error storm (a genuinely broken API key / TrueNAS down for
+        # 30m+), not on normal handshake flakiness.
         - alert: TrueNASISCSIScrapeErrors
-          expr: increase(truenas_iscsi_scrape_errors_total[15m]) > 5
-          for: 5m
+          expr: increase(truenas_iscsi_scrape_errors_total[15m]) > 20
+          for: 30m
           labels:
             severity: warning
           annotations:
-            summary: "TrueNAS iSCSI exporter is throwing scrape errors"
-            description: "{{ $value }} errors in the last 15m. Common causes: TrueNAS API key expired/rotated; TrueNAS unreachable on wss://10.42.2.10/api/current; K8s API token issue."
+            summary: "TrueNAS iSCSI exporter is throwing sustained scrape errors"
+            description: "{{ $value }} errors in the last 15m, sustained 30m+. Beyond normal transient wss handshake timeouts — check for an expired/rotated TrueNAS API key or TrueNAS unreachable on wss://10.42.2.10/api/current. (For a hard exporter outage see TrueNASISCSIScraperStale.)"

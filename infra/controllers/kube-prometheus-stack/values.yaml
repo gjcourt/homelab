@@ -586,7 +586,14 @@ alertmanager:
       # non-critical fell through to the default 'null' receiver and was silently
       # dropped — which is why week-long crashloops went unnoticed
       # (ContainerCrashLoopBackOff is severity=warning). See #1080.
-      - receiver: 'email-critical'
+      #
+      # Routed to 'email-warning' (send_resolved:false, 2026-07-21) rather than
+      # 'email-critical': warnings were sending a second "[RESOLVED]" email every
+      # time they cleared, which for flappy warnings was ~40% of all alert mail.
+      # For a warning, the firing notification is enough — we don't need to be
+      # told it stopped. Criticals still send resolved (knowing an outage cleared
+      # matters, and there's no ack channel).
+      - receiver: 'email-warning'
         matchers:
           - severity = "warning"
         repeat_interval: 24h
@@ -596,6 +603,10 @@ alertmanager:
       email_configs:
         - to: 'gjcourt+alerts@gmail.com'
           send_resolved: true
+    - name: 'email-warning'
+      email_configs:
+        - to: 'gjcourt+alerts@gmail.com'
+          send_resolved: false
     templates:
     - '/etc/alertmanager/config/*.tmpl'
 

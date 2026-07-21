@@ -31,7 +31,7 @@ spec:
     - nolock
   nfs:
     server: 10.42.2.10
-    path: /mnt/main/media/music
+    path: /mnt/main/family/media/music
     readOnly: true
 ---
 apiVersion: v1

@@ -8,10 +8,15 @@ metadata:
 spec:
   replicas: 1
   revisionHistoryLimit: 5
-  # RWO data volume on a single replica: recreate the old pod before the new one
-  # so a rollout can't Multi-Attach the iSCSI PVC.
+  # RWO data volume on a single replica: terminate the old pod before starting the
+  # new one so a rollout can't Multi-Attach the iSCSI PVC. maxSurge:0 gives the
+  # Recreate effect while staying type RollingUpdate (Recreate forbids the live,
+  # API-defaulted rollingUpdate block — dry-run rejects it).
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: vibrato

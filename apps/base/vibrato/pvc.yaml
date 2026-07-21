@@ -1,0 +1,17 @@
+# Persistent data dir for the app's JSON store (saved profiles + shot history).
+# Without this the store writes to the container's read-only root FS (`./data`)
+# and every write fails silently — profiles/history never persist. Mounted at
+# /data with LEVA_DATA_DIR=/data (see deployment.yaml). RWO + Retain (durable);
+# the deployment uses strategy: Recreate so a rollout doesn't Multi-Attach it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vibrato-data
+  namespace: vibrato
+spec:
+  storageClassName: truenas-iscsi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

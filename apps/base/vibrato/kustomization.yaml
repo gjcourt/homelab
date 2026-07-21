@@ -5,6 +5,7 @@ resources:
   - deployment.yaml
   - networkpolicy.yaml
   - pdb.yaml
+  - pvc.yaml
   - service.yaml
 labels:
   - includeSelectors: false

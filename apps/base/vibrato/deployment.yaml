@@ -8,6 +8,10 @@ metadata:
 spec:
   replicas: 1
   revisionHistoryLimit: 5
+  # RWO data volume on a single replica: recreate the old pod before the new one
+  # so a rollout can't Multi-Attach the iSCSI PVC.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: vibrato
@@ -42,6 +46,8 @@ spec:
               value: "mqtt://mosquitto.mosquitto.svc:1883" # anonymous listener (allow_anonymous true)
             - name: LEVA_NODE_ID
               value: "vibrato" # overlays override per env
+            - name: LEVA_DATA_DIR
+              value: "/data" # persisted profiles + shot history (see pvc.yaml)
           readinessProbe:
             httpGet:
               path: /healthz
@@ -77,6 +83,12 @@ spec:
             # leaves no writable /tmp, so provide one.
             - name: tmp
               mountPath: /tmp
+            # Persistent store for saved profiles + shot history (LEVA_DATA_DIR).
+            - name: data
+              mountPath: /data
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: vibrato-data

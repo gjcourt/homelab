@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
         - name: vibrato
-          image: ghcr.io/gjcourt/vibrato:c9a8206a4b7790861634da29d96dad81778de2a5
+          image: ghcr.io/gjcourt/vibrato:65e55e7bd87f11fb028149bb547bf7199201c5a0
           env:
             - name: LEVA_NODE_ID
               value: "vibrato-stage"

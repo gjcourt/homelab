@@ -8,6 +8,15 @@ metadata:
 spec:
   replicas: 1
   revisionHistoryLimit: 5
+  # RWO data volume on a single replica: terminate the old pod before starting the
+  # new one so a rollout can't Multi-Attach the iSCSI PVC. maxSurge:0 gives the
+  # Recreate effect while staying type RollingUpdate (Recreate forbids the live,
+  # API-defaulted rollingUpdate block — dry-run rejects it).
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: vibrato
@@ -42,6 +51,8 @@ spec:
               value: "mqtt://mosquitto.mosquitto.svc:1883" # anonymous listener (allow_anonymous true)
             - name: LEVA_NODE_ID
               value: "vibrato" # overlays override per env
+            - name: LEVA_DATA_DIR
+              value: "/data" # persisted profiles + shot history (see pvc.yaml)
           readinessProbe:
             httpGet:
               path: /healthz
@@ -77,6 +88,12 @@ spec:
             # leaves no writable /tmp, so provide one.
             - name: tmp
               mountPath: /tmp
+            # Persistent store for saved profiles + shot history (LEVA_DATA_DIR).
+            - name: data
+              mountPath: /data
       volumes:
         - name: tmp
           emptyDir: {}
+        - name: data
+          persistentVolumeClaim:
+            claimName: vibrato-data

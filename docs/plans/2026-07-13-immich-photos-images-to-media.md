@@ -100,7 +100,7 @@ ssh truenas_admin@10.42.2.10 'sudo zfs list -o name,used,refer,mounted,mountpoin
 - [ ] `media/photos` dataset-vs-dir decided and (if chosen) promoted + snapshotted.
 - [ ] Staging PVs + 30d-sync CronJob on `media/`, next sync green.
 - [x] alcatraz-pull rrsync root on `media/photos` (repointed 2026-07-21 — see note); alcatraz backup re-verifies on the next scheduled DSM pull.
-- [x] All docs reference `media/photos`; no `family/images/photos` references remain in the repo.
+- [~] alcatraz-pull operational script + runbooks (`pull-from-hestia.sh`, `hosts/alcatraz/immich-photos-pull/README.md`, the 2026-07-04 alcatraz-pull plan) reference `media/photos`. A full repo-wide sweep is NOT done — the retired path still appears in ~40 spots across older/superseded plan docs (2026-05-20, 2026-06-01, 2026-07-05, 2026-07-06) and some current-state docs (`hosts/hestia/README.md`, `scripts/import-sd-photos.sh`). Most are legitimate history; the current-state ones are a separate docs-hygiene follow-up. (`/volume1/family/images/photos` is the alcatraz Synology path — a different filesystem — and is out of scope here.)
 - [ ] `family/images/*` datasets destroyed after parity + snapshot verification.
 
 > **2026-07-21 — orphaned step 7 (alcatraz-pull repoint) fixed.** When

@@ -1,4 +1,4 @@
-# Deployment patches for production - DNS
+# Deployment patches for production - DNS + media libraries
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,3 +14,21 @@ spec:
         - ip: "10.42.2.40"
           hostnames:
             - auth.burntbytes.com
+      # Read-only NFS media mounts. In the Audiobookshelf UI, add a Book
+      # library pointing at /audiobooks and a Podcast library at /podcasts.
+      containers:
+        - name: audiobookshelf
+          volumeMounts:
+            - name: abs-audiobooks
+              mountPath: /audiobooks
+              readOnly: true
+            - name: abs-podcasts
+              mountPath: /podcasts
+              readOnly: true
+      volumes:
+        - name: abs-audiobooks
+          persistentVolumeClaim:
+            claimName: audiobookshelf-audiobooks-pvc
+        - name: abs-podcasts
+          persistentVolumeClaim:
+            claimName: audiobookshelf-podcasts-pvc

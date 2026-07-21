@@ -1,0 +1,96 @@
+# NFS-backed PersistentVolumes for the Audiobookshelf libraries (production).
+# Read-only mounts of the canonical media tree. Book library -> audiobooks/,
+# podcast library -> podcasts/ (split out of the old audiobooks/ bucket;
+# AA recordings moved to family/audio). Files are 0644/world-readable, so no
+# uid pinning is needed (unlike navidrome's 0700 music tree).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: audiobookshelf-audiobooks-pv-prod
+  labels:
+    app: audiobookshelf
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: audiobookshelf-audiobooks-pvc
+    namespace: audiobookshelf-prod
+  mountOptions:
+    - nfsvers=3
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+    - nolock
+  nfs:
+    server: 10.42.2.10
+    path: /mnt/main/family/media/audiobooks
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audiobookshelf-audiobooks-pvc
+  namespace: audiobookshelf-prod
+  labels:
+    app: audiobookshelf
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Ti
+  volumeName: audiobookshelf-audiobooks-pv-prod
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: audiobookshelf-podcasts-pv-prod
+  labels:
+    app: audiobookshelf
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: audiobookshelf-podcasts-pvc
+    namespace: audiobookshelf-prod
+  mountOptions:
+    - nfsvers=3
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+    - nolock
+  nfs:
+    server: 10.42.2.10
+    path: /mnt/main/family/media/podcasts
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audiobookshelf-podcasts-pvc
+  namespace: audiobookshelf-prod
+  labels:
+    app: audiobookshelf
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Ti
+  volumeName: audiobookshelf-podcasts-pv-prod
+  storageClassName: ""

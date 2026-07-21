@@ -84,7 +84,12 @@ spec:
               memory: 512Mi
             limits:
               cpu: 500m
-              memory: 1Gi
+              # Bumped 1Gi -> 2Gi 2026-07-21: steady-state is ~400Mi, but a
+              # replica transiently spikes past 1Gi (querylog/stats GC) and gets
+              # OOMKilled (adguard-1 died 6x, exit 137), causing DNS blips.
+              # Nodes have huge headroom (~11% mem used). If 2Gi still OOMs,
+              # tune AdGuard's querylog retention in AdGuardHome.yaml instead.
+              memory: 2Gi
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

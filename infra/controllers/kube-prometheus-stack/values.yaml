@@ -599,9 +599,16 @@ alertmanager:
         repeat_interval: 24h
     receivers:
     - name: 'null'
+    # Split alias 2026-07-21: criticals go to +critical, warnings to +alerts.
+    # A Gmail filter labels `to:gjcourt+alerts@gmail.com` (warnings) and skips
+    # the inbox — warnings become opt-in (look at the label when you want).
+    # Criticals land on +critical, which has NO skip-inbox filter, so genuine
+    # outages still reach the inbox. (This is the fix for the failure mode where
+    # a critical HomelabscopeJobStale was buried under warning-noise and a real
+    # 8-day photo-pull outage went unseen.)
     - name: 'email-critical'
       email_configs:
-        - to: 'gjcourt+alerts@gmail.com'
+        - to: 'gjcourt+critical@gmail.com'
           send_resolved: true
     - name: 'email-warning'
       email_configs:

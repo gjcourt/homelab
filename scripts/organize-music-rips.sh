@@ -206,7 +206,9 @@ if [ "$skipped" -gt 0 ]; then
 fi
 
 echo "=== PLANNED LAYOUT (first 40) ==="
-sort "$PLAN" | cut -f1 | sed 's#^#  #' | head -40
+# awk-limit instead of `head` so an early pipe close can't SIGPIPE-abort the
+# upstream sort under `set -e -o pipefail` (that killed the dry-run mid-print).
+sort "$PLAN" | cut -f1 | sed 's#^#  #' | awk 'NR<=40'
 [ "$placeable" -gt 40 ] && echo "  ... and $((placeable-40)) more"
 echo
 
@@ -243,19 +245,21 @@ rsync -a --checksum --partial --append-verify -e "ssh -o BatchMode=yes" \
 
 # 3) sudo rsync --chown into the owner-only-writable library (mirrors the photo
 #    pipeline). --checksum keeps it idempotent; ownership is set inline so the
-#    files land as the library owner, not truenas_admin. ssh -t so sudo can
-#    prompt if this host ever lacks passwordless sudo.
+#    files land as the library owner, not truenas_admin. hestia has passwordless
+#    sudo, so `sudo -n` runs non-interactively (works from cron/agents, no TTY).
 echo "Placing into library with correct ownership (sudo rsync --chown)..."
-ssh -t "$HESTIA" \
-  "sudo rsync -a --checksum --partial --chown=${OWNER_UID}:users '$SCRATCH/' '$DEST/'"
+ssh -o BatchMode=yes "$HESTIA" \
+  "sudo -n rsync -a --checksum --partial --chown=${OWNER_UID}:users '$SCRATCH/' '$DEST/'"
 
 # ---- verify (silent-skip guard) -----------------------------------------
 echo
 echo "=== VERIFY DESTINATION (over SSH) ==="
 ssh -o BatchMode=yes "$HESTIA" \
-  "printf '  du -sh: %s\n' \"\$(du -sh '$DEST' | cut -f1)\"; printf '  files: %s\n' \"\$(find '$DEST' -type f | wc -l | tr -d ' ')\""
-# Confirm every planned file is actually present at its computed path.
-ssh -o BatchMode=yes "$HESTIA" "cd '$DEST' && find . -type f | sed 's#^\\./##'" \
+  "printf '  du -sh: %s\n' \"\$(sudo -n du -sh '$DEST' | cut -f1)\"; printf '  files: %s\n' \"\$(sudo -n find '$DEST' -type f | wc -l | tr -d ' ')\""
+# Confirm every planned file is actually present at its computed path. The
+# library is mode 700, so read it via sudo (else find/du hit permission denied
+# and every planned file falsely reports as missing).
+ssh -o BatchMode=yes "$HESTIA" "sudo -n bash -c \"cd '$DEST' && find . -type f | sed 's#^\\./##'\"" \
   | sort > "$STAGE/.remote-list"
 cut -f1 "$PLAN" | sort > "$STAGE/.planned-list"
 missing="$(comm -23 "$STAGE/.planned-list" "$STAGE/.remote-list" | tee "$STAGE/.missing" | wc -l | tr -d ' ')"

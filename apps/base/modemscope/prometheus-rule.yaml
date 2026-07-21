@@ -152,11 +152,18 @@ spec:
         # ModemOFDMMetricsAbsent closes for OFDM. Accepted as low-probability
         # (all 31 channels would have to go NA at once, and
         # modemscope_downstream_channels would read 0) rather than papered over.
+        # De-tuned 2026-07-21: the CODA-56 overheats and sheds uncorrectable
+        # codewords during thermal events (known issue — pending 40mm heatsink +
+        # Noctua fan; see modem-thermal notes). At `> 1 for 15m` this paged
+        # ~38x/week on brief, self-clearing thermal blips. Raised to a sustained
+        # `> 10 for 30m` so only genuine line degradation (well past the known
+        # thermal baseline) pages. RE-TIGHTEN back toward `> 1` once the fan fix
+        # lands and the modem stops overheating.
         - alert: ModemUncorrectableErrors
           expr: |
             (sum(rate(modemscope_downstream_uncorrectables_total[15m])) or vector(0))
-              + (sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) or vector(0)) > 1
-          for: 15m
+              + (sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) or vector(0)) > 10
+          for: 30m
           labels:
             namespace: modemscope
             severity: warning

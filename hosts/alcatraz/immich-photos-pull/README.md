@@ -53,7 +53,7 @@ setuid patch). Full root cause + decision record:
 | Attribute | Value |
 |---|---|
 | Runs on | alcatraz (Synology DSM, `10.42.2.11`), as **root**, via the `immich-photos-pull` compose container (busybox crond) |
-| Source (server) | `truenas_admin@10.42.2.10:/mnt/main/family/images/photos/{mara,george}/` |
+| Source (server) | `truenas_admin@10.42.2.10:/mnt/main/family/media/photos/{mara,george}/` |
 | Destination (local) | `/volume1/homes/{mara,george}/Photos/` (owned `<uid>:100`; mara=1027, george=1028) |
 | Mode | `rsync -a --ignore-existing` (additive; **no `--delete`, ever**) |
 | SSH key | `/volume1/homes/truenas-backup/.ssh/id_ed25519_hestia` (mode 600) |
@@ -98,7 +98,7 @@ operator does not touch hestia.** The public key from step 1 goes into
 read-only rsync of the photos path:
 
 ```
-command="sudo -n --preserve-env=SSH_ORIGINAL_COMMAND /usr/bin/rrsync -ro /mnt/main/family/images/photos",no-agent-forwarding,no-port-forwarding,no-pty,no-X11-forwarding ssh-ed25519 AAAA...alcatraz-photos-pull
+command="sudo -n --preserve-env=SSH_ORIGINAL_COMMAND /usr/bin/rrsync -ro /mnt/main/family/media/photos",no-agent-forwarding,no-port-forwarding,no-pty,no-X11-forwarding ssh-ed25519 AAAA...alcatraz-photos-pull
 ```
 
 Two things about this line are load-bearing:

@@ -8,7 +8,7 @@ summary: "Retire the impossible hestia→alcatraz rsync push-back; alcatraz pull
 
 ## Problem
 
-hestia (`main/family/images/photos`) is the source of truth for the photo
+hestia (`main/family/media/photos`) is the source of truth for the photo
 library. Two flows keep alcatraz and hestia in sync:
 
 1. **alcatraz → hestia** (phone uploads): the hestia-side container
@@ -63,7 +63,7 @@ alcatraz (DSM Task Scheduler, runs as ROOT, ~05:00 daily)
            --exclude=@eaDir,.DS_Store,Thumbs.db \
            --rsh="ssh -T -x -i <key> -c chacha20-poly1305 -o Compression=no \
                   -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=<kh>" \
-           truenas_admin@10.42.2.10:/mnt/main/family/images/photos/<user>/ \
+           truenas_admin@10.42.2.10:/mnt/main/family/media/photos/<user>/ \
            /volume1/homes/<user>/Photos/
          chown -R <uid>:100 /volume1/homes/<user>/Photos/   # runs as root
 ```
@@ -93,7 +93,7 @@ Repo artifacts:
    `/volume1/homes/truenas-backup/immich-photos-pull/` (mode 755).
 2. **On hestia** (someone with hestia access — not the DSM operator): install
    the public key into `truenas_admin`'s `authorized_keys` with the
-   `rrsync -ro /mnt/main/family/images/photos` forced command.
+   `rrsync -ro /mnt/main/family/media/photos` forced command.
 3. **On alcatraz**: create a DSM Task Scheduler user-defined script, **run as
    `root`**, daily ~05:00, invoking the script.
 4. **Validate**: run the task manually; confirm files land under

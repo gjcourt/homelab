@@ -50,13 +50,13 @@ GID_USERS=100
 # hestia rsync server (source of truth). truenas_admin (uid 950) has read on
 # the photo dirs; the authorized_keys entry there restricts this key to a
 # read-only rrsync rooted at the photos path (abbreviated as
-# command="rrsync -ro /mnt/main/family/images/photos" here; the real
+# command="rrsync -ro /mnt/main/family/media/photos" here; the real
 # authorized_keys line wraps it in `sudo -n --preserve-env=SSH_ORIGINAL_COMMAND`
 # — see README for the exact, load-bearing form). Because
 # rrsync confines the client to that root, source paths are RELATIVE to it
 # (e.g. "mara/") — an ABSOLUTE path gets the root prepended a second time and
 # fails ("change_dir ...photos/mnt/.../photos/mara: No such file"). The
-# authorizing rrsync root on hestia is: /mnt/main/family/images/photos
+# authorizing rrsync root on hestia is: /mnt/main/family/media/photos
 SRC_HOST="truenas_admin@10.42.2.10"
 
 # alcatraz per-user DSM Photos libraries (destination, local).

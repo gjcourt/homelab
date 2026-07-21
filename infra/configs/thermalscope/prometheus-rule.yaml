@@ -126,14 +126,20 @@ spec:
         # rollup) to avoid double-firing on Sensor1/Sensor2 which read
         # identical values per drive. 65°C is conservative; throttling
         # typically kicks in around 70-75°C.
+        # De-tuned 2026-07-21: single-drive Talos nodes peak at ~64–65°C under
+        # normal load, so `> 65 for 5m` flapped ~20x/week — yet observed
+        # headroom-to-critical never dropped below 20°C, so 65°C is nowhere near
+        # dangerous here. Raised to `> 70 for 15m`. The genuine danger signal is
+        # ThermalScopeNVMeHeadroomLow (< 5°C to the drive's own crit threshold)
+        # below, which is untouched.
         - alert: ThermalScopeNVMeTemperatureHigh
-          expr: thermalscope_nvme_temperature_celsius{sensor="Composite"} > 65
-          for: 5m
+          expr: thermalscope_nvme_temperature_celsius{sensor="Composite"} > 70
+          for: 15m
           labels:
             severity: warning
           annotations:
             summary: "NVMe {{ $labels.device }} on {{ $labels.instance }} is hot"
-            description: "{{ $labels.device }} (Composite) on {{ $labels.instance }} is {{ $value }}°C (threshold 65°C)."
+            description: "{{ $labels.device }} (Composite) on {{ $labels.instance }} is {{ $value }}°C (threshold 70°C). See ThermalScopeNVMeHeadroomLow for the real thermal-danger signal."
 
         # Scoped to hestia because 83°C is the NVIDIA RTX 4090 thermal
         # warning threshold. AMD iGPUs run hotter by design — see
@@ -181,11 +187,15 @@ spec:
         # nodename for exactly this reason). 0.85/80 chosen to sit below the
         # 85°C ThermalScopeCPUTemperatureHigh threshold while still
         # requiring genuinely high heat alongside the clock drop.
+        # De-tuned 2026-07-21: `for: 10m` still flapped ~12x/week as the
+        # freq-ratio dipped in and out under bursty load. Lengthened to 20m so
+        # only genuinely sustained throttling (hot AND slow for 20m) pages; the
+        # compound condition (low freq ratio AND Tctl > 80) is already specific.
         - alert: ThermalScopeCPUThrottling
           expr: |
             instance:thermalscope_cpu_freq_ratio < 0.85
               and on(instance) max by(instance)(thermalscope_cpu_temperature_celsius{sensor="Tctl"}) > 80
-          for: 10m
+          for: 20m
           labels:
             severity: warning
           annotations:

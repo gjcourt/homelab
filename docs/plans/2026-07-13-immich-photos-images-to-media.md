@@ -99,6 +99,17 @@ ssh truenas_admin@10.42.2.10 'sudo zfs list -o name,used,refer,mounted,mountpoin
 - [ ] #1108 merged, image rebuilt, compose digest bumped, feeder redeployed.
 - [ ] `media/photos` dataset-vs-dir decided and (if chosen) promoted + snapshotted.
 - [ ] Staging PVs + 30d-sync CronJob on `media/`, next sync green.
-- [ ] alcatraz-pull rrsync root on `media/photos`; alcatraz backup verified.
-- [ ] All docs reference `media/photos`; no `family/images/photos` references remain in the repo.
+- [x] alcatraz-pull rrsync root on `media/photos` (repointed 2026-07-21 — see note); alcatraz backup re-verifies on the next scheduled DSM pull.
+- [~] alcatraz-pull operational script + runbooks (`pull-from-hestia.sh`, `hosts/alcatraz/immich-photos-pull/README.md`, the 2026-07-04 alcatraz-pull plan) reference `media/photos`. A full repo-wide sweep is NOT done — the retired path still appears in ~40 spots across older/superseded plan docs (2026-05-20, 2026-06-01, 2026-07-05, 2026-07-06) and some current-state docs (`hosts/hestia/README.md`, `scripts/import-sd-photos.sh`). Most are legitimate history; the current-state ones are a separate docs-hygiene follow-up. (`/volume1/family/images/photos` is the alcatraz Synology path — a different filesystem — and is out of scope here.)
 - [ ] `family/images/*` datasets destroyed after parity + snapshot verification.
+
+> **2026-07-21 — orphaned step 7 (alcatraz-pull repoint) fixed.** When
+> `family/images/photos` was retired, the two `rrsync -ro` forced-command roots
+> in `truenas_admin@10.42.2.10`'s `authorized_keys` were left pointing at the
+> destroyed path, so `alcatraz-photos-pull` failed silently for ~8 days
+> (`HomelabscopeJobStale` fired but was buried in alert-email noise — see the
+> alert de-tuning PR). Both `authorized_keys` lines were repointed to
+> `/mnt/main/family/media/photos` (backup: `authorized_keys.bak-2026-07-21`),
+> and the repo doc/script references updated in this PR. The pull runs on the
+> Synology's DSM Task Scheduler; it should succeed on its next scheduled run and
+> auto-resolve the alert. Trigger it manually in DSM to confirm immediately.

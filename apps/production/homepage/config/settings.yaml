@@ -1,17 +1,27 @@
 title: BurntBytes Home
 description: Production Environment
 headerStyle: clean
+# Two tabs cut first-paint clutter without losing access (Phase 2 interim
+# re-order, ahead of click data):
+#   Home  — daily drivers: Media + Tools
+#   Admin — behind a tab: Infrastructure + Monitoring
+# Home is listed first, so it is the default tab. Within-group order is a
+# frequency heuristic to be refined by the homepage-clicks usage data.
 layout:
   Media:
+    tab: Home
     style: column
     rows: 10
   Tools:
+    tab: Home
     style: column
     rows: 10
   Infrastructure:
+    tab: Admin
     style: column
     rows: 10
   Monitoring:
+    tab: Admin
     style: column
     rows: 10
 background:

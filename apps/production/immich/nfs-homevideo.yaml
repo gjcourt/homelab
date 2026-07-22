@@ -1,0 +1,45 @@
+# Read-only NFS mount of family/media/video/home so Immich can index home
+# videos alongside the photo timeline (Phase 5 of the media reorg). Disjoint
+# from the photos tree (phone videos live in photos/<person>/, camcorder/
+# export footage lives here), and Immich hash-dedupes, so no double-indexing.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: immich-homevideo-pv-prod
+  labels:
+    app: immich
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  mountOptions:
+    - nfsvers=3
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+    - nolock
+  nfs:
+    server: 10.42.2.10
+    path: /mnt/main/family/media/video/home
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-homevideo-pvc
+  namespace: immich-prod
+  labels:
+    app: immich
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  volumeName: immich-homevideo-pv-prod
+  resources:
+    requests:
+      storage: 1Ti

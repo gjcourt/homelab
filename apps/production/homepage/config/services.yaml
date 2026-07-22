@@ -1,3 +1,10 @@
+# Within-group order is a daily-use frequency heuristic (Phase 2 interim
+# re-order, ahead of click data) — the homepage-clicks usage dashboard will
+# refine it. Group -> tab mapping lives in settings.yaml (Media + Tools on the
+# Home tab; Infrastructure + Monitoring on the Admin tab). Power-user tiles
+# (Prometheus, Alertmanager, raw Logs deep-link) were moved to an
+# "Observability" bookmarks group to de-clutter the Monitoring group; Grafana
+# stays the monitoring entry point.
 - Media:
     - Immich:
         icon: immich.png
@@ -14,16 +21,11 @@
         href: https://music.burntbytes.com
         description: Music server and streamer
         siteMonitor: https://music.burntbytes.com
-    - Kitchen:
-        icon: mdi-speaker
-        href: http://kitchen-music.burntbytes.com
-        description: HifiBerry OS – Kitchen
-        siteMonitor: http://kitchen-music.burntbytes.com
-    - Living Room:
-        icon: mdi-speaker
-        href: http://living-music.burntbytes.com
-        description: HifiBerry OS – Living Room
-        siteMonitor: http://living-music.burntbytes.com
+    - Audiobookshelf:
+        icon: audiobookshelf.png
+        href: https://audiobooks.burntbytes.com
+        description: Audiobook and podcast server
+        siteMonitor: https://audiobooks.burntbytes.com
     - Snapcast:
         icon: mdi-speaker-multiple
         href: https://snapcast.burntbytes.com
@@ -34,11 +36,16 @@
         href: https://cast.burntbytes.com
         description: Play Navidrome to the speakers (Mopidy / Iris)
         siteMonitor: https://cast.burntbytes.com/iris/
-    - Audiobookshelf:
-        icon: audiobookshelf.png
-        href: https://audiobooks.burntbytes.com
-        description: Audiobook and podcast server
-        siteMonitor: https://audiobooks.burntbytes.com
+    - Kitchen:
+        icon: mdi-speaker
+        href: http://kitchen-music.burntbytes.com
+        description: HifiBerry OS – Kitchen
+        siteMonitor: http://kitchen-music.burntbytes.com
+    - Living Room:
+        icon: mdi-speaker
+        href: http://living-music.burntbytes.com
+        description: HifiBerry OS – Living Room
+        siteMonitor: http://living-music.burntbytes.com
 
 - Tools:
     - Finance:
@@ -46,18 +53,6 @@
         href: https://finance.burntbytes.com
         description: Net worth + IPS allocation dashboard
         siteMonitor: https://finance.burntbytes.com
-    - Ladder:
-        icon: mdi-ladder
-        href: https://ladder.burntbytes.com
-        description: Bond ladder + SEC fundamentals workbench
-        # /api/edgar/health returns {"ok":true}; the root path is a SPA, so probe
-        # the health endpoint for the status dot.
-        siteMonitor: https://ladder.burntbytes.com/api/edgar/health
-    - Vitals:
-        icon: mdi-heart-pulse
-        href: https://vitals.burntbytes.com
-        description: Health and fitness tracker
-        siteMonitor: https://vitals.burntbytes.com
     - Memos:
         icon: memos.png
         href: https://memos.burntbytes.com
@@ -73,11 +68,18 @@
         href: https://mealie.burntbytes.com
         description: Recipe management
         siteMonitor: https://mealie.burntbytes.com
-    - GoLinks:
-        icon: mdi-link-variant
-        href: https://go.burntbytes.com
-        description: URL shortener
-        siteMonitor: https://go.burntbytes.com
+    - Vitals:
+        icon: mdi-heart-pulse
+        href: https://vitals.burntbytes.com
+        description: Health and fitness tracker
+        siteMonitor: https://vitals.burntbytes.com
+    - Ladder:
+        icon: mdi-ladder
+        href: https://ladder.burntbytes.com
+        description: Bond ladder + SEC fundamentals workbench
+        # /api/edgar/health returns {"ok":true}; the root path is a SPA, so probe
+        # the health endpoint for the status dot.
+        siteMonitor: https://ladder.burntbytes.com/api/edgar/health
     - Excalidraw:
         icon: excalidraw.png
         href: https://excalidraw.burntbytes.com
@@ -89,26 +91,13 @@
         description: Spaced-repetition flashcards (FSRS)
         # nginx /healthz returns 200 "ok"; root path is a SPA so probe the healthz endpoint.
         siteMonitor: https://flashcards.burntbytes.com/healthz
-    - Vibrato:
-        icon: mdi-coffee-maker
-        href: https://vibrato.burntbytes.com
-        description: Espresso machine monitor & control (ito + leva!)
-        # Root path is a SPA (tabbed UI); /healthz returns {"status":"ok"} in one hop.
-        siteMonitor: https://vibrato.burntbytes.com/healthz
+    - GoLinks:
+        icon: mdi-link-variant
+        href: https://go.burntbytes.com
+        description: URL shortener
+        siteMonitor: https://go.burntbytes.com
 
 - Infrastructure:
-    - Hestia:
-        icon: truenas-scale.png
-        href: https://hestia.burntbytes.com
-        # Originally provisioned as a GPU server (RTX 4090, vLLM) but the
-        # GPU was removed and sold 2026-05-10. Hestia is now a
-        # TrueNAS storage server, primarily backing democratic-csi-provisioned
-        # iSCSI volumes for the cluster.
-        description: TrueNAS storage server (iSCSI for cluster PVCs)
-        # TrueNAS root emits a scheme-downgrading 302 → http://hestia.../ui/
-        # which homepage's siteMonitor renders as HTTP 500. /ui/ returns 200
-        # directly in one hop.
-        siteMonitor: https://hestia.burntbytes.com/ui/
     - Home Assistant:
         icon: home-assistant.png
         href: https://hass.burntbytes.com
@@ -126,16 +115,28 @@
           url: http://adguard-admin.adguard-prod.svc.cluster.local:8080
           username: "{{HOMEPAGE_VAR_ADGUARD_USER}}"
           password: "{{HOMEPAGE_VAR_ADGUARD_PASS}}"
-    - Authelia:
-        icon: mdi-shield-account
-        href: https://auth.burntbytes.com
-        description: Authentication portal (SSO)
-        siteMonitor: https://auth.burntbytes.com
+    - Hestia:
+        icon: truenas-scale.png
+        href: https://hestia.burntbytes.com
+        # Originally provisioned as a GPU server (RTX 4090, vLLM) but the
+        # GPU was removed and sold 2026-05-10. Hestia is now a
+        # TrueNAS storage server, primarily backing democratic-csi-provisioned
+        # iSCSI volumes for the cluster.
+        description: TrueNAS storage server (iSCSI for cluster PVCs)
+        # TrueNAS root emits a scheme-downgrading 302 → http://hestia.../ui/
+        # which homepage's siteMonitor renders as HTTP 500. /ui/ returns 200
+        # directly in one hop.
+        siteMonitor: https://hestia.burntbytes.com/ui/
     - Zigbee2MQTT:
         icon: zigbee2mqtt.png
         href: https://zigbee.burntbytes.com
         description: Zigbee to MQTT Bridge
         siteMonitor: https://zigbee.burntbytes.com
+    - Authelia:
+        icon: mdi-shield-account
+        href: https://auth.burntbytes.com
+        description: Authentication portal (SSO)
+        siteMonitor: https://auth.burntbytes.com
     - Pingo:
         icon: mdi-dns
         href: https://vpn.burntbytes.com
@@ -146,6 +147,11 @@
         # for the operator; the dashboard simply omits the status dot.
 
 - Monitoring:
+    - Grafana:
+        icon: grafana.png
+        href: https://grafana.burntbytes.com
+        description: Metrics dashboard
+        siteMonitor: https://grafana.burntbytes.com
     - Cluster Resources:
         icon: prometheus.png
         href: "#"
@@ -172,22 +178,3 @@
                 type: number
                 options:
                   maximumFractionDigits: 1
-    - Prometheus:
-        icon: prometheus.png
-        href: https://prometheus.burntbytes.com
-        description: Metrics & query UI
-        siteMonitor: https://prometheus.burntbytes.com
-    - Alertmanager:
-        icon: alertmanager.png
-        href: https://alerts.burntbytes.com
-        description: Active alerts & silences
-        siteMonitor: https://alerts.burntbytes.com
-    - Grafana:
-        icon: grafana.png
-        href: https://grafana.burntbytes.com
-        description: Metrics dashboard
-        siteMonitor: https://grafana.burntbytes.com
-    - Logs:
-        icon: grafana.png
-        href: https://grafana.burntbytes.com/explore?schemaVersion=1&panes=%7B%22jZ4%22:%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22expr%22:%22%7Bnamespace%3D%5C%22homepage-prod%5C%22%7D%22%7D%5D%7D%7D
-        description: Cluster logs (Grafana → Loki)

@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# No namespace.yaml: this Deployment lives alongside the homepage app in the
+# `homepage` namespace (retargeted to `homepage-prod` by the production
+# overlay), so the /api/clicks HTTPRoute path can forward to it without a
+# cross-namespace ReferenceGrant. The homepage base owns the namespace object.
+resources:
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - servicemonitor.yaml
+  - networkpolicy.yaml
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: homepage-clicks
+      app.kubernetes.io/component: exporter
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux

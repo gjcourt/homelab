@@ -1,0 +1,60 @@
+name: Build homepage-clicks
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'images/homepage-clicks/**'
+      - '.github/workflows/build-homepage-clicks.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: gjcourt/homepage-clicks
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Immutable per-commit tag (date + short SHA) — avoids the same-day tag
+      # collision that a bare YYYY-MM-DD hits when code is rebuilt twice in a day.
+      - name: Generate date-sha tag
+        id: tag
+        run: echo "tag=$(date -u +%Y-%m-%d)-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: images/homepage-clicks
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+            ghcr.io/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "### homepage-clicks published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Pin this tag in \`apps/base/homepage-clicks/deployment.yaml\` in a follow-up PR." >> $GITHUB_STEP_SUMMARY

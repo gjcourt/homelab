@@ -1,0 +1,52 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: homepage-clicks
+  namespace: homepage
+  labels:
+    app.kubernetes.io/name: homepage-clicks
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: |
+    Homepage tile-click beacon exporter. Ingress: the gateway forwards
+    `home.burntbytes.com/api/clicks` here on 9107 (arriving as host /
+    remote-node / ingress identities, same as the homepage app), plus the
+    Prometheus scrape on 9107. Egress: DNS only — the exporter makes no
+    outbound calls (it only receives POSTs and serves /metrics).
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: homepage-clicks
+  ingress:
+    # Cilium Envoy (Gateway API) forwards /api/clicks from the dedicated proxy
+    # IP (reserved identity "ingress"); same-node connections arrive as "host",
+    # cross-node VXLAN as "remote-node". All three are required, mirroring the
+    # homepage app's own ingress rule. Kubelet probes are auto-exempted.
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "9107"
+              protocol: TCP
+    # Prometheus scrape.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9107"
+              protocol: TCP
+  egress:
+    # DNS resolution via CoreDNS (the exporter needs no other egress).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

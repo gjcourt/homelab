@@ -89,6 +89,9 @@ spec:
               mountPath: /usr/src/app/upload
             - name: photos
               mountPath: /mnt/photos
+            - name: home-videos
+              mountPath: /mnt/home-videos
+              readOnly: true
             - name: oauth-config
               mountPath: /etc/immich
               readOnly: true
@@ -124,6 +127,9 @@ spec:
         - name: photos
           persistentVolumeClaim:
             claimName: immich-photos-pvc
+        - name: home-videos
+          persistentVolumeClaim:
+            claimName: immich-homevideo-pvc
         - name: oauth-config-template
           configMap:
             name: immich-oauth-config
@@ -222,6 +228,9 @@ spec:
               mountPath: /usr/src/app/upload
             - name: photos
               mountPath: /mnt/photos
+            - name: home-videos
+              mountPath: /mnt/home-videos
+              readOnly: true
             - name: dri
               mountPath: /dev/dri
             - name: oauth-config
@@ -244,6 +253,9 @@ spec:
         - name: photos
           persistentVolumeClaim:
             claimName: immich-photos-pvc
+        - name: home-videos
+          persistentVolumeClaim:
+            claimName: immich-homevideo-pvc
         - name: dri
           hostPath:
             path: /dev/dri

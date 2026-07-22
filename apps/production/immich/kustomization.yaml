@@ -6,6 +6,7 @@ resources:
   - database.yaml
   - httproute.yaml
   - nfs-photos.yaml
+  - nfs-homevideo.yaml
   - objectstore.yaml
   - pdb-ml.yaml
   - scheduledbackup.yaml

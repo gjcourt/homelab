@@ -20,7 +20,11 @@ spec:
       initContainers:
         - name: init-config
           image: busybox@sha256:fd8d9aa63ba2f0982b5304e1ee8d3b90a210bc1ffb5314d980eb6962f1a9715d
-          command: ['sh', '-c', "if [ ! -s /app/data/configuration.yaml ]; then cp -L /tmp/config/configuration.yaml /app/data/configuration.yaml; fi"]
+          # Guard against a stale/read-only iSCSI data mount (issue #1080): a hestia
+          # iSCSI target flap remounts the ext4 volume read-only, and z2m otherwise
+          # starts and burns hundreds of restarts on a confusing `ENOENT mkdir` deep
+          # in the app. Fail the init fast with a clear recovery hint instead.
+          command: ['sh', '-c', "SENTINEL=/app/data/.mount-writable; if ! ( touch $SENTINEL && rm -f $SENTINEL ) 2>/dev/null; then echo 'FATAL: /app/data not writable - stale/read-only iSCSI mount (see issue #1080); recover with: kubectl -n zigbee2mqtt scale deploy/zigbee2mqtt --replicas=0 then --replicas=1' >&2; exit 1; fi; if [ ! -s /app/data/configuration.yaml ]; then cp -L /tmp/config/configuration.yaml /app/data/configuration.yaml; fi"]
           volumeMounts:
             - name: config
               mountPath: /tmp/config

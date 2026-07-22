@@ -56,6 +56,9 @@ spec:
     name: flux-system
   path: ./infra/configs
   prune: true
+  # wait for configs (Gateway, issuers, LB IP pools) to be Ready, not merely
+  # applied, so apps-* dependents actually gate on them (see issue #1103).
+  wait: true
 
   # SOPS age decryption for secrets
   decryption:

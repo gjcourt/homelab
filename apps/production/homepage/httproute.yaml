@@ -29,7 +29,18 @@ spec:
     - name: app-gateway-production
       namespace: default
       sectionName: https
+  # Rules are evaluated specific-first by Cilium HTTPRoute matching:
+  # `/api/clicks` is forwarded to the homepage-clicks beacon exporter (same
+  # namespace, no ReferenceGrant needed) so the tile-click handler in
+  # custom.js can POST same-origin; everything else hits the Homepage web app.
   rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api/clicks
+      backendRefs:
+        - name: homepage-clicks
+          port: 9107
     - backendRefs:
         - name: homepage
           port: 3000

@@ -16,6 +16,7 @@ resources:
   - golinks
   - homeassistant
   - homepage
+  - homepage-clicks
   - immich
   - jellyfin
   - ladder

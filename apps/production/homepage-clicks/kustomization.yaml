@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Retargets the base (namespace `homepage`) into `homepage-prod`, the same
+# namespace as the homepage app — so the homepage HTTPRoute's /api/clicks path
+# forwards to this Service without a cross-namespace ReferenceGrant.
+namespace: homepage-prod
+resources:
+  - ../../base/homepage-clicks/
+labels:
+  - includeSelectors: false
+    pairs:
+      env: production
+      app.kubernetes.io/instance: production

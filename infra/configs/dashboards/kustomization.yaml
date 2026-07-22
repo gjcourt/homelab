@@ -5,6 +5,7 @@ resources:
   - cluster-overview-cm.yaml
   - cnpg-cm.yaml
   - control-plane-cm.yaml
+  - homepage-clicks-cm.yaml
   - homelabscope-cm.yaml
   - modemscope-cm.yaml
   - mqttscope-cm.yaml

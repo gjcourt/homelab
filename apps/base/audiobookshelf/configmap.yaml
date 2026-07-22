@@ -6,9 +6,15 @@ metadata:
     app: audiobookshelf
 data:
   CONFIG_PATH: /usr/share/audiobookshelf/config
-  FFMPEG_PATH: /usr/lib/audiobookshelf-ffmpeg/ffmpeg
-  FFPROBE_PATH: /usr/lib/audiobookshelf-ffmpeg/ffprobe
+  # The 2.35.1 image ships ffmpeg/ffprobe from Alpine at /usr/bin (dynamically
+  # linked). The old /usr/lib/audiobookshelf-ffmpeg/ bundle path no longer
+  # exists in this image, which made every AudioFileScanner ffprobe spawn fail
+  # with ENOENT and every library scan return 0 items. Point at /usr/bin.
+  # (tone is not shipped in this image; TONE_PATH is only used for m4b metadata
+  # embedding, not scanning, so a missing path there is non-blocking.)
+  FFMPEG_PATH: /usr/bin/ffmpeg
+  FFPROBE_PATH: /usr/bin/ffprobe
   METADATA_PATH: /usr/share/audiobookshelf/metadata
   PORT: "13378"
-  TONE_PATH: /usr/lib/audiobookshelf-ffmpeg/tone
+  TONE_PATH: /usr/bin/tone
   TZ: America/Los_Angeles

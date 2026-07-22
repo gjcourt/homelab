@@ -15,6 +15,20 @@
         - abbr: GCR
           href: https://github.com/orgs/gjcourt/packages
 
+# Power-user monitoring deep-links, moved off the Monitoring group (Admin tab)
+# to de-clutter it. Grafana remains the primary monitoring tile; these are the
+# rarely-clicked raw endpoints.
+- Observability:
+    - Prometheus:
+        - abbr: PRM
+          href: https://prometheus.burntbytes.com
+    - Alertmanager:
+        - abbr: ALT
+          href: https://alerts.burntbytes.com
+    - Loki Logs:
+        - abbr: LOG
+          href: https://grafana.burntbytes.com/explore?schemaVersion=1&panes=%7B%22jZ4%22:%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22expr%22:%22%7Bnamespace%3D%5C%22homepage-prod%5C%22%7D%22%7D%5D%7D%7D
+
 - Reference:
     - Kubernetes Docs:
         - abbr: K8S

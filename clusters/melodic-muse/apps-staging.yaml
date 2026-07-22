@@ -4,6 +4,13 @@ metadata:
   name: apps-staging
   namespace: flux-system
 spec:
+  # Enforce the documented reconciliation order (infra-* -> apps-*): apps
+  # hard-depend on infra/configs resources (shared Gateway, cert-manager
+  # issuers, Cilium LB IP pools, network policies), so this must reconcile
+  # after infra-configs is Ready. The dependsOn resolves against the
+  # same-namespace infra-configs Kustomization. See issue #1103.
+  dependsOn:
+    - name: infra-configs
   interval: 10m0s
   retryInterval: 1m
   timeout: 1m

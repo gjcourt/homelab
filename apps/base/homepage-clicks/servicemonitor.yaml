@@ -1,0 +1,29 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: homepage-clicks
+  namespace: homepage
+  labels:
+    # kube-prometheus-stack's Prometheus selects ServiceMonitors by the
+    # helm-default release label (serviceMonitorSelectorNilUsesHelmValues=true).
+    # Without this label the SM is invisible to it.
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: homepage-clicks
+    app.kubernetes.io/component: exporter
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: homepage-clicks
+      app.kubernetes.io/component: exporter
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      # Force job="homepage-clicks" so any future PrometheusRule / dashboard
+      # queries keyed on that job align with the scraped series (the operator
+      # otherwise auto-derives "homepage/homepage-clicks" or the prod-namespace
+      # equivalent).
+      relabelings:
+        - targetLabel: job
+          replacement: homepage-clicks

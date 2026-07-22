@@ -1,0 +1,234 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: homepage-clicks-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  homepage-clicks.json: |
+    {
+      "title": "Homepage Tile Usage",
+      "uid": "homepage-clicks",
+      "tags": ["homelab", "homepage", "usage"],
+      "schemaVersion": 38,
+      "refresh": "1m",
+      "time": { "from": "now-30d", "to": "now" },
+      "timepicker": {},
+      "panels": [
+        {
+          "id": 1,
+          "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+          "type": "stat",
+          "title": "Total Clicks (range)",
+          "description": "Total tile clicks recorded across the whole dashboard over the selected time range. This is the raw volume signal — how much the dashboard is used, period.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(homepage_tile_clicks_total[$__range]))",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "value",
+            "graphMode": "area"
+          },
+          "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } }
+        },
+        {
+          "id": 2,
+          "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+          "type": "stat",
+          "title": "Distinct Tiles Clicked",
+          "description": "Number of distinct {service,group} tiles the beacon has ever seen a click for (homepage_beacon_series). Compare against the total tile count on the dashboard — the gap is the set of never-clicked tiles.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(homepage_beacon_series)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "value",
+            "graphMode": "none"
+          },
+          "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } }
+        },
+        {
+          "id": 3,
+          "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+          "type": "stat",
+          "title": "Beacon Target Up",
+          "description": "Whether Prometheus is currently scraping the homepage-clicks exporter (up{job=\"homepage-clicks\"}). 0 means the exporter is down or unscraped and clicks are being lost.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "max(up{job=\"homepage-clicks\"})",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "mappings": [
+                { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" } } },
+                { "type": "value", "options": { "1": { "text": "UP", "color": "green" } } }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "red" },
+                  { "value": 1, "color": "green" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+          "type": "stat",
+          "title": "Rejected Beacons (range)",
+          "description": "Beacon POSTs rejected over the range (bad origin, rate-limited, bad payload, or series-cap). A small non-zero count is normal on a public endpoint; a spike suggests abuse or a broken client.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(homepage_beacon_requests_total{result=~\"rejected.*\"}[$__range]))",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "value",
+            "graphMode": "area"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "green" },
+                  { "value": 100, "color": "yellow" },
+                  { "value": 1000, "color": "red" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 10,
+          "gridPos": { "x": 0, "y": 4, "w": 24, "h": 9 },
+          "type": "timeseries",
+          "title": "Clicks Over Time, by Tile",
+          "description": "Per-tile click rate over time (increase per scrape interval, summed by service). Shows how usage shifts — including before/after a re-order — so a layout change becomes a measurable hypothesis rather than a guess.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (service) (increase(homepage_tile_clicks_total[$__rate_interval]))",
+              "legendFormat": "{{service}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "stacking": { "mode": "normal", "group": "A" },
+                "lineWidth": 0
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "id": 20,
+          "gridPos": { "x": 0, "y": 13, "w": 12, "h": 10 },
+          "type": "bargauge",
+          "title": "Top Tiles (range)",
+          "description": "Tiles ranked by total clicks over the range (topk 25). The promote list — high-traffic tiles belong top-left / on the Home tab.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "topk(25, sum by (service) (increase(homepage_tile_clicks_total[$__range])))",
+              "legendFormat": "{{service}}",
+              "instant": true
+            }
+          ],
+          "options": {
+            "displayMode": "gradient",
+            "orientation": "horizontal",
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "showUnfilled": true
+          },
+          "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } }
+        },
+        {
+          "id": 21,
+          "gridPos": { "x": 12, "y": 13, "w": 12, "h": 10 },
+          "type": "table",
+          "title": "Clicks by Tile + Group (least used first)",
+          "description": "Every tile that has been clicked in the range, with its group, sorted ascending. The bottom of this list plus any tile absent from it entirely are the demote/prune candidates for the next re-order.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (service, group) (increase(homepage_tile_clicks_total[$__range]))",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true }, "renameByName": { "service": "Tile", "group": "Group", "Value": "Clicks" } } },
+            { "id": "sortBy", "options": { "fields": {}, "sort": [{ "field": "Clicks", "desc": false }] } }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short", "decimals": 0 } }
+        },
+        {
+          "id": 30,
+          "gridPos": { "x": 0, "y": 23, "w": 12, "h": 8 },
+          "type": "timeseries",
+          "title": "Beacon Request Outcomes",
+          "description": "Beacon POST outcomes over time (accepted vs the rejection reasons). Operational health of the endpoint itself — a rising rejected_series_cap or rejected_ratelimit line means the caps are being hit.",
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (result) (increase(homepage_beacon_requests_total[$__rate_interval]))",
+              "legendFormat": "{{result}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 1 }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] },
+            "tooltip": { "mode": "multi", "sort": "desc" }
+          }
+        },
+        {
+          "id": 31,
+          "gridPos": { "x": 12, "y": 23, "w": 12, "h": 8 },
+          "type": "text",
+          "title": "Reading this dashboard",
+          "options": {
+            "mode": "markdown",
+            "content": "**Never-clicked tiles** don't appear here — the beacon only creates a series after a tile's first click. To find them, compare the tiles listed in *Clicks by Tile + Group* against the full tile inventory in `apps/production/homepage/config/services.yaml`; any tile not listed has zero clicks in the range.\n\n**The loop:** collect 2-4 weeks -> promote the top of *Top Tiles*, demote/retab the bottom of *Clicks by Tile + Group* and the never-clicked set -> ship a `services.yaml` re-order PR -> watch *Clicks Over Time* confirm the shift.\n\nData source: `homepage_tile_clicks_total{service,group}` from the `homepage-clicks` beacon exporter, fed by the `custom.js` click handler."
+          }
+        }
+      ]
+    }

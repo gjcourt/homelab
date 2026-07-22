@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homepage-clicks
+  namespace: homepage
+  labels:
+    app.kubernetes.io/name: homepage-clicks
+    app.kubernetes.io/component: exporter
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: homepage-clicks
+      app.kubernetes.io/component: exporter
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: homepage-clicks
+        app.kubernetes.io/component: exporter
+    spec:
+      serviceAccountName: homepage-clicks
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: exporter
+          # PLACEHOLDER TAG — the image is built + pushed by
+          # .github/workflows/build-homepage-clicks.yml only after this lands on
+          # master. Repin to the real `YYYY-MM-DD-<sha7>@sha256:<digest>` emitted
+          # by that workflow in a follow-up PR (see the workflow's step summary),
+          # per the homelab image-discipline rule. Until then this Deployment
+          # will not pull — the ServiceMonitor target stays down and the
+          # /api/clicks route returns 5xx, which is expected pre-build.
+          image: "ghcr.io/gjcourt/homepage-clicks:latest"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: LISTEN_PORT
+              value: "9107"
+            - name: BEACON_PATH
+              value: /api/clicks
+            # Same-origin allowlist: only beacons from the dashboard's own host.
+            - name: ALLOWED_ORIGINS
+              value: https://home.burntbytes.com
+          ports:
+            - name: metrics
+              containerPort: 9107
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 9107
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # No livenessProbe: /healthz reports only "the HTTP server is up",
+          # which is the same signal readiness already uses — per the repo's
+          # health-probe convention (and matching mqttscope), a liveness probe
+          # sharing that signal would only add restart-flapping, not recovery.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL

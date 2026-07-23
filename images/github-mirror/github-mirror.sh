@@ -29,7 +29,12 @@ if [ ! -r "${TOKEN_FILE}" ]; then
   exit 1
 fi
 token="$(tr -d '[:space:]' <"${TOKEN_FILE}")"
-auth="Authorization: Bearer ${token}"
+# GitHub git-over-HTTPS needs BASIC auth (the token as the password), NOT Bearer.
+# Bearer is accepted by the REST API but rejected by the git endpoints, which then
+# fall back to prompting for a username → "could not read Username" and every clone
+# fails. Basic works for both the API and git, and via http.extraHeader the token
+# still never lands in any repo's stored config (the remote URL stays token-less).
+auth="Authorization: Basic $(printf 'x-access-token:%s' "${token}" | base64 | tr -d '\n')"
 
 mkdir -p "${DEST}"
 

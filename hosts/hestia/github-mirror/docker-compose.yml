@@ -1,0 +1,45 @@
+# Daily mirror of every gjcourt GitHub repo (all branches + tags) into the family
+# tree at admin/backups/global/github/, as bare `git clone --mirror` clones.
+#
+# Runs on hestia (not k8s) on purpose: it's a hestia-data backup job, so compute
+# sits next to the bytes — local disk = fast git packfile I/O, and writes land
+# directly in the write-protected admin/backups tree with the correct owner (no
+# NFS PV round-trip back to hestia). The container runs as uid 1028 (george) so
+# the bare mirrors are owner-writable under the 0750 admin/backups tree. The image
+# is storage-agnostic, so the same artifact runs as a k8s CronJob where that fits
+# — see k8s-cronjob.example.yaml.
+#
+# First-time setup (see README.md):
+#   1. GitHub fine-grained PAT — Contents: Read-only, all repositories — saved at
+#        /mnt/main/family/admin/keys/github-mirror.token   (mode 0600, owner george)
+#   2. Mirror dir, george-owned:
+#        install -d -o 1028 -g 100 -m 0750 /mnt/main/family/admin/backups/global/github
+#   3. (metrics, optional) node-exporter textfile dir writable by uid 1028, else
+#      the homelabscope staleness metric silently skips.
+#
+# After bootstrap, every change to images/github-mirror/** triggers
+# build-github-mirror.yml which publishes a new tag; pin the digest below in a
+# follow-up PR and deploy-hestia.yml auto-rolls.
+services:
+  github-mirror:
+    # TODO(bootstrap): pin @sha256:<digest> in a follow-up PR after the first
+    # build-github-mirror.yml run publishes the image.
+    image: ghcr.io/gjcourt/github-mirror:latest
+    container_name: github-mirror
+    restart: unless-stopped
+    # Run as george:users so the bare mirrors are owner-writable under the
+    # write-protected (0750, no group write) admin/backups tree.
+    user: "1028:100"
+    environment:
+      - TZ=America/New_York
+      - GITHUB_USER=gjcourt
+      - DEST=/mirror
+      - TOKEN_FILE=/run/secrets/github-token
+      - INTERVAL_SECONDS=86400
+    volumes:
+      # GitHub PAT (Contents: read) — single-file RO mount from the locked keys area.
+      - /mnt/main/family/admin/keys/github-mirror.token:/run/secrets/github-token:ro
+      # Mirror destination — bare <repo>.git clones (read-open, write-protected).
+      - /mnt/main/family/admin/backups/global/github:/mirror
+      # Prometheus textfile collector for the homelabscope staleness metric.
+      - /var/lib/node-exporter/textfile:/var/lib/node-exporter/textfile

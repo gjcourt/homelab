@@ -1,0 +1,56 @@
+# EXAMPLE — not deployed here. This repo runs github-mirror on hestia (see
+# docker-compose.yml) because it's a hestia-data backup job: co-locating compute
+# with the destination bytes gives fast local git I/O and avoids an NFS PV round-
+# trip back to hestia. This manifest is kept so the image stays a portable,
+# reusable artifact — anyone whose backup target lives IN their cluster (a PVC on
+# cluster-local storage) can run the exact same image as a CronJob instead.
+#
+# To use it: point the `mirror` volume at your own PVC, provide the token via a
+# Secret, and set schedule/user to taste.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: github-mirror
+  namespace: github-mirror
+spec:
+  schedule: "0 4 * * *" # daily 04:00
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsUser: 1028
+            runAsGroup: 100
+            fsGroup: 100
+          containers:
+            - name: github-mirror
+              image: ghcr.io/gjcourt/github-mirror:latest
+              # The image loops by default (INTERVAL_SECONDS); for a CronJob we
+              # want a single pass then exit, so run the script directly.
+              command: ["/usr/local/bin/github-mirror.sh"]
+              env:
+                - name: GITHUB_USER
+                  value: gjcourt
+                - name: DEST
+                  value: /mirror
+                - name: TOKEN_FILE
+                  value: /run/secrets/github-token
+              volumeMounts:
+                - name: token
+                  mountPath: /run/secrets/github-token
+                  subPath: github-token
+                  readOnly: true
+                - name: mirror
+                  mountPath: /mirror
+          volumes:
+            - name: token
+              secret:
+                secretName: github-mirror-token # key: github-token
+            - name: mirror
+              persistentVolumeClaim:
+                claimName: github-mirror # your cluster-local RWO/RWX PVC

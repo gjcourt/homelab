@@ -22,9 +22,7 @@
 # follow-up PR and deploy-hestia.yml auto-rolls.
 services:
   github-mirror:
-    # TODO(bootstrap): pin @sha256:<digest> in a follow-up PR after the first
-    # build-github-mirror.yml run publishes the image.
-    image: ghcr.io/gjcourt/github-mirror:latest
+    image: ghcr.io/gjcourt/github-mirror:2026-07-23@sha256:76558aaf71526488bb213e7ca12ca756c1d1e11b3a86f3142e7828b27396c560
     container_name: github-mirror
     restart: unless-stopped
     # Run as george:users so the bare mirrors are owner-writable under the

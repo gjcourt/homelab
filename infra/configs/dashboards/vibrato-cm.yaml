@@ -1,0 +1,374 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vibrato-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  vibrato.json: |
+    {
+      "title": "Vibrato (ito + leva!)",
+      "uid": "vibrato-overview",
+      "tags": ["homelab", "vibrato", "espresso"],
+      "schemaVersion": 38,
+      "refresh": "1m",
+      "time": { "from": "now-24h", "to": "now" },
+      "timepicker": {},
+      "description": "Trends and health for the Vibrato espresso controller over hours/days. Prometheus scrapes /metrics at ~30s, which is FAR too coarse for per-shot pressure/flow dynamics (a shot is ~25-40s) — this dashboard is for long-run trends and app health, NOT the live shot scope. The per-shot, high-rate scope lives inside the Vibrato app itself.",
+      "panels": [
+        {
+          "id": 100,
+          "gridPos": { "x": 0, "y": 0, "w": 24, "h": 3 },
+          "type": "text",
+          "title": "",
+          "transparent": true,
+          "options": {
+            "mode": "markdown",
+            "content": "**Trends & health, not the shot scope.** Prometheus scrapes `/metrics` every ~30s — far coarser than a shot's second-by-second pressure/flow/phase dynamics (a shot lasts ~25-40s, so a whole shot is only ~1 sample). Read the timeseries below as **hours/days trends and app health**, never as a shot profile. Per-shot dynamics live in the Vibrato app's own live scope."
+          }
+        },
+        {
+          "id": 1,
+          "gridPos": { "x": 0, "y": 3, "w": 4, "h": 4 },
+          "type": "stat",
+          "title": "Vibrato Up",
+          "description": "vibrato_up — 1 while the Vibrato server is up and reporting. Distinct from up{job=\"vibrato\"} (whether Prometheus can scrape it at all).",
+          "targets": [
+            { "refId": "A", "expr": "vibrato_up", "legendFormat": "up" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bool_on_off",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "red" },
+                  { "value": 1, "color": "green" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "gridPos": { "x": 4, "y": 3, "w": 5, "h": 4 },
+          "type": "stat",
+          "title": "Shots (24h)",
+          "description": "increase(vibrato_shots_total[24h]) — shots pulled in the last 24h. Counter, so an app restart does not lose the running total.",
+          "targets": [
+            { "refId": "A", "expr": "sum(increase(vibrato_shots_total[24h]))", "legendFormat": "shots" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "value",
+            "graphMode": "area"
+          },
+          "fieldConfig": {
+            "defaults": { "unit": "short", "decimals": 0 }
+          }
+        },
+        {
+          "id": 3,
+          "gridPos": { "x": 9, "y": 3, "w": 5, "h": 4 },
+          "type": "stat",
+          "title": "Profile Writes OK (24h)",
+          "description": "sum(increase(vibrato_profile_writes_total{result=\"success\"}[24h])) — successful profile-write-to-machine operations in the last 24h. NOTE: the `result` label value (success/ok) will be reconciled once the /metrics endpoint PR lands.",
+          "targets": [
+            { "refId": "A", "expr": "sum(increase(vibrato_profile_writes_total{result=\"success\"}[24h]))", "legendFormat": "ok" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "value",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": { "unit": "short", "decimals": 0, "color": { "mode": "fixed", "fixedColor": "green" } }
+          }
+        },
+        {
+          "id": 4,
+          "gridPos": { "x": 14, "y": 3, "w": 5, "h": 4 },
+          "type": "stat",
+          "title": "Profile Writes FAILED (24h)",
+          "description": "sum(increase(vibrato_profile_writes_total{result=\"fail\"}[24h])) — failed profile-write-to-machine operations in the last 24h. Non-zero means the closed-loop menu-nav writer aborted or diverged. NOTE: the `result` label value (fail/error) will be reconciled once the /metrics endpoint PR lands.",
+          "targets": [
+            { "refId": "A", "expr": "sum(increase(vibrato_profile_writes_total{result=\"fail\"}[24h]))", "legendFormat": "fail" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "none"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "green" },
+                  { "value": 1, "color": "red" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 5,
+          "gridPos": { "x": 19, "y": 3, "w": 5, "h": 4 },
+          "type": "stat",
+          "title": "Connection Drops (24h)",
+          "description": "increase(vibrato_connection_drops_total[24h]) — how many times the link to the ito/leva! machine dropped in the last 24h. A few is normal (machine power-cycled); a rising count points at a flaky control link.",
+          "targets": [
+            { "refId": "A", "expr": "sum(increase(vibrato_connection_drops_total[24h]))", "legendFormat": "drops" }
+          ],
+          "options": {
+            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "area"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "green" },
+                  { "value": 1, "color": "yellow" },
+                  { "value": 5, "color": "red" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 10,
+          "gridPos": { "x": 0, "y": 7, "w": 12, "h": 8 },
+          "type": "timeseries",
+          "title": "Pressure vs Target",
+          "description": "vibrato_pressure_bar (measured) against vibrato_pressure_target_bar (setpoint). Fixed 0-14 bar axis. At ~30s sampling this shows the setpoint you were holding and roughly where pressure sat — it does NOT resolve the intra-shot pressure curve.",
+          "targets": [
+            { "refId": "A", "expr": "vibrato_pressure_bar", "legendFormat": "pressure" },
+            { "refId": "B", "expr": "vibrato_pressure_target_bar", "legendFormat": "target" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "pressurebar",
+              "min": 0,
+              "max": 14,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "auto"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "target" },
+                "properties": [
+                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
+                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } },
+                  { "id": "custom.fillOpacity", "value": 0 }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 11,
+          "gridPos": { "x": 12, "y": 7, "w": 12, "h": 8 },
+          "type": "timeseries",
+          "title": "Temperature",
+          "description": "vibrato_temp_c — group/brew temperature. Fixed 80-140 C axis to keep the working band readable. Watch for drift or recovery time between shots, not per-shot detail.",
+          "targets": [
+            { "refId": "A", "expr": "vibrato_temp_c", "legendFormat": "temp" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "celsius",
+              "min": 80,
+              "max": 140,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "auto"
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "single" }
+          }
+        },
+        {
+          "id": 12,
+          "gridPos": { "x": 0, "y": 15, "w": 12, "h": 8 },
+          "type": "timeseries",
+          "title": "Flow",
+          "description": "vibrato_flow_ml_s — volumetric flow. Fixed 0-10 ml/s axis. Coarse-sampled: use for trend/idle-vs-active, not the flow profile of a shot.",
+          "targets": [
+            { "refId": "A", "expr": "vibrato_flow_ml_s", "legendFormat": "flow" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "suffix:ml/s",
+              "min": 0,
+              "max": 10,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 10,
+                "showPoints": "auto"
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "single" }
+          }
+        },
+        {
+          "id": 13,
+          "gridPos": { "x": 12, "y": 15, "w": 12, "h": 8 },
+          "type": "timeseries",
+          "title": "Pump Phase Angle",
+          "description": "vibrato_phase_deg — pump control phase angle. Fixed 0-360 degree axis. The pressure-profiling firing angle sweeps continuously; here it reads as a coarse trend of where the pump was driven.",
+          "targets": [
+            { "refId": "A", "expr": "vibrato_phase_deg", "legendFormat": "phase" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "degree",
+              "min": 0,
+              "max": 360,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 0,
+                "showPoints": "auto"
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "single" }
+          }
+        },
+        {
+          "id": 20,
+          "gridPos": { "x": 0, "y": 23, "w": 8, "h": 8 },
+          "type": "timeseries",
+          "title": "Button Presses /min",
+          "description": "60 * sum(rate(vibrato_button_presses_total[5m])) — UI/virtual-button activity rate. A proxy for interactive use (direct MCc + the 6 virtual buttons).",
+          "targets": [
+            { "refId": "A", "expr": "60 * sum(rate(vibrato_button_presses_total[5m]))", "legendFormat": "presses/min" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "showPoints": "auto"
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "single" }
+          }
+        },
+        {
+          "id": 21,
+          "gridPos": { "x": 8, "y": 23, "w": 8, "h": 8 },
+          "type": "timeseries",
+          "title": "Profile Writes /min by result",
+          "description": "60 * sum by (result) (rate(vibrato_profile_writes_total[5m])) — profile-write-to-machine attempts split by outcome. A `fail` line lifting off zero is the signal the closed-loop writer is diverging. NOTE: `result` label values reconcile once the /metrics endpoint PR lands.",
+          "targets": [
+            { "refId": "A", "expr": "60 * sum by (result) (rate(vibrato_profile_writes_total[5m]))", "legendFormat": "{{result}}" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "showPoints": "auto"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": { "id": "byName", "options": "success" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+              },
+              {
+                "matcher": { "id": "byName", "options": "fail" },
+                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+              }
+            ]
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "multi" }
+          }
+        },
+        {
+          "id": 22,
+          "gridPos": { "x": 16, "y": 23, "w": 8, "h": 8 },
+          "type": "timeseries",
+          "title": "Connection Drops /min",
+          "description": "60 * sum(rate(vibrato_connection_drops_total[5m])) — rate of control-link drops to the ito/leva! machine. Sustained non-zero = flaky link (repoint LEVA_HOST / check the machine).",
+          "targets": [
+            { "refId": "A", "expr": "60 * sum(rate(vibrato_connection_drops_total[5m]))", "legendFormat": "drops/min" }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "min": 0,
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "showPoints": "auto",
+                "thresholdsStyle": { "mode": "line" }
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  { "value": null, "color": "transparent" },
+                  { "value": 1, "color": "red" }
+                ]
+              }
+            }
+          },
+          "options": {
+            "legend": { "displayMode": "list", "placement": "bottom" },
+            "tooltip": { "mode": "single" }
+          }
+        }
+      ]
+    }

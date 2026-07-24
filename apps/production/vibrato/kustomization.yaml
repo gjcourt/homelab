@@ -4,6 +4,7 @@ namespace: vibrato-prod
 resources:
   - ../../base/vibrato/
   - httproute.yaml
+  - servicemonitor.yaml
 labels:
   - pairs:
       env: production

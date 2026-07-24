@@ -1,0 +1,29 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: vibrato
+  namespace: vibrato-prod
+  labels:
+    # kube-prometheus-stack's Prometheus selects ServiceMonitors by the
+    # helm-default release label (serviceMonitorSelectorNilUsesHelmValues=true,
+    # serviceMonitorSelector={}). Without this label the SM is invisible to it.
+    release: kube-prometheus-stack
+    app.kubernetes.io/name: vibrato
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vibrato
+  # Scoped to the prod namespace on purpose. Only prod is wired to a real ito;
+  # staging (vibrato-stage) must not point at the single-connection physical
+  # machine, so it is deliberately left unscraped.
+  namespaceSelector:
+    matchNames:
+      - vibrato-prod
+  endpoints:
+    # The Vibrato server exposes GET /metrics on its single HTTP port (8080,
+    # named `http` on the Service). ~30s scrape — coarse on purpose: this feeds
+    # the trends/health dashboard, NOT per-shot dynamics (see vibrato-cm.yaml).
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s

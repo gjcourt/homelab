@@ -26,6 +26,18 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
+    # Prometheus scrapes GET /metrics on 8080. The scrape arrives as a normal
+    # pod-to-pod connection from the kube-prometheus-stack Prometheus pod, so it
+    # is not covered by the host/remote-node/ingress rule above and must be
+    # allowed explicitly (same pattern as overture's networkpolicy).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
   egress:
     # DNS via CoreDNS.
     - toEndpoints:

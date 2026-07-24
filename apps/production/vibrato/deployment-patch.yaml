@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
         - name: vibrato
-          image: ghcr.io/gjcourt/vibrato:f25906736f6bccb8543ae01697053e11c41bd0ab
+          image: ghcr.io/gjcourt/vibrato:6b1c3ebb9cf1b4e4f9efa264f19ce272538459d5
           env:
             - name: LEVA_NODE_ID
               value: "espresso"

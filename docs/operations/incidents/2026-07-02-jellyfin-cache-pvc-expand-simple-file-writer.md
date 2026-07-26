@@ -114,7 +114,10 @@ transcode-cleanup scheduled task. (Not yet done — follow-up.)
 
 ## Remaining follow-ups
 
-- [ ] Add a transcode-cleanup CronJob (or Jellyfin task) so `/cache` doesn't refill.
+- [x] Add a transcode-cleanup CronJob (or Jellyfin task) so `/cache` doesn't refill. —
+      **Missed; `/cache` refilled 2026-07-26 ([recurrence](2026-07-26-jellyfin-cache-refill-transcodes.md)).**
+      Now addressed via a **transcode-janitor sidecar** ([#1212](https://github.com/gjcourt/homelab/pull/1212)) —
+      a CronJob can't reliably mount the RWO cache PVC while Jellyfin holds it, so a sidecar is used instead.
 - [ ] Optional: paired chart bump to 0.15.1 (`release.yaml`) to match the v1.9.5 image.
 - [ ] Keep `truenas_admin` passwordless sudo ON (required for the reload on every expand).
 

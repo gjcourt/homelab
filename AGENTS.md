@@ -35,7 +35,7 @@ See `docs/architecture/` for component-level architecture (DNS strategy, gateway
 ## Conventions
 
 - **Branch + PR for every change** — never commit directly to `master` or `staging`.
-- **Image tags are strictly increasing** — never roll back to an earlier tag without explicit intent. CI tags as `YYYY-MM-DD` (first build of day) then `YYYY-MM-DD-N`.
+- **Image tags are strictly increasing** — never roll back to an earlier tag without explicit intent. In-repo `build-*.yml` workflows tag each image with an immutable date-sha tag `YYYY-MM-DD-<sha7>` (UTC date + 7-char commit SHA, e.g. `2026-07-26-57ffc01`); the build prints the tag, which you then pin in the app's `deployment.yaml` in a follow-up PR (Flux does not auto-track tags). Older pins may still use the legacy `YYYY-MM-DD` / `YYYY-MM-DD-N` form; new builds are date-sha.
 - **Namespace convention**: production uses a `-prod` suffix (`golinks-prod`); staging uses a `-stage` suffix (`golinks-stage`). The base manifest declares the plain name (`golinks`) and each overlay patches `metadata.name`. Apps without a staging variant (`mosquitto`, `cloudflare-tunnel`, `truenas-iscsi-monitor`, etc.) use the plain name.
 - **Secrets are SOPS-encrypted** before commit (key ref: `.sops.yaml`); never commit plaintext.
 - **Adding a new app**: see `docs/operations/2026-05-02-adding-an-app.md`.

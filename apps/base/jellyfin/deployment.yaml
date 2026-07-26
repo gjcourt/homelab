@@ -96,6 +96,41 @@ spec:
               memory: 4Gi
               cpu: 4000m
 
+        # Sidecar: periodically sweep orphaned transcode files. Jellyfin only
+        # removes transcodes on a clean session-stop or at startup; abnormally
+        # ended sessions (client/network drops) orphan them, and over long
+        # uptime they accumulate until /cache fills — which crashes FFmpeg and
+        # breaks playback + image rendering. This is the periodic cleanup
+        # Jellyfin has no scheduled task for. No probe by design: the janitor's
+        # health must not gate Jellyfin's pod readiness.
+        - name: transcode-janitor
+          image: busybox:1.37.0
+          command:
+            - /bin/sh
+            - -c
+            - |
+              while true; do
+                find /cache/transcodes -mindepth 1 -type f -mmin +240 -exec rm -f {} + 2>/dev/null || true
+                find /cache/transcodes -mindepth 1 -depth -type d -exec rmdir {} + 2>/dev/null || true
+                sleep 1800
+              done
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: jellyfin-cache
+              mountPath: /cache
+
       volumes:
         - name: jellyfin-config
           persistentVolumeClaim:

@@ -1,4 +1,59 @@
 views:
+- title: Overview
+  path: overview
+  icon: mdi:home
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Music — Room Volume
+      heading_style: title
+    - type: tile
+      entity: media_player.living_room_snapcast_client
+      name: Living Room
+      icon: mdi:sofa
+      features:
+      - type: media-player-volume-slider
+    - type: tile
+      entity: media_player.kitchen_snapcast_client
+      name: Kitchen
+      icon: mdi:silverware-fork-knife
+      features:
+      - type: media-player-volume-slider
+    - type: tile
+      entity: media_player.snap_test_snapcast_client
+      name: Office
+      icon: mdi:desk
+      features:
+      - type: media-player-volume-slider
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Key Rooms
+      heading_style: title
+    - type: button
+      name: All Lights Off
+      icon: mdi:lightbulb-group-off
+      tap_action:
+        action: call-service
+        service: light.turn_off
+        target:
+          entity_id: all
+    - type: area
+      area: front_foyer
+    - type: area
+      area: kitchen
+    - type: area
+      area: hallway
+    - type: area
+      area: master_bedroom
+    - type: area
+      area: master_bathroom
+    # TODO: add `hallway_landing` area card once that Area is created in HA.
 - title: Control
   type: sections
   max_columns: 3
@@ -213,6 +268,30 @@ views:
   type: sections
   max_columns: 3
   sections:
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Music — Room Volume
+      heading_style: title
+    - type: tile
+      entity: media_player.living_room_snapcast_client
+      name: Living Room
+      icon: mdi:sofa
+      features:
+      - type: media-player-volume-slider
+    - type: tile
+      entity: media_player.kitchen_snapcast_client
+      name: Kitchen
+      icon: mdi:silverware-fork-knife
+      features:
+      - type: media-player-volume-slider
+    - type: tile
+      entity: media_player.snap_test_snapcast_client
+      name: Office
+      icon: mdi:desk
+      features:
+      - type: media-player-volume-slider
   - type: grid
     column_span: 3
     cards:
@@ -519,3 +598,51 @@ views:
     - type: tile
       entity: button.ir_blaster_topping_c2
       name: C2
+- title: Lights
+  path: lights
+  icon: mdi:lightbulb-group
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Lights by Room
+      heading_style: title
+    - type: markdown
+      content: 'Room cards auto-populate from HA Areas — new lights appear in their room automatically. Replaces the old hand-maintained Switchboard.'
+  - type: grid
+    column_span: 3
+    cards:
+    - type: area
+      area: living_room
+    - type: area
+      area: kitchen
+    - type: area
+      area: dining_room
+    - type: area
+      area: front_foyer
+    - type: area
+      area: hallway
+    - type: area
+      area: butler_pantry
+    - type: area
+      area: master_bedroom
+    - type: area
+      area: master_bathroom
+    - type: area
+      area: niccolo_bedroom
+    - type: area
+      area: nursery_bedroom
+    - type: area
+      area: hall_bathroom
+    - type: area
+      area: powder_bathroom
+    - type: area
+      area: office
+    - type: area
+      area: laundry_room
+    - type: area
+      area: exterior
+    # TODO: add `hallway_landing` once that Area is created in HA.

@@ -1,0 +1,12 @@
+{
+  "data": {
+    "config": {
+      "strategy": {
+        "type": "map"
+      }
+    }
+  },
+  "key": "lovelace.map",
+  "minor_version": 1,
+  "version": 1
+}

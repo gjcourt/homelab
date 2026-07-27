@@ -1,0 +1,464 @@
+{
+  "data": {
+    "config": {
+      "title": "Floorplan",
+      "views": [
+        {
+          "cards": [
+            {
+              "elements": [
+                {
+                  "entity": "light.master_bedroom_main_lights",
+                  "hold_action": {
+                    "action": "more-info"
+                  },
+                  "style": {
+                    "--iron-icon-height": "26px",
+                    "--iron-icon-width": "26px",
+                    "left": "9%",
+                    "top": "30%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.master_bedroom_entry",
+                  "style": {
+                    "--iron-icon-height": "20px",
+                    "--iron-icon-width": "20px",
+                    "left": "13%",
+                    "top": "23%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.master_bedroom_sconce_north",
+                  "style": {
+                    "--iron-icon-height": "20px",
+                    "--iron-icon-width": "20px",
+                    "left": "4%",
+                    "top": "21%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.master_bedroom_sconce_south",
+                  "style": {
+                    "--iron-icon-height": "20px",
+                    "--iron-icon-width": "20px",
+                    "left": "4%",
+                    "top": "42%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "switch.master_bedroom_closet_light",
+                  "style": {
+                    "--iron-icon-height": "20px",
+                    "--iron-icon-width": "20px",
+                    "left": "18%",
+                    "top": "43%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.master_bathroom_ceiling",
+                  "style": {
+                    "--iron-icon-height": "22px",
+                    "--iron-icon-width": "22px",
+                    "left": "25%",
+                    "top": "22%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.master_bathroom_vanity",
+                  "style": {
+                    "--iron-icon-height": "20px",
+                    "--iron-icon-width": "20px",
+                    "left": "29%",
+                    "top": "22%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "switch.master_bathroom_exhaust_fan",
+                  "style": {
+                    "--iron-icon-height": "18px",
+                    "--iron-icon-width": "18px",
+                    "left": "27%",
+                    "top": "30%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.niccolo_bedroom_main_lights",
+                  "hold_action": {
+                    "action": "more-info"
+                  },
+                  "style": {
+                    "--iron-icon-height": "26px",
+                    "--iron-icon-width": "26px",
+                    "left": "9%",
+                    "top": "76%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.hall_bathroom_main_lights",
+                  "style": {
+                    "--iron-icon-height": "22px",
+                    "--iron-icon-width": "22px",
+                    "left": "25%",
+                    "top": "66%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.hall_bathroom_vanity_lights",
+                  "style": {
+                    "--iron-icon-height": "20px",
+                    "--iron-icon-width": "20px",
+                    "left": "29%",
+                    "top": "66%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "switch.hall_bathroom_exhaust_fan",
+                  "style": {
+                    "--iron-icon-height": "18px",
+                    "--iron-icon-width": "18px",
+                    "left": "27%",
+                    "top": "74%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.office_main_lights",
+                  "hold_action": {
+                    "action": "more-info"
+                  },
+                  "style": {
+                    "--iron-icon-height": "24px",
+                    "--iron-icon-width": "24px",
+                    "left": "40%",
+                    "top": "31%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "switch.office_closet",
+                  "style": {
+                    "--iron-icon-height": "18px",
+                    "--iron-icon-width": "18px",
+                    "left": "43%",
+                    "top": "39%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.powder_bathroom_chandelier",
+                  "style": {
+                    "--iron-icon-height": "22px",
+                    "--iron-icon-width": "22px",
+                    "left": "34%",
+                    "top": "64%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "switch.powder_bathroom_exhaust_fan",
+                  "style": {
+                    "--iron-icon-height": "18px",
+                    "--iron-icon-width": "18px",
+                    "left": "38%",
+                    "top": "64%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.hallway_long",
+                  "style": {
+                    "--iron-icon-height": "22px",
+                    "--iron-icon-width": "22px",
+                    "left": "42%",
+                    "top": "86%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.hallway_landing",
+                  "style": {
+                    "--iron-icon-height": "22px",
+                    "--iron-icon-width": "22px",
+                    "left": "54%",
+                    "top": "44%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.nursery_bedroom_main_lights",
+                  "style": {
+                    "--iron-icon-height": "24px",
+                    "--iron-icon-width": "24px",
+                    "left": "61%",
+                    "top": "75%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.nursery_bedroom_closet_light",
+                  "style": {
+                    "--iron-icon-height": "20px",
+                    "--iron-icon-width": "20px",
+                    "left": "63%",
+                    "top": "84%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.butler_pantry_main_lights",
+                  "style": {
+                    "--iron-icon-height": "22px",
+                    "--iron-icon-width": "22px",
+                    "left": "70%",
+                    "top": "23%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.kitchen_main_lights",
+                  "style": {
+                    "--iron-icon-height": "24px",
+                    "--iron-icon-width": "24px",
+                    "left": "68%",
+                    "top": "52%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.kitchen_island_pendants",
+                  "style": {
+                    "--iron-icon-height": "20px",
+                    "--iron-icon-width": "20px",
+                    "left": "68%",
+                    "top": "62%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.kitchen_under_cabinet",
+                  "style": {
+                    "--iron-icon-height": "18px",
+                    "--iron-icon-width": "18px",
+                    "left": "72%",
+                    "top": "52%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.laundry_room_main_lights",
+                  "style": {
+                    "--iron-icon-height": "22px",
+                    "--iron-icon-width": "22px",
+                    "left": "70%",
+                    "top": "84%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.laundry_room_cove",
+                  "style": {
+                    "--iron-icon-height": "20px",
+                    "--iron-icon-width": "20px",
+                    "left": "70%",
+                    "top": "76%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.dining_room_sconces",
+                  "style": {
+                    "--iron-icon-height": "22px",
+                    "--iron-icon-width": "22px",
+                    "left": "85%",
+                    "top": "24%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "switch.dining_room_chandelier",
+                  "style": {
+                    "--iron-icon-height": "20px",
+                    "--iron-icon-width": "20px",
+                    "left": "85%",
+                    "top": "34%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.front_foyer_spot_lights",
+                  "style": {
+                    "--iron-icon-height": "22px",
+                    "--iron-icon-width": "22px",
+                    "left": "79%",
+                    "top": "64%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "switch.front_foyer_closet",
+                  "style": {
+                    "--iron-icon-height": "18px",
+                    "--iron-icon-width": "18px",
+                    "left": "79%",
+                    "top": "76%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.living_room_sconces",
+                  "style": {
+                    "--iron-icon-height": "24px",
+                    "--iron-icon-width": "24px",
+                    "left": "91%",
+                    "top": "75%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.exterior_west",
+                  "style": {
+                    "--iron-icon-height": "24px",
+                    "--iron-icon-width": "24px",
+                    "left": "1%",
+                    "top": "55%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                },
+                {
+                  "entity": "light.exterior_east",
+                  "style": {
+                    "--iron-icon-height": "24px",
+                    "--iron-icon-width": "24px",
+                    "left": "98%",
+                    "top": "55%"
+                  },
+                  "tap_action": {
+                    "action": "toggle"
+                  },
+                  "type": "state-icon"
+                }
+              ],
+              "image": "/local/floorplan.svg",
+              "type": "picture-elements"
+            }
+          ],
+          "icon": "mdi:floor-plan",
+          "path": "floor-plan",
+          "title": "Floor Plan",
+          "type": "panel"
+        }
+      ]
+    }
+  },
+  "key": "lovelace.floorplan",
+  "minor_version": 1,
+  "version": 1
+}

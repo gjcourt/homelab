@@ -99,10 +99,21 @@ spec:
         # Sidecar: periodically sweep orphaned transcode files. Jellyfin only
         # removes transcodes on a clean session-stop or at startup; abnormally
         # ended sessions (client/network drops) orphan them, and over long
-        # uptime they accumulate until /cache fills — which crashes FFmpeg and
-        # breaks playback + image rendering. This is the periodic cleanup
-        # Jellyfin has no scheduled task for. No probe by design: the janitor's
-        # health must not gate Jellyfin's pod readiness.
+        # uptime they accumulate until /cache fills. As of Jellyfin 10.11 this
+        # is fatal, not just slow: startup aborts with "path `/cache` has
+        # insufficient free space (Required: 2GiB)" (seen 2026-07-26), and
+        # because that check runs before the task scheduler, Jellyfin can never
+        # run its own cleanup to recover — it crashloops. This sidecar is an
+        # independent process that cleans even while Jellyfin is down, doing
+        # the periodic reap Jellyfin has no scheduled task for. Two-stage:
+        #   1. age sweep — reap transcodes older than 4h (routine housekeeping).
+        #   2. free-space floor — if <4GiB free (comfortably above the 2GiB
+        #      startup gate), delete oldest transcodes regardless of age until
+        #      back over the line. This is what makes the sweep robust: age
+        #      alone loses the race when a burst of concurrent 4K transcodes
+        #      fills /cache faster than the 4h window. df -P prints 1K blocks;
+        #      4194304 = 4GiB. No probe by design: the janitor's health must
+        #      not gate Jellyfin's pod readiness.
         - name: transcode-janitor
           image: busybox:1.37.0
           command:
@@ -111,6 +122,11 @@ spec:
             - |
               while true; do
                 find /cache/transcodes -mindepth 1 -type f -mmin +240 -exec rm -f {} + 2>/dev/null || true
+                while [ "$(df -P /cache | awk 'NR==2{print $4}')" -lt 4194304 ]; do
+                  oldest=$(ls -tr /cache/transcodes/* 2>/dev/null | head -1)
+                  [ -z "$oldest" ] && break
+                  rm -f "$oldest" 2>/dev/null || true
+                done
                 find /cache/transcodes -mindepth 1 -depth -type d -exec rmdir {} + 2>/dev/null || true
                 sleep 1800
               done

@@ -1458,28 +1458,83 @@ views:
             transition: background 0.3s ease;
           }
 # Per-area subviews — reached by tapping the area tiles on Overview.
-# `subview: true` keeps them off the top tab bar; each gives direct access to
-# that room's lights/switches (area-controls) plus its climate sensors.
+# `subview: true` keeps them off the top tab bar. Tinted single-column
+# layout: every light is a mushroom-light-card with a brightness slider
+# and card_mod that washes the card warm when the light is on.
 - title: Front Foyer
   path: area-front-foyer
   subview: true
   icon: mdi:door
   type: sections
-  max_columns: 2
+  max_columns: 1
   sections:
   - type: grid
     cards:
     - type: heading
-      heading: Front Foyer
+      heading: Front Foyer Lights
       heading_style: title
-    - type: area
-      area: front_foyer
-      display_type: compact
-      features:
-      - type: area-controls
-      sensor_classes:
-      - temperature
-      - humidity
+      icon: mdi:door
+    - type: custom:mushroom-template-card
+      primary: All Front Foyer Lights
+      secondary: "{{ ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.front_foyer_chandelier
+          - light.front_foyer_spot_lights
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            background: {% if ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count > 0 %}linear-gradient(150deg, rgba(255, 184, 56, 0.28), rgba(255, 150, 40, 0.16)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+          }
+    - type: custom:mushroom-light-card
+      entity: light.front_foyer_chandelier
+      name: Chandelier
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
+    - type: custom:mushroom-light-card
+      entity: light.front_foyer_spot_lights
+      name: Spots
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
 - title: Kitchen
   path: area-kitchen
   subview: true
@@ -1494,8 +1549,6 @@ views:
       heading_style: title
       icon: mdi:silverware-fork-knife
     - type: custom:mushroom-template-card
-      grid_options:
-        columns: full
       primary: All Kitchen Lights
       secondary: "{{ ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count }} on"
       icon: mdi:lightbulb-group
@@ -1508,27 +1561,29 @@ views:
           - light.kitchen_main_lights
           - light.kitchen_under_cabinet
           - light.kitchen_island_pendants
+      grid_options:
+        columns: full
       card_mod:
         style: |
           ha-card {
-            max-width: 520px;
+            max-width: 500px !important;
             margin: 0 auto;
             border-radius: 22px;
             border: none;
             background: {% if ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count > 0 %}linear-gradient(150deg, rgba(255, 184, 56, 0.28), rgba(255, 150, 40, 0.16)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
           }
     - type: custom:mushroom-light-card
-      grid_options:
-        columns: full
       entity: light.kitchen_main_lights
       name: Main
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      grid_options:
+        columns: full
       card_mod:
         style: |
           ha-card {
-            max-width: 520px;
+            max-width: 500px !important;
             margin: 0 auto;
             border-radius: 22px;
             border: none;
@@ -1537,17 +1592,17 @@ views:
             transition: background 0.3s ease;
           }
     - type: custom:mushroom-light-card
-      grid_options:
-        columns: full
       entity: light.kitchen_under_cabinet
       name: Under Cabinet
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      grid_options:
+        columns: full
       card_mod:
         style: |
           ha-card {
-            max-width: 520px;
+            max-width: 500px !important;
             margin: 0 auto;
             border-radius: 22px;
             border: none;
@@ -1556,17 +1611,17 @@ views:
             transition: background 0.3s ease;
           }
     - type: custom:mushroom-light-card
-      grid_options:
-        columns: full
       entity: light.kitchen_island_pendants
       name: Island Pendants
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      grid_options:
+        columns: full
       card_mod:
         style: |
           ha-card {
-            max-width: 520px;
+            max-width: 500px !important;
             margin: 0 auto;
             border-radius: 22px;
             border: none;
@@ -1579,58 +1634,260 @@ views:
   subview: true
   icon: mdi:door-sliding
   type: sections
-  max_columns: 2
+  max_columns: 1
   sections:
   - type: grid
     cards:
     - type: heading
-      heading: Hallway
+      heading: Hallway Lights
       heading_style: title
-    - type: area
-      area: hallway
-      display_type: compact
-      features:
-      - type: area-controls
-      sensor_classes:
-      - temperature
-      - humidity
+      icon: mdi:door-sliding
+    - type: custom:mushroom-template-card
+      primary: All Hallway Lights
+      secondary: "{{ ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.hallway_long
+          - light.hallway_landing
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            background: {% if ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count > 0 %}linear-gradient(150deg, rgba(255, 184, 56, 0.28), rgba(255, 150, 40, 0.16)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+          }
+    - type: custom:mushroom-light-card
+      entity: light.hallway_long
+      name: Long
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
+    - type: custom:mushroom-light-card
+      entity: light.hallway_landing
+      name: Landing
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
 - title: Master Bedroom
   path: area-master-bedroom
   subview: true
   icon: mdi:bed
   type: sections
-  max_columns: 2
+  max_columns: 1
   sections:
   - type: grid
     cards:
     - type: heading
-      heading: Master Bedroom
+      heading: Master Bedroom Lights
       heading_style: title
-    - type: area
-      area: master_bedroom
-      display_type: compact
-      features:
-      - type: area-controls
-      sensor_classes:
-      - temperature
-      - humidity
+      icon: mdi:bed
+    - type: custom:mushroom-template-card
+      primary: All Master Bedroom Lights
+      secondary: "{{ ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.master_bedroom_main_lights
+          - light.master_bedroom_entry
+          - light.master_bedroom_sconce_north
+          - light.master_bedroom_sconce_south
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            background: {% if ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count > 0 %}linear-gradient(150deg, rgba(255, 184, 56, 0.28), rgba(255, 150, 40, 0.16)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+          }
+    - type: custom:mushroom-light-card
+      entity: light.master_bedroom_main_lights
+      name: Main
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
+    - type: custom:mushroom-light-card
+      entity: light.master_bedroom_entry
+      name: Entry
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
+    - type: custom:mushroom-light-card
+      entity: light.master_bedroom_sconce_north
+      name: Sconce N
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
+    - type: custom:mushroom-light-card
+      entity: light.master_bedroom_sconce_south
+      name: Sconce S
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
 - title: Master Bathroom
   path: area-master-bathroom
   subview: true
   icon: mdi:shower
   type: sections
-  max_columns: 2
+  max_columns: 1
   sections:
   - type: grid
     cards:
     - type: heading
-      heading: Master Bathroom
+      heading: Master Bathroom Lights
       heading_style: title
-    - type: area
-      area: master_bathroom
-      display_type: compact
-      features:
-      - type: area-controls
-      sensor_classes:
-      - temperature
-      - humidity
+      icon: mdi:shower
+    - type: custom:mushroom-template-card
+      primary: All Master Bathroom Lights
+      secondary: "{{ ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.master_bathroom_vanity
+          - light.master_bathroom_ceiling
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            background: {% if ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count > 0 %}linear-gradient(150deg, rgba(255, 184, 56, 0.28), rgba(255, 150, 40, 0.16)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+          }
+    - type: custom:mushroom-light-card
+      entity: light.master_bathroom_vanity
+      name: Vanity
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
+    - type: custom:mushroom-light-card
+      entity: light.master_bathroom_ceiling
+      name: Ceiling
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }

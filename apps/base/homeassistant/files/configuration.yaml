@@ -9,6 +9,8 @@ frontend:
   # This is the git-managed equivalent of a HACS resource registration and
   # works in storage-mode lovelace (unlike `lovelace: resources:`).
   extra_module_url:
+    # card-mod first so it's registered before cards that use card_mod render.
+    - /local/card-mod.js
     - /local/mushroom.js
 
 # Lovelace dashboards. Default + Map / Floor Plan / Switchboard stay

@@ -708,18 +708,45 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.kitchen_under_cabinet
       name: Under Cabinet
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.kitchen_island_pendants
       name: Island Pendants
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -744,6 +771,15 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -770,16 +806,43 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.0xa4c138b55dac7973
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.0xa4c138a9f6011cac
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -805,12 +868,30 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.front_foyer_spot_lights
       name: Spots
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -836,12 +917,30 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.hallway_landing
       name: Landing
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -869,24 +968,60 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.master_bedroom_entry
       name: Entry
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.master_bedroom_sconce_north
       name: Sconce N
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.master_bedroom_sconce_south
       name: Sconce S
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -912,12 +1047,30 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.master_bathroom_ceiling
       name: Ceiling
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -942,6 +1095,15 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -966,6 +1128,15 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -991,12 +1162,30 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.nursery_bedroom_closet_light
       name: Closet
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -1022,12 +1211,30 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.hall_bathroom_vanity_lights
       name: Vanity
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -1052,6 +1259,15 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -1076,6 +1292,15 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -1101,12 +1326,30 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.laundry_room_cove
       name: Cove
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
   - type: grid
     column_span: 1
     cards:
@@ -1132,12 +1375,30 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.exterior_west
       name: West
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
 # Per-area subviews — reached by tapping the area tiles on Overview.
 # `subview: true` keeps them off the top tab bar; each gives direct access to
 # that room's lights/switches (area-controls) plus its climate sensors.
@@ -1194,18 +1455,45 @@ views:
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.kitchen_under_cabinet
       name: Under Cabinet
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
     - type: custom:mushroom-light-card
       entity: light.kitchen_island_pendants
       name: Island Pendants
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: false
+      card_mod:
+        style: |
+          ha-card {
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+            background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
+            transition: background 0.3s ease;
+          }
 - title: Hallway
   path: area-hallway
   subview: true

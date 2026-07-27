@@ -1,0 +1,226 @@
+{
+  "data": {
+    "config": {
+      "title": "Switchboard",
+      "views": [
+        {
+          "cards": [
+            {
+              "entities": [
+                {
+                  "entity": "light.kitchen_main_lights",
+                  "toggle": true
+                },
+                {
+                  "entity": "light.kitchen_island_pendants",
+                  "toggle": true
+                },
+                {
+                  "entity": "light.kitchen_under_cabinet",
+                  "toggle": true
+                }
+              ],
+              "title": "Kitchen",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.living_room_sconces",
+                  "toggle": true
+                }
+              ],
+              "title": "Living Room",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.dining_room_sconces",
+                  "toggle": true
+                }
+              ],
+              "title": "Dining Room",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.front_foyer_spot_lights",
+                  "toggle": true
+                }
+              ],
+              "title": "Foyer",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.hallway_long",
+                  "toggle": true
+                },
+                {
+                  "entity": "light.hallway_landing",
+                  "toggle": true
+                }
+              ],
+              "title": "Hallway",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.office_main_lights",
+                  "toggle": true
+                }
+              ],
+              "title": "Office",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.master_bedroom_main_lights",
+                  "toggle": true
+                },
+                {
+                  "entity": "light.master_bedroom_entry",
+                  "toggle": true
+                },
+                {
+                  "entity": "light.master_bedroom_sconce_north",
+                  "toggle": true
+                },
+                {
+                  "entity": "light.master_bedroom_sconce_south",
+                  "toggle": true
+                }
+              ],
+              "title": "Master Bedroom",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.master_bathroom_ceiling",
+                  "toggle": true
+                },
+                {
+                  "entity": "light.master_bathroom_vanity",
+                  "toggle": true
+                },
+                {
+                  "entity": "switch.master_bathroom_exhaust_fan",
+                  "toggle": true
+                }
+              ],
+              "title": "Master Bathroom",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.niccolo_bedroom_main_lights",
+                  "toggle": true
+                }
+              ],
+              "title": "Niccolo Bedroom",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.nursery_bedroom_main_lights",
+                  "toggle": true
+                },
+                {
+                  "entity": "light.nursery_bedroom_closet_light",
+                  "toggle": true
+                }
+              ],
+              "title": "Nursery",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.hall_bathroom_main_lights",
+                  "toggle": true
+                },
+                {
+                  "entity": "light.hall_bathroom_vanity_lights",
+                  "toggle": true
+                },
+                {
+                  "entity": "switch.hall_bathroom_exhaust_fan",
+                  "toggle": true
+                }
+              ],
+              "title": "Hall Bathroom",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.powder_bathroom_chandelier",
+                  "toggle": true
+                },
+                {
+                  "entity": "switch.powder_bathroom_exhaust_fan",
+                  "toggle": true
+                }
+              ],
+              "title": "Powder Bathroom",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.butler_pantry_main_lights",
+                  "toggle": true
+                }
+              ],
+              "title": "Butler Pantry",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.laundry_room_main_lights",
+                  "toggle": true
+                },
+                {
+                  "entity": "light.laundry_room_cove",
+                  "toggle": true
+                }
+              ],
+              "title": "Laundry Room",
+              "type": "entities"
+            },
+            {
+              "entities": [
+                {
+                  "entity": "light.exterior_east",
+                  "toggle": true
+                },
+                {
+                  "entity": "light.exterior_west",
+                  "toggle": true
+                }
+              ],
+              "title": "Exterior",
+              "type": "entities"
+            }
+          ],
+          "icon": "mdi:lightbulb-group",
+          "path": "lights",
+          "title": "Lights",
+          "type": "masonry"
+        }
+      ]
+    }
+  },
+  "key": "lovelace.switchboard",
+  "minor_version": 1,
+  "version": 1
+}

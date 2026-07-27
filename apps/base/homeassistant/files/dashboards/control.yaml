@@ -696,9 +696,9 @@ views:
       icon_color: "{{ 'amber' if ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.kitchen_main_lights
           - light.kitchen_under_cabinet
           - light.kitchen_island_pendants
@@ -767,9 +767,9 @@ views:
       icon_color: "{{ 'amber' if ['light.living_room_sconces'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.living_room_sconces
     - type: custom:mushroom-light-card
       entity: light.living_room_sconces
@@ -802,9 +802,9 @@ views:
       icon_color: "{{ 'amber' if ['light.dining_room_sconces', 'light.0xa4c138b55dac7973', 'light.0xa4c138a9f6011cac'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.dining_room_sconces
           - light.0xa4c138b55dac7973
           - light.0xa4c138a9f6011cac
@@ -871,9 +871,9 @@ views:
       icon_color: "{{ 'amber' if ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.front_foyer_chandelier
           - light.front_foyer_spot_lights
     - type: custom:mushroom-light-card
@@ -924,9 +924,9 @@ views:
       icon_color: "{{ 'amber' if ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.hallway_long
           - light.hallway_landing
     - type: custom:mushroom-light-card
@@ -977,9 +977,9 @@ views:
       icon_color: "{{ 'amber' if ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.master_bedroom_main_lights
           - light.master_bedroom_entry
           - light.master_bedroom_sconce_north
@@ -1066,9 +1066,9 @@ views:
       icon_color: "{{ 'amber' if ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.master_bathroom_vanity
           - light.master_bathroom_ceiling
     - type: custom:mushroom-light-card
@@ -1119,9 +1119,9 @@ views:
       icon_color: "{{ 'amber' if ['light.office_main_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.office_main_lights
     - type: custom:mushroom-light-card
       entity: light.office_main_lights
@@ -1154,9 +1154,9 @@ views:
       icon_color: "{{ 'amber' if ['light.niccolo_bedroom_main_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.niccolo_bedroom_main_lights
     - type: custom:mushroom-light-card
       entity: light.niccolo_bedroom_main_lights
@@ -1189,9 +1189,9 @@ views:
       icon_color: "{{ 'amber' if ['light.nursery_bedroom_main_lights', 'light.nursery_bedroom_closet_light'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.nursery_bedroom_main_lights
           - light.nursery_bedroom_closet_light
     - type: custom:mushroom-light-card
@@ -1242,9 +1242,9 @@ views:
       icon_color: "{{ 'amber' if ['light.hall_bathroom_main_lights', 'light.hall_bathroom_vanity_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.hall_bathroom_main_lights
           - light.hall_bathroom_vanity_lights
     - type: custom:mushroom-light-card
@@ -1295,9 +1295,9 @@ views:
       icon_color: "{{ 'amber' if ['light.powder_bathroom_chandelier'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.powder_bathroom_chandelier
     - type: custom:mushroom-light-card
       entity: light.powder_bathroom_chandelier
@@ -1330,9 +1330,9 @@ views:
       icon_color: "{{ 'amber' if ['light.butler_pantry_main_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.butler_pantry_main_lights
     - type: custom:mushroom-light-card
       entity: light.butler_pantry_main_lights
@@ -1365,9 +1365,9 @@ views:
       icon_color: "{{ 'amber' if ['light.laundry_room_main_lights', 'light.laundry_room_cove'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.laundry_room_main_lights
           - light.laundry_room_cove
     - type: custom:mushroom-light-card
@@ -1418,9 +1418,9 @@ views:
       icon_color: "{{ 'amber' if ['light.exterior_east', 'light.exterior_west'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.exterior_east
           - light.exterior_west
     - type: custom:mushroom-light-card
@@ -1481,9 +1481,9 @@ views:
       icon_color: "{{ 'amber' if ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.front_foyer_chandelier
           - light.front_foyer_spot_lights
       grid_options:
@@ -1555,9 +1555,9 @@ views:
       icon_color: "{{ 'amber' if ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.kitchen_main_lights
           - light.kitchen_under_cabinet
           - light.kitchen_island_pendants
@@ -1649,9 +1649,9 @@ views:
       icon_color: "{{ 'amber' if ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.hallway_long
           - light.hallway_landing
       grid_options:
@@ -1723,9 +1723,9 @@ views:
       icon_color: "{{ 'amber' if ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.master_bedroom_main_lights
           - light.master_bedroom_entry
           - light.master_bedroom_sconce_north
@@ -1837,9 +1837,9 @@ views:
       icon_color: "{{ 'amber' if ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
-        perform_action: light.toggle
-        target:
-          entity_id:
+        perform_action: script.smart_light_toggle
+        data:
+          entities:
           - light.master_bathroom_vanity
           - light.master_bathroom_ceiling
       grid_options:

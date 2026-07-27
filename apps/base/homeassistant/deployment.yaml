@@ -102,6 +102,9 @@ spec:
             - name: config-file
               mountPath: /config/automations.yaml
               subPath: automations.yaml
+            - name: config-file
+              mountPath: /config/scripts.yaml
+              subPath: scripts.yaml
             # Lovelace YAML-mode dashboards. ConfigMap data keys cannot
             # contain `/`, so the dashboard file is stored as a flat key
             # (dashboards_control.yaml) and subPath-mounted into the

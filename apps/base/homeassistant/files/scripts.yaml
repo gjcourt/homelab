@@ -1,0 +1,31 @@
+# Git-managed HA scripts (script: !include scripts.yaml in configuration.yaml).
+# Mounted read-only from the homeassistant-config ConfigMap.
+
+# Smart group toggle for a set of lights, used by the "All <Room> Lights" cards.
+# Fixes the light.toggle-per-entity bug (mixed state scrambled instead of
+# unifying). Logic:
+#   - if ANY light in the set is on  -> turn them ALL off
+#   - if ALL are off                 -> turn them ALL on
+# turn_on is called without a brightness, so lights with brightness memory
+# (most Zigbee/Hue) return to their last level ("remember last state").
+smart_light_toggle:
+  alias: Smart Light Group Toggle
+  mode: parallel
+  max: 25
+  icon: mdi:lightbulb-group
+  fields:
+    entities:
+      description: The light entities to toggle together (list).
+      example: "[light.kitchen_main_lights, light.kitchen_island_pendants]"
+  sequence:
+    - if:
+        - condition: template
+          value_template: "{{ expand(entities) | selectattr('state', 'eq', 'on') | list | count > 0 }}"
+      then:
+        - action: light.turn_off
+          target:
+            entity_id: "{{ entities }}"
+      else:
+        - action: light.turn_on
+          target:
+            entity_id: "{{ entities }}"

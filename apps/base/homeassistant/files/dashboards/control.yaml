@@ -5,8 +5,11 @@ views:
   type: sections
   max_columns: 3
   sections:
+  # Controls-first landing (Option A): the things George touches most — room
+  # volume + the lights killswitch — lead; weather sits beside the killswitch;
+  # areas and a summary strip follow underneath.
   - type: grid
-    column_span: 1
+    column_span: 3
     cards:
     - type: heading
       heading: Today
@@ -16,6 +19,19 @@ views:
       forecast_type: daily
       show_current: true
       show_forecast: true
+      grid_options:
+        columns: 8
+    - type: button
+      name: All Lights Off
+      icon: mdi:lightbulb-group-off
+      tap_action:
+        action: perform-action
+        perform_action: light.turn_off
+        target:
+          entity_id: all
+      grid_options:
+        columns: 4
+  # Volume ordered by how the rooms are used: Kitchen, Living Room, Office.
   - type: grid
     column_span: 3
     cards:
@@ -23,15 +39,15 @@ views:
       heading: Music — Room Volume
       heading_style: title
     - type: tile
-      entity: media_player.living_room_snapcast_client
-      name: Living Room
-      icon: mdi:sofa
-      features:
-      - type: media-player-volume-slider
-    - type: tile
       entity: media_player.kitchen_snapcast_client
       name: Kitchen
       icon: mdi:silverware-fork-knife
+      features:
+      - type: media-player-volume-slider
+    - type: tile
+      entity: media_player.living_room_snapcast_client
+      name: Living Room
+      icon: mdi:sofa
       features:
       - type: media-player-volume-slider
     - type: tile
@@ -44,16 +60,8 @@ views:
     column_span: 3
     cards:
     - type: heading
-      heading: Key Rooms
+      heading: Areas
       heading_style: title
-    - type: button
-      name: All Lights Off
-      icon: mdi:lightbulb-group-off
-      tap_action:
-        action: call-service
-        service: light.turn_off
-        target:
-          entity_id: all
     # navigation_path makes each area tile navigate to its per-area subview
     # (defined below with subview: true). Without it the area card only opens
     # more-info and reads as "not clickable".
@@ -73,6 +81,30 @@ views:
       area: master_bathroom
       navigation_path: area-master-bathroom
     # TODO: add `hallway_landing` area card once that Area is created in HA.
+  # Summary strip — glanceable counts, tap to jump to the relevant tab.
+  # Backed by template sensors in configuration.yaml (lights_on_count,
+  # media_playing_count).
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Summaries
+      heading_style: title
+    - type: tile
+      entity: sensor.lights_on
+      name: Lights On
+      icon: mdi:lightbulb-group
+      color: amber
+      tap_action:
+        action: navigate
+        navigation_path: lights
+    - type: tile
+      entity: sensor.media_playing
+      name: Media Playing
+      icon: mdi:play-circle
+      tap_action:
+        action: navigate
+        navigation_path: av
 - title: Control
   type: sections
   max_columns: 3

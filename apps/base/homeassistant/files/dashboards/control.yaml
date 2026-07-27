@@ -18,7 +18,7 @@ views:
       features:
       - type: media-player-volume-slider
     - type: tile
-      entity: media_player.kitchen_snapcast_client
+      entity: media_player.kitchen_snapcast_client_2
       name: Kitchen
       icon: mdi:silverware-fork-knife
       features:
@@ -281,7 +281,7 @@ views:
       features:
       - type: media-player-volume-slider
     - type: tile
-      entity: media_player.kitchen_snapcast_client
+      entity: media_player.kitchen_snapcast_client_2
       name: Kitchen
       icon: mdi:silverware-fork-knife
       features:

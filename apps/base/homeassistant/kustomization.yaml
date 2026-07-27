@@ -23,6 +23,7 @@ configMapGenerator:
       - automations.yaml=files/automations.yaml
       - binary_sensors.yaml=files/binary_sensors.yaml
       - scripts.yaml=files/scripts.yaml
+      - themes_tinted.yaml=files/themes/tinted.yaml
       # Lovelace dashboards bundled as flat keys (K8s ConfigMap data keys
       # cannot contain `/`). The Deployment mounts each via subPath into
       # /config/dashboards/<name>.yaml so HA finds them at the path declared

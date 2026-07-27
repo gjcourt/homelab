@@ -1,0 +1,40 @@
+# Git-managed HA theme (frontend.themes: !include_dir_merge_named themes).
+# Applied per-view via `theme: Tinted`. Soft, rounded, borderless cards to
+# match the "Tinted" design direction, in both light and dark.
+Tinted:
+  # Shared (both modes)
+  ha-card-border-radius: "18px"
+  ha-card-border-width: "0px"
+  card-mod-theme: Tinted
+
+  modes:
+    light:
+      primary-color: "#0aa2e6"
+      accent-color: "#0aa2e6"
+      primary-background-color: "#eef1f5"
+      secondary-background-color: "#eef1f5"
+      card-background-color: "#ffffff"
+      ha-card-background: "#ffffff"
+      primary-text-color: "#1b2026"
+      secondary-text-color: "#5f6b76"
+      disabled-text-color: "#9aa4b2"
+      divider-color: "rgba(20, 30, 60, 0.06)"
+      ha-card-box-shadow: "0 1px 2px rgba(20,30,60,0.05), 0 4px 16px rgba(20,30,60,0.06)"
+      # mushroom
+      mush-border-radius: "18px"
+      mush-card-primary-font-weight: "600"
+
+    dark:
+      primary-color: "#38bdf8"
+      accent-color: "#38bdf8"
+      primary-background-color: "#0e1116"
+      secondary-background-color: "#0e1116"
+      card-background-color: "#1b1f27"
+      ha-card-background: "#1b1f27"
+      primary-text-color: "#e6e9ee"
+      secondary-text-color: "#9aa4b2"
+      disabled-text-color: "#6b7482"
+      divider-color: "rgba(255, 255, 255, 0.07)"
+      ha-card-box-shadow: "0 1px 2px rgba(0,0,0,0.4), 0 6px 20px rgba(0,0,0,0.35)"
+      mush-border-radius: "18px"
+      mush-card-primary-font-weight: "600"

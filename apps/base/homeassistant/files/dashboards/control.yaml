@@ -6,6 +6,17 @@ views:
   max_columns: 3
   sections:
   - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Today
+      heading_style: title
+    - type: weather-forecast
+      entity: weather.forecast_home
+      forecast_type: daily
+      show_current: true
+      show_forecast: true
+  - type: grid
     column_span: 3
     cards:
     - type: heading
@@ -43,16 +54,24 @@ views:
         service: light.turn_off
         target:
           entity_id: all
+    # navigation_path makes each area tile navigate to its per-area subview
+    # (defined below with subview: true). Without it the area card only opens
+    # more-info and reads as "not clickable".
     - type: area
       area: front_foyer
+      navigation_path: area-front-foyer
     - type: area
       area: kitchen
+      navigation_path: area-kitchen
     - type: area
       area: hallway
+      navigation_path: area-hallway
     - type: area
       area: master_bedroom
+      navigation_path: area-master-bedroom
     - type: area
       area: master_bathroom
+      navigation_path: area-master-bathroom
     # TODO: add `hallway_landing` area card once that Area is created in HA.
 - title: Control
   type: sections
@@ -646,3 +665,106 @@ views:
     - type: area
       area: exterior
     # TODO: add `hallway_landing` once that Area is created in HA.
+# Per-area subviews — reached by tapping the area tiles on Overview.
+# `subview: true` keeps them off the top tab bar; each gives direct access to
+# that room's lights/switches (area-controls) plus its climate sensors.
+- title: Front Foyer
+  path: area-front-foyer
+  subview: true
+  icon: mdi:door
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Front Foyer
+      heading_style: title
+    - type: area
+      area: front_foyer
+      display_type: compact
+      features:
+      - type: area-controls
+      sensor_classes:
+      - temperature
+      - humidity
+- title: Kitchen
+  path: area-kitchen
+  subview: true
+  icon: mdi:silverware-fork-knife
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Kitchen
+      heading_style: title
+    - type: area
+      area: kitchen
+      display_type: compact
+      features:
+      - type: area-controls
+      sensor_classes:
+      - temperature
+      - humidity
+- title: Hallway
+  path: area-hallway
+  subview: true
+  icon: mdi:door-sliding
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Hallway
+      heading_style: title
+    - type: area
+      area: hallway
+      display_type: compact
+      features:
+      - type: area-controls
+      sensor_classes:
+      - temperature
+      - humidity
+- title: Master Bedroom
+  path: area-master-bedroom
+  subview: true
+  icon: mdi:bed
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Master Bedroom
+      heading_style: title
+    - type: area
+      area: master_bedroom
+      display_type: compact
+      features:
+      - type: area-controls
+      sensor_classes:
+      - temperature
+      - humidity
+- title: Master Bathroom
+  path: area-master-bathroom
+  subview: true
+  icon: mdi:shower
+  type: sections
+  max_columns: 2
+  sections:
+  - type: grid
+    cards:
+    - type: heading
+      heading: Master Bathroom
+      heading_style: title
+    - type: area
+      area: master_bathroom
+      display_type: compact
+      features:
+      - type: area-controls
+      sensor_classes:
+      - temperature
+      - humidity

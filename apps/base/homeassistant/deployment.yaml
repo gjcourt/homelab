@@ -114,6 +114,9 @@ spec:
             - name: www-file
               mountPath: /config/www/mushroom.js
               subPath: mushroom.js
+            - name: www-file
+              mountPath: /config/www/card-mod.js
+              subPath: card-mod.js
       volumes:
         - name: config
           persistentVolumeClaim:

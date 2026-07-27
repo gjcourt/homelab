@@ -109,6 +109,11 @@ spec:
             - name: config-file
               mountPath: /config/dashboards/control.yaml
               subPath: dashboards_control.yaml
+            # Vendored Mushroom card bundle, served at /local/mushroom.js and
+            # registered via frontend.extra_module_url in configuration.yaml.
+            - name: www-file
+              mountPath: /config/www/mushroom.js
+              subPath: mushroom.js
       volumes:
         - name: config
           persistentVolumeClaim:
@@ -116,3 +121,6 @@ spec:
         - name: config-file
           configMap:
             name: homeassistant-config
+        - name: www-file
+          configMap:
+            name: homeassistant-www

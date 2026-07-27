@@ -20,7 +20,7 @@ views:
       show_current: true
       show_forecast: true
       grid_options:
-        columns: 8
+        columns: 6
     - type: custom:mushroom-template-card
       primary: All Lights Off
       secondary: "{{ states('sensor.lights_on') }} on"
@@ -31,8 +31,9 @@ views:
         perform_action: light.turn_off
         target:
           entity_id: all
+      fill_container: true
       grid_options:
-        columns: 4
+        columns: 6
   # Volume ordered by how the rooms are used: Kitchen, Living Room, Office.
   - type: grid
     column_span: 3
@@ -1168,18 +1169,43 @@ views:
   max_columns: 2
   sections:
   - type: grid
+    column_span: 1
     cards:
     - type: heading
-      heading: Kitchen
+      heading: Kitchen Lights
       heading_style: title
-    - type: area
-      area: kitchen
-      display_type: compact
-      features:
-      - type: area-controls
-      sensor_classes:
-      - temperature
-      - humidity
+      icon: mdi:silverware-fork-knife
+    - type: custom:mushroom-template-card
+      primary: All Kitchen Lights
+      secondary: "{{ ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.kitchen_main_lights
+          - light.kitchen_under_cabinet
+          - light.kitchen_island_pendants
+    - type: custom:mushroom-light-card
+      entity: light.kitchen_main_lights
+      name: Main
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.kitchen_under_cabinet
+      name: Under Cabinet
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.kitchen_island_pendants
+      name: Island Pendants
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
 - title: Hallway
   path: area-hallway
   subview: true

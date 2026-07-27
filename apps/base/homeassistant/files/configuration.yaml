@@ -182,3 +182,14 @@ template:
           {% set offset = states('input_number.nightlight_offset_today') | int(0) %}
           {% set total_minutes = (base_minutes + offset) % 1440 %}
           {{ '%02d:%02d' | format(total_minutes // 60, total_minutes % 60) }}
+      # Summary counters for the Overview landing page (Controls-first layout).
+      - name: "Lights On"
+        unique_id: lights_on_count
+        unit_of_measurement: "on"
+        icon: mdi:lightbulb-group
+        state: "{{ states.light | selectattr('state', 'eq', 'on') | list | count }}"
+      - name: "Media Playing"
+        unique_id: media_playing_count
+        unit_of_measurement: "playing"
+        icon: mdi:play-circle
+        state: "{{ states.media_player | selectattr('state', 'eq', 'playing') | list | count }}"

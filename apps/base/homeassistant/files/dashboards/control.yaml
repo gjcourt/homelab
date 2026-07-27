@@ -18,13 +18,13 @@ views:
       features:
       - type: media-player-volume-slider
     - type: tile
-      entity: media_player.kitchen_snapcast_client_2
+      entity: media_player.kitchen_snapcast_client
       name: Kitchen
       icon: mdi:silverware-fork-knife
       features:
       - type: media-player-volume-slider
     - type: tile
-      entity: media_player.snap_test_snapcast_client
+      entity: media_player.office_snapcast_client
       name: Office
       icon: mdi:desk
       features:
@@ -281,13 +281,13 @@ views:
       features:
       - type: media-player-volume-slider
     - type: tile
-      entity: media_player.kitchen_snapcast_client_2
+      entity: media_player.kitchen_snapcast_client
       name: Kitchen
       icon: mdi:silverware-fork-knife
       features:
       - type: media-player-volume-slider
     - type: tile
-      entity: media_player.snap_test_snapcast_client
+      entity: media_player.office_snapcast_client
       name: Office
       icon: mdi:desk
       features:

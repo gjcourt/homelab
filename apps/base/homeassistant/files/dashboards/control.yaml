@@ -1494,6 +1494,8 @@ views:
       heading_style: title
       icon: mdi:silverware-fork-knife
     - type: custom:mushroom-template-card
+      grid_options:
+        columns: full
       primary: All Kitchen Lights
       secondary: "{{ ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count }} on"
       icon: mdi:lightbulb-group
@@ -1516,6 +1518,8 @@ views:
             background: {% if ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count > 0 %}linear-gradient(150deg, rgba(255, 184, 56, 0.28), rgba(255, 150, 40, 0.16)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
           }
     - type: custom:mushroom-light-card
+      grid_options:
+        columns: full
       entity: light.kitchen_main_lights
       name: Main
       show_brightness_control: true
@@ -1533,6 +1537,8 @@ views:
             transition: background 0.3s ease;
           }
     - type: custom:mushroom-light-card
+      grid_options:
+        columns: full
       entity: light.kitchen_under_cabinet
       name: Under Cabinet
       show_brightness_control: true
@@ -1550,6 +1556,8 @@ views:
             transition: background 0.3s ease;
           }
     - type: custom:mushroom-light-card
+      grid_options:
+        columns: full
       entity: light.kitchen_island_pendants
       name: Island Pendants
       show_brightness_control: true

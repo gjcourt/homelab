@@ -1,7 +1,7 @@
 # Incident: Jellyfin `/cache` refilled with orphaned transcodes (recurrence)
 
 **Date:** 2026-07-26
-**Status:** **Mitigated** — `/cache/transcodes` cleared (20 G → 121 M), service restored; durable fix (transcode-janitor sidecar) in review ([#1212](https://github.com/gjcourt/homelab/pull/1212))
+**Status:** **Resolved** — `/cache/transcodes` cleared (20 G → 121 M), service restored; transcode-janitor sidecar merged ([#1212](https://github.com/gjcourt/homelab/pull/1212)) and hardened with a free-space floor after a same-day recurrence (see [Update 2026-07-26](#update-2026-07-26--jellyfin-1011-startup-gate-turned-a-full-cache-into-a-crashloop))
 **Severity:** Medium — user-facing degradation (broken thumbnails, laggy/broken playback, flaky resume) across devices; no data loss, no outage
 **Environments affected:** `jellyfin-prod`
 **Authors:** George Courtsunis
@@ -93,11 +93,52 @@ was the volume being 4× larger (20 Gi vs 5 Gi) — it just took longer to refil
 
 ## Remaining follow-ups
 
-- [ ] Merge #1212 (via staging validation).
+- [x] Merge #1212 (transcode-janitor sidecar).
+- [x] Harden the janitor with a free-space floor after the 10.11 startup-gate recurrence
+      (see [Update 2026-07-26](#update-2026-07-26--jellyfin-1011-startup-gate-turned-a-full-cache-into-a-crashloop)).
 - [ ] **Verify the `KubePersistentVolumeFillingUp` alert fired for this fill and is
       routed/visible** — 2026-07-02 was caught by the alert *before* user impact; this one
-      reached users first, suggesting the alert was missed, silenced, or not routed.
+      reached users first, suggesting the alert was missed, silenced, or not routed. The
+      10.11 startup gate makes this more urgent: a full cache now crashloops the server.
 - [ ] Optional: move transcodes to an `emptyDir` (defense-in-depth, above).
+
+## Update 2026-07-26 — Jellyfin 10.11 startup gate turned a full cache into a crashloop
+
+Hours after #1212 merged, Jellyfin **crashlooped** (`1/2`, `CrashLoopBackOff`). The janitor
+sidecar was up, but the main container died at boot:
+
+```
+[FTL] Main: Unhandled Exception
+System.InvalidOperationException: The path `/cache` has insufficient free space.
+Available: 140KiB, Required: 2GiB.
+   at StorageHelper.TestCommonPathsForStorageCapacity(...)
+   at Program.StartApp(...)
+```
+
+**New failure mode vs. the original incident.** Jellyfin **10.11** added a hard startup
+storage check requiring **≥2 GiB free on `/cache`**. Two consequences:
+
+1. A full cache is now **fatal at boot**, not merely slow — the same slow orphan-fill that
+   previously only degraded playback now refuses to start the server.
+2. The check runs inside `StartApp`, **before the scheduled-task host starts**, so Jellyfin
+   can never run its *own* transcode cleanup to recover — it's a chicken-and-egg crashloop.
+   Only an independent process (the sidecar) can clean `/cache` in this state.
+
+**Trigger:** the cache was already at 100% (140 KiB free) from ongoing orphan accumulation;
+the PR-driven pod rolls (#1212 + the concurrent HA/dashboard merges) restarted the pod into
+the new 10.11 gate. The janitor's 4 h age threshold meant not enough was old enough to reap
+at that instant, so it couldn't rescue the boot.
+
+**Immediate:** `rm -rf /cache/transcodes/*` via the sidecar container → `/cache` 100% → 1%
+(19.5 G free) → Jellyfin booted `2/2`.
+
+**Durable hardening ([#TBD]):** added a **free-space floor** to the janitor loop. In addition
+to the 4 h age sweep, if `/cache` drops below **4 GiB free** (comfortably above the 2 GiB
+startup gate) it deletes the *oldest* transcode files regardless of age until back over the
+line. Age-based cleanup alone loses the race when a burst of concurrent 4K transcodes fills
+the volume faster than the 4 h window; the free-space floor makes the 30-min sweep a genuine
+guarantee against the startup gate — **without** growing the PVC (kept at 20 Gi; a larger
+volume only raises the ceiling it eventually fills to, it doesn't remove the failure mode).
 
 ## References
 

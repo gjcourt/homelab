@@ -22,31 +22,31 @@ views:
       grid_options:
         columns: full
       cards:
-        - type: weather-forecast
-          entity: weather.forecast_home
-          forecast_type: daily
-          show_current: true
-          show_forecast: true
-        - type: custom:mushroom-template-card
-          primary: All Lights Off
-          secondary: "{{ states('sensor.lights_on') }} on"
-          icon: mdi:lightbulb-group-off
-          icon_color: "{{ 'amber' if states('sensor.lights_on') | int(0) > 0 else 'disabled' }}"
-          layout: vertical
-          fill_container: true
-          tap_action:
-            action: perform-action
-            perform_action: light.turn_off
-            target:
-              entity_id: all
-          card_mod:
-            style: |
-              ha-card {
-                height: 100%;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-              }
+      - type: weather-forecast
+        entity: weather.forecast_home
+        forecast_type: daily
+        show_current: true
+        show_forecast: true
+      - type: custom:mushroom-template-card
+        primary: All Lights Off
+        secondary: "{{ states('sensor.lights_on') }} on"
+        icon: mdi:lightbulb-group-off
+        icon_color: "{{ 'amber' if states('sensor.lights_on') | int(0) > 0 else 'disabled' }}"
+        layout: vertical
+        fill_container: true
+        tap_action:
+          action: perform-action
+          perform_action: light.turn_off
+          target:
+            entity_id: all
+        card_mod:
+          style: |
+            ha-card {
+              height: 100%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+            }
   # Volume ordered by how the rooms are used: Kitchen, Living Room, Office.
   - type: grid
     column_span: 3

@@ -4,6 +4,12 @@ default_config:
 # Load frontend themes from the themes folder
 frontend:
   themes: !include_dir_merge_named themes
+  # Vendored custom cards loaded as ES modules. mushroom.js is mounted to
+  # /config/www (served at /local/) from the homeassistant-www ConfigMap.
+  # This is the git-managed equivalent of a HACS resource registration and
+  # works in storage-mode lovelace (unlike `lovelace: resources:`).
+  extra_module_url:
+    - /local/mushroom.js
 
 # Lovelace dashboards. Default + Map / Floor Plan / Switchboard stay
 # UI-managed (storage mode). Only the Control dashboard is migrated to

@@ -27,6 +27,13 @@ configMapGenerator:
       # /config/dashboards/<name>.yaml so HA finds them at the path declared
       # in lovelace.dashboards.<slug>.filename.
       - dashboards_control.yaml=files/dashboards/control.yaml
+  # Vendored custom frontend cards (Mushroom v5.1.1). Kept in git (not a HACS
+  # runtime download) so the resource is reproducible. Mounted to /config/www
+  # and loaded via `frontend.extra_module_url: /local/mushroom.js`.
+  - name: homeassistant-www
+    namespace: homeassistant
+    files:
+      - mushroom.js=files/www/mushroom.js
 
 labels:
   - includeSelectors: false

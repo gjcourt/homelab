@@ -21,9 +21,11 @@ views:
       show_forecast: true
       grid_options:
         columns: 8
-    - type: button
-      name: All Lights Off
+    - type: custom:mushroom-template-card
+      primary: All Lights Off
+      secondary: "{{ states('sensor.lights_on') }} on"
       icon: mdi:lightbulb-group-off
+      icon_color: "{{ 'amber' if states('sensor.lights_on') | int(0) > 0 else 'disabled' }}"
       tap_action:
         action: perform-action
         perform_action: light.turn_off
@@ -62,24 +64,45 @@ views:
     - type: heading
       heading: Areas
       heading_style: title
-    # navigation_path makes each area tile navigate to its per-area subview
-    # (defined below with subview: true). Without it the area card only opens
-    # more-info and reads as "not clickable".
-    - type: area
-      area: front_foyer
-      navigation_path: area-front-foyer
-    - type: area
-      area: kitchen
-      navigation_path: area-kitchen
-    - type: area
-      area: hallway
-      navigation_path: area-hallway
-    - type: area
-      area: master_bedroom
-      navigation_path: area-master-bedroom
-    - type: area
-      area: master_bathroom
-      navigation_path: area-master-bathroom
+    # Mushroom template cards: clickable — tap navigates to the per-area
+    # subview. Curated key rooms; full room-by-room light control (all lights
+    # + dimming) lives on the Lights tab. icon_color uses a state template so
+    # the icon lights up amber when any light in the room is on.
+    - type: custom:mushroom-template-card
+      primary: Kitchen
+      icon: mdi:silverware-fork-knife
+      icon_color: "{{ 'amber' if ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: navigate
+        navigation_path: area-kitchen
+    - type: custom:mushroom-template-card
+      primary: Front Foyer
+      icon: mdi:door
+      icon_color: "{{ 'amber' if ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: navigate
+        navigation_path: area-front-foyer
+    - type: custom:mushroom-template-card
+      primary: Hallway
+      icon: mdi:door-sliding
+      icon_color: "{{ 'amber' if ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: navigate
+        navigation_path: area-hallway
+    - type: custom:mushroom-template-card
+      primary: Master Bedroom
+      icon: mdi:bed
+      icon_color: "{{ 'amber' if ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: navigate
+        navigation_path: area-master-bedroom
+    - type: custom:mushroom-template-card
+      primary: Master Bathroom
+      icon: mdi:shower
+      icon_color: "{{ 'amber' if ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: navigate
+        navigation_path: area-master-bathroom
     # TODO: add `hallway_landing` area card once that Area is created in HA.
   # Summary strip — glanceable counts, tap to jump to the relevant tab.
   # Backed by template sensors in configuration.yaml (lights_on_count,
@@ -655,48 +678,465 @@ views:
   type: sections
   max_columns: 3
   sections:
+  # One section per room. Every light is a mushroom-light-card with a
+  # brightness slider (tap = toggle, hold = full more-info dialog). The
+  # room heading's badge is a group toggle for all lights in that room.
   - type: grid
-    column_span: 3
+    column_span: 1
     cards:
     - type: heading
-      heading: Lights by Room
+      heading: Kitchen
       heading_style: title
-    - type: markdown
-      content: 'Room cards auto-populate from HA Areas — new lights appear in their room automatically. Replaces the old hand-maintained Switchboard.'
+      icon: mdi:silverware-fork-knife
+    - type: custom:mushroom-template-card
+      primary: All Kitchen Lights
+      secondary: "{{ ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.kitchen_main_lights
+          - light.kitchen_under_cabinet
+          - light.kitchen_island_pendants
+    - type: custom:mushroom-light-card
+      entity: light.kitchen_main_lights
+      name: Main
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.kitchen_under_cabinet
+      name: Under Cabinet
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.kitchen_island_pendants
+      name: Island Pendants
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
   - type: grid
-    column_span: 3
+    column_span: 1
     cards:
-    - type: area
-      area: living_room
-    - type: area
-      area: kitchen
-    - type: area
-      area: dining_room
-    - type: area
-      area: front_foyer
-    - type: area
-      area: hallway
-    - type: area
-      area: butler_pantry
-    - type: area
-      area: master_bedroom
-    - type: area
-      area: master_bathroom
-    - type: area
-      area: niccolo_bedroom
-    - type: area
-      area: nursery_bedroom
-    - type: area
-      area: hall_bathroom
-    - type: area
-      area: powder_bathroom
-    - type: area
-      area: office
-    - type: area
-      area: laundry_room
-    - type: area
-      area: exterior
-    # TODO: add `hallway_landing` once that Area is created in HA.
+    - type: heading
+      heading: Living Room
+      heading_style: title
+      icon: mdi:sofa
+    - type: custom:mushroom-template-card
+      primary: All Living Room Lights
+      secondary: "{{ ['light.living_room_sconces'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.living_room_sconces'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.living_room_sconces
+    - type: custom:mushroom-light-card
+      entity: light.living_room_sconces
+      name: Sconces
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Dining Room
+      heading_style: title
+      icon: mdi:table-furniture
+    - type: custom:mushroom-template-card
+      primary: All Dining Room Lights
+      secondary: "{{ ['light.dining_room_sconces', 'light.0xa4c138b55dac7973', 'light.0xa4c138a9f6011cac'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.dining_room_sconces', 'light.0xa4c138b55dac7973', 'light.0xa4c138a9f6011cac'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.dining_room_sconces
+          - light.0xa4c138b55dac7973
+          - light.0xa4c138a9f6011cac
+    - type: custom:mushroom-light-card
+      entity: light.dining_room_sconces
+      name: Sconces
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.0xa4c138b55dac7973
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.0xa4c138a9f6011cac
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Front Foyer
+      heading_style: title
+      icon: mdi:door
+    - type: custom:mushroom-template-card
+      primary: All Front Foyer Lights
+      secondary: "{{ ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.front_foyer_chandelier
+          - light.front_foyer_spot_lights
+    - type: custom:mushroom-light-card
+      entity: light.front_foyer_chandelier
+      name: Chandelier
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.front_foyer_spot_lights
+      name: Spots
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Hallway
+      heading_style: title
+      icon: mdi:door-sliding
+    - type: custom:mushroom-template-card
+      primary: All Hallway Lights
+      secondary: "{{ ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.hallway_long
+          - light.hallway_landing
+    - type: custom:mushroom-light-card
+      entity: light.hallway_long
+      name: Long
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.hallway_landing
+      name: Landing
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Master Bedroom
+      heading_style: title
+      icon: mdi:bed
+    - type: custom:mushroom-template-card
+      primary: All Master Bedroom Lights
+      secondary: "{{ ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.master_bedroom_main_lights
+          - light.master_bedroom_entry
+          - light.master_bedroom_sconce_north
+          - light.master_bedroom_sconce_south
+    - type: custom:mushroom-light-card
+      entity: light.master_bedroom_main_lights
+      name: Main
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.master_bedroom_entry
+      name: Entry
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.master_bedroom_sconce_north
+      name: Sconce N
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.master_bedroom_sconce_south
+      name: Sconce S
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Master Bathroom
+      heading_style: title
+      icon: mdi:shower
+    - type: custom:mushroom-template-card
+      primary: All Master Bathroom Lights
+      secondary: "{{ ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.master_bathroom_vanity
+          - light.master_bathroom_ceiling
+    - type: custom:mushroom-light-card
+      entity: light.master_bathroom_vanity
+      name: Vanity
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.master_bathroom_ceiling
+      name: Ceiling
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Office
+      heading_style: title
+      icon: mdi:desk
+    - type: custom:mushroom-template-card
+      primary: All Office Lights
+      secondary: "{{ ['light.office_main_lights'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.office_main_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.office_main_lights
+    - type: custom:mushroom-light-card
+      entity: light.office_main_lights
+      name: Main
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Niccolo Bedroom
+      heading_style: title
+      icon: mdi:bed
+    - type: custom:mushroom-template-card
+      primary: All Niccolo Bedroom Lights
+      secondary: "{{ ['light.niccolo_bedroom_main_lights'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.niccolo_bedroom_main_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.niccolo_bedroom_main_lights
+    - type: custom:mushroom-light-card
+      entity: light.niccolo_bedroom_main_lights
+      name: Main
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Nursery Bedroom
+      heading_style: title
+      icon: mdi:cradle
+    - type: custom:mushroom-template-card
+      primary: All Nursery Bedroom Lights
+      secondary: "{{ ['light.nursery_bedroom_main_lights', 'light.nursery_bedroom_closet_light'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.nursery_bedroom_main_lights', 'light.nursery_bedroom_closet_light'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.nursery_bedroom_main_lights
+          - light.nursery_bedroom_closet_light
+    - type: custom:mushroom-light-card
+      entity: light.nursery_bedroom_main_lights
+      name: Main
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.nursery_bedroom_closet_light
+      name: Closet
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Hall Bathroom
+      heading_style: title
+      icon: mdi:toilet
+    - type: custom:mushroom-template-card
+      primary: All Hall Bathroom Lights
+      secondary: "{{ ['light.hall_bathroom_main_lights', 'light.hall_bathroom_vanity_lights'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.hall_bathroom_main_lights', 'light.hall_bathroom_vanity_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.hall_bathroom_main_lights
+          - light.hall_bathroom_vanity_lights
+    - type: custom:mushroom-light-card
+      entity: light.hall_bathroom_main_lights
+      name: Main
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.hall_bathroom_vanity_lights
+      name: Vanity
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Powder Bathroom
+      heading_style: title
+      icon: mdi:toilet
+    - type: custom:mushroom-template-card
+      primary: All Powder Bathroom Lights
+      secondary: "{{ ['light.powder_bathroom_chandelier'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.powder_bathroom_chandelier'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.powder_bathroom_chandelier
+    - type: custom:mushroom-light-card
+      entity: light.powder_bathroom_chandelier
+      name: Chandelier
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Butler Pantry
+      heading_style: title
+      icon: mdi:cupboard
+    - type: custom:mushroom-template-card
+      primary: All Butler Pantry Lights
+      secondary: "{{ ['light.butler_pantry_main_lights'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.butler_pantry_main_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.butler_pantry_main_lights
+    - type: custom:mushroom-light-card
+      entity: light.butler_pantry_main_lights
+      name: Main
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Laundry Room
+      heading_style: title
+      icon: mdi:washing-machine
+    - type: custom:mushroom-template-card
+      primary: All Laundry Room Lights
+      secondary: "{{ ['light.laundry_room_main_lights', 'light.laundry_room_cove'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.laundry_room_main_lights', 'light.laundry_room_cove'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.laundry_room_main_lights
+          - light.laundry_room_cove
+    - type: custom:mushroom-light-card
+      entity: light.laundry_room_main_lights
+      name: Main
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.laundry_room_cove
+      name: Cove
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Exterior
+      heading_style: title
+      icon: mdi:home-outline
+    - type: custom:mushroom-template-card
+      primary: All Exterior Lights
+      secondary: "{{ ['light.exterior_east', 'light.exterior_west'] | select('is_state', 'on') | list | count }} on"
+      icon: mdi:lightbulb-group
+      icon_color: "{{ 'amber' if ['light.exterior_east', 'light.exterior_west'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: perform-action
+        perform_action: light.toggle
+        target:
+          entity_id:
+          - light.exterior_east
+          - light.exterior_west
+    - type: custom:mushroom-light-card
+      entity: light.exterior_east
+      name: East
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
+    - type: custom:mushroom-light-card
+      entity: light.exterior_west
+      name: West
+      show_brightness_control: true
+      use_light_color: true
+      collapsible_controls: false
 # Per-area subviews — reached by tapping the area tiles on Overview.
 # `subview: true` keeps them off the top tab bar; each gives direct access to
 # that room's lights/switches (area-controls) plus its climate sensors.

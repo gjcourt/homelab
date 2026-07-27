@@ -1,5 +1,6 @@
 views:
 - title: Overview
+  theme: Tinted
   path: overview
   icon: mdi:home
   type: sections
@@ -20,7 +21,7 @@ views:
       show_current: true
       show_forecast: true
       grid_options:
-        columns: 6
+        columns: 7
     - type: custom:mushroom-template-card
       primary: All Lights Off
       secondary: "{{ states('sensor.lights_on') }} on"
@@ -33,7 +34,7 @@ views:
           entity_id: all
       fill_container: true
       grid_options:
-        columns: 6
+        columns: 5
   # Volume ordered by how the rooms are used: Kitchen, Living Room, Office.
   - type: grid
     column_span: 3
@@ -130,6 +131,7 @@ views:
         action: navigate
         navigation_path: av
 - title: Control
+  theme: Tinted
   type: sections
   max_columns: 3
   sections:
@@ -338,6 +340,7 @@ views:
       entity: input_number.nightlight_offset_today
       name: Jitter (today)
 - title: Audio / Visual
+  theme: Tinted
   path: av
   icon: mdi:remote
   type: sections
@@ -674,6 +677,7 @@ views:
       entity: button.ir_blaster_topping_c2
       name: C2
 - title: Lights
+  theme: Tinted
   path: lights
   icon: mdi:lightbulb-group
   type: sections
@@ -1462,6 +1466,7 @@ views:
 # layout: every light is a mushroom-light-card with a brightness slider
 # and card_mod that washes the card warm when the light is on.
 - title: Front Foyer
+  theme: Tinted
   path: area-front-foyer
   subview: true
   icon: mdi:door
@@ -1536,6 +1541,7 @@ views:
             transition: background 0.3s ease;
           }
 - title: Kitchen
+  theme: Tinted
   path: area-kitchen
   subview: true
   icon: mdi:silverware-fork-knife
@@ -1630,6 +1636,7 @@ views:
             transition: background 0.3s ease;
           }
 - title: Hallway
+  theme: Tinted
   path: area-hallway
   subview: true
   icon: mdi:door-sliding
@@ -1704,6 +1711,7 @@ views:
             transition: background 0.3s ease;
           }
 - title: Master Bedroom
+  theme: Tinted
   path: area-master-bedroom
   subview: true
   icon: mdi:bed
@@ -1818,6 +1826,7 @@ views:
             transition: background 0.3s ease;
           }
 - title: Master Bathroom
+  theme: Tinted
   path: area-master-bathroom
   subview: true
   icon: mdi:shower

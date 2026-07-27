@@ -18,8 +18,22 @@ spec:
           # postgres 18-alpine
           image: postgres@sha256:3a82e1f56c8f0f5616a11103ac3d47e632c3938698946a7ad26da0df1334744a
           command: ["/bin/sh", "-c"]
+          # Immich uses VectorChord (`vchord`, which pulls in `vector`) as of the
+          # pgvecto.rs -> VectorChord migration. The old `vectors` (pgvecto.rs)
+          # extension is no longer shipped by the CNPG image, so `CREATE EXTENSION
+          # vectors` fails (this is exactly what broke immich-stage db-init on
+          # 2026-07-20). CREATE EXTENSION requires superuser, so this job runs as
+          # postgres to create the extensions and hand ownership to the immich
+          # role. Idempotent: safe to re-run against an already-provisioned DB.
+          # Per-env DB connection (PGPASSWORD/PGHOST) is supplied by the overlay
+          # patch; the script here is shared so prod and staging can't drift.
           args:
-            - echo "Patch me"
+            - |
+              until pg_isready -h "$PGHOST"; do echo "Waiting for database..."; sleep 2; done;
+              psql -U postgres -d immich -v ON_ERROR_STOP=1 \
+                -c "CREATE EXTENSION IF NOT EXISTS vchord CASCADE;" \
+                -c "CREATE EXTENSION IF NOT EXISTS earthdistance CASCADE;" \
+                -c "UPDATE pg_extension SET extowner = (SELECT oid FROM pg_roles WHERE rolname = 'immich') WHERE extname IN ('vchord', 'vector', 'earthdistance', 'cube');"
           env:
             - name: PGPASSWORD
             - name: PGHOST

@@ -6,18 +6,25 @@ Mealie is a self-hosted recipe manager and meal planner with a REST API backend 
 ## 2. Architecture
 Mealie is deployed as a Kubernetes `Deployment` with a single replica in the `mealie-prod` (and `mealie-stage`) namespace.
 - **Database**: Uses SQLite, stored within the application's data directory.
-- **Storage**: Uses a PersistentVolumeClaim (`mealie-data-pvc`) backed by the `synology-iscsi` storage class for storing the SQLite database, recipes, and images.
+- **Storage**: Uses a PersistentVolumeClaim (`mealie-data-pvc`) backed by the `truenas-iscsi` storage class for storing the SQLite database, recipes, and images.
 - **Networking**: Exposed via Cilium Gateway API (`HTTPRoute`).
 
 ## 3. URLs
 - **Staging**: https://mealie.stage.burntbytes.com
-- **Production**: https://mealie.burntbytes.com
+- **Production**: https://food.burntbytes.com — the legacy https://mealie.burntbytes.com 301-redirects here (migration 2026-07-28). LAN-only (served by the `*.burntbytes.com` wildcard gateway; not exposed via the Cloudflare tunnel).
 
 ## 4. Configuration
 - **Environment Variables**:
-  - OIDC configuration is provided via the `mealie-oidc-config` ConfigMap.
+  - OIDC config: `mealie-oidc-config` ConfigMap.
+  - App/email config: `mealie-env-config` ConfigMap — `BASE_URL` (must equal the public URL so
+    server-generated email/notification links are correct) and the non-secret SMTP settings
+    (`SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_AUTH_STRATEGY=TLS`, `SMTP_FROM_*`).
 - **ConfigMaps/Secrets**:
-  - `mealie-oidc-secret` (Secret): Contains the OIDC client secret for Authelia integration (SOPS encrypted).
+  - `mealie-oidc-secret` (Secret, SOPS): OIDC client secret for Authelia.
+  - `mealie-smtp-secret` (Secret, SOPS): `SMTP_USER` + `SMTP_PASSWORD` (Gmail app password — the same
+    one used across the fleet). Created from `secret-smtp.yaml.example` by the operator (`sops -e -i`).
+- **OIDC redirect URIs**: registered in `apps/production/authelia/configuration.yaml` (mealie client).
+  When the hostname changes, these MUST be updated to match or SSO login breaks.
 - **SSO Integration**: Uses `hostAliases` to resolve `auth.burntbytes.com` to the Gateway API IP (`10.42.2.40`) from within the pod, allowing it to communicate with Authelia for OIDC authentication.
 
 ## 5. Usage Instructions
@@ -40,9 +47,13 @@ To verify Mealie is working:
 
 ## 8. Disaster Recovery
 - **Backup Strategy**:
-  - The `mealie-data-pvc` (which contains the SQLite database and all media) is backed up via Synology Snapshot Replication.
+  - The `mealie-data-pvc` (SQLite database + all media) lives on TrueNAS (`truenas-iscsi`) and is
+    covered by TrueNAS ZFS snapshots.
+  - Mealie also has an in-app backup (Admin → Backups) that exports a portable archive — take one
+    before version upgrades.
 - **Restore Procedure**:
-  1. Restore the `mealie-data-pvc` LUN via Synology DSM if necessary.
+  1. Restore the `mealie-data-pvc` zvol from a TrueNAS ZFS snapshot if necessary, or restore an
+     in-app backup archive via Admin → Backups.
   2. Re-deploy the Mealie manifests.
 
 ## 9. Troubleshooting

@@ -4,8 +4,12 @@ namespace: mealie-prod
 resources:
   - ../../base/mealie/
   - configmap-oidc.yaml
+  - configmap-env.yaml
   - httproute.yaml
   - secret-oidc.yaml
+  # secret-smtp.yaml is created from secret-smtp.yaml.example by the operator
+  # (SOPS-encrypted). kustomize build / CI fails until it exists — intended gate.
+  - secret-smtp.yaml
 
 labels:
   - pairs:

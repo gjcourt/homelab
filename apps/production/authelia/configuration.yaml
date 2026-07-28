@@ -89,6 +89,10 @@ identity_providers:
         authorization_policy: two_factor
         token_endpoint_auth_method: client_secret_basic
         redirect_uris:
+          # New primary hostname (food.burntbytes.com). The mealie.burntbytes.com
+          # entries are kept during the 301-redirect transition and removed in cleanup.
+          - https://food.burntbytes.com/login
+          - https://food.burntbytes.com/login?direct=1
           - https://mealie.burntbytes.com/login
           - https://mealie.burntbytes.com/login?direct=1
         scopes:

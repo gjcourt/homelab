@@ -65,9 +65,9 @@
         siteMonitor: https://links.burntbytes.com
     - Mealie:
         icon: mealie.png
-        href: https://mealie.burntbytes.com
+        href: https://food.burntbytes.com
         description: Recipe management
-        siteMonitor: https://mealie.burntbytes.com
+        siteMonitor: https://food.burntbytes.com
     - Vitals:
         icon: mdi-heart-pulse
         href: https://vitals.burntbytes.com

@@ -12,6 +12,7 @@ frontend:
     # card-mod first so it's registered before cards that use card_mod render.
     - /local/card-mod.js
     - /local/mushroom.js
+    - /local/clock-weather-card.js
 
 # Lovelace dashboards. Default + Map / Floor Plan / Switchboard stay
 # UI-managed (storage mode). Only the Control dashboard is migrated to

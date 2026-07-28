@@ -123,6 +123,9 @@ spec:
             - name: www-file
               mountPath: /config/www/card-mod.js
               subPath: card-mod.js
+            - name: www-file
+              mountPath: /config/www/clock-weather-card.js
+              subPath: clock-weather-card.js
       volumes:
         - name: config
           persistentVolumeClaim:

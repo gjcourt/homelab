@@ -21,6 +21,10 @@ views:
     - type: horizontal-stack
       grid_options:
         columns: full
+      # Weather ~3/4, All Lights Off ~1/4.
+      card_mod:
+        style: |
+          #root > *:first-child { flex-grow: 3 !important; flex-basis: 74% !important; }
       cards:
       # clock-weather-card renders a wide weather panel WITH a horizontal-ish
       # daily forecast (the native weather card drops the forecast when wide).

@@ -26,11 +26,13 @@ views:
         style: |
           #root > *:first-child { flex-grow: 2 !important; flex-basis: 60% !important; }
       cards:
-      - type: weather-forecast
+      # clock-weather-card renders a wide weather panel WITH a horizontal-ish
+      # daily forecast (the native weather card drops the forecast when wide).
+      - type: custom:clock-weather-card
         entity: weather.forecast_home
-        forecast_type: daily
-        show_current: true
-        show_forecast: true
+        forecast_rows: 3
+        hide_clock: false
+        hide_date: false
       - type: custom:mushroom-template-card
         primary: All Lights Off
         secondary: "{{ states('sensor.lights_on') }} on"

@@ -37,6 +37,7 @@ configMapGenerator:
     files:
       - mushroom.js=files/www/mushroom.js
       - card-mod.js=files/www/card-mod.js
+      - clock-weather-card.js=files/www/clock-weather-card.js
 
 labels:
   - includeSelectors: false

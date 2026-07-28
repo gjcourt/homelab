@@ -32,10 +32,16 @@ configMapGenerator:
   # Vendored custom frontend cards (Mushroom v5.1.1). Kept in git (not a HACS
   # runtime download) so the resource is reproducible. Mounted to /config/www
   # and loaded via `frontend.extra_module_url: /local/mushroom.js`.
+  # Split across two ConfigMaps: a single one holding all three vendored cards
+  # exceeds the 1 MiB etcd/ConfigMap limit (mushroom 712K + card-mod 99K +
+  # clock 306K). mushroom alone in one, the smaller two in another.
   - name: homeassistant-www
     namespace: homeassistant
     files:
       - mushroom.js=files/www/mushroom.js
+  - name: homeassistant-www2
+    namespace: homeassistant
+    files:
       - card-mod.js=files/www/card-mod.js
       - clock-weather-card.js=files/www/clock-weather-card.js
 

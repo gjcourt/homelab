@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mealie-env-config
+  namespace: mealie-stage
+  labels:
+    app: mealie
+    env: staging
+data:
+  # Fixes the "Server Side Base URL default" warning on staging too; staging
+  # keeps its own hostname (not renamed to food).
+  BASE_URL: "https://mealie.stage.burntbytes.com"
+  # SMTP via Gmail submission (STARTTLS on 587). Credentials in secret-smtp.yaml (SOPS).
+  SMTP_HOST: "smtp.gmail.com"
+  SMTP_PORT: "587"
+  SMTP_AUTH_STRATEGY: "TLS"
+  SMTP_FROM_NAME: "Mealie (staging)"
+  SMTP_FROM_EMAIL: "gjcourt@gmail.com"

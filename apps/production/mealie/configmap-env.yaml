@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mealie-env-config
+  namespace: mealie
+  labels:
+    app: mealie
+    env: production
+data:
+  # Server-generated links (invites, password reset, notification emails) are
+  # built from BASE_URL. Setting it fixes the "Server Side Base URL is still the
+  # default" warning in Site Settings. Points at the new primary hostname.
+  BASE_URL: "https://food.burntbytes.com"
+  # SMTP via Gmail submission (STARTTLS on 587) — mirrors the fleet pattern
+  # (infra/controllers/renovate-automerge, alertmanager). Mealie uses
+  # SMTP_AUTH_STRATEGY=TLS for STARTTLS. Credentials live in secret-smtp.yaml (SOPS).
+  SMTP_HOST: "smtp.gmail.com"
+  SMTP_PORT: "587"
+  SMTP_AUTH_STRATEGY: "TLS"
+  SMTP_FROM_NAME: "Mealie"
+  SMTP_FROM_EMAIL: "gjcourt@gmail.com"

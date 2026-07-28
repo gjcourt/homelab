@@ -19,5 +19,9 @@ spec:
           envFrom:
             - configMapRef:
                 name: mealie-oidc-config
+            - configMapRef:
+                name: mealie-env-config
             - secretRef:
                 name: mealie-oidc-secret
+            - secretRef:
+                name: mealie-smtp-secret

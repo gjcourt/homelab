@@ -22,7 +22,7 @@ spec:
       serviceAccountName: mealie
       automountServiceAccountToken: false
       # App runs as the upstream `abc` user (UID/GID 911) per the Mealie
-      # Dockerfile (https://github.com/mealie-recipes/mealie/blob/v3.16.0/docker/Dockerfile).
+      # Dockerfile (https://github.com/mealie-recipes/mealie/blob/v3.22.0/docker/Dockerfile).
       # When the entrypoint sees it is already running as 911 it skips the
       # root-only chown branch and execs straight into the app, so a hard
       # securityContext here is safe.
@@ -34,8 +34,8 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-        # mealie v3.16.0
-        - image: ghcr.io/mealie-recipes/mealie:v3.19.2@sha256:f68e959bf66f4f458893ea58facac71690fe6f2ac7a31466b5cecb41b4e99c02
+        # mealie v3.22.0
+        - image: ghcr.io/mealie-recipes/mealie:v3.22.0@sha256:36c28f0642fb6c75fae8997a2d55994631b9b4bcffba3016c208fc132a4c1e69
           name: mealie
           ports:
             - containerPort: 9000

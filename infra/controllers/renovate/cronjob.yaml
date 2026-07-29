@@ -28,6 +28,23 @@ spec:
                 - gjcourt/soundbyte
                 - gjcourt/python-nginx-signing
 
+              env:
+                # Re-expose the platform token by name so it can be interpolated
+                # into RENOVATE_HOST_RULES below (envFrom vars are NOT available
+                # for k8s $(VAR) expansion).
+                - name: RENOVATE_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: secret-renovate-container-env
+                      key: RENOVATE_TOKEN
+                # Authenticate the Docker datasource against ghcr.io. Without a
+                # token, anonymous ghcr lookups hit the rate limit (-> "no-result"
+                # for public third-party images like Immich/Navidrome/Home Assistant/
+                # Audiobookshelf/Homepage/CNPG/open-webui, so no update PRs are ever
+                # opened) and 403 on private gjcourt/* packages. k8s expands
+                # $(RENOVATE_TOKEN) at runtime, so no secret value lives in this file.
+                - name: RENOVATE_HOST_RULES
+                  value: '[{"matchHost":"ghcr.io","hostType":"docker","token":"$(RENOVATE_TOKEN)"}]'
               envFrom:
                 - configMapRef:
                     name: renovate-container-env

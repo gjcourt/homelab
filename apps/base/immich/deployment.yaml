@@ -398,7 +398,7 @@ spec:
       containers:
         - name: redis
           # redis 8-alpine
-          image: redis@sha256:c88d347edef6249a6d2293f926f1eeb48bd40c57cbcd02c07f52e7f1fd2cb46b
+          image: redis@sha256:077ba791400f390cb96d9d419d90259d5e72e697fca7abc3bbde6d83285d7346
           args:
             - "--save"
             - ""

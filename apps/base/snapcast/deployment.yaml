@@ -124,13 +124,15 @@ spec:
               drop:
                 - ALL
           env:
+            # server.json (client VOLUMES + MACs, group/stream assignments) must
+            # survive restarts. snapserver writes it to $HOME/.config/snapserver/
+            # and does NOT honor XDG_CONFIG_HOME — a prior attempt pointed XDG at
+            # the PVC but state still landed on the ephemeral /tmp emptyDir, so
+            # every restart reset all clients to 100% (kitchen/living-room blast).
+            # Point HOME at the spotify-state PVC (mounted at /var/lib/snapserver);
+            # go-librespot files live at the PVC root, snapserver under .config/ —
+            # no conflict.
             - name: HOME
-              value: /tmp
-            # State file (server.json: client MACs, group/stream assignments) is
-            # persisted to the spotify-state PVC so pod restarts don't lose stream
-            # assignments. go-librespot files live at the PVC root; snapserver
-            # writes to the snapserver/ subdirectory — no conflict.
-            - name: XDG_CONFIG_HOME
               value: /var/lib/snapserver
           ports:
             - name: stream

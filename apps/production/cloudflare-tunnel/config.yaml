@@ -43,5 +43,13 @@ ingress:
     originRequest:
       originServerName: burntbytes.com
 
+  # Cadence — self-hosted Shopify app (agent-payment discovery demo). Routes to the
+  # production gateway; the app-side HTTPRoute (cadence.burntbytes.com -> cadence
+  # Service) lands with the app deploy. TLS covered by the *.burntbytes.com wildcard.
+  - hostname: cadence.burntbytes.com
+    service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+    originRequest:
+      originServerName: cadence.burntbytes.com
+
   # Catch-all returns 404
   - service: http_status:404

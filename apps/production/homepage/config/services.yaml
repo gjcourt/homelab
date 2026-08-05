@@ -174,3 +174,17 @@
                 type: number
                 options:
                   maximumFractionDigits: 1
+    - Prometheus:
+        icon: prometheus.png
+        href: https://prometheus.burntbytes.com
+        description: Metrics & query UI
+        siteMonitor: https://prometheus.burntbytes.com
+    - Alertmanager:
+        icon: alertmanager.png
+        href: https://alerts.burntbytes.com
+        description: Active alerts & silences
+        siteMonitor: https://alerts.burntbytes.com
+    - Logs:
+        icon: grafana.png
+        href: https://grafana.burntbytes.com/explore?schemaVersion=1&panes=%7B%22jZ4%22:%7B%22datasource%22:%22loki%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22expr%22:%22%7Bnamespace%3D%5C%22homepage-prod%5C%22%7D%22%7D%5D%7D%7D
+        description: Cluster logs (Grafana → Loki)

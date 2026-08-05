@@ -5,7 +5,7 @@
 > this page links out. **Update this file in the same PR whenever** a plan's
 > status changes, an incident postmortem lands, or hardware/topology changes.
 >
-> Last updated: 2026-07-06
+> Last updated: 2026-08-05
 
 ## Cluster at a glance
 
@@ -59,6 +59,7 @@ Planned, not yet started:
 
 ## Known issues / blocked
 
+- **`*.burntbytes.com` wildcard expired 2026-08-05 — resolved same day, but it was silently broken for 30 days.** cert-manager's DNS-01 propagation self-check queried cluster DNS (CoreDNS → AdGuard), which serves a split-horizon view and returns `ANSWER: 0` for `_acme-challenge.burntbytes.com`, so the ACME Order sat `pending` from 2026-07-06 until the old cert lapsed. Cloudflare had published the records correctly the whole time. Fixed with `--dns01-recursive-nameservers` ([#1274](https://github.com/gjcourt/homelab/pull/1274)); cert-manager metrics are now scraped and alerted on ([#1275](https://github.com/gjcourt/homelab/pull/1275)) — there was previously **no ServiceMonitor**, so no expiry alert was possible at all. The Certificate reported `Ready=True` throughout, which was true and useless. Full postmortem: [incidents/2026-08-05-wildcard-cert-expiry-dns01-split-horizon.md](operations/incidents/2026-08-05-wildcard-cert-expiry-dns01-split-horizon.md). **Open follow-up:** audit which other Helm charts default `serviceMonitor.enabled: false` and are therefore unmonitored.
 - **No on-prem LLM inference.** The 2× RTX 4090 were sold 2026-05-16. The `llms/` and GPU-`monitoring/` Custom Apps on hestia are archived. Restoring inference needs new GPU hardware or a hosted-API backend.
 - **`hermes` / `hermes-callee` (Signal bots) and `signal-cli` decommissioned 2026-06-17.** Removed from `apps/{base,production,staging}/` and garbage-collected by Flux (`prune: true`). They had no model backend after the GPUs were sold and were already scaled to 0. Signal-based critical-alert routing is dead as a result — see the obsoleted Phase 2 in [plans/2026-05-09-monitoring-enhancement.md](plans/2026-05-09-monitoring-enhancement.md).
 - **`.22` (talos-v2l-hng) decommissioned 2026-06-19** — bad DIMM (reads 30.6 GiB vs ~62), did not return after the 2026-06-18 maintenance. Removed from etcd and the cluster; **`.23` was promoted to control-plane in its place**, restoring fault-tolerant 3-member etcd (now a 4-node cluster). See the [control-plane promotion runbook](operations/2026-06-19-talos-controlplane-promotion.md) and [plan/execution record](plans/2026-06-19-promote-talos-25-to-controlplane.md). `.22` hardware verdict (DIMM/board/RMA) and `.24` re-entry still pending. **Topology (verified 2026-06-19):** all 4 nodes share one **Rack Switch (USWED42)** and one **USP PDU Pro** (separate outlets) — so the switch + PDU are **accepted single points of failure** (a 3-member etcd survives a node/outlet loss, not a whole-switch/PDU loss). Highest-value mitigation: put the Rack Switch + PDU on a UPS.

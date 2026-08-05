@@ -41,20 +41,32 @@ approveSignerNames:
   - "issuers.cert-manager.io/*"
   - "clusterissuers.cert-manager.io/*"
 
-# Metrics scraping. The chart creates the ServiceMonitor but labels it only
-# `prometheusInstance: default`; this cluster's Prometheus selects on
-# `release: kube-prometheus-stack` (serviceMonitorSelectorNilUsesHelmValues=true),
-# so WITHOUT the label below the ServiceMonitor would be created and then
-# silently ignored — scraped by nothing, alerting on nothing.
-#
-# Why this exists: the *.burntbytes.com wildcard expired 2026-08-05 after a
-# renewal stalled for 30 days, and nothing noticed because
+# Metrics scraping. Why this exists: the *.burntbytes.com wildcard expired
+# 2026-08-05 after a renewal stalled for 30 days, and nothing noticed because
 # certmanager_certificate_expiration_timestamp_seconds was never scraped. The
 # alerts this feeds live in infra/configs/alerts/cert-manager-rules.yaml.
+#
+# Two settings below are load-bearing; without either, this is monitoring that
+# doesn't monitor:
+#
+#   labels.release — the chart labels its ServiceMonitor `prometheus: default`
+#     only. This cluster's Prometheus selects on `release:
+#     kube-prometheus-stack` (serviceMonitorSelectorNilUsesHelmValues=true), so
+#     without this the ServiceMonitor is created and then silently ignored.
+#
+#   honorLabels — prometheus-operator sets `namespace` on every scraped series
+#     from the TARGET's namespace (always `security` here). With the default
+#     honorLabels=false the target wins and the certificate's own namespace is
+#     renamed `exported_namespace`, so every alert annotation would report
+#     `security` regardless of where the cert lives — and the runbook line
+#     would print the wrong `kubectl -n`. honorLabels=true keeps the metric's
+#     own namespace/name, which IS the subject of these alerts. Same pattern
+#     kube-prometheus-stack uses for kube-state-metrics.
 prometheus:
   enabled: true
   servicemonitor:
     enabled: true
+    honorLabels: true
     labels:
       release: kube-prometheus-stack
 

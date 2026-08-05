@@ -15,8 +15,9 @@
 # The cluster's 8 pre-existing certificate alerts are all kubelet/apiserver
 # internals. Nothing watched the public certs users actually hit.
 #
-# Discovered via ruleNamespaceSelector: {} plus the release label below
-# (serviceMonitorSelectorNilUsesHelmValues=true also governs rule selection).
+# Discovery: ruleNamespaceSelector is {} and ruleSelector matches
+# `release: kube-prometheus-stack` (via ruleSelectorNilUsesHelmValues), which is
+# why the label below is required — same as the sibling prometheus-rules.yaml.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -40,7 +41,16 @@ spec:
         # listening to. 24h of grace absorbs a normal retry; a month does not.
         # ---------------------------------------------------------------------
         - alert: CertManagerRenewalOverdue
-          expr: certmanager_certificate_renewal_timestamp_seconds < time()
+          # `> 0` guard: the collector initialises renewalTime to 0.0 and only
+          # overwrites it when status.RenewalTime is non-nil, which the readiness
+          # controller clears whenever the Secret is missing/undecodable. Without
+          # the guard, 0 < time() is trivially true and every never-issued cert
+          # pages critical — including right after someone deletes a Secret to
+          # force reissuance, a plausible move while recovering from this very
+          # incident. CertManagerCertNotReady covers never-issued certs instead.
+          expr: >
+            certmanager_certificate_renewal_timestamp_seconds > 0
+            and certmanager_certificate_renewal_timestamp_seconds < time()
           for: 24h
           labels:
             severity: critical
@@ -57,7 +67,14 @@ spec:
         # renewalTime looking sane. 21d gives three weeks of daylight on a
         # 90-day Let's Encrypt cert that renews at 30 days remaining.
         - alert: CertManagerCertExpiringSoon
-          expr: (certmanager_certificate_expiration_timestamp_seconds - time()) / 86400 < 21
+          # `> 0` guard as above. Upper-bounded at 7d so this does not fire
+          # alongside CertManagerCertExpiringCritical — Alertmanager's inhibit
+          # rules key on `equal: [namespace, alertname]`, so differing alertnames
+          # are never deduped and one cert would otherwise send three emails.
+          expr: >
+            certmanager_certificate_expiration_timestamp_seconds > 0
+            and (certmanager_certificate_expiration_timestamp_seconds - time()) / 86400 < 21
+            and (certmanager_certificate_expiration_timestamp_seconds - time()) / 86400 >= 7
           for: 1h
           labels:
             severity: warning
@@ -69,7 +86,9 @@ spec:
 
         # Paging tier: under a week means the renewal path is broken, not slow.
         - alert: CertManagerCertExpiringCritical
-          expr: (certmanager_certificate_expiration_timestamp_seconds - time()) / 86400 < 7
+          expr: >
+            certmanager_certificate_expiration_timestamp_seconds > 0
+            and (certmanager_certificate_expiration_timestamp_seconds - time()) / 86400 < 7
           for: 1h
           labels:
             severity: critical
@@ -99,10 +118,18 @@ spec:
         # looks like health. That is the failure mode this whole file exists to
         # prevent, so watch the watcher.
         - alert: CertManagerDown
-          expr: up{job=~".*cert-manager.*"} == 0
+          # `absent()` is the whole point. `up == 0` only evaluates while the
+          # target still EXISTS; if the ServiceMonitor is deleted, the release
+          # label regresses on a chart upgrade, or the Service labels change,
+          # the series disappears and a bare `up == 0` silently stops firing —
+          # which is exactly the pre-2026-08-05 state: nothing scraped, nothing
+          # alerting, everything green. Critical, not warning: warnings route to
+          # +alerts@ whose Gmail filter skips the inbox, so the meta-alert
+          # guarding this entire file would land where nobody looks.
+          expr: up{job=~".*cert-manager.*"} == 0 or absent(up{job="cert-manager"})
           for: 15m
           labels:
-            severity: warning
+            severity: critical
           annotations:
             summary: "cert-manager metrics endpoint is down"
             description: >

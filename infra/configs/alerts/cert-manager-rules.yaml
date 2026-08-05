@@ -1,0 +1,110 @@
+# Certificate lifecycle alerts.
+#
+# Written after the 2026-08-05 outage: the *.burntbytes.com wildcard expired and
+# every production host started serving an expired cert. The renewal had been
+# stalled for THIRTY DAYS (ACME Order pending since 2026-07-06, DNS-01 self-check
+# querying split-horizon cluster DNS). Nothing alerted, for two reasons:
+#
+#   1. The Certificate reported Ready=True the entire time. That was true and
+#      useless — the OLD cert had not expired yet. Readiness says nothing about
+#      whether renewal is succeeding.
+#   2. cert-manager's metrics were never scraped at all (no ServiceMonitor), so
+#      certmanager_certificate_expiration_timestamp_seconds did not exist in
+#      Prometheus. Enabled in infra/controllers/cert-manager/values.yaml.
+#
+# The cluster's 8 pre-existing certificate alerts are all kubelet/apiserver
+# internals. Nothing watched the public certs users actually hit.
+#
+# Discovered via ruleNamespaceSelector: {} plus the release label below
+# (serviceMonitorSelectorNilUsesHelmValues=true also governs rule selection).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: cert-manager-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: cert-manager
+      rules:
+        # ---------------------------------------------------------------------
+        # THE ONE THAT WOULD HAVE CAUGHT 2026-08-05.
+        #
+        # renewalTime is when cert-manager intends to renew. On a healthy cert it
+        # sits in the FUTURE, and jumps forward each time renewal succeeds. If it
+        # is in the past, renewal was due and has not completed.
+        #
+        # During the incident this was pinned at 2026-07-06 for 30 straight days
+        # while Ready stayed True — a loud, unambiguous signal that nobody was
+        # listening to. 24h of grace absorbs a normal retry; a month does not.
+        # ---------------------------------------------------------------------
+        - alert: CertManagerRenewalOverdue
+          expr: certmanager_certificate_renewal_timestamp_seconds < time()
+          for: 24h
+          labels:
+            severity: critical
+          annotations:
+            summary: "cert-manager renewal overdue for {{ $labels.namespace }}/{{ $labels.name }}"
+            description: >
+              Renewal for {{ $labels.namespace }}/{{ $labels.name }} was scheduled
+              over 24h ago and has not completed. The certificate may still be
+              valid and Ready=True — that is exactly how the 2026-08-05 wildcard
+              expiry went unnoticed for a month. Check for a stuck ACME Order:
+              kubectl -n {{ $labels.namespace }} get order,challenge
+
+        # Expiry backstop, in case renewal fails in a way that leaves
+        # renewalTime looking sane. 21d gives three weeks of daylight on a
+        # 90-day Let's Encrypt cert that renews at 30 days remaining.
+        - alert: CertManagerCertExpiringSoon
+          expr: (certmanager_certificate_expiration_timestamp_seconds - time()) / 86400 < 21
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "TLS cert {{ $labels.namespace }}/{{ $labels.name }} expires in {{ $value | printf \"%.0f\" }}d"
+            description: >
+              {{ $labels.namespace }}/{{ $labels.name }} expires in
+              {{ $value | printf "%.0f" }} days and has not been renewed.
+
+        # Paging tier: under a week means the renewal path is broken, not slow.
+        - alert: CertManagerCertExpiringCritical
+          expr: (certmanager_certificate_expiration_timestamp_seconds - time()) / 86400 < 7
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "TLS cert {{ $labels.namespace }}/{{ $labels.name }} expires in {{ $value | printf \"%.0f\" }}d"
+            description: >
+              {{ $labels.namespace }}/{{ $labels.name }} expires in
+              {{ $value | printf "%.0f" }} days. Renewal has had weeks to succeed
+              and has not. Expect browser TLS errors on every host this cert
+              serves when it lapses.
+
+        # Ready=False is a weaker signal than the two above (it was True
+        # throughout the incident), but a cert that never issues at all — a new
+        # app, or a wildcard after a hard failure — only shows up here.
+        - alert: CertManagerCertNotReady
+          expr: certmanager_certificate_ready_status{condition="True"} == 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Certificate {{ $labels.namespace }}/{{ $labels.name }} is not Ready"
+            description: >
+              {{ $labels.namespace }}/{{ $labels.name }} has been not-Ready for
+              over an hour. If this is a new certificate it has never issued.
+
+        # If cert-manager stops being scraped, every alert above goes silent and
+        # looks like health. That is the failure mode this whole file exists to
+        # prevent, so watch the watcher.
+        - alert: CertManagerDown
+          expr: up{job=~".*cert-manager.*"} == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cert-manager metrics endpoint is down"
+            description: >
+              Prometheus cannot scrape cert-manager. Every certificate-expiry
+              alert is blind while this is true.

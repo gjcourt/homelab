@@ -14,6 +14,27 @@ config:
   # Enables gateway api to manage certs
   enableGatewayAPI: true
 
+# DNS-01 self-check MUST bypass cluster DNS.
+#
+# Before validating with Let's Encrypt, cert-manager checks that the challenge
+# TXT record has propagated. By default it asks the cluster resolver, which
+# chains CoreDNS -> the node's resolv.conf -> AdGuard (10.42.2.43). AdGuard runs
+# a split-horizon view of burntbytes.com and answers NOERROR/ANSWER:0 for
+# _acme-challenge.burntbytes.com, so the self-check can never pass — even though
+# Cloudflare has published the record and public resolvers serve it fine.
+#
+# That silently stalled the *.burntbytes.com renewal for 30 days (Order pending
+# since 2026-07-06) until the certificate expired on 2026-08-05, taking every
+# production host down with an expired-cert browser error. The Certificate
+# reported Ready=True throughout, because the OLD cert was still valid; the real
+# signal was Issuing=True/Renewing sitting unchanged for a month.
+#
+# Pointing the self-check at public recursive resolvers is the documented remedy
+# for split-horizon DNS. `-only` stops it falling back to the cluster resolver.
+extraArgs:
+  - --dns01-recursive-nameservers=1.1.1.1:53,8.8.8.8:53
+  - --dns01-recursive-nameservers-only
+
 # Enable the default approver
 # This automatically approves certificate requests from cert-manager
 approveSignerNames:

@@ -25,7 +25,7 @@ The monitoring stack is deployed in the `monitoring` namespace via Flux using of
   - `infra/controllers/promtail/values.yaml`
   - `infra/controllers/vector/values.yaml`
 - **Loki Alerting Rules** (LogQL, evaluated by Loki ruler): `infra/controllers/loki/alerting-rules.yaml`
-- **Prometheus Alerting Rules** (PromQL): `infra/configs/alerts/prometheus-rules.yaml`
+- **Prometheus Alerting Rules** (PromQL): `infra/configs/alerts/prometheus-rules.yaml` and `infra/configs/alerts/cert-manager-rules.yaml`
 - **Grafana Dashboards**: Pre-configured dashboards are included in the `kube-prometheus-stack` chart. Additional custom dashboards can be added via ConfigMaps.
 - **Loki Data Source**: Grafana is configured to use Loki as a data source for log querying.
 

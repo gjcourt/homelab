@@ -21,10 +21,10 @@
         description: Audiobook and podcast server
 
 - Tools:
-    - Vitals:
-        icon: mdi-heart-pulse
-        href: https://vitals.stage.burntbytes.com
-        description: Health and fitness tracker
+    - Vibrato:
+        icon: mdi-coffee-maker
+        href: https://vibrato.stage.burntbytes.com
+        description: Espresso machine monitor & control (ito + leva!)
     - Memos:
         icon: memos.png
         href: https://memos.stage.burntbytes.com
@@ -37,14 +37,6 @@
         icon: mealie.png
         href: https://mealie.stage.burntbytes.com
         description: Recipe management
-    - Vibrato:
-        icon: mdi-coffee-maker
-        href: https://vibrato.stage.burntbytes.com
-        description: Espresso machine monitor & control (ito + leva!)
-    - GoLinks:
-        icon: mdi-link-variant
-        href: https://go.stage.burntbytes.com
-        description: URL shortener
     - Excalidraw:
         icon: excalidraw.png
         href: https://excalidraw.stage.burntbytes.com
@@ -53,7 +45,10 @@
         icon: mdi-cards
         href: https://flashcards.stage.burntbytes.com
         description: Spaced-repetition flashcards (FSRS)
-
+    - Vitals:
+        icon: mdi-heart-pulse
+        href: https://vitals.stage.burntbytes.com
+        description: Health and fitness tracker
 - Infrastructure:
     - Synology NAS:
         icon: synology-dsm.png
@@ -84,6 +79,10 @@
         icon: mdi-dns
         href: https://vpn.burntbytes.com
         description: DNS updater for vpn.burntbytes.com
+    - GoLinks:
+        icon: mdi-link-variant
+        href: https://go.stage.burntbytes.com
+        description: URL shortener
 - Monitoring:
     - Cluster Resources:
         icon: prometheus.png

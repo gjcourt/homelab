@@ -1,9 +1,16 @@
 # Within-group order is a daily-use frequency heuristic (Phase 2 interim
 # re-order, ahead of click data) — the homepage-clicks usage dashboard will
-# refine it. There are NO tabs: every group renders on one page as a column
-# (see settings.yaml). Prometheus, Alertmanager and Logs are first-class tiles
-# in Monitoring, not bookmarks — custom.js only instruments `.service-title-text`,
+# refine it.
+#
+# EXCEPTION: the Tools order is set explicitly by George (2026-08-04) and is
+# NOT a heuristic. A data-driven pass must confirm with him before reshuffling
+# Tools; see docs/operations/apps/homepage.md.
+#
+# There are NO tabs: every group renders on one page as a column (see
+# settings.yaml). Prometheus, Alertmanager and Logs are first-class tiles in
+# Monitoring, not bookmarks — custom.js only instruments `.service-title-text`,
 # so anything demoted to a bookmark stops being measurable.
+
 - Media:
     - Immich:
         icon: immich.png
@@ -37,11 +44,12 @@
         siteMonitor: https://cast.burntbytes.com/iris/
 
 - Tools:
-    - Finance:
-        icon: mdi-finance
-        href: https://finance.burntbytes.com
-        description: Net worth + IPS allocation dashboard
-        siteMonitor: https://finance.burntbytes.com
+    - Vibrato:
+        icon: mdi-coffee-maker
+        href: https://vibrato.burntbytes.com
+        description: Espresso machine monitor & control (ito + leva!)
+        # Root path is a SPA (tabbed UI); /healthz returns {"status":"ok"} in one hop.
+        siteMonitor: https://vibrato.burntbytes.com/healthz
     - Memos:
         icon: memos.png
         href: https://memos.burntbytes.com
@@ -57,12 +65,17 @@
         href: https://food.burntbytes.com
         description: Recipe management
         siteMonitor: https://food.burntbytes.com
-    - Vibrato:
-        icon: mdi-coffee-maker
-        href: https://vibrato.burntbytes.com
-        description: Espresso machine monitor & control (ito + leva!)
-        # Root path is a SPA (tabbed UI); /healthz returns {"status":"ok"} in one hop.
-        siteMonitor: https://vibrato.burntbytes.com/healthz
+    - Excalidraw:
+        icon: excalidraw.png
+        href: https://excalidraw.burntbytes.com
+        description: Virtual whiteboard for sketching
+        siteMonitor: https://excalidraw.burntbytes.com
+    - Flashcards:
+        icon: mdi-cards
+        href: https://flashcards.burntbytes.com
+        description: Spaced-repetition flashcards (FSRS)
+        # nginx /healthz returns 200 "ok"; root path is a SPA so probe the healthz endpoint.
+        siteMonitor: https://flashcards.burntbytes.com/healthz
     - Vitals:
         icon: mdi-heart-pulse
         href: https://vitals.burntbytes.com
@@ -75,22 +88,11 @@
         # /api/edgar/health returns {"ok":true}; the root path is a SPA, so probe
         # the health endpoint for the status dot.
         siteMonitor: https://ladder.burntbytes.com/api/edgar/health
-    - Excalidraw:
-        icon: excalidraw.png
-        href: https://excalidraw.burntbytes.com
-        description: Virtual whiteboard for sketching
-        siteMonitor: https://excalidraw.burntbytes.com
-    - Flashcards:
-        icon: mdi-cards
-        href: https://flashcards.burntbytes.com
-        description: Spaced-repetition flashcards (FSRS)
-        # nginx /healthz returns 200 "ok"; root path is a SPA so probe the healthz endpoint.
-        siteMonitor: https://flashcards.burntbytes.com/healthz
-    - GoLinks:
-        icon: mdi-link-variant
-        href: https://go.burntbytes.com
-        description: URL shortener
-        siteMonitor: https://go.burntbytes.com
+    - Finance:
+        icon: mdi-finance
+        href: https://finance.burntbytes.com
+        description: Net worth + IPS allocation dashboard
+        siteMonitor: https://finance.burntbytes.com
 
 - Infrastructure:
     - Home Assistant:
@@ -98,6 +100,17 @@
         href: https://hass.burntbytes.com
         description: Home automation platform
         siteMonitor: https://hass.burntbytes.com
+    # Moved Tools -> Infrastructure 2026-08-04. NOTE for anyone reading the
+    # "Clicks by Tile + Group (least used first)" panel: homepage_tile_clicks_total
+    # is labelled {service, group}, so this move minted a NEW series and stranded
+    # the old one. Over any range spanning that date GoLinks appears as two rows,
+    # each holding a fraction of its clicks — do not read it as a prune candidate.
+    # Sum by `service` alone to get the true figure.
+    - GoLinks:
+        icon: mdi-link-variant
+        href: https://go.burntbytes.com
+        description: URL shortener
+        siteMonitor: https://go.burntbytes.com
     - AdGuard Home:
         icon: adguard-home.png
         href: https://adguard.burntbytes.com

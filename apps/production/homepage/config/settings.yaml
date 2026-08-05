@@ -15,9 +15,11 @@ headerStyle: clean
 # been evaluated. Restoring them as tiles re-arms the instrument; the next
 # re-order can be data-driven as intended.
 #
-# Within-group frequency ordering from #1171 is KEPT — that part was fine; it
-# was the hiding that hurt. Staging never took the tab split, so its layout was
-# already this shape.
+# Within-group frequency ordering from #1171 is KEPT for Media, Infrastructure
+# and Monitoring — that part was fine; it was the hiding that hurt. TOOLS is the
+# exception: as of 2026-08-04 its order is set explicitly by George, not by the
+# heuristic (see the header of services.yaml). Staging never took the tab split,
+# so its layout was already this shape.
 layout:
   Media:
     style: column

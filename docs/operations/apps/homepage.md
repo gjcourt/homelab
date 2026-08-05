@@ -88,7 +88,18 @@ kubectl -n homepage-prod exec deploy/homepage-clicks -- wget -qO- localhost:8080
 - **No tabs.** Every group renders on a single page as a column (`layout.<group>.style: column`).
   The Home/Admin tab split (#1171) was reverted in #1272: a tab you have to remember to click
   hides what the dashboard exists to show. Do not reintroduce `layout.<group>.tab`.
-- Within each group, tiles in `services.yaml` are ordered by expected daily-use frequency.
+- Within each group, tiles in `services.yaml` are ordered by expected daily-use frequency —
+  **except Tools**, whose order was set explicitly by George in #1273 (2026-08-04):
+  Vibrato, Memos, Linkding, Mealie, Excalidraw, Flashcards, Vitals, Ladder, Finance.
+  That is an owner preference, not a hypothesis. A data-driven pass may propose changes to it
+  but must confirm with him before applying them; the other three groups can be reordered freely
+  from the panel.
+- **Moving a tile between groups forks its click metric.** `homepage_tile_clicks_total` is
+  labelled `{service, group}`, so a group change mints a new series and strands the old one —
+  any panel doing `sum by (service, group)` (including "Clicks by Tile + Group (least used
+  first)") will show the tile twice, each row holding only part of its clicks, which reads as
+  "barely used". Sum by `service` alone across such a move, and annotate the merge. GoLinks
+  moved Tools → Infrastructure in #1273 and is the current instance of this.
 - Prometheus, Alertmanager and Logs are **first-class tiles** in Monitoring — also restored in
   #1272. Keep them as tiles: `custom.js` instruments only `.service-title-text`, so a bookmark
   emits no click events. Demoting a tile to a bookmark makes it permanently unmeasurable, which
@@ -107,4 +118,6 @@ kubectl -n homepage-prod exec deploy/homepage-clicks -- wget -qO- localhost:8080
 5. **Annotate** — add a Grafana annotation at the merge so the next period's before/after is visible.
 6. **Measure again** — each re-order is a hypothesis the next period's data confirms or refutes.
 
-Never hand-order by intuition once data exists — let the panel drive it.
+Never hand-order by intuition once data exists — let the panel drive it. The one standing
+exception is the Tools group, whose order is George's explicit preference (see Layout above);
+propose changes there, don't apply them unilaterally.

@@ -49,6 +49,7 @@
         icon: mdi-heart-pulse
         href: https://vitals.stage.burntbytes.com
         description: Health and fitness tracker
+
 - Infrastructure:
     - Synology NAS:
         icon: synology-dsm.png
@@ -63,6 +64,10 @@
         icon: home-assistant.png
         href: https://hass.stage.burntbytes.com
         description: Home automation platform
+    - GoLinks:
+        icon: mdi-link-variant
+        href: https://go.stage.burntbytes.com
+        description: URL shortener
     - AdGuard Home:
         icon: adguard-home.png
         href: https://adguard.stage.burntbytes.com
@@ -79,10 +84,7 @@
         icon: mdi-dns
         href: https://vpn.burntbytes.com
         description: DNS updater for vpn.burntbytes.com
-    - GoLinks:
-        icon: mdi-link-variant
-        href: https://go.stage.burntbytes.com
-        description: URL shortener
+
 - Monitoring:
     - Cluster Resources:
         icon: prometheus.png

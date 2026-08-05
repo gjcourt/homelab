@@ -1,11 +1,16 @@
 # Within-group order is a daily-use frequency heuristic (Phase 2 interim
 # re-order, ahead of click data) — the homepage-clicks usage dashboard will
-# refine it. EXCEPTION: the Tools order is set explicitly by George
-# (2026-08-05) and is not a heuristic — a data-driven pass should confirm
-# before reshuffling it. There are NO tabs: every group renders on one page as a column
-# (see settings.yaml). Prometheus, Alertmanager and Logs are first-class tiles
-# in Monitoring, not bookmarks — custom.js only instruments `.service-title-text`,
+# refine it.
+#
+# EXCEPTION: the Tools order is set explicitly by George (2026-08-04) and is
+# NOT a heuristic. A data-driven pass must confirm with him before reshuffling
+# Tools; see docs/operations/apps/homepage.md.
+#
+# There are NO tabs: every group renders on one page as a column (see
+# settings.yaml). Prometheus, Alertmanager and Logs are first-class tiles in
+# Monitoring, not bookmarks — custom.js only instruments `.service-title-text`,
 # so anything demoted to a bookmark stops being measurable.
+
 - Media:
     - Immich:
         icon: immich.png
@@ -88,12 +93,24 @@
         href: https://finance.burntbytes.com
         description: Net worth + IPS allocation dashboard
         siteMonitor: https://finance.burntbytes.com
+
 - Infrastructure:
     - Home Assistant:
         icon: home-assistant.png
         href: https://hass.burntbytes.com
         description: Home automation platform
         siteMonitor: https://hass.burntbytes.com
+    # Moved Tools -> Infrastructure 2026-08-04. NOTE for anyone reading the
+    # "Clicks by Tile + Group (least used first)" panel: homepage_tile_clicks_total
+    # is labelled {service, group}, so this move minted a NEW series and stranded
+    # the old one. Over any range spanning that date GoLinks appears as two rows,
+    # each holding a fraction of its clicks — do not read it as a prune candidate.
+    # Sum by `service` alone to get the true figure.
+    - GoLinks:
+        icon: mdi-link-variant
+        href: https://go.burntbytes.com
+        description: URL shortener
+        siteMonitor: https://go.burntbytes.com
     - AdGuard Home:
         icon: adguard-home.png
         href: https://adguard.burntbytes.com
@@ -136,11 +153,7 @@
         # not an HTTP service — there is no HTTPRoute for vpn.burntbytes.com,
         # so any probe returns 404 from the gateway. The href stays clickable
         # for the operator; the dashboard simply omits the status dot.
-    - GoLinks:
-        icon: mdi-link-variant
-        href: https://go.burntbytes.com
-        description: URL shortener
-        siteMonitor: https://go.burntbytes.com
+
 - Monitoring:
     - Grafana:
         icon: grafana.png

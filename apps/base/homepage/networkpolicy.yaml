@@ -11,8 +11,8 @@ spec:
   description: >-
     Gateway ingress on 3000; egress for DNS, Kubernetes API, in-cluster widget
     Services (AdGuard admin, Prometheus), and HTTP/HTTPS to the world for the
-    Synology DSM widget (10.42.2.11:5001), HifiBerry siteMonitor probes (LAN
-    IPs), gateway VIP siteMonitor probes (*.burntbytes.com → 10.42.2.40+
+    Synology DSM widget (10.42.2.11:5001), gateway VIP siteMonitor probes
+    (*.burntbytes.com → 10.42.2.40+
     LoadBalancer IPs), and the Unsplash background image. The previous selector
     (`app: homepage`) matched zero pods — homepage's pods are labelled
     `app.kubernetes.io/name: homepage`.
@@ -87,7 +87,6 @@ spec:
               protocol: TCP
     # World egress on HTTP/HTTPS covers:
     #   - Synology DSM widget on the LAN (10.42.2.11:5001 — see port rule below).
-    #   - HifiBerry siteMonitor probes (http://10.42.2.38, http://10.42.2.39).
     #   - Gateway VIP siteMonitor probes (*.burntbytes.com → 10.42.2.40+ LB pool).
     #   - Cloudflare-tunnel-fronted hostnames (e.g. https://hestia.burntbytes.com).
     #   - Unsplash background image (https://images.unsplash.com).

@@ -5,3 +5,26 @@ config:
   snippets:
     pipelineStages:
       - cri: {}
+
+# Metrics scraping. promtail is the client half of the 2026-02-28 failure:
+# "promtail was retrying against a Loki returning HTTP 500" is a statement about
+# promtail_request_duration_seconds_count{status_code="500"} and
+# promtail_dropped_entries_total{reason="ingester_error"} — neither of which
+# existed in Prometheus, because promtail had no Service and no ServiceMonitor.
+# Those counters on the live pods still carry the scars: 13.9M entries dropped
+# with reason=ingester_error and 31,518 HTTP 500s, all of it invisible.
+#
+# Enabling this does two things: renders the `promtail-metrics` headless Service
+# (the chart gates service-metrics.yaml on serviceMonitor.enabled, and promtail
+# genuinely has no Service today) and the matching ServiceMonitor on port
+# http-metrics / 3101.
+#
+# labels.release is load-bearing — Prometheus here selects ServiceMonitors on
+# matchLabels{release: kube-prometheus-stack}. Without it the resource is
+# created and silently never scraped.
+serviceMonitor:
+  enabled: true
+  labels:
+    release: kube-prometheus-stack
+  # Alerts on this data use 15-30m windows; 30s sampling is plenty.
+  interval: 30s

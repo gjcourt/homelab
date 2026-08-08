@@ -127,6 +127,12 @@ test:
 #   loki-memberlist       only has a `tcp` port, no http-metrics -> no target
 # So the canary needs no hand-written ServiceMonitor.
 monitoring:
+  # Chart 6.24.0 defaults metricsInstance.enabled to true, which renders a
+  # grafana-agent MetricsInstance CR. It is gated on the
+  # monitoring.grafana.com CRDs, which are absent, so nothing renders today —
+  # but installing those CRDs would then break this HelmRelease. Pin it off.
+  metricsInstance:
+    enabled: false
   serviceMonitor:
     enabled: true
     labels:

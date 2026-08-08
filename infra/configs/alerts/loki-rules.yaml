@@ -67,11 +67,16 @@ spec:
             summary: "Loki WAL is failing writes (disk full / read-only)"
             description: >
               Loki's ingester recorded {{ $value | printf "%.0f" }} WAL disk-full
-              failure(s) in the last 15m. This is the 2026-02-28 failure mode:
-              the WAL stops accepting writes, Loki 500s every push, and promtail
-              retries forever while logs are silently lost. Check the backing
-              PVC first:
+              failure(s) in the last 15m. Check the backing PVC first:
               kubectl -n monitoring exec loki-0 -c loki -- df -h /var/loki
+
+              NOTE: this alert covers a genuinely FULL disk only. It would NOT
+              have caught the 2026-02-28 incident. Loki increments this counter
+              only on ENOSPC (pkg/ingester/instance.go); that incident was
+              EROFS -- the postmortem records the literal error "read-only file
+              system" -- which takes a different branch, leaves this counter at
+              zero, and returns the error to the caller. The alert that covers
+              a read-only WAL is LokiPushErrors, which sees the resulting 5xx.
 
         # Chunks that never flush mean accepted logs are not reaching storage —
         # the same data loss as a WAL failure, one stage later, and equally
@@ -197,9 +202,9 @@ spec:
         # ---------------------------------------------------------------------
         - alert: PromtailSendFailing
           expr: >
-            sum(rate(promtail_request_duration_seconds_count{status_code!~"2.."}[30m]))
+            sum by (namespace) (rate(promtail_request_duration_seconds_count{status_code!~"2.."}[30m]))
             /
-            sum(rate(promtail_request_duration_seconds_count[30m]))
+            sum by (namespace) (rate(promtail_request_duration_seconds_count[30m]))
             > 0.1
           for: 15m
           labels:
@@ -221,7 +226,8 @@ spec:
         # emitting oversized lines. Observed steady state: all four reasons flat
         # at zero, so any sustained movement is real loss.
         - alert: PromtailDroppingEntries
-          expr: sum by (reason) (increase(promtail_dropped_entries_total[30m])) > 0
+          expr: >
+            rate(promtail_dropped_entries_total[15m]) > 0.1
           for: 15m
           labels:
             severity: warning

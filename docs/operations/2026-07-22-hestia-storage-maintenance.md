@@ -46,10 +46,18 @@ kubectl get deploy,statefulset -A -o json | jq -r '.items[] | "\(.kind) \(.metad
 cat /tmp/hestia-maint-replicas.txt
 ```
 
-Decide on **monitoring**: Prometheus/Alertmanager TSDB is on iSCSI (`monitoring` ns, 3 PVCs).
-Draining it means going blind for the window; leaving it up risks its PVC going read-only. Default:
-**leave monitoring up** and accept it may need a bounce afterward (it is not data-critical) — but if
+Decide on **monitoring**: Prometheus TSDB, Loki and (since #1278) Alertmanager all sit on iSCSI
+(`monitoring` ns, 4 PVCs). Draining means going blind for the window; leaving it up risks a PVC
+going read-only. Default: **leave monitoring up** and accept it may need a bounce afterward — but if
 the window is long, drain it too.
+
+> ⚠️ **Alertmanager now has a volume, so it can no longer schedule without hestia.** Before #1278 it
+> ran on `emptyDir` and would start on any node even with the iSCSI target down; now an unavailable
+> target means the pod stays Pending and **alert delivery stops during exactly the incident that
+> most needs it**. Flux will not surface this — Helm does not own the operator-created StatefulSet,
+> so the HelmRelease still reports Ready with the pod Pending. During any hestia work, check
+> `kubectl -n monitoring get pods -l app.kubernetes.io/name=alertmanager` explicitly rather than
+> trusting the dashboard to tell you.
 
 ## 2. Suspend Flux (so it doesn't fight the scale-down)
 

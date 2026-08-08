@@ -104,13 +104,24 @@ spec:
     # -------------------------------------------------------------------------
     - name: loki
       rules:
+        # Recalibrated 2026-08-08. This rule was added 2026-02-27 and has been
+        # DEAD CODE ever since: loki_request_duration_seconds_count was never
+        # scraped (no ServiceMonitor), so it never had data to evaluate — it did
+        # not fire during the 2026-02-28 incident it was written for. #1279
+        # enables the scrape and brings it to life, so the threshold gets a real
+        # test for the first time. `> 0` with for:5m would page critical on a
+        # single transient 5xx (rate[5m] stays above zero for ~5m, marginally
+        # satisfying the `for`); with 31,518 historical 500s on record, the
+        # first Loki bounce would plausibly page and get silenced. Require a
+        # sustained error rate instead: this is the promtail-retry-forever
+        # failure mode, which is continuous, not a blip.
         - alert: LokiPushErrors
           expr: >
             rate(loki_request_duration_seconds_count{
               route="loki_api_v1_push",
               status_code=~"5.."
-            }[5m]) > 0
-          for: 5m
+            }[5m]) > 0.01
+          for: 10m
           labels:
             severity: critical
           annotations:

@@ -1,0 +1,312 @@
+# Log-pipeline alerts: Loki, loki-canary, promtail.
+#
+# Written to close the gap left by the 2026-02-28 incident. That postmortem's
+# third finding — quoted verbatim in the header of the sibling
+# prometheus-rules.yaml — was:
+#
+#   "Loki WAL becoming read-only caused the entire log ingestion pipeline to
+#    fail silently (promtail was retrying against a Loki returning HTTP 500)."
+#
+# The fix that followed added a LokiPushErrors alert. It has never been able to
+# fire. Nothing in this cluster scraped Loki, promtail or loki-canary: all three
+# declared metrics ports, none had a ServiceMonitor, and as of this commit
+# `count(loki_request_duration_seconds_count)`, `count(loki_canary_missing_entries_total)`
+# and `count(promtail_sent_entries_total)` each returned zero series in
+# Prometheus. The alert was real; the metric was not. So the identical silent
+# failure was still possible five months later, and loki-canary — a component
+# whose entire job is to emit a heartbeat so you can detect log-pipeline
+# failure — was itself unwatched.
+#
+# Scraping is enabled in infra/controllers/loki/values.yaml (one chart
+# ServiceMonitor covers both loki:3100 and loki-canary:3500) and
+# infra/controllers/promtail/values.yaml (promtail-metrics:3101).
+#
+# LokiPushErrors is deliberately NOT duplicated here — it already exists in
+# prometheus-rules.yaml and starts working the moment the ServiceMonitor lands.
+#
+# Discovery: ruleNamespaceSelector is {} and ruleSelector matches
+# `release: kube-prometheus-stack` (via ruleSelectorNilUsesHelmValues), which is
+# why the label below is required — same as the sibling rule files.
+#
+# Every metric name used below was read off the live /metrics endpoints before
+# being written down, not recalled. Thresholds are calibrated against two
+# samples ~3 minutes apart on the running cluster; the observed steady-state
+# rate is noted next to each alert so a future reader can tell whether a firing
+# alert means "broken" or "threshold was always wrong".
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: loki-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    # =========================================================================
+    # Loki server-side ingestion
+    # =========================================================================
+    - name: loki.ingestion
+      rules:
+        # ---------------------------------------------------------------------
+        # THE ONE THAT WOULD HAVE CAUGHT 2026-02-28.
+        #
+        # When the WAL's filesystem goes read-only or full, Loki increments this
+        # counter and starts 500-ing pushes. It is a hard, unambiguous failure —
+        # there is no benign reason for it to move — so any increase at all is
+        # worth paging on. Observed steady state: 0, and flat across sampling.
+        #
+        # increase() over 15m holds the signal well past the 5m `for`, so a
+        # single burst still pages rather than being averaged into nothing.
+        # ---------------------------------------------------------------------
+        - alert: LokiWALDiskFull
+          expr: increase(loki_ingester_wal_disk_full_failures_total[15m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Loki WAL is failing writes (disk full / read-only)"
+            description: >
+              Loki's ingester recorded {{ $value | printf "%.0f" }} WAL disk-full
+              failure(s) in the last 15m. Check the backing PVC first:
+              kubectl -n monitoring exec loki-0 -c loki -- df -h /var/loki
+
+              NOTE: this alert covers a genuinely FULL disk only. It would NOT
+              have caught the 2026-02-28 incident. Loki increments this counter
+              only on ENOSPC (pkg/ingester/instance.go); that incident was
+              EROFS -- the postmortem records the literal error "read-only file
+              system" -- which takes a different branch, leaves this counter at
+              zero, and returns the error to the caller. The alert that covers
+              a read-only WAL is LokiPushErrors, which sees the resulting 5xx.
+
+        # Chunks that never flush mean accepted logs are not reaching storage —
+        # the same data loss as a WAL failure, one stage later, and equally
+        # invisible from the outside. Warning rather than critical because a
+        # transient flush failure is retried successfully; 30m of it is not
+        # transient. Observed steady state: 0.
+        - alert: LokiChunkFlushFailing
+          expr: increase(loki_ingester_chunks_flush_failures_total[30m]) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki is failing to flush chunks to storage"
+            description: >
+              {{ $value | printf "%.0f" }} chunk flush failure(s) in 30m. Logs
+              are being accepted but not durably stored, so they will be lost
+              when the ingester restarts. Check: kubectl -n monitoring logs
+              loki-0 -c loki | grep -i flush
+
+    # =========================================================================
+    # loki-canary — the only true end-to-end check
+    #
+    # Each canary pod writes a log line every second and then reads it back out
+    # of Loki. That round trip is the one signal that covers the whole pipeline
+    # at once: promtail tailing, the push to Loki, the WAL, the index, and the
+    # query path. Every other alert in this file watches one stage.
+    # =========================================================================
+    - name: loki.canary
+      rules:
+        # ---------------------------------------------------------------------
+        # Ratio, not an absolute count, and deliberately not `> 0`.
+        #
+        # The counters are NOT zero historically — 2,975 missing out of 3.1M
+        # entries over 76 days (~0.1%), clustered around Loki restarts. A `> 0`
+        # rule would page on every routine restart and be silenced within a
+        # week, which is how you end up back where this incident started.
+        #
+        # During a real pipeline failure the canary keeps writing while nothing
+        # reads back, so this ratio pins near 1.0 — two orders of magnitude
+        # above the 0.1 threshold. The 30m rate window (rather than 15m) is what
+        # keeps a restart blip under the line: ~120 entries missed during a
+        # restart is 6.7% of a 30m window but 13% of a 15m one.
+        #
+        # Observed steady state: 0 missing over the sample window, against
+        # ~0.97 entries/sec/pod.
+        # ---------------------------------------------------------------------
+        - alert: LokiCanaryMissingEntries
+          expr: >
+            sum(rate(loki_canary_missing_entries_total[30m]))
+            /
+            sum(rate(loki_canary_entries_total[30m]))
+            > 0.1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Loki is losing log entries end-to-end ({{ $value | humanizePercentage }})"
+            description: >
+              loki-canary wrote log lines and could not read
+              {{ $value | humanizePercentage }} of them back. Logs are being
+              lost somewhere between promtail and the Loki query path. This is
+              the end-to-end check that was missing on 2026-02-28 — treat it as
+              "the log pipeline is broken" regardless of what the component-level
+              alerts say. Check: kubectl -n monitoring logs -l
+              app.kubernetes.io/component=canary --tail=50
+
+        # A canary that stopped writing proves nothing and looks like health —
+        # the missing-entries ratio above goes quiet right along with it. Per-pod
+        # so one wedged node is visible rather than being averaged away by the
+        # other three. Observed steady state: ~0.97/sec on every pod.
+        - alert: LokiCanaryStalled
+          expr: sum by (pod) (rate(loki_canary_entries_total[15m])) == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "loki-canary {{ $labels.pod }} has stopped writing entries"
+            description: >
+              loki-canary pod {{ $labels.pod }} has not written a log entry in
+              15m. It is running but not testing anything, so
+              LokiCanaryMissingEntries is blind for this node.
+
+        # "Late" rather than "missing": read-back latency climbing is the early
+        # warning that precedes entries being dropped outright, and it is what
+        # a saturated ingester or a struggling index looks like before it fails.
+        # Observed steady state: p99 between 0.5s and 1s, so 5s is ~5-10x
+        # headroom. Warning tier — slow is not the same as losing data, and the
+        # canary's own maxWait would turn genuine stalls into missing entries.
+        - alert: LokiCanaryReadBackSlow
+          expr: >
+            histogram_quantile(0.99,
+              sum by (le) (rate(loki_canary_response_latency_seconds_bucket[30m]))
+            ) > 5
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki read-back p99 is {{ $value | printf \"%.1f\" }}s"
+            description: >
+              loki-canary is taking {{ $value | printf "%.1f" }}s at p99 to read
+              back an entry it just wrote, against a normal sub-second baseline.
+              Ingestion or query is degrading; entries are usually dropped next.
+
+    # =========================================================================
+    # promtail — the client side of the 2026-02-28 failure
+    # =========================================================================
+    - name: loki.promtail
+      rules:
+        # ---------------------------------------------------------------------
+        # "promtail was retrying against a Loki returning HTTP 500" is exactly
+        # this metric. The live pods still carry the scars: 31,518 responses
+        # with status_code="500" and 11,220 with status_code="-1" (connection
+        # failed), none of which anything ever saw.
+        #
+        # Ratio rather than an absolute rate, because promtail retries and a
+        # single 500 during a Loki rollout is normal. status_code!~"2.." catches
+        # both 5xx and the synthetic "-1" promtail uses when it cannot connect
+        # at all — a Loki that is entirely gone produces no 500s, only -1s, and
+        # a rule keyed on 5xx alone would miss the worst case.
+        #
+        # Observed steady state: 100% status_code="204" (~0.71 req/sec), with
+        # the 500 and -1 counters completely flat.
+        # ---------------------------------------------------------------------
+        - alert: PromtailSendFailing
+          expr: >
+            sum by (namespace) (rate(promtail_request_duration_seconds_count{status_code!~"2.."}[30m]))
+            /
+            sum by (namespace) (rate(promtail_request_duration_seconds_count[30m]))
+            > 0.1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "promtail cannot ship logs to Loki ({{ $value | humanizePercentage }} failing)"
+            description: >
+              {{ $value | humanizePercentage }} of promtail's push requests to
+              Loki are failing (HTTP 5xx, or -1 for connection refused). promtail
+              buffers and retries, so nothing downstream looks broken until the
+              buffer overflows — this is the alert that makes that visible.
+              Check Loki first: kubectl -n monitoring logs loki-0 -c loki --tail=50
+
+        # Distinct from the alert above: send failures are retried, but a
+        # non-zero drop counter means log lines were given up on and are gone
+        # for good. reason= tells you which: ingester_error is the 2026-02-28
+        # signature (13.9M dropped that way on the current pods), rate_limited
+        # means limits_config needs raising, line_too_long means an app is
+        # emitting oversized lines. Observed steady state: all four reasons flat
+        # at zero, so any sustained movement is real loss.
+        - alert: PromtailDroppingEntries
+          expr: >
+            rate(promtail_dropped_entries_total[15m]) > 0.1
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "promtail dropped {{ $value | printf \"%.0f\" }} log entries (reason: {{ $labels.reason }})"
+            description: >
+              promtail permanently discarded {{ $value | printf "%.0f" }} log
+              entries in 30m with reason={{ $labels.reason }}. These are not
+              retried — the logs are lost. reason=ingester_error points at Loki
+              itself; reason=rate_limited points at
+              infra/controllers/loki/values.yaml limits_config.
+
+    # =========================================================================
+    # Meta: watch the watchers.
+    #
+    # Every alert above assumes its metrics are being scraped. Before this
+    # commit none of them were, and the cluster looked perfectly healthy —
+    # which is the entire reason this file exists. If a scrape target vanishes,
+    # that must itself be an alert, or we regress silently to the old state.
+    # =========================================================================
+    - name: loki.meta
+      rules:
+        # absent() is the whole point, and `up == 0` alone is not enough: it
+        # only evaluates while the target still EXISTS. If the ServiceMonitor is
+        # deleted, the `release: kube-prometheus-stack` label regresses on a
+        # chart upgrade, or the Service labels change, the series disappears
+        # entirely and a bare `up == 0` stops firing — indistinguishable from
+        # healthy. That is precisely the pre-existing state this PR fixes.
+        #
+        # Matchers use namespace+service rather than job because the Loki chart
+        # rewrites `job` to "monitoring/<service>" via a ServiceMonitor
+        # relabeling; namespace and service are set by prometheus-operator
+        # itself and are stable across chart changes.
+        #
+        # Critical, not warning: warnings route to +alerts@ whose Gmail filter
+        # skips the inbox, so the meta-alert guarding this whole file would land
+        # where nobody looks.
+        - alert: LokiDown
+          expr: >
+            up{namespace="monitoring", service="loki"} == 0
+            or absent(up{namespace="monitoring", service="loki"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Loki metrics endpoint is down or unscraped"
+            description: >
+              Prometheus cannot scrape Loki. LokiWALDiskFull,
+              LokiChunkFlushFailing and the pre-existing LokiPushErrors are all
+              blind while this is true. If this fired right after a Helm
+              upgrade, check that the ServiceMonitor still carries
+              `release: kube-prometheus-stack`.
+
+        - alert: LokiCanaryDown
+          expr: >
+            up{namespace="monitoring", service="loki-canary"} == 0
+            or absent(up{namespace="monitoring", service="loki-canary"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "loki-canary metrics endpoint is down or unscraped"
+            description: >
+              Prometheus cannot scrape loki-canary, so the only end-to-end proof
+              that logs survive the pipeline is gone. Note the canary is a
+              DaemonSet: a single down pod trips this too, which is intended —
+              that node's logs are no longer being verified.
+
+        - alert: PromtailDown
+          expr: >
+            up{namespace="monitoring", service="promtail-metrics"} == 0
+            or absent(up{namespace="monitoring", service="promtail-metrics"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "promtail metrics endpoint is down or unscraped"
+            description: >
+              Prometheus cannot scrape promtail. PromtailSendFailing and
+              PromtailDroppingEntries are blind, so log shipping could stop
+              without any alert. The Service is `promtail-metrics` (the chart
+              only renders it when serviceMonitor.enabled is true).

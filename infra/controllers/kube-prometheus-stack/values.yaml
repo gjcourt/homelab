@@ -967,9 +967,16 @@ alertmanager:
     ## on scaling down and deleting statefulset, respectively.
     ## Requires Kubernetes version 1.27.0+.
     ## Ref: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
-    persistentVolumeClaimRetentionPolicy: {}
-    #  whenDeleted: Retain
-    #  whenScaled: Retain
+    ## Retain is already the Kubernetes DEFAULT for both fields, so writing it
+    ## here adds no protection today. It is stated explicitly as a guard: the
+    ## operator delete-and-recreates this StatefulSet with foreground propagation
+    ## whenever an update is rejected as immutable, so anyone later flipping
+    ## either field to Delete would silently start destroying the silence/nflog
+    ## volume on every such recreate. Same block as the Prometheus storage
+    ## stanza added in #979.
+    persistentVolumeClaimRetentionPolicy:
+      whenDeleted: Retain
+      whenScaled: Retain
 
     ## Standard object's metadata. More info: https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata
     ## Metadata Labels and Annotations gets propagated to the Alertmanager pods.
@@ -1093,8 +1100,30 @@ alertmanager:
 
     ## Storage is the definition of how storage will be used by the Alertmanager instances.
     ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/platform/storage.md
+    ## Durable state: was emptyDir, so every restart (node drain, chart upgrade,
+    ## OOM) dropped /alertmanager — losing (a) active silences, so a silence set
+    ## during maintenance evaporates mid-window and the alerts it muted re-page,
+    ## and (b) the notification log, so already-notified alerts re-notify and
+    ## inhibition/dedup restarts from zero. This does NOT give fired-alert
+    ## history — Alertmanager stores none by design; see
+    ## docs/plans/2026-08-05-alertmanager-alert-history.md.
     ##
-    storage: {}
+    ## 1Gi on truenas-iscsi (same class as the Prometheus TSDB and Loki PVCs in
+    ## this namespace; Retain reclaim policy). The on-disk state is the silences
+    ## file + nflog snapshot — single-digit MB even with the 120h retention
+    ## below — so 1Gi is the repo's floor for a small state PVC (mosquitto,
+    ## memos, linkding, authelia all use 1Gi), not a sizing estimate. The
+    ## `-xfs` classes exist for volumes that may need in-place expansion; this
+    ## one is bounded and never will. replicas is 1, so there is no gossip/HA
+    ## peer state to consider.
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: truenas-iscsi
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 1Gi
     # volumeClaimTemplate:
     #   spec:
     #     storageClassName: gluster

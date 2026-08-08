@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cadence
+resources:
+  - ../../base/cadence/
+  - httproute.yaml
+  # The cadence-secrets Secret is operator-created (SOPS) — see secret.sops.yaml.example.
+  # Add `- secret.sops.yaml` here once it exists; the pod won't start without it.
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false

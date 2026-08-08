@@ -967,10 +967,13 @@ alertmanager:
     ## on scaling down and deleting statefulset, respectively.
     ## Requires Kubernetes version 1.27.0+.
     ## Ref: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
-    ## Retain the silence/nflog PVC across StatefulSet delete + scale events. The
-    ## HelmRelease uses remediation strategy `uninstall`, which deletes the
-    ## Alertmanager CR (and therefore the StatefulSet) on a failed upgrade — this
-    ## keeps a botched chart upgrade from also wiping active silences.
+    ## Retain is already the Kubernetes DEFAULT for both fields, so writing it
+    ## here adds no protection today. It is stated explicitly as a guard: the
+    ## operator delete-and-recreates this StatefulSet with foreground propagation
+    ## whenever an update is rejected as immutable, so anyone later flipping
+    ## either field to Delete would silently start destroying the silence/nflog
+    ## volume on every such recreate. Same block as the Prometheus storage
+    ## stanza added in #979.
     persistentVolumeClaimRetentionPolicy:
       whenDeleted: Retain
       whenScaled: Retain

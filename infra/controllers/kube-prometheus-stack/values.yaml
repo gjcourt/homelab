@@ -968,8 +968,6 @@ alertmanager:
     ## Requires Kubernetes version 1.27.0+.
     ## Ref: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/#persistentvolumeclaim-retention
     persistentVolumeClaimRetentionPolicy: {}
-    #  whenDeleted: Retain
-    #  whenScaled: Retain
 
     ## Standard object's metadata. More info: https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#metadata
     ## Metadata Labels and Annotations gets propagated to the Alertmanager pods.
@@ -1084,7 +1082,12 @@ alertmanager:
 
     ## Size is the expected size of the alertmanager cluster. The controller will eventually make the size of the
     ## running cluster equal to the expected size.
-    replicas: 1
+    ## Two peers so silences and the notification log survive a restart without
+    ## a volume (see the storage note above). Anti-affinity is REQUIRED, not
+    ## cosmetic: both replicas on one node makes this strictly worse than a
+    ## single pod -- same blast radius, twice the notifications on a gossip
+    ## partition.
+    replicas: 2
 
     ## Time duration Alertmanager shall retain data for. Default is '120h', and must match the regular expression
     ## [0-9]+(ms|s|m|h) (milliseconds seconds minutes hours).
@@ -1093,7 +1096,36 @@ alertmanager:
 
     ## Storage is the definition of how storage will be used by the Alertmanager instances.
     ## ref: https://github.com/prometheus-operator/prometheus-operator/blob/main/Documentation/platform/storage.md
+    ## Durable state: was emptyDir, so every restart (node drain, chart upgrade,
+    ## OOM) dropped /alertmanager — losing (a) active silences, so a silence set
+    ## during maintenance evaporates mid-window and the alerts it muted re-page,
+    ## and (b) the notification log, so already-notified alerts re-notify and
+    ## inhibition/dedup restarts from zero. This does NOT give fired-alert
+    ## history — Alertmanager stores none by design; see
+    ## docs/plans/2026-08-05-alertmanager-alert-history.md.
     ##
+    ## DURABILITY IS PROVIDED BY GOSSIP, NOT BY A VOLUME. `storage` stays empty
+    ## on purpose. Every StorageClass in this cluster is democratic-csi against
+    ## hestia, so any PVC here would mean Alertmanager cannot schedule while the
+    ## iSCSI target is unavailable -- alert delivery would stop during exactly
+    ## the storage incident that most needs it, and Flux would not surface it
+    ## (Helm does not own the operator-created StatefulSet, so the HelmRelease
+    ## reports Ready with the pod Pending). See
+    ## docs/operations/2026-07-22-hestia-storage-maintenance.md.
+    ##
+    ## Two replicas instead: Alertmanager's cluster protocol replicates silences
+    ## and the notification log between peers, which is its designed HA
+    ## mechanism rather than a workaround. State survives pod restart, node
+    ## drain, node loss and rolling chart upgrades. It is lost only if every
+    ## replica restarts simultaneously -- at which point the cluster is gone and
+    ## stale silences are not the problem.
+    ##
+    ## Node-local storage would remove the hestia coupling but pin the pod to
+    ## one node, trading a rare dependency for a routine one (Talos upgrades
+    ## drain nodes; .22 was decommissioned for a bad DIMM and .20 needed a
+    ## physical power-cycle). Combining HA with node-local volumes is the
+    ## complete answer and needs a local provisioner this cluster does not have:
+    ## docs/plans/2026-08-08-alertmanager-local-durability.md.
     storage: {}
     # volumeClaimTemplate:
     #   spec:
@@ -1144,7 +1176,11 @@ alertmanager:
     ## The value "hard" means that the scheduler is *required* to not schedule two replica pods onto the same node.
     ## The value "" will disable pod anti-affinity so that no anti-affinity rules will be configured.
     ##
-    podAntiAffinity: "soft"
+    ## "hard", not the chart default "soft": two replicas co-scheduled on one
+    ## node is strictly worse than a single pod -- identical blast radius, but
+    ## twice the notifications if the gossip link partitions. 4 nodes, 2
+    ## replicas, so there is ample room to place them.
+    podAntiAffinity: "hard"
 
     ## If anti-affinity is enabled sets the topologyKey to use for anti-affinity.
     ## This can be changed to, for example, failure-domain.beta.kubernetes.io/zone

@@ -25,7 +25,10 @@ The monitoring stack is deployed in the `monitoring` namespace via Flux using of
   - `infra/controllers/promtail/values.yaml`
   - `infra/controllers/vector/values.yaml`
 - **Loki Alerting Rules** (LogQL, evaluated by Loki ruler): `infra/controllers/loki/alerting-rules.yaml`
-- **Prometheus Alerting Rules** (PromQL): `infra/configs/alerts/prometheus-rules.yaml` and `infra/configs/alerts/cert-manager-rules.yaml`
+- **Prometheus Alerting Rules** (PromQL), all in `infra/configs/alerts/`:
+  - `prometheus-rules.yaml` — CNPG, node filesystem, DaemonSet, Loki push errors, container health, Cilium BGP, Flux.
+  - `cert-manager-rules.yaml` — certificate renewal, expiry, and a `CertManagerDown` meta-alert.
+  - `loki-rules.yaml` — log-pipeline alerts: Loki WAL/chunk-flush failures, loki-canary end-to-end missing/late entries, promtail send failures and dropped entries, plus `LokiDown` / `LokiCanaryDown` / `PromtailDown` meta-alerts.
 - **Grafana Dashboards**: Pre-configured dashboards are included in the `kube-prometheus-stack` chart. Additional custom dashboards can be added via ConfigMaps.
 - **Loki Data Source**: Grafana is configured to use Loki as a data source for log querying.
 
@@ -43,10 +46,10 @@ All pods (Prometheus, Alertmanager, Grafana, Loki, Promtail) should be in a `Run
 Access Grafana and verify that data is populating in the default dashboards.
 
 ## 7. Monitoring & Alerting
-- **Metrics**: The stack monitors itself. Prometheus scrapes metrics from all its components.
+- **Metrics**: The stack monitors itself. Prometheus scrapes metrics from all its components. Loki (`loki:3100`), loki-canary (`loki-canary:3500`) and promtail (`promtail-metrics:3101`) are scraped via the charts' own ServiceMonitor options (`monitoring.serviceMonitor.enabled` in `infra/controllers/loki/values.yaml`, `serviceMonitor.enabled` in `infra/controllers/promtail/values.yaml`). A single Loki ServiceMonitor covers both `loki` and `loki-canary`; `loki-headless` is excluded by its `prometheus.io/service-monitor=false` label and `loki-memberlist` has no `http-metrics` port.
 - **Container Logs**: Promtail collects logs from all containers in the cluster and sends them to Loki.
 - **Kernel Logs**: Vector collects Talos kernel and service logs and sends them to Loki. See [Talos Kernel Log Shipping](kernel-log-shipping.md).
-- **Metric Alerts**: Alertmanager receives alerts from Prometheus via `PrometheusRule` resources. Custom rules are in `infra/configs/alerts/prometheus-rules.yaml`.
+- **Metric Alerts**: Alertmanager receives alerts from Prometheus via `PrometheusRule` resources. Custom rules are in `infra/configs/alerts/` (`prometheus-rules.yaml`, `cert-manager-rules.yaml`, `loki-rules.yaml`).
 - **Log Alerts**: Loki's built-in ruler evaluates LogQL rules from `infra/controllers/loki/alerting-rules.yaml` and forwards firing alerts to Alertmanager.
 - **Alert delivery**: Alertmanager config lives in `infra/controllers/kube-prometheus-stack/values.yaml` (`alertmanager.config`). `severity = "critical"` alerts route to the `email-critical` receiver, which emails `gjcourt+alerts@gmail.com` via Gmail SMTP (`smtp.gmail.com:587`, STARTTLS, auth `gjcourt@gmail.com`). The app password is the SOPS-encrypted `alertmanager-smtp` secret in the `monitoring` namespace, mounted at `/etc/alertmanager/secrets/alertmanager-smtp/password` via `alertmanagerSpec.secrets` and referenced by `smtp_auth_password_file`. Everything else (warnings, info, Watchdog) still routes to the `null` receiver. See [plans/2026-06-17-alertmanager-smtp-alerting.md](../plans/2026-06-17-alertmanager-smtp-alerting.md).
 
@@ -61,6 +64,7 @@ Access Grafana and verify that data is populating in the default dashboards.
 - **Missing Metrics**:
   - Check the Prometheus UI `Targets` page to ensure endpoints are being scraped successfully.
   - Verify `ServiceMonitor` or `PodMonitor` resources are correctly configured and labeled.
+  - **Every `ServiceMonitor` must carry the label `release: kube-prometheus-stack`.** Prometheus runs with `serviceMonitorSelectorNilUsesHelmValues: true`, so its `serviceMonitorSelector` is `matchLabels: {release: kube-prometheus-stack}`. A `ServiceMonitor` without that label is created successfully and then silently ignored — the resource exists, `kubectl get servicemonitor` looks fine, and no metrics ever arrive. Confirm the selector with `kubectl get prometheus -A -o jsonpath='{.items[0].spec.serviceMonitorSelector}'`, and confirm a metric actually landed with `count(<metric_name>)` in the Prometheus UI rather than assuming.
 - **Missing Container Logs**:
   - Check Promtail logs for errors reading container logs or sending to Loki.
   - Verify Loki is running and accepting connections.

@@ -101,10 +101,65 @@ gateway:
 test:
   enabled: false
 
+# Metrics scraping. Why this exists: in the 2026-02-28 incident Loki's WAL went
+# read-only and the entire log ingestion pipeline failed silently — promtail
+# retried forever against a Loki returning HTTP 500 and nothing noticed. The
+# LokiPushErrors alert written in response (infra/configs/alerts/prometheus-rules.yaml)
+# has never once been able to fire, because Loki was never scraped at all:
+# loki_request_duration_seconds_count did not exist in Prometheus. The alert was
+# real, the metric was not. Enabling this ServiceMonitor is what makes that
+# alert — and the ones in infra/configs/alerts/loki-rules.yaml — actually
+# evaluate.
+#
+# labels.release is load-bearing. This cluster's Prometheus runs with
+# serviceMonitorSelectorNilUsesHelmValues=true, so its serviceMonitorSelector is
+# matchLabels{release: kube-prometheus-stack}. A ServiceMonitor without that
+# label is created and then silently ignored — monitoring that doesn't monitor.
+# Same trap as cert-manager; see that chart's values for the sibling case.
+#
+# One ServiceMonitor covers two targets. Its selector is the chart's
+# loki.selectorLabels (app.kubernetes.io/name=loki, app.kubernetes.io/instance=loki)
+# plus `prometheus.io/service-monitor NotIn (false)`, and its single endpoint is
+# port `http-metrics`. Against the live Services that resolves to:
+#   loki            :3100 http-metrics  -> scraped
+#   loki-canary     :3500 http-metrics  -> scraped (labels match; adds component=canary)
+#   loki-headless         carries prometheus.io/service-monitor=false -> excluded
+#   loki-memberlist       only has a `tcp` port, no http-metrics -> no target
+# So the canary needs no hand-written ServiceMonitor.
 monitoring:
+  # Chart 6.24.0 defaults metricsInstance.enabled to true, which renders a
+  # grafana-agent MetricsInstance CR. It is gated on the
+  # monitoring.grafana.com CRDs, which are absent, so nothing renders today —
+  # but installing those CRDs would then break this HelmRelease. Pin it off.
+  metricsInstance:
+    enabled: false
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+    # The chart default is 15s, sized for its recording rules (1m rate needs
+    # >=4 samples). Those rules are disabled here, and every alert in
+    # loki-rules.yaml evaluates over 15-30m windows, so 30s is ample and halves
+    # the series churn.
+    interval: 30s
+  # Grafana-Agent-operator self-monitoring: a *separate* mechanism that ships
+  # Loki's own logs back into Loki through a LogsInstance CR. Unrelated to the
+  # ServiceMonitor above, and deliberately still off — it would pull in the
+  # agent operator we don't run.
   selfMonitoring:
     enabled: false
     grafanaAgent:
       installOperator: false
-  lokiCanary:
-    enabled: false
+
+# loki-canary is the end-to-end pipeline check: each pod writes a log line every
+# second, then reads it back out of Loki. loki_canary_missing_entries_total is
+# therefore the only metric that proves a log actually survives the whole trip —
+# which is precisely the assurance missing on 2026-02-28.
+#
+# This was ALREADY running (4 pods, one per node, for 76d) even though this file
+# previously said `monitoring.lokiCanary.enabled: false`. That key does not exist
+# in chart 6.24.0 — `lokiCanary` is top-level — so the setting was a silent no-op
+# and the chart default (enabled: true) applied throughout. Stated explicitly at
+# the correct path so the file matches reality instead of contradicting it.
+lokiCanary:
+  enabled: true

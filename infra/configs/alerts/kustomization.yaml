@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - prometheus-rules.yaml
   - cert-manager-rules.yaml
+  - loki-rules.yaml

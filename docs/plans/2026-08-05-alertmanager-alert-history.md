@@ -13,9 +13,10 @@ conflating them is why the wrong fix keeps looking attractive:
 
 1. **Alertmanager state durability** — silences and the notification log (dedup /
    inhibition memory) lived on `emptyDir`, so every restart dropped them. **Fixed
-   separately** by giving `alertmanagerSpec` a `storage.volumeClaimTemplate`
-   (`infra/controllers/kube-prometheus-stack/values.yaml`). That is the whole of
-   what persistence buys.
+   separately** by running 2 gossip replicas with hard anti-affinity, NOT by a
+   volume (`infra/controllers/kube-prometheus-stack/values.yaml`); a PVC here
+   would couple alert delivery to hestia. Residual gap and a deadman proposal:
+   [2026-08-08-alertmanager-local-durability.md](2026-08-08-alertmanager-local-durability.md).
 2. **Fired-alert history** — "what fired last week, and for how long?" **This
    plan.** Persistence does *not* address it and never could.
 
@@ -25,8 +26,8 @@ Prometheus is asserting right now. The on-disk state a PVC preserves is the
 silences file plus `nflog`, and `nflog` is a *dedup ledger* — entries keyed by
 receiver + alert-group fingerprint, pruned at `alertmanagerSpec.retention`
 (120h), holding the last-notified timestamp and nothing about what came before.
-It is not a queryable audit log and the UI never surfaces it. A 1 TiB PVC would
-show the same empty history page as an `emptyDir`.
+It is not a queryable audit log and the UI never surfaces it. No amount of
+storage would change the empty history page.
 
 So the history has to come from somewhere else. Two different questions, with
 two different sources:

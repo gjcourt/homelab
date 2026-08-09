@@ -1,7 +1,7 @@
 ---
 status: planned
-last_modified: 2026-08-08
-summary: "Close the last Alertmanager durability gap with node-local volumes alongside HA, plus a deadman for silent alerting loss"
+last_modified: 2026-08-09
+summary: "Gap 2 (deadman) resolved 2026-08-09; the remaining open item is node-local volumes for state across a simultaneous restart"
 ---
 
 # Plan: Alertmanager local durability + deadman
@@ -51,7 +51,19 @@ protect against a scenario where the cluster is already down. Weigh honestly.
 Document the residual risk and move on. Reasonable while the silence inventory
 stays near zero.
 
-## Gap 2 — silent alerting loss is undetectable (the bigger one)
+## Gap 2 — silent alerting loss is undetectable (the bigger one) — **RESOLVED 2026-08-09**
+
+> Closed by the healthchecks.io dead man's switch: `Watchdog` now routes to a
+> `deadman` receiver that POSTs to an off-cluster check every 5m (15m grace,
+> ~20m worst-case detection). The ping URL lives in the SOPS-encrypted
+> `alertmanager-deadman` secret and is referenced via `url_file`.
+>
+> The follow-on local mesh — cross-monitoring between the cluster, hestia and
+> alcatraz to say *which* component died and to tell a WAN drop from a power
+> cut — is specified in
+> [2026-08-09-local-deadman-mesh.md](2026-08-09-local-deadman-mesh.md).
+>
+> Original analysis retained below.
 
 `Watchdog` routes to the `null` receiver, and there is no external check on
 `alerts.burntbytes.com`. If Alertmanager dies, or the notification path breaks,
@@ -80,7 +92,11 @@ chosen here; picking a vendor is not a decision to make inside a plan doc.
 
 ## Recommendation
 
-1. **Gap 2 first.** Highest value, smallest change, no new cluster components.
+1. ~~**Gap 2 first.** Highest value, smallest change, no new cluster
+   components.~~ **Done 2026-08-09** — healthchecks.io, as above.
 2. **Gap 1 only if the silence inventory grows** enough that losing it during a
    full-cluster restart would actually hurt. Revisit if a local provisioner
    arrives for other reasons.
+
+Gap 1 remains the only open item here, and it is still judged not worth a new
+cluster component. This plan stays `planned` on that basis alone.

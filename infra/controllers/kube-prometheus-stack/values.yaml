@@ -549,55 +549,35 @@ alertmanager:
       repeat_interval: 12h
       receiver: 'null'
       routes:
-      # DEAD MAN'S SWITCH. Watchdog is an always-firing alert (expression
-      # `vector(1)`) that measures nothing — it exists purely as a heartbeat.
-      # Its arrival proves the whole chain is intact: rule evaluation →
-      # Alertmanager → routing → notification delivery.
+      # DEAD MAN'S SWITCH. Watchdog is an always-firing alert (`vector(1)`) that
+      # measures nothing — it is purely a heartbeat. Routed to 'null' it was
+      # generated and discarded, which left the one failure ordinary alerting
+      # cannot catch: alerting itself dying, where the silence is
+      # indistinguishable from "nothing is wrong". It now POSTs to a
+      # healthchecks.io check that alerts on the ping's ABSENCE. That receiver
+      # MUST stay off-cluster — a deadman inside the failure domain it watches
+      # cannot report that domain failing.
       #
-      # Until now it routed to 'null': the pulse was generated and discarded.
-      # That left the one failure ordinary alerting cannot catch — alerting
-      # itself dying. A dead Prometheus or a wedged Alertmanager produces
-      # silence, and silence is indistinguishable from "nothing is wrong".
-      #
-      # It now POSTs to a healthchecks.io check that alerts on the ABSENCE of
-      # the ping. The receiver MUST live off-cluster — a deadman inside the
-      # failure domain it watches cannot report that domain failing.
-      #
-      # SCOPE — what this does NOT cover. The chain proven is rule evaluation →
-      # Alertmanager → routing → *webhook* delivery. Real alerts leave over
-      # Gmail SMTP (email-critical / email-warning), and that leg is NOT
-      # exercised here: if the app password expires, this keeps pinging green
-      # while every genuine alert silently fails to send. Closing that needs a
-      # heartbeat over the mail path itself — see the follow-up in
+      # SCOPE: this proves the *webhook* leg only. Real alerts leave over Gmail
+      # SMTP, which is never exercised here — an expired app password keeps the
+      # check green while every genuine alert fails to send. Follow-up in
       # docs/plans/2026-08-09-local-deadman-mesh.md.
       #
       # TIMING — group_interval sets the cadence; repeat_interval must be
-      # strictly SMALLER, never equal. The dispatcher flushes on a
-      # group_interval ticker and the dedup stage only sends when the last
-      # notification is older than repeat_interval, where that timestamp is
-      # written *after* the POST completes. With both at 5m the t+5m tick loses
-      # that comparison by the width of the previous round-trip and the ping
-      # slips to the next tick — simulated gaps were 5m15s/9m45s alternating,
-      # i.e. up to double the intended period, silently.
+      # strictly SMALLER, never equal. Dedup compares against a timestamp
+      # written *after* the POST, so with both at 5m the on-time tick loses by
+      # the previous round-trip and the ping slips: gaps of 5m15s/9m45s, double
+      # the intended period, silently. Don't invert the fix by shrinking
+      # group_interval either — the HA WaitStage delays the non-first peer 15s
+      # (--cluster.peer-timeout) *before* dedup, so small intervals let peer 1
+      # win ticks early and the period goes ragged.
       #
-      # Keeping repeat_interval well under group_interval makes every tick win
-      # the dedup check, so the cadence is exactly group_interval: a uniform
-      # 5m. Do not "fix" this by shrinking group_interval instead — with 2
-      # replicas the HA WaitStage delays the non-first peer by
-      # --cluster.peer-timeout (15s) *before* dedup runs, so a small
-      # group_interval lets peer 1 win ticks early and the period becomes
-      # ragged (1m/4m simulates to 4m15s–4m45s). One flush per period is both
-      # exact and easier to reason about.
-      #
-      # Against a 15m healthchecks.io grace, 5m gives ~20m worst-case detection
-      # with 3x margin. The global 12h repeat_interval is of course far too
-      # slow for a heartbeat.
-      #
-      # group_wait 0s saves the default 30s on the first flush after a restart.
-      # That is worth slightly more than it looks: cluster settling returns
-      # after a few consecutive stable membership polls (~seconds), not the 60s
-      # --cluster.settle-timeout ceiling, so the 30s is not hidden underneath
-      # it. The 15m grace absorbs all of this regardless.
+      # Replicas ticker independently and never re-sync (the group never
+      # empties), so after a restart both may POST within one period. Harmless:
+      # only the gap matters and it stays <= 5m. Against a 15m grace that is
+      # ~20m worst-case detection. group_wait 0s saves a real 30s on the first
+      # flush — gossip settles in seconds, well short of the 60s
+      # --cluster.settle-timeout ceiling.
       - receiver: 'deadman'
         matchers:
           - alertname = "Watchdog"
@@ -692,18 +672,20 @@ alertmanager:
     # That path does assume email still works. A simultaneously broken mail
     # path is the uncovered case noted in the route comment above.
     #
-    # KNOWN NOISE, accepted deliberately. That rule is a ratio
-    # (failed/total > 0.01 for 5m) and this integration only emits ~3
-    # notifications per 15m window, so a SINGLE missed POST scores ~0.33 —
-    # 33x the threshold — and pages critical. Any WAN blip therefore produces
-    # one +critical email on top of the healthchecks.io check going red. That
-    # is arguably correct (the deadman really did fail to report) but it is
-    # redundant, and the modem's thermal reboots make it recurring. Left
-    # un-muted for now because pre-emptively silencing a brand-new safety net
-    # is worse than a little noise. If it does become a nuisance, the bounded
-    # fix is a route matching alertname="AlertmanagerClusterFailedToSendAlerts"
-    # + integration="webhook" with a long repeat_interval (e.g. 24h) — that
-    # keeps the signal and caps it at one page a day, rather than dropping it.
+    # POSSIBLE NOISE, accepted deliberately. That rule is a ratio
+    # (failed/total > 0.01 for 5m) over a low-volume integration — roughly 3
+    # notifications per 15m window — so it takes very little to cross the
+    # threshold. Note the counter increments once per flush *after retries are
+    # exhausted*, not per HTTP attempt, and the retry deadline is about one
+    # group_interval: a brief WAN blip that succeeds on retry scores nothing.
+    # It takes hc-ping.com being unreachable for a full ~5m window to register
+    # a failure, at which point a +critical email accompanies the check going
+    # red. Redundant but not wrong. Left un-muted because pre-emptively
+    # silencing a brand-new safety net is worse than occasional noise; if it
+    # does become a nuisance, the bounded fix is a route on
+    # alertname="AlertmanagerClusterFailedToSendAlerts" + integration="webhook"
+    # with a 24h repeat_interval — capping it at one page a day rather than
+    # dropping the signal.
     - name: 'deadman'
       webhook_configs:
         - url_file: '/etc/alertmanager/secrets/alertmanager-deadman/ping-url'

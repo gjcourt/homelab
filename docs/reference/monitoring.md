@@ -51,7 +51,18 @@ Access Grafana and verify that data is populating in the default dashboards.
 - **Kernel Logs**: Vector collects Talos kernel and service logs and sends them to Loki. See [Talos Kernel Log Shipping](kernel-log-shipping.md).
 - **Metric Alerts**: Alertmanager receives alerts from Prometheus via `PrometheusRule` resources. Custom rules are in `infra/configs/alerts/` (`prometheus-rules.yaml`, `cert-manager-rules.yaml`, `loki-rules.yaml`).
 - **Log Alerts**: Loki's built-in ruler evaluates LogQL rules from `infra/controllers/loki/alerting-rules.yaml` and forwards firing alerts to Alertmanager.
-- **Alert delivery**: Alertmanager config lives in `infra/controllers/kube-prometheus-stack/values.yaml` (`alertmanager.config`). `severity = "critical"` alerts route to the `email-critical` receiver, which emails `gjcourt+alerts@gmail.com` via Gmail SMTP (`smtp.gmail.com:587`, STARTTLS, auth `gjcourt@gmail.com`). The app password is the SOPS-encrypted `alertmanager-smtp` secret in the `monitoring` namespace, mounted at `/etc/alertmanager/secrets/alertmanager-smtp/password` via `alertmanagerSpec.secrets` and referenced by `smtp_auth_password_file`. Everything else (warnings, info, Watchdog) still routes to the `null` receiver. See [plans/2026-06-17-alertmanager-smtp-alerting.md](../plans/2026-06-17-alertmanager-smtp-alerting.md).
+- **Alert delivery**: Alertmanager config lives in `infra/controllers/kube-prometheus-stack/values.yaml` (`alertmanager.config`). Four receivers:
+
+| Receiver | Gets | Delivery |
+|---|---|---|
+| `email-critical` | `severity = "critical"` | `gjcourt+critical@gmail.com` (no skip-inbox filter), `send_resolved: true`, `repeat_interval: 4h` |
+| `email-warning` | `severity = "warning"` | `gjcourt+alerts@gmail.com` behind a Gmail skip-inbox label, `send_resolved: false`, `repeat_interval: 24h` |
+| `deadman` | `Watchdog` only | Webhook POST to an off-cluster healthchecks.io check every 5m — the **dead man's switch**; the check alerts on the ping's *absence*. See [plans/2026-08-09-local-deadman-mesh.md](../plans/2026-08-09-local-deadman-mesh.md) |
+| `null` | `overture-prod` KubePdb, `*-stage` warnings, and the default route | Discarded |
+
+Both email receivers use Gmail SMTP (`smtp.gmail.com:587`, STARTTLS, auth `gjcourt@gmail.com`). Secrets are SOPS-encrypted in the `monitoring` namespace and mounted via `alertmanagerSpec.secrets`: `alertmanager-smtp` → `/etc/alertmanager/secrets/alertmanager-smtp/password` (`smtp_auth_password_file`), and `alertmanager-deadman` → `/etc/alertmanager/secrets/alertmanager-deadman/ping-url` (`url_file`).
+
+Note the default route receiver is `null`, so an alert carrying no `severity` label is silently dropped. Note also that the deadman proves the *webhook* leg only — a broken SMTP path would leave the check green while email alerts fail. See [plans/2026-06-17-alertmanager-smtp-alerting.md](../plans/2026-06-17-alertmanager-smtp-alerting.md).
 
 ## 8. Disaster Recovery
 - **Backup Strategy**:

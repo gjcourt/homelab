@@ -177,7 +177,7 @@ Edit `infra/controllers/kube-prometheus-stack/values.yaml` inside the `alertmana
 
 1. **Update `config.route.group_by`** from `['namespace']` to `['namespace', 'alertname']`.
 
-2. **Add a new route** to `config.route.routes:`, immediately after the existing Watchdog route (`- receiver: 'null'` with `matchers: alertname = "Watchdog"`):
+2. **Add a new route** to `config.route.routes:`, immediately after the existing Watchdog route (as of 2026-08-09 that is `- receiver: 'deadman'`, not `'null'` — Watchdog now drives the dead man's switch):
 
    ```yaml
          - receiver: 'signal-critical'

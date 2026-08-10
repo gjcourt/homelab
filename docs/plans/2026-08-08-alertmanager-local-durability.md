@@ -65,7 +65,10 @@ stays near zero.
 >
 > Original analysis retained below.
 
-`Watchdog` routes to the `null` receiver, and there is no external check on
+*(State as of 2026-08-08, before the fix above. Retained for the reasoning, not
+as a description of the cluster today.)*
+
+`Watchdog` routed to the `null` receiver, and there was no external check on
 `alerts.burntbytes.com`. If Alertmanager dies, or the notification path breaks,
 **nothing tells you.** Every alert in the cluster goes quiet and the failure is
 indistinguishable from silence-because-all-is-well.

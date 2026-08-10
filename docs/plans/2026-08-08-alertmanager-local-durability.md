@@ -87,8 +87,9 @@ that alerts on *absence*:
 The receiver must live **off this cluster** — a deadman that shares failure
 domains with the thing it watches is decoration.
 
-**Open question for the operator:** which external service. Deliberately not
-chosen here; picking a vendor is not a decision to make inside a plan doc.
+~~**Open question for the operator:** which external service. Deliberately not
+chosen here; picking a vendor is not a decision to make inside a plan doc.~~
+**Answered 2026-08-09: healthchecks.io.**
 
 ## Recommendation
 

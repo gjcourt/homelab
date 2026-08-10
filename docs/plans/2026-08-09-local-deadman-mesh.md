@@ -48,7 +48,7 @@ connectivity returns.
 |---|---|---|---|
 | Talos cluster | 3 CP + workers | **Not on the host** — Talos is immutable and API-driven; no host cron. Must be a k8s CronJob or the Alertmanager fan-out | Gmail SMTP (existing) |
 | hestia | TrueNAS SCALE; iSCSI/NFS backing store | Yes — SCALE Custom App (compose YAML canonical in-repo) | TrueNAS built-in alert email |
-| alcatraz | Synology DSM | Yes — DSM Task Scheduler | DSM native email/push |
+| alcatraz | Synology DSM | Yes — DSM Task Scheduler today; a GitOps `docker compose` deploy path is already built (operator bootstrap pending, see the alcatraz GitOps plan) and is the better long-term host | DSM native email/push |
 
 Two constraints fall out of that table and shape the whole design:
 
@@ -62,11 +62,12 @@ Two constraints fall out of that table and shape the whole design:
 Only alcatraz is genuinely independent of the other two — and only as of the
 completed storage migration. It has **zero bound cluster PVs** today; the 48
 `csi.san.synology.com` volumes still present are all `Released` leftovers and
-the `synology-iscsi` StorageClass is gone. Note that `docs/STATUS.md` still
-lists "iSCSI backing for CNPG PVCs" among alcatraz's roles under an in-flight
-role-narrowing; that line is stale with respect to bound volumes. If alcatraz
-ever backs live cluster storage again, it stops being an independent observer
-and this design loses its only truly external node.
+the `synology-iscsi` StorageClass is gone. (`docs/STATUS.md` described alcatraz
+as providing "iSCSI backing for CNPG PVCs" until 2026-08-09; that line was
+corrected in the same PR as this plan.) If alcatraz ever backs live cluster
+storage again, it stops being an independent observer and this design loses its
+only truly external node — which makes that a decision to take deliberately,
+not incidentally.
 
 ## Design
 
@@ -97,7 +98,7 @@ path that protects the catastrophic case:
 |---|---|---|
 | k8s | hestia, alcatraz | blackbox-exporter `Probe` + PrometheusRule (new; no blackbox exporter today) |
 | hestia | k8s, alcatraz | Custom App: Watchdog webhook receiver + timer; poll alcatraz |
-| alcatraz | k8s, hestia | DSM Task Scheduler script on 5m |
+| alcatraz | k8s, hestia | DSM Task Scheduler script on 5m; move to the compose path once bootstrapped |
 
 Each watcher notifies through **its own** path, so one broken mail
 configuration cannot silence everything.
@@ -130,7 +131,7 @@ Two candidate fixes, both cheap:
 
 | Approach | Notes |
 |---|---|
-| Low-frequency email heartbeat to a healthchecks.io **email ping address** | healthchecks.io accepts pings by email as well as HTTP. Route `Watchdog` with `continue: true` to an email receiver addressed at the check, `repeat_interval: 24h`. Absence of the daily mail then alerts — proving the SMTP leg end to end. **Verify the email-ping feature and its free-tier availability before designing around it.** |
+| Low-frequency email heartbeat to a healthchecks.io **email ping address** | healthchecks.io does accept pings by email as well as HTTP — each check has a ping address ([docs](https://healthchecks.io/docs/email/)). Route `Watchdog` with `continue: true` to an email receiver addressed at the check, `repeat_interval: 24h`. Absence of the daily mail then alerts — proving the SMTP leg end to end. **Confirm free-tier (Hobbyist) availability before designing around it**; the feature itself is documented, its plan gating is not. |
 | Second receiver on a different transport | Doesn't prove Gmail specifically, only that *some* path works. Weaker. |
 
 The first is strictly better if the feature exists as described. A daily cadence
@@ -175,14 +176,20 @@ that rots unnoticed.
 ## Phasing
 
 1. **Cluster → hosts.** Deploy blackbox-exporter, probe hestia + alcatraz, alert
-   on down. Smallest step, entirely in-repo, no new hosts touched. Partial
-   coverage exists for hestia — `IPMIScraperDown` (`infra/configs/ipmi-exporter/
-   prometheus-rule.yaml`) alerts when its ipmi-exporter stops answering, and
-   `hestia-thermalscope` / `hestia-netscope` are scraped too — but that is
-   liveness of a single exporter process, not of the host, and **alcatraz has no
-   scrape target anywhere in `infra/`**. So this phase is mostly new coverage
-   for alcatraz plus a process-independent check for hestia.
-2. **alcatraz → cluster + hestia.** DSM Task Scheduler + native notification.
+   on down. Smallest step, entirely in-repo, no new hosts touched.
+
+   Partial coverage already exists, so the gap is narrower than "nothing":
+   hestia has `IPMIScraperDown` in `infra/configs/ipmi-exporter/prometheus-rule.yaml`
+   plus `hestia-homelabscope` / `hestia-thermalscope` / `hestia-netscope`
+   scrapes, and alcatraz has an *indirect* signal via
+   `HomelabscopeJobMetricAbsent` on `alcatraz-photos-pull`. Both are weaker than
+   they look: `IPMIScraperDown` is liveness of one exporter process rather than
+   of the host, and it is `severity: warning`, so it lands in the
+   `gjcourt+alerts@` skip-inbox label this repo elsewhere documents as
+   effectively unread. Alcatraz has **no direct scrape target anywhere in
+   `infra/`**. This phase buys a process-independent host check for both, at
+   critical severity.
+2. **alcatraz → cluster + hestia.** DSM Task Scheduler + native notification (or the compose path if bootstrapped by then).
    Highest value per unit effort: alcatraz is the only genuinely independent
    node, and DSM's notification path is already configured and off-cluster.
 3. **hestia → cluster + alcatraz.** SCALE Custom App receiving the

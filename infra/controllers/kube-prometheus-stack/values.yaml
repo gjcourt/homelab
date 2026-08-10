@@ -571,27 +571,39 @@ alertmanager:
       # heartbeat over the mail path itself — see the follow-up in
       # docs/plans/2026-08-09-local-deadman-mesh.md.
       #
-      # TIMING — repeat_interval rounds UP to the next group_interval tick, so
-      # the two must not be equal. The dispatcher flushes on a group_interval
-      # ticker, and the dedup stage only sends when the last notification is
-      # older than repeat_interval; with both at 5m the t+5m tick loses that
-      # comparison by the width of the previous POST's round-trip and the ping
-      # lands at t+10m instead — silently halving the cadence. group_interval
-      # 1m + repeat_interval 4m makes the t+5m tick the first one that wins, so
-      # the real period is 5m. Against a 15m healthchecks.io grace that gives
-      # ~20m worst-case detection with 3x margin. The global 12h
-      # repeat_interval is of course far too slow for a heartbeat.
+      # TIMING — group_interval sets the cadence; repeat_interval must be
+      # strictly SMALLER, never equal. The dispatcher flushes on a
+      # group_interval ticker and the dedup stage only sends when the last
+      # notification is older than repeat_interval, where that timestamp is
+      # written *after* the POST completes. With both at 5m the t+5m tick loses
+      # that comparison by the width of the previous round-trip and the ping
+      # slips to the next tick — simulated gaps were 5m15s/9m45s alternating,
+      # i.e. up to double the intended period, silently.
       #
-      # group_wait 0s trims the default 30s off the first flush after a
-      # restart. It is not "immediate": with 2 replicas (#1278) the ~60s
-      # default --cluster.settle-timeout dominates, plus the HA peer wait on
-      # the non-first peer. The 15m grace absorbs all of it comfortably.
+      # Keeping repeat_interval well under group_interval makes every tick win
+      # the dedup check, so the cadence is exactly group_interval: a uniform
+      # 5m. Do not "fix" this by shrinking group_interval instead — with 2
+      # replicas the HA WaitStage delays the non-first peer by
+      # --cluster.peer-timeout (15s) *before* dedup runs, so a small
+      # group_interval lets peer 1 win ticks early and the period becomes
+      # ragged (1m/4m simulates to 4m15s–4m45s). One flush per period is both
+      # exact and easier to reason about.
+      #
+      # Against a 15m healthchecks.io grace, 5m gives ~20m worst-case detection
+      # with 3x margin. The global 12h repeat_interval is of course far too
+      # slow for a heartbeat.
+      #
+      # group_wait 0s saves the default 30s on the first flush after a restart.
+      # That is worth slightly more than it looks: cluster settling returns
+      # after a few consecutive stable membership polls (~seconds), not the 60s
+      # --cluster.settle-timeout ceiling, so the 30s is not hidden underneath
+      # it. The 15m grace absorbs all of this regardless.
       - receiver: 'deadman'
         matchers:
           - alertname = "Watchdog"
         group_wait: 0s
-        group_interval: 1m
-        repeat_interval: 4m
+        group_interval: 5m
+        repeat_interval: 1m
       # overture is intentionally OFF: the Deployment is scaled 0/0 and its CNPG
       # cluster is hibernated (cnpg.io/hibernation=on), so the PodDisruptionBudget
       # (minAvailable=1) permanently reports 0 healthy pods and
@@ -679,6 +691,19 @@ alertmanager:
     #
     # That path does assume email still works. A simultaneously broken mail
     # path is the uncovered case noted in the route comment above.
+    #
+    # KNOWN NOISE, accepted deliberately. That rule is a ratio
+    # (failed/total > 0.01 for 5m) and this integration only emits ~3
+    # notifications per 15m window, so a SINGLE missed POST scores ~0.33 —
+    # 33x the threshold — and pages critical. Any WAN blip therefore produces
+    # one +critical email on top of the healthchecks.io check going red. That
+    # is arguably correct (the deadman really did fail to report) but it is
+    # redundant, and the modem's thermal reboots make it recurring. Left
+    # un-muted for now because pre-emptively silencing a brand-new safety net
+    # is worse than a little noise. If it does become a nuisance, the bounded
+    # fix is a route matching alertname="AlertmanagerClusterFailedToSendAlerts"
+    # + integration="webhook" with a long repeat_interval (e.g. 24h) — that
+    # keeps the signal and caps it at one page a day, rather than dropping it.
     - name: 'deadman'
       webhook_configs:
         - url_file: '/etc/alertmanager/secrets/alertmanager-deadman/ping-url'

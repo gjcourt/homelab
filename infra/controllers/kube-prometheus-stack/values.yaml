@@ -556,26 +556,42 @@ alertmanager:
       #
       # Until now it routed to 'null': the pulse was generated and discarded.
       # That left the one failure ordinary alerting cannot catch — alerting
-      # itself dying. A dead Prometheus, a wedged Alertmanager, expired SMTP
-      # credentials or a broken mail path all produce silence, and silence is
-      # indistinguishable from "nothing is wrong".
+      # itself dying. A dead Prometheus or a wedged Alertmanager produces
+      # silence, and silence is indistinguishable from "nothing is wrong".
       #
       # It now POSTs to a healthchecks.io check that alerts on the ABSENCE of
       # the ping. The receiver MUST live off-cluster — a deadman inside the
       # failure domain it watches cannot report that domain failing.
       #
-      # Timing: the global repeat_interval (12h) is far too slow for a
-      # heartbeat, so this route overrides it. A 5m ping against a 15m
-      # healthchecks.io grace gives ~20m worst-case detection. group_wait is 0s
-      # so a freshly restarted Alertmanager re-pings at once rather than
-      # burning the default 30s — the grace period is the only timer that
-      # should decide whether we are late.
+      # SCOPE — what this does NOT cover. The chain proven is rule evaluation →
+      # Alertmanager → routing → *webhook* delivery. Real alerts leave over
+      # Gmail SMTP (email-critical / email-warning), and that leg is NOT
+      # exercised here: if the app password expires, this keeps pinging green
+      # while every genuine alert silently fails to send. Closing that needs a
+      # heartbeat over the mail path itself — see the follow-up in
+      # docs/plans/2026-08-09-local-deadman-mesh.md.
+      #
+      # TIMING — repeat_interval rounds UP to the next group_interval tick, so
+      # the two must not be equal. The dispatcher flushes on a group_interval
+      # ticker, and the dedup stage only sends when the last notification is
+      # older than repeat_interval; with both at 5m the t+5m tick loses that
+      # comparison by the width of the previous POST's round-trip and the ping
+      # lands at t+10m instead — silently halving the cadence. group_interval
+      # 1m + repeat_interval 4m makes the t+5m tick the first one that wins, so
+      # the real period is 5m. Against a 15m healthchecks.io grace that gives
+      # ~20m worst-case detection with 3x margin. The global 12h
+      # repeat_interval is of course far too slow for a heartbeat.
+      #
+      # group_wait 0s trims the default 30s off the first flush after a
+      # restart. It is not "immediate": with 2 replicas (#1278) the ~60s
+      # default --cluster.settle-timeout dominates, plus the HA peer wait on
+      # the non-first peer. The 15m grace absorbs all of it comfortably.
       - receiver: 'deadman'
         matchers:
           - alertname = "Watchdog"
         group_wait: 0s
-        group_interval: 5m
-        repeat_interval: 5m
+        group_interval: 1m
+        repeat_interval: 4m
       # overture is intentionally OFF: the Deployment is scaled 0/0 and its CNPG
       # cluster is hibernated (cnpg.io/hibernation=on), so the PodDisruptionBudget
       # (minAvailable=1) permanently reports 0 healthy pods and
@@ -649,9 +665,20 @@ alertmanager:
     # send_resolved is false: Watchdog is designed never to resolve, and a
     # resolved-POST would be an extra ping carrying no information.
     #
-    # If the URL is ever wrong, this fails loudly rather than silently — the
-    # stack's own AlertmanagerFailedToSendAlerts rule fires on the delivery
-    # errors. A deadman that breaks quietly would be worse than none.
+    # If the URL is ever wrong — including the case where the operator encrypts
+    # the .example without replacing the REPLACE_WITH placeholder, which passes
+    # `kustomize build` and lets Alertmanager start, since url_file is read at
+    # send time and not validated at config load — this fails loudly rather
+    # than silently. Every POST errors, and because all replicas fail together,
+    # AlertmanagerClusterFailedToSendAlerts fires at severity=critical (its
+    # `integration=~".*"` arm covers webhook; the warning arm's
+    # `integration!~".*"` matches nothing). Critical routes to +critical, which
+    # has no skip-inbox filter. NOT the per-instance
+    # AlertmanagerFailedToSendAlerts, which is only severity=warning and lands
+    # in the label this repo documents as unread.
+    #
+    # That path does assume email still works. A simultaneously broken mail
+    # path is the uncovered case noted in the route comment above.
     - name: 'deadman'
       webhook_configs:
         - url_file: '/etc/alertmanager/secrets/alertmanager-deadman/ping-url'

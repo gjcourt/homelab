@@ -34,7 +34,8 @@ underneath it.
 
 ### The failure this actually fixes
 
-The CODA-56 overheats and reboots (see `docs/STATUS.md`, modem thermal). Every
+The CODA-56 modem overheats and reboots (an observed, recurring fault; not yet
+written up in `docs/STATUS.md`). Every
 one of those events drops the WAN, so *every* external check goes red at once —
 which reads as a site-level catastrophe. It isn't: every machine is healthy and
 the modem is cooking. Today nothing can tell those apart. A local mesh records
@@ -58,7 +59,14 @@ Two constraints fall out of that table and shape the whole design:
    two are correlated by construction — treat hestia→k8s as a supervisor
    relationship, not two independent observers.
 
-Only alcatraz is genuinely independent of the other two.
+Only alcatraz is genuinely independent of the other two — and only as of the
+completed storage migration. It has **zero bound cluster PVs** today; the 48
+`csi.san.synology.com` volumes still present are all `Released` leftovers and
+the `synology-iscsi` StorageClass is gone. Note that `docs/STATUS.md` still
+lists "iSCSI backing for CNPG PVCs" among alcatraz's roles under an in-flight
+role-narrowing; that line is stale with respect to bound volumes. If alcatraz
+ever backs live cluster storage again, it stops being an independent observer
+and this design loses its only truly external node.
 
 ## Design
 
@@ -106,6 +114,41 @@ Give each box its own check. The *pattern* of which went quiet is the diagnosis
 | alcatraz only | NAS down; lowest blast radius |
 | all three | Site event: power or WAN |
 
+## Also uncovered: the mail path itself
+
+The external deadman proves rule evaluation → Alertmanager → routing →
+**webhook** delivery. Every real alert leaves over Gmail SMTP
+(`email-critical` / `email-warning`), and that leg is never exercised. If the
+Gmail app password expires, the healthchecks.io check stays green while every
+genuine alert silently fails to send — the precise failure the deadman exists to
+prevent, one integration to the left.
+
+`AlertmanagerClusterFailedToSendAlerts` (critical) does fire on SMTP delivery
+errors, but it is routed *over the broken mail path*, so it cannot self-report.
+
+Two candidate fixes, both cheap:
+
+| Approach | Notes |
+|---|---|
+| Low-frequency email heartbeat to a healthchecks.io **email ping address** | healthchecks.io accepts pings by email as well as HTTP. Route `Watchdog` with `continue: true` to an email receiver addressed at the check, `repeat_interval: 24h`. Absence of the daily mail then alerts — proving the SMTP leg end to end. **Verify the email-ping feature and its free-tier availability before designing around it.** |
+| Second receiver on a different transport | Doesn't prove Gmail specifically, only that *some* path works. Weaker. |
+
+The first is strictly better if the feature exists as described. A daily cadence
+keeps the noise at one message and still bounds an SMTP outage to ~1 day, which
+is proportionate: a broken mail path is far rarer than a dead Alertmanager.
+
+## Egress dependency to record
+
+This introduces a hard egress dependency: Alertmanager pods → `hc-ping.com:443`
+plus DNS. It works today because `monitoring` does not carry the
+`network-policies: enforced` label that arms the default-deny
+`CiliumClusterwideNetworkPolicy`, and `alertmanager.networkPolicy.enabled` is
+`false`. When `monitoring` is opted into the per-namespace rollout described in
+`infra/configs/network-policies/README.md`, it will need an explicit
+internet-egress allow or the deadman breaks. Failure is at least loud — the
+check goes red — but it would look like an alerting outage rather than a policy
+change, so it belongs in the rollout checklist.
+
 ## Honest limits
 
 **WAN-down still can't be reported in real time.** If the modem drops while
@@ -132,8 +175,13 @@ that rots unnoticed.
 ## Phasing
 
 1. **Cluster → hosts.** Deploy blackbox-exporter, probe hestia + alcatraz, alert
-   on down. Smallest step, entirely in-repo, no new hosts touched, and it is
-   independently useful (there is no host liveness monitoring at all today).
+   on down. Smallest step, entirely in-repo, no new hosts touched. Partial
+   coverage exists for hestia — `IPMIScraperDown` (`infra/configs/ipmi-exporter/
+   prometheus-rule.yaml`) alerts when its ipmi-exporter stops answering, and
+   `hestia-thermalscope` / `hestia-netscope` are scraped too — but that is
+   liveness of a single exporter process, not of the host, and **alcatraz has no
+   scrape target anywhere in `infra/`**. So this phase is mostly new coverage
+   for alcatraz plus a process-independent check for hestia.
 2. **alcatraz → cluster + hestia.** DSM Task Scheduler + native notification.
    Highest value per unit effort: alcatraz is the only genuinely independent
    node, and DSM's notification path is already configured and off-cluster.

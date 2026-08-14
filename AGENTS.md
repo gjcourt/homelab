@@ -104,4 +104,79 @@ Per-app runbooks live under `docs/operations/apps/<app>.md`. Incident postmortem
 - Common Flux failure patterns and recovery: `docs/operations/2026-05-02-flux-debugging.md`.
 - Per-app observability dashboards: see each `docs/operations/apps/<app>.md` runbook.
 
+## Recovering read-only iSCSI volumes (recurring)
+
+**This is the most common failure mode in this cluster.** Every StorageClass is
+`democratic-csi` over iSCSI to hestia, so any disruption on that path — a switch
+port flap, a target hiccup — causes I/O errors, and Linux remounts the affected
+filesystems **read-only**. Nothing recovers from that automatically: not the
+kernel, not Kubernetes, not CNPG, not Flux. It always needs an operator.
+
+Recurrences: [2026-02-08](docs/operations/incidents/2026-02-08-pv-recovery.md) ·
+[2026-02-12](docs/operations/incidents/2026-02-12-iscsi-zombie-targets.md) ·
+[2026-02-15](docs/operations/incidents/2026-02-15-iscsi-targets-disabled.md) ·
+[2026-02-27](docs/operations/incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md) ·
+[2026-02-28](docs/operations/incidents/2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md) ·
+[2026-08-13](docs/operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md).
+Tracking issue: [#1080](https://github.com/gjcourt/homelab/issues/1080).
+
+### Recognising it
+
+Pods stay `Running` and often `Ready` — **status lies here**. Look for
+`read-only file system` in logs, and confirm per-pod rather than trusting status:
+
+```bash
+kubectl -n <ns> exec <pod> -c <ctr> -- sh -c 'touch <mount>/.wtest && rm -f <mount>/.wtest'
+```
+
+`NodeFilesystemReadOnly` (`infra/configs/alerts/prometheus-rules.yaml`) alerts on
+this — but it is evaluated *by Prometheus*, so if Prometheus' own PVC is affected
+it goes mute and the alert never fires. Do not assume silence means healthy.
+
+### Recovery, by workload type
+
+The goal is always the same: **force an iSCSI detach and reattach.** How much
+force depends on the workload.
+
+| Workload | Action | Why |
+|---|---|---|
+| StatefulSet pod (Prometheus, Loki) | `kubectl delete pod <pod>` | Recreated in place; the delete is enough to detach |
+| **CNPG primary** | `kubectl delete pod <primary>` — **never the PVC** | The PVC *is* the data |
+| **CNPG replica** | delete the pod; if it still fails, **also delete its PVC** | A replica is reconstructible — CNPG re-clones from the primary. Precedent: 2026-02-28, where a replica PVC came back empty and only `delete pvc` recovered it |
+| Deployment on RWO | scale-to-0 cycle (below) | `rollout restart` is **not** sufficient — see below |
+
+For CNPG, **restart the primary first**: replicas stream WAL from it and cannot
+sync until it serves. Before deleting a primary, confirm the replicas are
+*unready* — otherwise the delete triggers an unplanned switchover. `kubectl cnpg
+restart <cluster>` is the supported path when replicas are healthy.
+
+### Deployments on RWO need the full cycle
+
+`rollout restart` creates the replacement pod **before** terminating the old one,
+so on a ReadWriteOnce volume the new pod attaches to the same errored device and
+comes up read-only again. Two further traps: **Flux reverts a scale-to-0** within
+the reconcile interval, and pod termination is *not* proof the device was
+released — `volumeattachment` reaching zero is.
+
+```bash
+flux suspend kustomization apps-production -n flux-system   # else Flux undoes the scale
+kubectl -n <ns> scale deploy/<app> --replicas=0
+until [ "$(kubectl -n <ns> get pods -l app=<app> --no-headers 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ]; do sleep 5; done
+PV=$(kubectl -n <ns> get pvc <pvc> -o jsonpath='{.spec.volumeName}')
+kubectl get volumeattachment -o jsonpath="{range .items[?(@.spec.source.persistentVolumeName=='$PV')]}{.metadata.name}{'\n'}{end}"   # must be empty
+kubectl -n <ns> scale deploy/<app> --replicas=1
+flux resume kustomization apps-production -n flux-system     # ALWAYS, even if the above failed
+```
+
+`tr -d ' '` matters: BSD/macOS `wc -l` emits leading whitespace, so a string
+comparison against `"0"` never matches and the loop hangs — with production
+reconciliation suspended. Use `-eq`, and if you abort partway, **resume Flux
+first**. Verify with `flux get kustomizations -A` showing `SUSPENDED=False`.
+
+### After recovery
+
+Re-check writability per pod (status will look fine either way), confirm CNPG
+clusters report full instance counts, and confirm Flux is reconciling on all
+Kustomizations.
+
 When you learn a new convention or invariant in this repo, update this file.

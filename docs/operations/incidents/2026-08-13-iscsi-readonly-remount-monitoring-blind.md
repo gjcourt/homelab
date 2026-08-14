@@ -1,26 +1,51 @@
 # Incident: LAN blip remounted ~20 iSCSI volumes read-only; Prometheus went mute for 12 hours
 
 **Date:** 2026-08-13
-**Status:** **Resolved** — all workloads recovered, 12/12 CNPG clusters healthy, alerts 21 → 5 (0 critical). Detection gap and recovery gotchas tracked as follow-ups; see [Prevent recurrence](#prevent-recurrence)
+**Status:** **Resolved** — all workloads recovered, 12/13 CNPG clusters healthy (overture is deliberately scaled 0/0), alerts 21 → 5 (0 critical). Detection gap and recovery gotchas tracked as follow-ups; see [Prevent recurrence](#prevent-recurrence)
 **Severity:** High — `immich-prod`'s database was unavailable for ~14h (every query `FATAL`), 6 CNPG clusters lost redundancy, and **monitoring was blind for 12 hours** while reporting a storm of false criticals
 **Environments affected:** production and staging
 **Authors:** George Courtsunis
 
 ---
 
-> **A 20-second network blip cost 14 hours.** The network healed itself in about a
-> minute. Every consequence that followed — a dead database, a monitoring blackout,
+> **A two-minute link flap cost 14 hours.** The network healed itself unaided. Every consequence that followed — a dead database, a monitoring blackout,
 > nineteen critical alerts — persisted for twelve hours because nothing in the
 > cluster can recover from a read-only remount on its own, and the one system that
 > should have raised the alarm was itself the loudest casualty.
 
 ## Summary
 
-At **10:01 UTC** hestia lost DNS to both `10.42.2.1` and `1.1.1.2`. Cilium's BGP session
-to the gateway dropped at **10:11**, and iSCSI stalled long enough for initiators to take
-I/O errors. Linux did what it always does on a storage error: it **remounted the affected
-filesystems read-only**. Roughly **20 volumes** across nearly every stateful workload
-flipped, and stayed flipped — ext4 never remounts read-write by itself.
+At **10:01 UTC** hestia's Ethernet carrier dropped. The kernel log is unambiguous:
+
+```
+03:01:10 PDT  igb enp201s0: NIC Link is Down
+03:03:16      NIC Link is Up 1000 Mbps Full Duplex
+03:03:28      NIC Link is Down
+03:03:31      NIC Link is Up
+```
+
+Two flaps across **~2m20s**. iSCSI sessions died inside that window:
+
+```
+03:02:07  iscsi-scst: conn_rsp_timer_fn: Timeout 30 sec ... closing connection
+          iscsi-scst: session_free: Freeing session (SID 2f2300003d0200)
+```
+
+Linux did what it always does on a storage error: it **remounted the affected filesystems
+read-only**. Roughly **20 volumes** across nearly every stateful workload flipped, and
+stayed flipped — ext4 never remounts read-write by itself.
+
+**This was a physical LAN event, not an upstream one.** hestia↔cluster iSCSI is
+same-subnet `10.42.2.x` traffic that never touches the WAN, so neither a Comcast outage
+nor a modem reboot can explain carrier loss on hestia's own NIC. The DNS timeouts to
+`1.1.1.2` were a *symptom* of hestia being off the network, not the cause. A power event
+is also excluded: nothing rebooted — all four Talos nodes have been `Ready` since
+2026-06-21/07-01, and hestia has 36 days of uptime.
+
+The `Down → Up → Down → Up` signature points at the **switch port, cable, or switch
+itself** — port renegotiation, not a routing or upstream fault. Worth correlating against
+the UniFi controller for a switch reboot or port-flap event at 03:01 PDT; a marginal cable
+that flaps under thermal cycling would recur.
 
 **The storage was never at fault.** Every component blamed by the alerts was healthy
 throughout:
@@ -30,11 +55,28 @@ throughout:
 | ZFS pools (`main`, `boot-pool`) | `all pools are healthy`, no reboot, 36d uptime |
 | SCST iSCSI target | `active`, running since **2026-07-08** — never restarted |
 | hestia load | 2.29 / 2.16 / 2.10 — normal |
-| Cilium BGP | re-established **within about a minute** of dropping |
+| Cilium BGP | re-established on its own roughly six minutes after dropping |
 | Kubernetes | 4 nodes `Ready`, all `kube-system` pods up |
 
 The incident surfaced at **22:37 UTC** as "a number of alerts firing" — twelve and a
 half hours after it began.
+
+### This is a recurrence
+
+The same failure mode is documented five times already:
+[2026-02-08](2026-02-08-pv-recovery.md) ·
+[2026-02-12](2026-02-12-iscsi-zombie-targets.md) ·
+[2026-02-15](2026-02-15-iscsi-targets-disabled.md) ·
+[2026-02-27](2026-02-27-homeassistant-staging-iscsi-io-error.md) ·
+[2026-02-28](2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md) — the last of which hit
+the *same* CNPG + Loki + immich combination. What was new this time was the monitoring
+blackout, not the storage failure. The recovery knowledge existed but was spread across
+six documents nobody reads at 3am; it is now consolidated in `AGENTS.md`.
+
+Note one case from 2026-02-28 that this incident did not reproduce: a read-only CNPG
+*replica* PVC that came back **empty**, requiring `delete pvc` as well as `delete pod`.
+Deleting a replica PVC is safe (CNPG re-clones from the primary); deleting a *primary's*
+PVC destroys the data.
 
 ## Why 21 alerts fired, and why they were all wrong
 
@@ -76,7 +118,11 @@ All times UTC.
 
 | Time | Event |
 |---|---|
-| 10:01 | hestia logs DNS timeouts to `10.42.2.1` and `1.1.1.2` — first sign of the network event |
+| 10:01:10 | **hestia `enp201s0` NIC Link is Down** — the root cause |
+| 10:01:40 | hestia logs the first of 118 DNS timeouts (`10.42.2.1`, `1.1.1.2`) |
+| 10:02:07 | iSCSI sessions time out and are freed; volumes begin remounting read-only |
+| 10:03:16–10:03:31 | Link up, down, up — second flap; carrier stable thereafter |
+| ~10:06 | BGP session actually drops (inferred: `CiliumBGPNoPeers` has `for: 5m`) |
 | 10:11 | `CiliumBGPNoPeers` fires |
 | ~10:12 | BGP re-establishes on its own (inferred from `established 12h37m58s` measured at ~22:50) |
 | 10:15–10:16 | `MqttscopeMetricsAbsent`, `NetscopeMetricsAbsent`, `ModemscopeMetricsAbsent` |
@@ -93,7 +139,7 @@ All times UTC.
 
 ## Why immich died and the others only degraded
 
-Four other CNPG clusters lost replicas but kept serving. `immich-prod` lost all three
+Five other CNPG clusters lost replicas but kept serving. `immich-prod` lost all three
 instances. The reason is placement:
 
 ```
@@ -150,9 +196,16 @@ happily on a filesystem that has stopped accepting writes. This is the same gap 
 while reviewing [#1262](https://github.com/gjcourt/homelab/pull/1262) — a TCP readiness
 probe on an app whose SQLite lives on RWO iSCSI cannot detect the failure that matters.
 
-**3. Nothing watches for read-only remounts.** There is no alert on
-`node_filesystem_readonly`, and no probe writes a canary byte to a PVC. The condition is
-directly observable and trivially detectable — nothing was looking.
+**3. The correct alert already existed and still did not save us.** `NodeFilesystemReadOnly`
+is defined in `infra/configs/alerts/prometheus-rules.yaml` at `severity: critical`, with a
+description that names this exact scenario — "This is the iSCSI volume read-only failure
+pattern." node-exporter is even deliberately configured to keep `/var/lib/kubelet` in scope
+so PVC mounts are visible (`infra/controllers/kube-prometheus-stack/values.yaml`, citing
+#1080).
+
+It never fired, because **it is evaluated by the Prometheus whose own volume had gone
+read-only**. This is the sharpest lesson available here: writing the right alert is not
+enough when the evaluator shares a failure domain with the thing it watches.
 
 The 19 criticals were, ironically, *evidence* of the outage — but they read as
 "everything is broken", which is indistinguishable from "the monitoring is broken", and
@@ -198,7 +251,7 @@ that is the actual signal the device was released, not pod termination.
 ```bash
 flux suspend kustomization apps-production -n flux-system
 kubectl -n jellyfin-prod scale deploy/jellyfin --replicas=0
-until [ "$(kubectl -n jellyfin-prod get pods --no-headers | wc -l)" = "0" ]; do sleep 5; done
+until [ "$(kubectl -n jellyfin-prod get pods --no-headers 2>/dev/null | wc -l | tr -d ' ')" -eq 0 ]; do sleep 5; done
 kubectl get volumeattachment | grep <pv-name>          # must be empty
 kubectl -n jellyfin-prod scale deploy/jellyfin --replicas=1
 flux resume kustomization apps-production -n flux-system   # do NOT forget
@@ -209,7 +262,7 @@ flux resume kustomization apps-production -n flux-system   # do NOT forget
 ```
 alerts:          21 → 5   (19 critical → 0)
 unhealthy pods:  0
-CNPG clusters:   12/12 healthy
+CNPG clusters:   12/13 healthy (overture excluded — scaled 0/0 deliberately)
 flux:            6/6 reconciling, SUSPENDED=False
 ```
 
@@ -226,7 +279,7 @@ kubectl -n <ns> exec <pod> -c <ctr> -- sh -c 'touch /path/.wtest && rm -f /path/
 | Prometheus can go mute undetected | Alert on ingestion stalling, and extend the deadman to cover a live-but-mute Prometheus rather than only a dead Alertmanager |
 | Read-only remounts are invisible | Alert on `node_filesystem_readonly` and/or a write-canary probe across PVCs |
 | Readiness probes pass on read-only volumes | For stateful workloads, make readiness actually touch the volume (`exec` write, or an HTTP `/healthz` that does a trivial DB write) |
-| Recovery procedure was not written down | Fold the three facts above into [#1080](https://github.com/gjcourt/homelab/issues/1080) |
+| Recovery knowledge was scattered across six incident docs | Consolidated into `AGENTS.md` → "Recovering read-only iSCSI volumes", the first place an operator or agent looks |
 
 The underlying single point of failure is unchanged: every StorageClass in this cluster is
 `democratic-csi` against hestia over iSCSI, so a network event between the cluster and

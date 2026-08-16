@@ -47,7 +47,21 @@ kubectl get clusterissuer letsencrypt-production -o wide
 The `ClusterIssuer` should show a `Ready` status of `True`.
 
 ## 7. Monitoring & Alerting
-- **Metrics**: Cert-Manager exposes Prometheus metrics. Key metrics include `certmanager_certificate_expiration_timestamp_seconds` to monitor expiring certificates.
+
+- **Metrics**: scraped via the chart's ServiceMonitor (`prometheus.servicemonitor.enabled`
+  in `infra/controllers/cert-manager/values.yaml`). Two settings there are load-bearing:
+  `labels.release: kube-prometheus-stack` (this cluster's Prometheus selects on it — without
+  it the ServiceMonitor is created and silently ignored) and `honorLabels: true` (otherwise
+  the certificate's `namespace` label is overwritten with the target's, always `security`).
+  Enabled 2026-08-05; before that cert-manager was **not scraped at all**.
+- **Alerts**: `infra/configs/alerts/cert-manager-rules.yaml` —
+  `CertManagerRenewalOverdue` (critical, `renewalTime` in the past >24h),
+  `CertManagerCertExpiringSoon` (<21d) / `Critical` (<7d), `CertManagerCertNotReady`,
+  `CertManagerDown`.
+- **`Ready=True` is not a renewal health signal.** It describes the certificate you already
+  have, not whether renewal is succeeding. A stalled renewal keeps `Ready=True` right up
+  until the old cert expires — this is exactly how the 2026-08-05 outage stayed invisible
+  for 30 days. Watch `status.renewalTime` and the `Issuing` condition instead.
 - **Logs**: Check controller logs using `kubectl logs -n security deploy/cert-manager`.
 
 ## 8. Disaster Recovery
@@ -60,4 +74,16 @@ The `ClusterIssuer` should show a `Ready` status of `True`.
   - Check the `Challenge` resource: `kubectl describe challenge <name>`
   - Verify the Cloudflare API token is valid and has the correct permissions.
   - Ensure the DNS TXT record is propagating correctly.
+- **Order stuck `pending` for days, but `dig @1.1.1.1 TXT _acme-challenge.<domain>` shows
+  the record is live**: this is the 2026-08-05 failure mode. cert-manager runs its own
+  propagation self-check *before* asking Let's Encrypt to validate, and by default that
+  check uses cluster DNS (CoreDNS → AdGuard), which serves a split-horizon view of
+  `burntbytes.com` and returns `NOERROR / ANSWER: 0` for the challenge record. The fix is
+  already applied — `--dns01-recursive-nameservers` in `values.yaml` — so if you see this
+  again, confirm those args survived a chart upgrade. Note the certificate will report
+  `Ready=True` throughout. Full writeup:
+  [incidents/2026-08-05-wildcard-cert-expiry-dns01-split-horizon.md](../operations/incidents/2026-08-05-wildcard-cert-expiry-dns01-split-horizon.md).
+- **Authorizations older than ~30 days are dead.** A long-stalled Order holds expired ACME
+  authorizations and will never recover on its own; delete the CertificateRequest to force
+  cert-manager to rebuild the chain.
 - **Webhook errors**: If you see errors related to the cert-manager webhook, ensure the webhook pod is running and reachable by the Kubernetes API server.

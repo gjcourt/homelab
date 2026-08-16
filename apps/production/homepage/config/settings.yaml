@@ -1,27 +1,36 @@
 title: BurntBytes Home
 description: Production Environment
 headerStyle: clean
-# Two tabs cut first-paint clutter without losing access (Phase 2 interim
-# re-order, ahead of click data):
-#   Home  — daily drivers: Media + Tools
-#   Admin — behind a tab: Infrastructure + Monitoring
-# Home is listed first, so it is the default tab. Within-group order is a
-# frequency heuristic to be refined by the homepage-clicks usage data.
+# Single page, four columns — no tabs. The Home/Admin tab split (#1171) was
+# tried for ~2 weeks and reverted 2026-08-04: hiding Infrastructure and
+# Monitoring behind a tab optimized for a clean first paint, but the dashboard's
+# actual job is showing at a glance everything that's available. A tab you have
+# to remember to click is worse than a column you can scan.
+#
+# This is an intuition call ahead of the 2-4 week click window the Phase 3 loop
+# asks for, and it is made deliberately: #1171 ALSO demoted Prometheus,
+# Alertmanager and Logs to bookmarks, and custom.js instruments only
+# `.service-title-text` — so bookmarks emit no clicks at all. The experiment
+# destroyed the data for exactly the items it was testing and could never have
+# been evaluated. Restoring them as tiles re-arms the instrument; the next
+# re-order can be data-driven as intended.
+#
+# Within-group frequency ordering from #1171 is KEPT for Media, Infrastructure
+# and Monitoring — that part was fine; it was the hiding that hurt. TOOLS is the
+# exception: as of 2026-08-04 its order is set explicitly by George, not by the
+# heuristic (see the header of services.yaml). Staging never took the tab split,
+# so its layout was already this shape.
 layout:
   Media:
-    tab: Home
     style: column
     rows: 10
   Tools:
-    tab: Home
     style: column
     rows: 10
   Infrastructure:
-    tab: Admin
     style: column
     rows: 10
   Monitoring:
-    tab: Admin
     style: column
     rows: 10
 background:

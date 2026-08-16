@@ -46,10 +46,15 @@ kubectl get deploy,statefulset -A -o json | jq -r '.items[] | "\(.kind) \(.metad
 cat /tmp/hestia-maint-replicas.txt
 ```
 
-Decide on **monitoring**: Prometheus/Alertmanager TSDB is on iSCSI (`monitoring` ns, 3 PVCs).
-Draining it means going blind for the window; leaving it up risks its PVC going read-only. Default:
-**leave monitoring up** and accept it may need a bounce afterward (it is not data-critical) — but if
-the window is long, drain it too.
+Decide on **monitoring**: Prometheus TSDB and Loki sit on iSCSI (`monitoring` ns, 3 PVCs).
+Draining means going blind for the window; leaving it up risks a PVC going read-only. Default:
+**leave monitoring up** and accept it may need a bounce afterward — but if the window is long,
+drain it too.
+
+> **Alertmanager is deliberately volume-less** (`alertmanagerSpec.storage: {}`) so alert delivery
+> keeps working while hestia is down — see #1278. Durability comes from 2 gossip replicas instead.
+> Do not "fix" this by giving it a PVC: every StorageClass here is democratic-csi against hestia,
+> so a volume would stop alerting during exactly the incident this runbook covers.
 
 ## 2. Suspend Flux (so it doesn't fight the scale-down)
 

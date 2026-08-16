@@ -84,12 +84,26 @@ Verify the beacon:
 kubectl -n homepage-prod exec deploy/homepage-clicks -- wget -qO- localhost:8080/metrics | grep homepage_tile_clicks_total
 ```
 
-### Layout: tabs + within-group order (Phase 2)
-- `settings.yaml` assigns each group to a tab via `layout.<group>.tab`: **Home** (Media, Tools) and
-  **Admin** (Infrastructure, Monitoring) — this halves first-paint clutter without removing access.
-- Within each group, tiles in `services.yaml` are ordered by expected daily-use frequency.
-- Rarely-used power-user deep-links (Prometheus, Alertmanager, raw Loki logs) live in the
-  **Observability** bookmarks group, not as tiles.
+### Layout: one page, four columns + within-group order
+- **No tabs.** Every group renders on a single page as a column (`layout.<group>.style: column`).
+  The Home/Admin tab split (#1171) was reverted in #1272: a tab you have to remember to click
+  hides what the dashboard exists to show. Do not reintroduce `layout.<group>.tab`.
+- Within each group, tiles in `services.yaml` are ordered by expected daily-use frequency —
+  **except Tools**, whose order was set explicitly by George in #1273 (2026-08-04):
+  Vibrato, Memos, Linkding, Mealie, Excalidraw, Flashcards, Vitals, Ladder, Finance.
+  That is an owner preference, not a hypothesis. A data-driven pass may propose changes to it
+  but must confirm with him before applying them; the other three groups can be reordered freely
+  from the panel.
+- **Moving a tile between groups forks its click metric.** `homepage_tile_clicks_total` is
+  labelled `{service, group}`, so a group change mints a new series and strands the old one —
+  any panel doing `sum by (service, group)` (including "Clicks by Tile + Group (least used
+  first)") will show the tile twice, each row holding only part of its clicks, which reads as
+  "barely used". Sum by `service` alone across such a move, and annotate the merge. GoLinks
+  moved Tools → Infrastructure in #1273 and is the current instance of this.
+- Prometheus, Alertmanager and Logs are **first-class tiles** in Monitoring — also restored in
+  #1272. Keep them as tiles: `custom.js` instruments only `.service-title-text`, so a bookmark
+  emits no click events. Demoting a tile to a bookmark makes it permanently unmeasurable, which
+  is how #1171's own experiment lost the data it needed to be judged.
 
 ### The loop (Phases 3–4, repeat every ~quarter)
 1. **Instrument** — already live (above); new tiles are tracked automatically (generic handler).
@@ -97,9 +111,13 @@ kubectl -n homepage-prod exec deploy/homepage-clicks -- wget -qO- localhost:8080
 3. **Read** — open the Grafana "tile usage" panel: top tiles, click distribution, never-clicked tiles.
 4. **Re-order (a config-only PR)** — edit `apps/production/homepage/config/`:
    - promote high-click tiles toward top-left (F-pattern), demote low-click ones;
-   - move never-clicked tiles (after a full quarter) to the Observability bookmarks or remove them;
-   - retab if a whole group's cadence changed. Run `kustomize build apps/production/homepage` to validate.
+   - after a full quarter, a never-clicked tile can be removed outright — but do NOT park it in
+     bookmarks to "keep access": bookmarks are uninstrumented, so that ends measurement instead
+     of continuing it (see the Layout section);
+   - do not reintroduce tabs. Run `kustomize build apps/production/homepage` to validate.
 5. **Annotate** — add a Grafana annotation at the merge so the next period's before/after is visible.
 6. **Measure again** — each re-order is a hypothesis the next period's data confirms or refutes.
 
-Never hand-order by intuition once data exists — let the panel drive it.
+Never hand-order by intuition once data exists — let the panel drive it. The one standing
+exception is the Tools group, whose order is George's explicit preference (see Layout above);
+propose changes there, don't apply them unilaterally.

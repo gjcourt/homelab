@@ -248,7 +248,7 @@ spec:
       containers:
         - name: proxy
           # python 3.14-slim
-          image: python@sha256:5f1cdbcab9a50594a79502dd73e885456d2a2fc31f1a1fa18484815b37ee9152
+          image: python@sha256:297cf11d0b98b38ac26a56136f0279df845314bcd0347c1f6383fee6e75125ee
           command: ["/bin/sh", "-c"]
           args:
             - |

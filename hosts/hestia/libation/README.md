@@ -1,0 +1,139 @@
+# Libation — Audible → Audiobookshelf pipeline
+
+Exports the owned Audible library to DRM-free **M4B** on hestia, in the layout
+Audiobookshelf expects. The goal is durability: the content survives an Audible
+account lapse, a subscription cancellation, or a title being pulled from the
+store.
+
+## Shape
+
+```
+Libation (docker, hestia)
+   └─ scan → liberate → M4B (chapters + cover + metadata embedded)
+        └─ /mnt/main/family/media/audiobooks/<Author>/<Title>/
+             └─ NFS export → audiobookshelf-audiobooks-pv-prod (ROX)
+                  └─ ABS library scan (must be triggered — see below)
+```
+
+**One writer, one reader.** The ABS pod mounts the share **read-only** (ROX), so
+it cannot write here even in principle. That is why the producer runs host-side
+on hestia rather than as a sidecar in the cluster.
+
+## Bootstrap (operator, one time)
+
+### 1. Create the directories
+
+```bash
+sudo mkdir -p /mnt/main/apps/libation/config
+sudo chown -R 950:950 /mnt/main/apps/libation
+sudo chmod 700 /mnt/main/apps/libation/config    # holds a live Audible token
+```
+
+### 2. Start the container
+
+```bash
+cd /mnt/main/apps/libation && docker compose up -d
+docker logs -f libation      # confirm what the entrypoint actually does
+```
+
+Watch that first log. It settles the one thing this compose file could not
+verify at authoring time: whether the image loops on `SLEEP_TIME` or runs once
+and exits. If it exits, remove `restart: unless-stopped` and drive it from a
+systemd timer instead — a restarting one-shot container is an accidental
+hot loop against Audible's API, which is exactly what you don't want.
+
+### 3. Authenticate to Audible — interactive, cannot be automated
+
+Audible login needs the account password **and an OTP**, so this is deliberately
+a human step and is not scripted anywhere in this repo.
+
+```bash
+docker exec -it libation libationcli account add
+```
+
+It is one-time. Libation persists the token under `/config`, and every run after
+this is unattended. If the token is ever invalidated (password change, Amazon
+security event), re-run exactly this command — nothing else needs touching.
+
+### 4. Set the naming template — do this BEFORE the first bulk run
+
+Audiobookshelf infers author, title and series **from the directory layout**.
+Target:
+
+```
+/mnt/main/family/media/audiobooks/
+  └─ Malcolm Gladwell/
+      └─ Outliers/
+          └─ Outliers.m4b
+```
+
+and for series:
+
+```
+  └─ Author Name/
+      └─ Series Name Vol 2 - Title/
+          └─ Title.m4b
+```
+
+Set Libation's folder and file templates to produce that before liberating
+anything. **Retrofitting the layout across a whole library afterwards is
+genuinely painful** — ABS caches its inferred metadata, so a later rename means
+re-matching every book by hand.
+
+### 5. First bulk run
+
+```bash
+docker exec libation libationcli scan        # refresh the library list
+docker exec libation libationcli liberate    # download + decrypt everything
+```
+
+<100 titles — expect a single evening, not a multi-day backfill. No throttling
+configured, and none needed at this size.
+
+### 6. Trigger the ABS scan — it will NOT self-detect
+
+Same gotcha as the Immich photo pipeline: files appearing on the share do not
+reliably wake the consumer. After a liberate pass:
+
+```bash
+curl -X POST "https://audiobooks.burntbytes.com/api/libraries/<LIBRARY_ID>/scan" \
+     -H "Authorization: Bearer <ABS_API_TOKEN>"
+```
+
+Get `<LIBRARY_ID>` from the ABS UI URL when the library is open; mint the token
+in ABS under **Settings → Users → your user → API Token**. Once verified by
+hand, fold this into a cron on hestia so the pipeline is genuinely
+end-to-end — until then it is "automated download, manual publish".
+
+## Verifying it worked
+
+```bash
+ls /mnt/main/family/media/audiobooks | head          # authors appear
+find /mnt/main/family/media/audiobooks -name '*.m4b' | wc -l
+ffprobe -v error -show_chapters <a-file>.m4b | head  # chapters survived
+```
+
+Chapters are the thing most likely to be silently wrong, and the thing you'll
+miss most. Check one file explicitly rather than assuming.
+
+## Operational notes
+
+**The config directory is a credential store.** `/mnt/main/apps/libation/config`
+holds a live Audible auth token. It is `chmod 700`, owned by `950:950`, and
+never enters this repo. Treat a leak the same as an account compromise: change
+the Amazon password, then re-run `account add`.
+
+**Storage is not a constraint.** ~16T free on `main` against a <100-title
+library. The `audiobooks` PV is provisioned 1Ti.
+
+**Renovate.** The image is digest-pinned, so bumps arrive as PRs like any other
+workload. Libation tracks Audible's API, which changes without notice —
+if `liberate` starts failing, check for a newer release before debugging
+locally.
+
+## Why this tool
+
+Libation writes M4B with chapters, cover art and metadata already embedded.
+Alternatives that produce bare MP3s force a post-processing stage to rebuild
+chapter markers, which is both lossy and tedious. Choosing the tool whose output
+already matches the consumer's expected format removes an entire pipeline stage.

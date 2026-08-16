@@ -1,0 +1,61 @@
+# Libation — exports the owned Audible library to DRM-free M4B for Audiobookshelf.
+#
+# Purpose: own the content independently of Audible. Libation authenticates as
+# the account owner, downloads purchased titles, and writes M4B with chapters,
+# cover art and metadata already embedded — which is exactly the shape
+# Audiobookshelf wants, so there is no post-processing step.
+#
+# Storage layout:
+#   /mnt/main/apps/libation/config        — Libation settings AND the Audible
+#                                           auth token. TREAT AS A SECRET: the
+#                                           token is a live credential for the
+#                                           Audible account. Not world-readable,
+#                                           never copied into the repo.
+#   /mnt/main/family/media/audiobooks     — output, and the same dataset the
+#                                           Audiobookshelf PV exports over NFS.
+#
+# Why write here directly: the audiobookshelf PV is mounted ROX (read-only) into
+# the cluster pod (audiobookshelf-audiobooks-pv-prod, 1Ti). ABS can never write
+# to this share, so the producer has to run host-side. That is the correct shape
+# — one writer (this container), one reader (ABS), no contention.
+#
+# Capacity: <100 titles, ~16T free on main as of 2026-08-16. Not a concern.
+#
+# ─── OPERATOR BOOTSTRAP REQUIRED BEFORE FIRST RUN ───────────────────────────
+# Audible authentication is interactive: it needs the account password and an
+# OTP, so it cannot be automated and is deliberately not scripted here. It is a
+# ONE-TIME step — Libation persists the token to /config and every subsequent
+# run is unattended. See README.md for the exact command.
+#
+# ─── UNVERIFIED: the env interface below ────────────────────────────────────
+# The image's entrypoint/env could not be introspected when this was written
+# (sshd on hestia was refusing connections). SLEEP_TIME is Libation's documented
+# loop interval, but CONFIRM against `docker inspect rmcrackan/libation:13.7.8`
+# and the container's first-run logs before trusting the schedule. If the image
+# turns out to be one-shot rather than looping, drop `restart: unless-stopped`
+# and drive it from a systemd timer instead — see README.md.
+
+services:
+  libation:
+    # Pinned to the 13.7.8 release by INDEX digest (multi-arch safe) rather than
+    # :latest — same discipline as every other workload here. Note `docker
+    # manifest inspect` reports a per-platform manifest digest; the index digest
+    # below came from `docker buildx imagetools inspect`, which is the one that
+    # resolves correctly regardless of architecture.
+    image: rmcrackan/libation:13.7.8@sha256:8a6cd5c3a532512f7871401c3c63110acf3115a3b19e744ccb118a4a99bef186
+    container_name: libation
+    restart: unless-stopped
+    environment:
+      - PUID=950 # truenas_admin — matches the other hestia workloads
+      - PGID=950
+      - TZ=America/New_York
+      # Interval between `liberate` passes. New Audible purchases are rare, so
+      # this is deliberately slow — a daily sweep is plenty and keeps the
+      # account's request pattern unremarkable.
+      - SLEEP_TIME=86400
+    volumes:
+      - /mnt/main/apps/libation/config:/config
+      - /mnt/main/family/media/audiobooks:/data
+    # No ports: this is a headless producer with no web UI to expose. Everything
+    # is driven through `docker exec` or the config directory.
+    network_mode: bridge

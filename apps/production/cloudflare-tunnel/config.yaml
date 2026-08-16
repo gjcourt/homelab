@@ -9,24 +9,47 @@ no-autoupdate: true
 
 # Route all traffic to the production gateway
 # The gateway handles routing based on hostname
+#
+# THIS LIST IS THE ENTIRE PUBLIC ATTACK SURFACE. Everything not named here is
+# LAN-only — the cluster has no other inbound path from the internet. Adding a
+# hostname here publishes it, so the bar for entry is: the app must enforce its
+# own authentication, because Authelia's `default_policy` is `bypass` and a
+# forward-auth rule does NOT apply to these (the OIDC apps below authenticate
+# in-app, they are not gateway-protected).
+#
+# Before adding an entry, confirm the app is an Authelia OIDC client with
+# `authorization_policy: two_factor` in apps/production/authelia/configuration.yaml,
+# and add the matching Cloudflare DNS CNAME (see README — DNS is NOT in GitOps).
 ingress:
-  # Authelia
+  # Authelia — the SSO endpoint itself; must be publicly reachable for every
+  # OIDC redirect below to complete.
   - hostname: auth.burntbytes.com
     service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
     originRequest:
       originServerName: auth.burntbytes.com
 
-  # Linkding
+  # ── "Local cloud" — the three apps intended to be reachable from anywhere.
+  # All three are Authelia OIDC clients at authorization_policy: two_factor.
+
+  # Linkding — bookmarks. LD_ENABLE_OIDC=True.
   - hostname: links.burntbytes.com
     service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
     originRequest:
       originServerName: links.burntbytes.com
 
-  # Overture
-  - hostname: overture.burntbytes.com
+  # Memos — notes. OIDC via Authelia (see memos deployment-patch.yaml).
+  - hostname: memos.burntbytes.com
     service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
     originRequest:
-      originServerName: overture.burntbytes.com
+      originServerName: memos.burntbytes.com
+
+  # Mealie — recipes. OIDC_AUTH_ENABLED=true. Note the app answers on both
+  # food. and mealie.; only food. is published, and it is already a registered
+  # OIDC redirect_uri. mealie.burntbytes.com stays LAN-only.
+  - hostname: food.burntbytes.com
+    service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+    originRequest:
+      originServerName: food.burntbytes.com
 
   # burntbytes blog — hidden origin hostname for pre-cutover validation.
   # Inert off-LAN until a Cloudflare DNS record points it at the tunnel;
@@ -43,9 +66,16 @@ ingress:
     originRequest:
       originServerName: burntbytes.com
 
-  # Cadence — self-hosted Shopify app (agent-payment discovery demo). Routes to the
-  # production gateway; the app-side HTTPRoute (cadence.burntbytes.com -> cadence
-  # Service) lands with the app deploy. TLS covered by the *.burntbytes.com wildcard.
+  # Cadence — self-hosted Shopify app (agent-payment discovery demo).
+  #
+  # ⚠️ ORPHAN as of 2026-08-12: this hostname is published but there is NO
+  # production HTTPRoute for it — #1261 landed the tunnel route ahead of the app,
+  # and the app PR (#1262) is blocked on three findings, one of which is that it
+  # would expose an unauthenticated merchant dashboard (no Authelia rule, and
+  # default_policy is bypass). It therefore does not meet the bar stated at the
+  # top of this file. Left in place pending the #1262 decision — remove it if
+  # that PR is closed, and re-land it together with the app (and its auth
+  # posture) if it proceeds.
   - hostname: cadence.burntbytes.com
     service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
     originRequest:

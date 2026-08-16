@@ -20,7 +20,7 @@ available to whoever is actually debugging at 2am, rather than only inside a too
 | [Networking](./2026-08-15-networking-gotchas.md) | Cilium netpol for Gateway API, LoadBalancer SNAT |
 | [Storage](./2026-08-15-storage-gotchas.md) | PVC/PV immutability, Retain recovery, ZFS busy, TrueNAS, Synology |
 | [Cluster](./2026-08-15-cluster-gotchas.md) | Talos topology and sysfs, kubectl selectors, Flux |
-| [Services](./2026-08-15-services-gotchas.md) | CNPG, SOPS, mosquitto, signal-cli, Spotify, Mopidy |
+| [Services](./2026-08-15-services-gotchas.md) | CNPG, SOPS, mosquitto, Spotify, Mopidy |
 | [Operating principles](./2026-08-15-operating-principles.md) | Staging, registries, cluster access, API versions |
 
 **Read the storage runbook before destroying anything.** Several entries there are data-loss

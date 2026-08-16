@@ -21,14 +21,14 @@ For apps exposed via Cilium Gateway API on a multi-node cluster with VXLAN tunne
 
 ```yaml
 ingress:
-  - fromEntities:
-      - host        # Envoy and pod on the same node
-      - remote-node # Envoy and pod on different nodes (VXLAN cross-node)
-      - ingress     # Cilium proxy source IP (reserved identity 8)
-    toPorts:
-      - ports:
-          - port: "8080"
-            protocol: TCP
+ - fromEntities:
+ - host # Envoy and pod on the same node
+ - remote-node # Envoy and pod on different nodes (VXLAN cross-node)
+ - ingress # Cilium proxy source IP (reserved identity 8)
+ toPorts:
+ - ports:
+ - port: "8080"
+ protocol: TCP
 ```
 
 **Why:** Cilium's Gateway API Envoy binds upstream connections to a dedicated proxy IP (e.g. `10.244.x.15`) that Cilium classifies as reserved identity 8 (`ingress`), not `host` or `remote-node`. Without `ingress`, all Envoy→pod connections fail even though direct `/dev/tcp` from the same pod works. Confirmed by checking `cilium bpf ipcache list` on the destination node: the Envoy source IP shows `identity=8`. Also: `remote-node` is needed when Envoy and the pod are on different nodes (VXLAN cross-node). All three are required.

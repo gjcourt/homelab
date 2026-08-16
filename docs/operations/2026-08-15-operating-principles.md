@@ -17,9 +17,9 @@ Standing decisions about how this cluster is operated, as distinct from how any 
 
 **staging envs (esp. CNPG DBs) should be fixed-size stable mirrors of prod so they're a real rehearsal testbed**
 
-George wants **staging environments to be fixed-size, stable mirrors of prod** so they function as a real rehearsal testbed — not drifted, half-broken clones.
+the operator wants **staging environments to be fixed-size, stable mirrors of prod** so they function as a real rehearsal testbed — not drifted, half-broken clones.
 
-**Why:** discovered 2026-07-03 while rehearsing the Immich v3 migration on staging: `immich-db-staging-cnpg-v1` had drifted to **20Gi** (prod is **10Gi** after the [[project_democratic_csi_api_driver_blocked]] expansion) AND had a replica (`-6`) wedged on a WAL-segment gap and crashlooping for 9 days. A degraded, wrong-sized staging DB undermines its value as a pre-prod rehearsal for risky ops.
+**Why:** discovered 2026-07-03 while rehearsing the Immich v3 migration on staging: `immich-db-staging-cnpg-v1` had drifted to **20Gi** (prod is **10Gi** after the expansion) AND had a replica (`-6`) wedged on a WAL-segment gap and crashlooping for 9 days. A degraded, wrong-sized staging DB undermines its value as a pre-prod rehearsal for risky ops.
 
 **How to apply:** when touching staging manifests, size staging DB/PVCs to mirror prod's shape (or a deliberate fraction), keep them healthy, and treat staging as a first-class rehearsal env. Follow-up work item: normalize `apps/staging/immich` (and other CNPG staging clusters) to a fixed size aligned with prod, and add health monitoring so staging degradation is caught early. Relates to the "do staging fully first" rule in the Immich v3 upgrade runbook.
 
@@ -33,14 +33,14 @@ A staging/preview environment must **not** connect to a single-connection physic
 production also uses. Point staging at a **simulator/mock** transport instead; **prod owns the
 device exclusively**.
 
-**Why:** Discovered on Vibrato 2026-07-18 ([[project_leva_controller]]). Both staging + prod set
+**Why:** Discovered on Vibrato 2026-07-18 (). Both staging + prod set
 `LEVA_HOST=10.42.7.11` (the one physical ito espresso controller, limited TCP slots). Two failures:
 1. **Contention** — after the connection self-heal (watchdog + re-handshake) deployed to both, staging
-   actively re-grabbed the ito's single telemetry stream every ~20s and **starved prod** (prod Monitor
-   went blank; scaling staging to 0 instantly restored prod's stream).
+ actively re-grabbed the ito's single telemetry stream every ~20s and **starved prod** (prod Monitor
+ went blank; scaling staging to 0 instantly restored prod's stream).
 2. **Safety** — a staging PR-preview wired to the real machine can **send it commands** (trigger a
-   shot / actuate hardware). Preview envs rebuild from every open PR, so untrusted/in-progress code
-   would drive real hardware.
+ shot / actuate hardware). Preview envs rebuild from every open PR, so untrusted/in-progress code
+ would drive real hardware.
 
 **How to apply:** In the staging overlay, set the transport to sim/mock (e.g. Vibrato:
 `LEVA_TRANSPORT=sim` on `apps/staging/<app>/deployment-patch.yaml`). Staging still validates the full
@@ -61,23 +61,23 @@ When adding a new first-party container image to gjcourt/homelab:
 
 The two legacy images on Docker Hub — `gjcourt/snapcast`, `gjcourt/go-librespot` — are forks of upstream projects kept on Docker Hub for backwards compatibility. They are **not** the precedent for new images. The snapcast deployment references them as-is for compat, but new sidecars should use ghcr.io.
 
-**Why:** This session, I told an agent to push the new mopidy image to docker.io because the snapcast deployment had docker.io siblings. The agent's PR worked but required setting up `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` repo secrets — friction the user shouldn't have to deal with. I had to push a fix commit (#436 retag → ghcr.io) before the workflow could run.
+**Why:** Historically, an attempt to push the new mopidy image to docker.io because the snapcast deployment had docker.io siblings. The agent's PR worked but required setting up `DOCKERHUB_USERNAME`/`DOCKERHUB_TOKEN` repo secrets — friction the user shouldn't have to deal with. I had to push a fix commit (#436 retag → ghcr.io) before the workflow could run.
 
 **How to apply:** When spawning an agent to add a new image + build workflow:
 
 - Explicitly tell them ghcr.io is the registry, not docker.io.
-- Reference the existing `.github/workflows/build-signal-bridge.yml` as the canonical pattern (GITHUB_TOKEN auth, date-tagged: `YYYY-MM-DD`, fallback `YYYY-MM-DD-N`, multi-arch `linux/amd64,linux/arm64` via QEMU + buildx).
+- Reference the existing `.github/workflows/build-mopidy.yml` as the canonical pattern (GITHUB_TOKEN auth, date-tagged: `YYYY-MM-DD`, fallback `YYYY-MM-DD-N`, multi-arch `linux/amd64,linux/arm64` via QEMU + buildx).
 - Don't let the agent infer the registry from `apps/base/snapcast/deployment.yaml` — those are the legacy forks.
 
-**★ GHCR "repo:null" 403 GOTCHA (2026-07-25).** A GHA `GITHUB_TOKEN` push gets `403 Forbidden` (`unexpected status from HEAD request … 403`) when the target GHCR package **already exists but is NOT linked to a repo** — i.e. it was first created by a manual PAT push (`make image`). Check with `gh api user/packages/container/<name> --jq .repository.full_name` → `null` = unlinked. **Fix: delete the stale package so the next GHA push re-creates it auto-linked (+ public):** `gh api --method DELETE user/packages/container/<name>` (needs `delete:packages` scope → `gh auth refresh -h github.com -s delete:packages` first; and Claude's auto-mode classifier BLOCKS the DELETE — have George run it via `! …`). Non-destructive alt = package Settings → *Manage Actions access* → add the repo with **Write**. After either, `gh run rerun <id>`. **2026-07-25: migrated golinks, changes, vitals, soundbyte from manual `make image` to GHA `image.yml`** (push to default branch + workflow_dispatch; tags `YYYY-MM-DD`, `YYYY-MM-DD-<sha7>`, `latest`; the immutable `date-sha` is the one to pin in homelab). golinks deployed `2026-07-26-57ffc01` (golinks-prod ns; host go.burntbytes.com; unknown shortcode now 302→`/admin?new=<code>`). Repos already on GHA (left alone): vibrato, pingo, flashcards, burntbytes, modemscope, netscope, thermalscope, ladder, tempo-interview. cadence skipped (killed venture).
+**★ GHCR "repo:null" 403 GOTCHA (2026-07-25).** A GHA `GITHUB_TOKEN` push gets `403 Forbidden` (`unexpected status from HEAD request … 403`) when the target GHCR package **already exists but is NOT linked to a repo** — i.e. it was first created by a manual PAT push (`make image`). Check with `gh api user/packages/container/<name> --jq .repository.full_name` → `null` = unlinked. **Fix: delete the stale package so the next GHA push re-creates it auto-linked (+ public):** `gh api --method DELETE user/packages/container/<name>` (needs `delete:packages` scope → `gh auth refresh -h github.com -s delete:packages` first; and Some tooling blocks interactive DELETEs; run it directly if so.). Non-destructive alt = package Settings → *Manage Actions access* → add the repo with **Write**. After either, `gh run rerun <id>`. **2026-07-25: migrated golinks, changes, vitals, soundbyte from manual `make image` to GHA `image.yml`** (push to default branch + workflow_dispatch; tags `YYYY-MM-DD`, `YYYY-MM-DD-<sha7>`, `latest`; the immutable `date-sha` is the one to pin in homelab). golinks deployed `2026-07-26-57ffc01` (golinks-prod ns; host go.burntbytes.com; unknown shortcode now 302→`/admin?new=<code>`). Repos already on GHA (left alone): vibrato, pingo, flashcards, burntbytes, modemscope, netscope, thermalscope, ladder, tempo-interview. cadence skipped (killed venture).
 
 ---
 
 ## homelab lan access
 
-**kubectl commands to the homelab cluster work from this Mac — confirmed in session fd65b62a. Stale "no LAN access" note was wrong.**
+**kubectl commands to the homelab cluster work from this Mac — Stale "no LAN access" note was wrong.**
 
-**kubectl works on this Mac** against the homelab cluster (`https://10.42.2.20:6443`). The earlier "no LAN access" note was from a different session or network state. The user confirmed: "you can run that yourself" when I offered to wait for them to run kubectl commands.
+**kubectl works on this Mac** against the homelab cluster (`https://10.42.2.20:6443`). The earlier "no LAN access" note was from a different session or network state.  when I offered to wait for them to run kubectl commands.
 
 `ping` and `ssh` to `10.42.2.x` may still require VPN or not — don't assume either way. Use kubectl for cluster diagnostics; it has been confirmed working.
 

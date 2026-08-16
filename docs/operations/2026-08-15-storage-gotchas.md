@@ -34,7 +34,7 @@ The "lossy vs preserve" classification of small Deploy/STS PVCs in the alcatraz�
 | snapcast-spotify-state | 20K | state.json | yes (regen on first play) |
 | adguard config/work (STS VCT) | ~10K | AdGuardHome.yaml — all blocklists, clients, rewrites | **NO — wiping = household DNS down** |
 
-Bigger insight: **adguard-prod config PVC was on the original "lossy" list and got destroyed → household DNS went down**. Saved by old PV being on `Retain` policy — restored via rsync from `pvc-2d7d6f58...` (see [[pv-retain-recovery-pattern]]).
+Bigger insight: **adguard-prod config PVC was on the original "lossy" list and got destroyed → household DNS went down**. Saved by old PV being on `Retain` policy — restored via rsync from `pvc-2d7d6f58..` (see [pv retain recovery pattern](#pv-retain-recovery-pattern)).
 
 **Why:** I trusted an earlier classification ("lossy" tag from migration plan) without verifying actual contents. The plan said "data PVC" but small data PVCs in tiny apps often hold their entire sqlite + configuration.
 
@@ -48,24 +48,24 @@ pod=$(kubectl get pods -n $NS -o json | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 for p in d['items']:
-    for v in p['spec'].get('volumes',[]):
-        if v.get('persistentVolumeClaim',{}).get('claimName')=='$PVC':
-            for c in p['spec']['containers']:
-                for m in c.get('volumeMounts',[]):
-                    if m['name']==v['name']:
-                        print(p['metadata']['name'], c['name'], m['mountPath'])
-                        sys.exit(0)
+ for v in p['spec'].get('volumes',[]):
+ if v.get('persistentVolumeClaim',{}).get('claimName')=='$PVC':
+ for c in p['spec']['containers']:
+ for m in c.get('volumeMounts',[]):
+ if m['name']==v['name']:
+ print(p['metadata']['name'], c['name'], m['mountPath'])
+ sys.exit(0)
 ")
 
 # 2. Look at sizes + file types
 kubectl exec -n $NS $POD -c $CONTAINER -- sh -c "du -sh $MOUNT; ls -la $MOUNT" 
 
 # 3. RED FLAGS for "lossy":
-#    - any .sqlite / .db file > 0 bytes (user data)
-#    - .yaml/.json config (state)
-#    - .storage/ directory (Home Assistant)
-#    - files >1MB total
-#    - mtime within last 7 days (active use)
+# - any .sqlite / .db file > 0 bytes (user data)
+# - .yaml/.json config (state)
+# - .storage/ directory (Home Assistant)
+# - files >1MB total
+# - mtime within last 7 days (active use)
 ```
 
 **Heuristic:** "X-cache" or "X-transcodes" or "X-state" PVCs are usually lossy. "X-data" or "X-config" or just "X" without a qualifier are usually preserve. Empty dirs (0K) are obviously lossy.
@@ -73,9 +73,9 @@ kubectl exec -n $NS $POD -c $CONTAINER -- sh -c "du -sh $MOUNT; ls -la $MOUNT"
 **For staging vs prod:** staging is fine to lose. **Prod requires per-PVC verification** even if staging was wiped — production data has different blast radius.
 
 **Related cross-references:**
-- [[flux-suspend-during-cluster-ops]] — suspend Flux first so the workload doesn't re-grab the PVC
-- [[pvc-storage-class-migration]] — destroy-and-recreate pattern (assumes you've correctly classified as lossy)
-- [[pv-retain-recovery-pattern]] — if you destroy and regret it, Retain policy is your safety net
+- [flux suspend during cluster ops](./2026-08-15-cluster-gotchas.md#flux-suspend-during-cluster-ops) — suspend Flux first so the workload doesn't re-grab the PVC
+- [pvc storage class migration](#pvc-storage-class-migration) — destroy-and-recreate pattern (assumes you've correctly classified as lossy)
+- [pv retain recovery pattern](#pv-retain-recovery-pattern) — if you destroy and regret it, Retain policy is your safety net
 
 ---
 
@@ -98,7 +98,7 @@ kubectl exec -n $NS $POD -c $CONTAINER -- sh -c "du -sh $MOUNT; ls -la $MOUNT"
 **Gotchas:**
 - **Flux gets stuck on the immutable-field error and stops reconciling downstream resources** — must clear ALL stuck PVCs in one batch, not one at a time, or Flux blocks itself.
 - **Terminating PVCs hang when a Pending pod still references them.** Force-delete Pending pods (`kubectl delete pod X --force --grace-period=0`) to clear the finalizer chain.
-- **Lossy migrations wipe app state** — adguard ends up in "first launch" mode, crashlooping on probes that check the production port instead of the wizard port 3000. Either scale to 0 until you reconfigure, or use [[cnpg-promote-pg-resetwal]]-style operator-only recovery if the manifest defaults insist on a running pod.
+- **Lossy migrations wipe app state** — adguard ends up in "first launch" mode, crashlooping on probes that check the production port instead of the wizard port 3000. Either scale to 0 until you reconfigure, or use [cnpg promote pg resetwal](./2026-08-15-services-gotchas.md#cnpg-promote-pg-resetwal)-style operator-only recovery if the manifest defaults insist on a running pod.
 
 For data-preserving migrations across storage classes, use `kubectl pv-migrate` with a temp PVC (orig → tmp on new SC → delete orig → recreate empty on new SC → tmp → orig). PVC names can't be renamed, so this 2-step copy is unavoidable when you want to keep the original PVC name.
 
@@ -108,7 +108,7 @@ For data-preserving migrations across storage classes, use `kubectl pv-migrate` 
 
 **When a PV has `persistentVolumeReclaimPolicy: Retain` and goes to phase=Released after PVC deletion, the underlying volume is still intact. Recover by clearing claimRef + creating a new PVC with volumeName pointing to the old PV.**
 
-If a "lossy" PVC destroy turned out to wipe real data (see [[audit-pvc-before-lossy-destroy]]), and the old PV had `Retain` reclaim policy, the data is still on the storage backend. Recovery is mechanical.
+If a "lossy" PVC destroy turned out to wipe real data (see [audit pvc before lossy destroy](#audit-pvc-before-lossy-destroy)), and the old PV had `Retain` reclaim policy, the data is still on the storage backend. Recovery is mechanical.
 
 **Why:** Burned and recovered from this on 2026-05-23 destroying adguard-prod config PVC. Old PV `pvc-2d7d6f58-6293-4a0f-8e29-d13ddf47ea6e` was phase=Released with Retain, underlying Synology iSCSI LUN still had AdGuardHome.yaml. Without that backstop, the household DNS resolver would have needed a full re-setup.
 
@@ -120,9 +120,9 @@ kubectl get pv -o json | python3 -c "
 import json,sys
 d = json.load(sys.stdin)
 for pv in d['items']:
-    cr = pv['spec'].get('claimRef', {})
-    if cr.get('namespace')=='$NS' and cr.get('name')=='$OLD_PVC_NAME':
-        print(pv['metadata']['name'], pv['status']['phase'], pv['spec']['persistentVolumeReclaimPolicy'])
+ cr = pv['spec'].get('claimRef', {})
+ if cr.get('namespace')=='$NS' and cr.get('name')=='$OLD_PVC_NAME':
+ print(pv['metadata']['name'], pv['status']['phase'], pv['spec']['persistentVolumeReclaimPolicy'])
 "
 
 # 2. Clear claimRef so it becomes Available
@@ -133,22 +133,22 @@ cat <<YAML | kubectl apply -f -
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: ${OLD_PVC_NAME}-recovery-source
-  namespace: $NS
+ name: ${OLD_PVC_NAME}-recovery-source
+ namespace: $NS
 spec:
-  accessModes: [ReadWriteOnce]
-  storageClassName: $OLD_STORAGE_CLASS   # e.g. synology-iscsi (must match the PV's class)
-  resources:
-    requests:
-      storage: $SIZE
-  volumeName: $OLD_PV_NAME              # binds to specific PV
+ accessModes: [ReadWriteOnce]
+ storageClassName: $OLD_STORAGE_CLASS # e.g. truenas-iscsi (must match the PV's class)
+ resources:
+ requests:
+ storage: $SIZE
+ volumeName: $OLD_PV_NAME # binds to specific PV
 YAML
 
 # 4. Scale workload to 0 (release the new PVC)
 
 # 5. Run a Job that mounts BOTH old + new PVCs, rsync/cp old -> new
-#    (use a permissive image like alpine + rsync, OR the same app image
-#     to avoid ImagePullBackOff if cluster DNS is impaired)
+# (use a permissive image like alpine + rsync, OR the same app image
+# to avoid ImagePullBackOff if cluster DNS is impaired)
 
 # 6. Scale workload back up
 # 7. Clean up: delete the recovery-source PVC. Old PV goes back to Released (or Available depending on reclaim).
@@ -160,8 +160,8 @@ YAML
 - The PV's underlying volume (iSCSI LUN / NFS export / ZFS dataset) must not have been deleted by the storage operator. With Retain, that won't happen automatically, but if you've explicitly issued a `synology-csi`/`democratic-csi` delete or rm'd the dataset, this trick won't help.
 
 **Related cross-references:**
-- [[audit-pvc-before-lossy-destroy]] — the upstream cause; verify before destroying so this recovery is rare
-- [[pvc-storage-class-migration]] — the migration pattern this protects against
+- [audit pvc before lossy destroy](#audit-pvc-before-lossy-destroy) — the upstream cause; verify before destroying so this recovery is rare
+- [pvc storage class migration](#pvc-storage-class-migration) — the migration pattern this protects against
 
 ---
 
@@ -176,13 +176,13 @@ Homelab `staging` is an auto-preview env rebuilt by CI (`staging-deploy.yaml`) f
 **How to apply:** when a PR changes an immutable PV field, expect to recreate the `-staging` PVs/PVCs as part of landing it (same one-time delete/recreate the `-prod` ones needed). Recreate procedure (staging, read-only NFS, `Retain` → no data loss), confirmed 2026-07-17 on jellyfin (PR #1136):
 ```
 flux suspend kustomization apps-staging -n flux-system
-kubectl scale deploy <app> -n <ns>-stage --replicas=0            # release PVC mounts; wait pod gone
-kubectl delete pvc -n <ns>-stage <pvc>...                        # then
-kubectl delete pv  <pv>-staging...                               # Retain PV, data untouched
+kubectl scale deploy <app> -n <ns>-stage --replicas=0 # release PVC mounts; wait pod gone
+kubectl delete pvc -n <ns>-stage <pvc>.. # then
+kubectl delete pv <pv>-staging.. # Retain PV, data untouched
 flux resume kustomization apps-staging -n flux-system
-flux reconcile kustomization apps-staging -n flux-system --with-source   # recreates at new path + scales app back up
+flux reconcile kustomization apps-staging -n flux-system --with-source # recreates at new path + scales app back up
 ```
-Prod (`apps-production`) does NOT auto-apply open PRs, so prod only needs the recreate at actual merge — and only if the prod render's PV path actually changes (a base change that prod already overlays to the same value = no-op). Related: [[feedback_flux_suspend_during_cluster_ops]], [[feedback_pvc_storage_class_migration]], [[feedback_flux_pvc_volumename_anti_pattern]], [[project_jellyfin_library_cleanup]].
+Prod (`apps-production`) does NOT auto-apply open PRs, so prod only needs the recreate at actual merge — and only if the prod render's PV path actually changes (a base change that prod already overlays to the same value = no-op). Related: [flux suspend during cluster ops](./2026-08-15-cluster-gotchas.md#flux-suspend-during-cluster-ops), [pvc storage class migration](#pvc-storage-class-migration), [flux pvc volumename anti pattern](./2026-08-15-cluster-gotchas.md#flux-pvc-volumename-anti-pattern).
 
 ---
 
@@ -208,25 +208,24 @@ namespaces: `for f in /proc/[0-9]*/mountinfo; do grep -l "<path>" $f; done`, the
 map PID→container via `/proc/<pid>/cgroup`. `docker inspect .Mounts` won't show it
 (the bind is the parent, the submount is implicit).
 
-**2. `showmount -a` can show a PHANTOM client** (`10.42.2.25:/...images...`) that
+**2. `showmount -a` can show a PHANTOM client** (`10.42.2.25:/..images..`) that
 has NO real mount (verified with a privileged hostPID probe pod reading
 `/proc/1/mounts` on that Talos node). It's stale mountd bookkeeping, unrelated to
 the busy state. Red herring — don't chase it or restart NFS for it.
 
 **3. TrueNAS altroot mountpoint gotcha.** Pool `main` has `altroot=/mnt`. Creating
-a dataset with `zfs create -o mountpoint=/mnt/main/...` DOUBLE-prefixes →
-`/mnt/mnt/main/...`, and any rsync to the intended path silently lands in a plain
+a dataset with `zfs create -o mountpoint=/mnt/main/..` DOUBLE-prefixes →
+`/mnt/mnt/main/..`, and any rsync to the intended path silently lands in a plain
 dir on the PARENT dataset instead of the new dataset. **Set mountpoint WITHOUT the
 `/mnt` prefix:** `zfs set mountpoint=/main/family/media/photos-staging-30d` →
-resolves to `/mnt/main/family/...`. Move staged data aside first so the (re)mount
+resolves to `/mnt/main/family/..`. Move staged data aside first so the (re)mount
 doesn't shadow it.
 
 **How to apply:** before any hestia `zfs destroy`, expect a container/app to hold
 the dataset via a parent bind-mount; restart the holders (cheap, low-risk) rather
 than restarting NFS (blips prod). Verify redundancy with a path+size manifest diff
 (`find -printf "%P\t%s\n" | sort` + `comm -23`) before destroying. Context:
-[[project_immich_photos_images_to_media]], [[project_truenas_api]],
-[[feedback_bash_arrays_in_harness]].
+, .
 
 ---
 
@@ -251,13 +250,7 @@ For services running on TrueNAS hestia (`truenas_admin@10.42.2.10`), prefer **Tr
 
 ## synology 0700 default and group bit
 
-**\"Synology DSM started saving new photo uploads with POSIX mode 0700 sometime around 2025-12-31. Files owned by user:users with mode `rwx**
-
----` look readable to a service account in the admin group, but they aren't: gid=100(users) matches the file group, and the group bit `---` denies BEFORE Unix falls through to 'other'. Fix is `chmod g+rX,o+rX`, not just `o+rX`."
-metadata:
-  node_type: memory
-  type: feedback
----
+**Synology DSM started saving new photo uploads with POSIX mode 0700 (`rwx------`) around 2025-12-31. A service account in the file's group (gid=100 `users`) is denied by the group bit before Unix falls through to "other" — so the fix is `chmod g+rX,o+rX`, not `o+rX`.**
 
 ### Rule
 
@@ -269,7 +262,7 @@ When a Synology DSM share rsync silently misses files dated after ~2026-01-01:
 
 ### Why
 
-Symptom this presents as: rsync says `success` with `Number of regular files transferred: 0` for files that obviously aren't on the destination. Or rsync exits 23 with `send_files failed to open ... Permission denied (13)` despite the share-level ACL granting Read access.
+Symptom this presents as: rsync says `success` with `Number of regular files transferred: 0` for files that obviously aren't on the destination. Or rsync exits 23 with `send_files failed to open .. Permission denied (13)` despite the share-level ACL granting Read access.
 
 Reproduced 2026-06-02 on alcatraz (Synology DSM):
 - `truenas-backup` user (uid 1031, **gid 100 = users**, also in admin group 101)
@@ -285,7 +278,7 @@ This is a classic Unix gotcha (group-bit-evaluated-before-other) showing up in a
 When debugging "rsync silently skips Synology-owned files":
 - `ssh truenas-backup@<alcatraz> 'stat -c "%a %U:%G" /volume1/homes/<user>/Photos/<recent-file>'`
 - If the mode is `700` or any pattern where `group` is more restrictive than `other`, and the service account is in the file's group:
-  - `ssh <dsm_admin>@<alcatraz>; sudo chmod -R g+rX,o+rX /volume1/homes/<user>/Photos/...`
+ - `ssh <dsm_admin>@<alcatraz>; sudo chmod -R g+rX,o+rX /volume1/homes/<user>/Photos/..`
 
 For the homelab Synology specifically, this is alcatraz at `10.42.2.11`. DSM admin user that can sudo: **`manager`** (confirmed 2026-06-09).
 
@@ -310,9 +303,9 @@ Next failure mode to watch for (not yet observed):
 
 ### Related
 
-- [[synology-per-user-photo-symlinks]] — sibling Synology permission trap on `family/images/photos/<user>` symlinks. Different mechanism (symlink ACL), same outcome (silent rsync skip).
-- [[rsync-verify-destination]] — generic rule: always verify destination after a low-bytes rsync; both Synology traps masquerade as "clean" rsync runs.
-- [[hestia-photos-sot]] — the migration that surfaced this trap. Caused Immich to silently miss all 2026 photos until 2026-06-02.
+- [synology per user photo symlinks](#synology-per-user-photo-symlinks) — sibling Synology permission trap on `family/images/photos/<user>` symlinks. Different mechanism (symlink ACL), same outcome (silent rsync skip).
+- [rsync verify destination](#rsync-verify-destination) — generic rule: always verify destination after a low-bytes rsync; both Synology traps masquerade as "clean" rsync runs.
+- see [the hestia photos plan](./plans/2026-06-01-hestia-photos-sot.md) — the migration that surfaced this trap. Caused Immich to silently miss all 2026 photos until 2026-06-02.
 
 ---
 
@@ -333,7 +326,7 @@ Per-file ACLs on those files come from the original uploader's Synology account,
 - See file names and sizes (stat works via the parent dir's ACL)
 - **NOT open the files** (file-level ACL only includes the owner)
 
-Rsync's failure mode is specifically `send_files failed to open "...": Permission denied (13)` with exit code 23. The DSM "Apply to this folder, sub-folders and files" recursive-ACL apply on the `family` share **does not traverse into the symlinked targets** — you have to apply it on the underlying `homes` share, and even then file-level ACLs from the user's account can override.
+Rsync's failure mode is specifically `send_files failed to open "..": Permission denied (13)` with exit code 23. The DSM "Apply to this folder, sub-folders and files" recursive-ACL apply on the `family` share **does not traverse into the symlinked targets** — you have to apply it on the underlying `homes` share, and even then file-level ACLs from the user's account can override.
 
 The reliable workaround is to source from the canonical path: `truenas-backup@host:/volume1/homes/<user>/Photos/`. As long as `truenas-backup` has Read on the `homes` share, file ACLs from the user account include the share-level grant via the standard inheritance, and file open succeeds.
 
@@ -351,16 +344,16 @@ The `immich-photos-backup` script (`images/immich-photos-backup/immich-photos-ba
 
 If rsync hits this and you forget the rule:
 - exit code 23
-- stderr full of `send_files failed to open "/volume1/family/images/photos/<user>/<YYYY>/<MM>/...": Permission denied (13)` for files older than a certain date AND newest files
+- stderr full of `send_files failed to open "/volume1/family/images/photos/<user>/<YYYY>/<MM>/..": Permission denied (13)` for files older than a certain date AND newest files
 - `du -sh` as the service user shows real sizes on the family path (directory ACL works)
 - BUT `cat` on any individual file returns Permission denied
 
-Reproduced 2026-06-01 in the hestia-SOT bulk seed (Phase 3 of [[hestia-photos-sot]]). Wasted ~2 hours of retries before the user surfaced the symlink fact.
+Reproduced 2026-06-01 in the hestia-SOT bulk seed (Phase 3 of see [the hestia photos plan](./plans/2026-06-01-hestia-photos-sot.md)). Wasted ~2 hours of retries before the user surfaced the symlink fact.
 
 ### Related
 
-- [[immich-photo-backup-setup]] — uses this pattern in production
-- [[hestia-photos-sot]] — the plan that hit this trap during Phase 3 bulk seed
+- — uses this pattern in production
+- see [the hestia photos plan](./plans/2026-06-01-hestia-photos-sot.md) — the plan that hit this trap during Phase 3 bulk seed
 
 ---
 
@@ -380,7 +373,7 @@ Rsync's final summary looks the same whether:
 
 Both produce: `sent 196 bytes received 2.01K bytes; total size is X; speedup is Y` with no `rsync error:` suffix. Exit code may still be 0 with `--ignore-errors`. The difference only shows up when you look at the destination.
 
-Burned 2026-06-01 on hestia-SOT Phase 3 Stream C: `/volume1/homes/` → `/mnt/main/homes/`. Summary line matched the "already in place" pattern; declared clean. User later asked "where does that data live?" → discovered `/mnt/main/homes/` was 205 bytes (empty ZFS dataset metadata only). Truenas-backup hit the same per-user ACL trap as photos (see [[synology-per-user-photo-symlinks]]), and `--ignore-errors` swallowed every Permission denied silently.
+Burned 2026-06-01 on hestia-SOT Phase 3 Stream C: `/volume1/homes/` → `/mnt/main/homes/`. Summary line matched the "already in place" pattern; declared clean. User later asked "where does that data live?" → discovered `/mnt/main/homes/` was 205 bytes (empty ZFS dataset metadata only). Truenas-backup hit the same per-user ACL trap as photos (see [synology per user photo symlinks](#synology-per-user-photo-symlinks)), and `--ignore-errors` swallowed every Permission denied silently.
 
 ### How to apply
 
@@ -396,7 +389,7 @@ When using `--ignore-errors` or `--partial`, always pipe stderr to a file (`2>/t
 
 ### Related
 
-- [[synology-per-user-photo-symlinks]] — the specific ACL trap that produced the silent skip in the hestia-SOT case
-- [[hestia-photos-sot]] — the plan where this misread happened
+- [synology per user photo symlinks](#synology-per-user-photo-symlinks) — the specific ACL trap that produced the silent skip in the hestia-SOT case
+- see [the hestia photos plan](./plans/2026-06-01-hestia-photos-sot.md) — the plan where this misread happened
 
 ---

@@ -1,0 +1,202 @@
+---
+status: planned
+last_modified: 2026-08-09
+summary: "Cross-monitor k8s, hestia and alcatraz so each reports the others' death, with healthchecks.io as the arbiter that tells one-box failure from a site event"
+blocked_on: "Operator: are the Talos nodes, hestia and alcatraz on the same UPS/circuit? Determines how much this buys."
+---
+
+# Plan: local dead man's mesh (k8s ↔ hestia ↔ alcatraz)
+
+## Context
+
+The external dead man's switch routes the always-firing `Watchdog` alert to a
+healthchecks.io check that alerts on the ping's *absence*. That closes the
+catastrophic case — total alerting failure no longer looks like silence.
+
+It is deliberately coarse. healthchecks.io knows exactly one bit per check:
+pings arrived, or they didn't. It cannot say which component died, and it
+cannot distinguish a house-wide power cut from the ISP dropping.
+
+## The thesis
+
+**Each layer is blind to precisely what the other sees.**
+
+| | External (healthchecks.io) | Local mesh |
+|---|---|---|
+| Survives whole-site failure | ✅ it isn't here | ❌ dies with everything |
+| Identifies *which* component | ❌ one bit | ✅ names it, with diagnostics |
+| Tells WAN-down from power-down | ❌ identical silence | ✅ peers still see each other |
+| Detection latency | ~20 min (grace) | seconds to ~2 min |
+| Needs maintenance | ❌ vendor's problem | ✅ ours, and it can rot |
+
+This is not a replacement for the external check. It is the diagnostic tier
+underneath it.
+
+### The failure this actually fixes
+
+The CODA-56 modem overheats and reboots (an observed, recurring fault; not yet
+written up in `docs/STATUS.md`). Every
+one of those events drops the WAN, so *every* external check goes red at once —
+which reads as a site-level catastrophe. It isn't: every machine is healthy and
+the modem is cooking. Today nothing can tell those apart. A local mesh records
+"all peers up, WAN unreachable" and the story is unambiguous the moment
+connectivity returns.
+
+## Inventory and constraints
+
+| Node | Role | Can it run a watcher? | Independent notification path |
+|---|---|---|---|
+| Talos cluster | 3 CP + workers | **Not on the host** — Talos is immutable and API-driven; no host cron. Must be a k8s CronJob or the Alertmanager fan-out | Gmail SMTP (existing) |
+| hestia | TrueNAS SCALE; iSCSI/NFS backing store | Yes — SCALE Custom App (compose YAML canonical in-repo) | TrueNAS built-in alert email |
+| alcatraz | Synology DSM | Yes — DSM Task Scheduler today; a GitOps `docker compose` deploy path is already built (operator bootstrap pending, see the alcatraz GitOps plan) and is the better long-term host | DSM native email/push |
+
+Two constraints fall out of that table and shape the whole design:
+
+1. **Talos has no host-level cron.** The cluster cannot run an ordinary watcher
+   daemon the way the other two can.
+2. **hestia is a dependency of k8s, not a peer.** democratic-csi backs cluster
+   PVCs over iSCSI from hestia, so "hestia down" *causes* "k8s degraded". These
+   two are correlated by construction — treat hestia→k8s as a supervisor
+   relationship, not two independent observers.
+
+Only alcatraz is genuinely independent of the other two — and only as of the
+completed storage migration. It has **zero bound cluster PVs** today; the 48
+`csi.san.synology.com` volumes still present are all `Released` leftovers and
+the `synology-iscsi` StorageClass is gone. (`docs/STATUS.md` described alcatraz
+as providing "iSCSI backing for CNPG PVCs" until 2026-08-09; that line was
+corrected in the same PR as this plan.) If alcatraz ever backs live cluster
+storage again, it stops being an independent observer and this design loses its
+only truly external node — which makes that a decision to take deliberately,
+not incidentally.
+
+## Design
+
+### Push, not poll, for the cluster's heartbeat
+
+The cluster already emits `Watchdog` through the full chain. Have the local
+watchers **receive** that webhook rather than poll an endpoint: polling
+`/-/healthy` only proves the API answers, whereas receiving the Watchdog proves
+rule evaluation → Alertmanager → routing → delivery all work. Same signal, same
+pipeline, three destinations.
+
+Keep the external receiver isolated from local flakiness by fanning out with a
+`continue: true` route rather than adding local URLs to the existing `deadman`
+receiver — a flapping LAN endpoint must never generate delivery errors on the
+path that protects the catastrophic case:
+
+```yaml
+- receiver: 'deadman'          # healthchecks.io — must stay clean
+  matchers: [alertname = "Watchdog"]
+  continue: true
+- receiver: 'deadman-local'    # hestia + alcatraz
+  matchers: [alertname = "Watchdog"]
+```
+
+### Who watches whom
+
+| Watcher | Watches | Mechanism |
+|---|---|---|
+| k8s | hestia, alcatraz | blackbox-exporter `Probe` + PrometheusRule (new; no blackbox exporter today) |
+| hestia | k8s, alcatraz | Custom App: Watchdog webhook receiver + timer; poll alcatraz |
+| alcatraz | k8s, hestia | DSM Task Scheduler script on 5m; move to the compose path once bootstrapped |
+
+Each watcher notifies through **its own** path, so one broken mail
+configuration cannot silence everything.
+
+### healthchecks.io as arbiter
+
+Give each box its own check. The *pattern* of which went quiet is the diagnosis
+— information no single check can carry:
+
+| Red | Reading |
+|---|---|
+| cluster only | Alerting or cluster failure; hestia + alcatraz supply detail |
+| hestia only | Storage host down — expect PVC degradation next |
+| alcatraz only | NAS down; lowest blast radius |
+| all three | Site event: power or WAN |
+
+## Also uncovered: the mail path itself
+
+The external deadman proves rule evaluation → Alertmanager → routing →
+**webhook** delivery. Every real alert leaves over Gmail SMTP
+(`email-critical` / `email-warning`), and that leg is never exercised. If the
+Gmail app password expires, the healthchecks.io check stays green while every
+genuine alert silently fails to send — the precise failure the deadman exists to
+prevent, one integration to the left.
+
+`AlertmanagerClusterFailedToSendAlerts` (critical) does fire on SMTP delivery
+errors, but it is routed *over the broken mail path*, so it cannot self-report.
+
+Two candidate fixes, both cheap:
+
+| Approach | Notes |
+|---|---|
+| Low-frequency email heartbeat to a healthchecks.io **email ping address** | healthchecks.io does accept pings by email as well as HTTP — each check has a ping address ([docs](https://healthchecks.io/docs/email/)). Route `Watchdog` with `continue: true` to an email receiver addressed at the check, `repeat_interval: 24h`. Absence of the daily mail then alerts — proving the SMTP leg end to end. **Confirm free-tier (Hobbyist) availability before designing around it**; the feature itself is documented, its plan gating is not. |
+| Second receiver on a different transport | Doesn't prove Gmail specifically, only that *some* path works. Weaker. |
+
+The first is strictly better if the feature exists as described. A daily cadence
+keeps the noise at one message and still bounds an SMTP outage to ~1 day, which
+is proportionate: a broken mail path is far rarer than a dead Alertmanager.
+
+## Egress dependency to record
+
+This introduces a hard egress dependency: Alertmanager pods → `hc-ping.com:443`
+plus DNS. It works today because `monitoring` does not carry the
+`network-policies: enforced` label that arms the default-deny
+`CiliumClusterwideNetworkPolicy`, and `alertmanager.networkPolicy.enabled` is
+`false`. When `monitoring` is opted into the per-namespace rollout described in
+`infra/configs/network-policies/README.md`, it will need an explicit
+internet-egress allow or the deadman breaks. Failure is at least loud — the
+check goes red — but it would look like an alerting outage rather than a policy
+change, so it belongs in the rollout checklist.
+
+## Honest limits
+
+**WAN-down still can't be reported in real time.** If the modem drops while
+every machine is healthy, nothing inside the house can reach you. The mesh's
+value there is *post-hoc*: its logs prove it was the modem, not a power cut. The
+only real-time fix is an out-of-band path (LTE), which is out of scope here.
+
+**Who watches the watchers.** hestia's cron and the DSM task can fail silently,
+which locally regresses forever. Terminating it is exactly what the external
+tier is for — each watcher pings its own healthchecks.io check, so a dead
+watcher surfaces as a red check rather than as false confidence.
+
+**Correlated failure caps the value.** If everything shares a UPS and a switch,
+the mesh covers strictly less than the table above implies — the failures it
+uniquely catches are single-component ones, and those are already the ones
+ordinary alerting handles when alerting is alive. This is the open question in
+the frontmatter and it should be answered before Phase 2.
+
+**Three more moving parts.** Two watchers and a blackbox exporter, each with its
+own upgrade and failure story, to cover a scenario where the cluster is already
+degraded. Worth it for the diagnostics; not worth it if it becomes another thing
+that rots unnoticed.
+
+## Phasing
+
+1. **Cluster → hosts.** Deploy blackbox-exporter, probe hestia + alcatraz, alert
+   on down. Smallest step, entirely in-repo, no new hosts touched.
+
+   Partial coverage already exists, so the gap is narrower than "nothing":
+   hestia has `IPMIScraperDown` in `infra/configs/ipmi-exporter/prometheus-rule.yaml`
+   plus `hestia-homelabscope` / `hestia-thermalscope` / `hestia-netscope`
+   scrapes, and alcatraz has an *indirect* signal via
+   `HomelabscopeJobMetricAbsent` on `alcatraz-photos-pull`. Both are weaker than
+   they look: `IPMIScraperDown` is liveness of one exporter process rather than
+   of the host, and it is `severity: warning`, so it lands in the
+   `gjcourt+alerts@` skip-inbox label this repo elsewhere documents as
+   effectively unread. Alcatraz has **no direct scrape target anywhere in
+   `infra/`**. This phase buys a process-independent host check for both, at
+   critical severity.
+2. **alcatraz → cluster + hestia.** DSM Task Scheduler + native notification (or the compose path if bootstrapped by then).
+   Highest value per unit effort: alcatraz is the only genuinely independent
+   node, and DSM's notification path is already configured and off-cluster.
+3. **hestia → cluster + alcatraz.** SCALE Custom App receiving the
+   `deadman-local` webhook. Do last — hestia is the most coupled to the cluster,
+   so it adds the least independence.
+4. **Per-box healthchecks.io checks** so the watchers are themselves watched,
+   and the arbiter table above becomes readable.
+
+Phase 1 is worth doing regardless of the UPS answer. Phases 2–4 should wait on
+it.

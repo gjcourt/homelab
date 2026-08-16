@@ -549,9 +549,41 @@ alertmanager:
       repeat_interval: 12h
       receiver: 'null'
       routes:
-      - receiver: 'null'
+      # DEAD MAN'S SWITCH. Watchdog is an always-firing alert (`vector(1)`) that
+      # measures nothing — it is purely a heartbeat. Routed to 'null' it was
+      # generated and discarded, which left the one failure ordinary alerting
+      # cannot catch: alerting itself dying, where the silence is
+      # indistinguishable from "nothing is wrong". It now POSTs to a
+      # healthchecks.io check that alerts on the ping's ABSENCE. That receiver
+      # MUST stay off-cluster — a deadman inside the failure domain it watches
+      # cannot report that domain failing.
+      #
+      # SCOPE: this proves the *webhook* leg only. Real alerts leave over Gmail
+      # SMTP, which is never exercised here — an expired app password keeps the
+      # check green while every genuine alert fails to send. Follow-up in
+      # docs/plans/2026-08-09-local-deadman-mesh.md.
+      #
+      # TIMING — group_interval sets the cadence; repeat_interval must be
+      # strictly SMALLER, never equal. Dedup compares against a timestamp
+      # written *after* the POST, so with both at 5m the on-time tick loses by
+      # the previous round-trip and the ping slips: gaps of 5m15s/9m45s, double
+      # the intended period, silently. Don't invert the fix by shrinking
+      # group_interval either — the HA WaitStage delays the non-first peer 15s
+      # (--cluster.peer-timeout) *before* dedup, so small intervals let peer 1
+      # win ticks early and the period goes ragged.
+      #
+      # Replicas ticker independently and never re-sync (the group never
+      # empties), so after a restart both may POST within one period. Harmless:
+      # only the gap matters and it stays <= 5m. Against a 15m grace that is
+      # ~20m worst-case detection. group_wait 0s saves a real 30s on the first
+      # flush — gossip settles in seconds, well short of the 60s
+      # --cluster.settle-timeout ceiling.
+      - receiver: 'deadman'
         matchers:
           - alertname = "Watchdog"
+        group_wait: 0s
+        group_interval: 5m
+        repeat_interval: 1m
       # overture is intentionally OFF: the Deployment is scaled 0/0 and its CNPG
       # cluster is hibernated (cnpg.io/hibernation=on), so the PodDisruptionBudget
       # (minAvailable=1) permanently reports 0 healthy pods and
@@ -613,6 +645,50 @@ alertmanager:
     - name: 'email-warning'
       email_configs:
         - to: 'gjcourt+alerts@gmail.com'
+          send_resolved: false
+    # Dead man's switch target — see the Watchdog route above for why.
+    #
+    # The ping URL is a capability: anyone holding it can keep the check alive
+    # and mask a real outage. It therefore comes from the mounted
+    # alertmanager-deadman secret via url_file (Alertmanager >= 0.26; running
+    # 0.28.1), never from this plaintext ConfigMap — the same indirection as
+    # smtp_auth_password_file above.
+    #
+    # send_resolved is false: Watchdog is designed never to resolve, and a
+    # resolved-POST would be an extra ping carrying no information.
+    #
+    # If the URL is ever wrong — including the case where the operator encrypts
+    # the .example without replacing the REPLACE_WITH placeholder, which passes
+    # `kustomize build` and lets Alertmanager start, since url_file is read at
+    # send time and not validated at config load — this fails loudly rather
+    # than silently. Every POST errors, and because all replicas fail together,
+    # AlertmanagerClusterFailedToSendAlerts fires at severity=critical (its
+    # `integration=~".*"` arm covers webhook; the warning arm's
+    # `integration!~".*"` matches nothing). Critical routes to +critical, which
+    # has no skip-inbox filter. NOT the per-instance
+    # AlertmanagerFailedToSendAlerts, which is only severity=warning and lands
+    # in the label this repo documents as unread.
+    #
+    # That path does assume email still works. A simultaneously broken mail
+    # path is the uncovered case noted in the route comment above.
+    #
+    # POSSIBLE NOISE, accepted deliberately. That rule is a ratio
+    # (failed/total > 0.01 for 5m) over a low-volume integration — roughly 3
+    # notifications per 15m window — so it takes very little to cross the
+    # threshold. Note the counter increments once per flush *after retries are
+    # exhausted*, not per HTTP attempt, and the retry deadline is about one
+    # group_interval: a brief WAN blip that succeeds on retry scores nothing.
+    # It takes hc-ping.com being unreachable for a full ~5m window to register
+    # a failure, at which point a +critical email accompanies the check going
+    # red. Redundant but not wrong. Left un-muted because pre-emptively
+    # silencing a brand-new safety net is worse than occasional noise; if it
+    # does become a nuisance, the bounded fix is a route on
+    # alertname="AlertmanagerClusterFailedToSendAlerts" + integration="webhook"
+    # with a 24h repeat_interval — capping it at one page a day rather than
+    # dropping the signal.
+    - name: 'deadman'
+      webhook_configs:
+        - url_file: '/etc/alertmanager/secrets/alertmanager-deadman/ping-url'
           send_resolved: false
     templates:
     - '/etc/alertmanager/config/*.tmpl'
@@ -998,8 +1074,17 @@ alertmanager:
     # /etc/alertmanager/secrets/alertmanager-smtp/password and referenced by
     # config.global.smtp_auth_password_file so the credential never enters the
     # (plaintext) values ConfigMap.
+    #
+    # alertmanager-deadman holds the healthchecks.io ping URL; mounted at
+    # /etc/alertmanager/secrets/alertmanager-deadman/ping-url and referenced by
+    # the 'deadman' receiver's url_file, for the same reason.
+    #
+    # A missing secret here blocks Alertmanager startup. Both files are wired
+    # into kustomization.yaml, so `kustomize build` (and CI) fails before a
+    # half-configured Alertmanager can ever reach the cluster.
     secrets:
       - alertmanager-smtp
+      - alertmanager-deadman
 
     ## If false then the user will opt out of automounting API credentials.
     ##

@@ -28,6 +28,7 @@ The historical `docs/apps/`, `docs/guides/`, `docs/incidents/`, and `docs/infra/
 
 - [Adding a new app](operations/2026-05-02-adding-an-app.md)
 - [Flux debugging — common patterns](operations/2026-05-02-flux-debugging.md)
+- [Gotchas index](operations/2026-08-15-gotchas-index.md) — behaviour that already cost real time once
 - [CNPG backup and disaster recovery](operations/2026-05-02-cnpg-backup-recovery.md)
 - How-to guides (grandfathered names): [Making changes](operations/making-changes.md), [Flux and deployments](operations/flux-and-deployments.md), [Staging workflow](operations/staging-workflow.md), [Synology iSCSI operations](operations/synology-iscsi-operations.md)
 

@@ -4,8 +4,20 @@ namespace: cadence
 resources:
   - ../../base/cadence/
   - httproute.yaml
-  # The cadence-secrets Secret is operator-created (SOPS) — see secret.sops.yaml.example.
-  # Add `- secret.sops.yaml` here once it exists; the pod won't start without it.
+  # SOPS-encrypted; operator-created from secret.sops.yaml.example.
+  #
+  # Referenced (not commented out) ON PURPOSE: `kustomize build` — and therefore
+  # CI — fails until the encrypted file exists. That is the merge gate, matching
+  # infra/controllers/kube-prometheus-stack/.
+  #
+  # Leaving it commented out made the gate a comment rather than a gate: the
+  # build passed, CI went green, and Flux would have applied everything. There
+  # is no `wait: true` or `healthChecks` on the apps-production Kustomization, so
+  # Flux reports success while the pod sits in CreateContainerConfigError
+  # indefinitely — and cadence.burntbytes.com is already published on the public
+  # tunnel (#1261), so it would have started serving 503s from the gateway
+  # instead of a 404. A broken-production gate is not a merge gate.
+  - secret.sops.yaml
 labels:
   - pairs:
       env: production

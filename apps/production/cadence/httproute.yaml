@@ -29,6 +29,34 @@ spec:
     - name: app-gateway-production
       namespace: default
       sectionName: https
+  # AUTHENTICATION — deliberately none at the gateway. Recorded here because
+  # cadence.burntbytes.com is published on the public tunnel (#1261) and
+  # Authelia's default_policy is `bypass`, so "no rule" is easy to mistake for
+  # an oversight. It is not: the app authenticates every route itself, and the
+  # route mix is why a blanket Authelia rule would break it.
+  #
+  #   app.*        merchant dashboard — GUARDED. apps/shopify/app/routes/app.tsx
+  #                calls authenticate.admin(request) in its loader, which covers
+  #                every app.* child. A Shopify session is required.
+  #   auth.*       OAuth install/callback — MUST stay public or no merchant can
+  #                ever install the app.
+  #   webhooks.*   Shopify-signed — MUST stay public; authenticate.webhook()
+  #                verifies HMAC, which is strictly better than IP/SSO gating.
+  #   pay/:shop/:sku
+  #                UNAUTHENTICATED BY DESIGN — the agent-facing payment endpoint.
+  #                Paying agents are not merchants and hold no Shopify session,
+  #                so this is the product, not a gap. Its integrity comes from
+  #                the signed acceptance receipt, NOT from network placement.
+  #
+  # Which is why CADENCE_ACCEPTANCE_PRIV_PEM / _PUB_HEX are load-bearing: absent
+  # them the app falls back to an EPHEMERAL signing key and only warns, so
+  # receipts stop verifying across restarts or replicas. They are in the
+  # SOPS secret, and the kustomization now hard-fails the build without it.
+  #
+  # No path `matches` are set, so all four groups route to the backend — correct
+  # given the above. If a future route needs SSO, split it out rather than
+  # putting Authelia in front of the whole host: that would break OAuth install
+  # and every webhook.
   rules:
     - backendRefs:
         - name: cadence

@@ -35,15 +35,30 @@ spec:
           type: RuntimeDefault
       containers:
         - name: cadence
-          # Public ghcr package; the production overlay pins a sha (deployment-patch).
-          # First deploy tracks :latest until the sha pin lands (see kustomization).
-          image: ghcr.io/gjcourt/cadence:latest
+          # Public ghcr package, pinned by date tag AND digest.
+          #
+          # This was `:latest` until 2026-08-16, behind a comment promising the
+          # production overlay pinned a sha — no such deployment-patch ever
+          # existed. `:latest` implies imagePullPolicy: Always, so any reschedule
+          # (node drain, OOM, or a bounce for the recurring iSCSI read-only
+          # failure) silently pulls whatever was pushed last. A bad build would
+          # reach production with no Git change, Flux would still report healthy,
+          # and there would be no tag to roll back to — which makes the repo's
+          # "image tags are strictly increasing" invariant unevaluable rather
+          # than merely violated.
+          image: ghcr.io/gjcourt/cadence:2026-08-12@sha256:fdd29a861705dc83c8ca2f153639a51a78fae1b61b551e5a050ed34d7617ac47
           ports:
             - name: http
               containerPort: 3000
           env:
             - name: PORT
               value: "3000"
+            # Production defaults; overlays override per env (same pattern as
+            # vibrato's LEVA_NODE_ID). Env-specific values in a base is a latent
+            # bug rather than a live one — today there is no staging overlay, but
+            # the moment one is added an unpatched `-stage` pod would advertise
+            # the PRODUCTION app URL and Shopify OAuth callbacks would land on
+            # prod. Any new overlay MUST patch SHOPIFY_APP_URL.
             - name: SHOPIFY_APP_URL
               value: "https://cadence.burntbytes.com"
             - name: SCOPES
@@ -78,15 +93,38 @@ spec:
                 secretKeyRef:
                   name: cadence-secrets
                   key: CADENCE_ACCEPTANCE_PUB_HEX
-          # TCP readiness (the app has no dedicated health route). No livenessProbe: it
-          # would share the same TCP signal, and the quality gate wants a distinct one.
+          # Readiness EXERCISES THE VOLUME, not just the socket.
+          #
+          # This was a tcpSocket probe. That cannot detect this app's most likely
+          # production failure: SQLite lives on an RWO iSCSI PVC, and the
+          # recurring failure mode in this cluster is that volume flipping
+          # read-only (six incidents; #1080). When it does, the listener on 3000
+          # stays open, so TCP readiness stays green, the gateway keeps routing,
+          # and every Shopify webhook and agent payment fails silently.
+          #
+          # That is not hypothetical — on 2026-08-13 exactly this happened
+          # cluster-wide, and immich's Postgres reported ready=True while
+          # FATALing on every query. See the AGENTS.md iSCSI section.
+          #
+          # A write to /data is the cheapest signal that the thing the app
+          # actually depends on still works; the adding-an-app doc lists `exec`
+          # for precisely this case. Timings are the doc's locked 5/3 — the
+          # previous 15/6 kept a wedged pod in rotation for 60s of failures with
+          # no stated justification.
           readinessProbe:
-            tcpSocket:
-              port: http
-            initialDelaySeconds: 15
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - touch /data/.readyz && rm -f /data/.readyz
+            initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3
-            failureThreshold: 6
+            failureThreshold: 3
+          # No livenessProbe: a restart does not clear a read-only iSCSI mount
+          # (see AGENTS.md — it needs an operator-driven detach), so liveness
+          # would crash-loop the pod without fixing anything. Readiness pulling
+          # it from rotation is the correct, non-destructive response.
           resources:
             requests:
               cpu: 25m
@@ -99,11 +137,24 @@ spec:
             capabilities:
               drop:
                 - ALL
+            # Every self-authored Node app in this repo sets this (vibrato is the
+            # direct model); the handful that don't are all third-party images.
+            # It matters more than usual here: this app terminates unauthenticated
+            # requests from the public internet at /pay/:shop/:sku, so a
+            # path-traversal or dependency RCE should be confined to /data and
+            # /tmp rather than free to write anywhere in the container.
+            readOnlyRootFilesystem: true
           volumeMounts:
             # SQLite session + decision/order store (DATABASE_URL=file:/data/cadence.sqlite).
             - name: data
               mountPath: /data
+            # Writable scratch to compensate for readOnlyRootFilesystem — Node
+            # and the React Router server both expect a usable /tmp.
+            - name: tmp
+              mountPath: /tmp
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: cadence-data
+        - name: tmp
+          emptyDir: {}

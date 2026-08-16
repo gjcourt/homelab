@@ -1,0 +1,23 @@
+# PodDisruptionBudget — block voluntary eviction of the single replica.
+#
+# 23 of 32 base apps ship one; the direct model here is apps/base/vibrato/pdb.yaml.
+#
+# maxUnavailable: 0 (not minAvailable: 1) because this is a single-replica
+# Deployment on an RWO iSCSI volume. A node drain would otherwise evict the pod
+# and force a detach/reattach cycle on hestia — which is the exact churn that
+# triggers the recurring read-only remount (#1080, six incidents). Blocking the
+# voluntary case makes drains stop and ask rather than silently wedging the app.
+#
+# Trade-off, stated so the next person doesn't file it as a bug: `kubectl drain`
+# on this pod's node will hang until it is scaled down by hand. That is
+# deliberate. It does NOT affect involuntary disruption (node loss, OOM) — those
+# bypass PDBs entirely.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: cadence
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cadence

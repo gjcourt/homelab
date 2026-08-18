@@ -57,12 +57,51 @@ Access Grafana and verify that data is populating in the default dashboards.
 |---|---|---|
 | `email-critical` | `severity = "critical"` | `gjcourt+critical@gmail.com` (no skip-inbox filter), `send_resolved: true`, `repeat_interval: 4h` |
 | `email-warning` | `severity = "warning"` | `gjcourt+alerts@gmail.com` behind a Gmail skip-inbox label, `send_resolved: false`, `repeat_interval: 24h` |
-| `deadman` | `Watchdog` only | Webhook POST to an off-cluster healthchecks.io check every 5m — the **dead man's switch**; the check alerts on the ping's *absence*. See [plans/2026-08-09-local-deadman-mesh.md](../plans/2026-08-09-local-deadman-mesh.md) |
+| `deadman` | `Watchdog` only | Webhook POST to an off-cluster healthchecks.io check every 5m — the **dead man's switch**; the check alerts on the ping's *absence*. Notifies `gjcourt+critical@gmail.com` (see below). See [plans/2026-08-09-local-deadman-mesh.md](../plans/2026-08-09-local-deadman-mesh.md) |
 | `null` | `overture-prod` KubePdb, `*-stage` warnings, and the default route | Discarded |
 
 Both email receivers use Gmail SMTP (`smtp.gmail.com:587`, STARTTLS, auth `gjcourt@gmail.com`). Secrets are SOPS-encrypted in the `monitoring` namespace and mounted via `alertmanagerSpec.secrets`: `alertmanager-smtp` → `/etc/alertmanager/secrets/alertmanager-smtp/password` (`smtp_auth_password_file`), and `alertmanager-deadman` → `/etc/alertmanager/secrets/alertmanager-deadman/ping-url` (`url_file`).
 
 Note the default route receiver is `null`, so an alert carrying no `severity` label is silently dropped. Note also that the deadman proves the *webhook* leg only — a broken SMTP path would leave the check green while email alerts fail. See [plans/2026-06-17-alertmanager-smtp-alerting.md](../plans/2026-06-17-alertmanager-smtp-alerting.md).
+
+### Dead man's switch — verified timings
+
+The healthchecks.io check is configured **Simple schedule, Period 6m, Grace 15m
+→ 21m worst-case detection**. Period is 6m and not 5m because the measured ping
+cadence is **5m03–5m04s**: `group_interval` sets a nominal 5m and each ping
+slips by the POST round-trip, so a 5m Period would park the check in amber
+"late" for a few seconds of every cycle and destroy "late" as a signal.
+
+Notifications go to `gjcourt+critical@gmail.com`, **not** `+alerts`. `+alerts`
+is the skip-inbox tier documented above as unread, and total alerting failure
+outranks any individual critical — routing the deadman there would put the one
+alert that means "you are now blind" in the mailbox you do not watch. A
+non-email channel (Pushover/ntfy/SMS) is worth adding for the same reason: 21m
+detection becomes overnight detection if it only reaches an inbox.
+
+Three behaviours that will otherwise read as faults:
+
+- **Only one replica's counter moves.** In HA the peer that wins the dedup race
+  is the one that POSTs; `alertmanager_notifications_total{integration="webhook"}`
+  stays `0` on the other. Read both replicas before concluding the webhook is
+  broken.
+- **`amtool check-config` does not catch `repeat_interval < group_interval`.**
+  It returns SUCCESS; only the running server logs the warning
+  (`Notifications will not repeat until the next group_interval`). That warning
+  is expected and benign — `repeat_interval` must stay strictly under
+  `group_interval` or the cadence silently doubles.
+- **Recovery after a silence expires is not instant** — the next flush waits a
+  full `group_interval` (measured 4m37s).
+
+Fail-closed test, **verified 2026-08-16** (procedure in the
+`secret-alertmanager-deadman.yaml.example` header):
+
+| | |
+|---|---|
+| Last ping → DOWN | 09:11:11Z → 09:32:11Z = **21m0s**, exactly Period + Grace |
+| Silence expired → resumed | 09:36:34Z → 09:41:11Z = **4m37s** |
+| Reported downtime | 8m59s |
+| Ping accounting | healthchecks.io "Total Pings" matched the Alertmanager counter at both points — **zero loss** cluster → endpoint |
 
 ## 8. Disaster Recovery
 - **Backup Strategy**:

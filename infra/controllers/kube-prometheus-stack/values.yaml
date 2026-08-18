@@ -574,8 +574,10 @@ alertmanager:
       #
       # Replicas ticker independently and never re-sync (the group never
       # empties), so after a restart both may POST within one period. Harmless:
-      # only the gap matters and it stays <= 5m. Against a 15m grace that is
-      # ~20m worst-case detection. group_wait 0s saves a real 30s on the first
+      # only the gap matters and it stays <= 5m. Measured cadence is 5m03-5m04s
+      # (the POST round-trip slips each tick), so the check Period is 6m, not
+      # 5m; against a 15m grace that is 21m worst-case detection, confirmed
+      # empirically at 21m0s on 2026-08-16. group_wait 0s saves a real 30s on the first
       # flush — gossip settles in seconds, well short of the 60s
       # --cluster.settle-timeout ceiling.
       - receiver: 'deadman'

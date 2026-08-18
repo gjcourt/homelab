@@ -26,7 +26,7 @@ cannot distinguish a house-wide power cut from the ISP dropping.
 | Survives whole-site failure | ✅ it isn't here | ❌ dies with everything |
 | Identifies *which* component | ❌ one bit | ✅ names it, with diagnostics |
 | Tells WAN-down from power-down | ❌ identical silence | ✅ peers still see each other |
-| Detection latency | ~20 min (grace) | seconds to ~2 min |
+| Detection latency | 21 min (6m period + 15m grace, measured) | seconds to ~2 min |
 | Needs maintenance | ❌ vendor's problem | ✅ ours, and it can rot |
 
 This is not a replacement for the external check. It is the diagnostic tier

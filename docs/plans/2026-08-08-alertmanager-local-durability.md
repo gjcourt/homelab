@@ -54,8 +54,8 @@ stays near zero.
 ## Gap 2 — silent alerting loss is undetectable (the bigger one) — **RESOLVED 2026-08-09**
 
 > Closed by the healthchecks.io dead man's switch: `Watchdog` now routes to a
-> `deadman` receiver that POSTs to an off-cluster check every 5m (15m grace,
-> ~20m worst-case detection). The ping URL lives in the SOPS-encrypted
+> `deadman` receiver that POSTs to an off-cluster check every 5m (6m period +
+> 15m grace, 21m worst-case detection, measured 2026-08-16). The ping URL lives in the SOPS-encrypted
 > `alertmanager-deadman` secret and is referenced via `url_file`.
 >
 > The follow-on local mesh — cross-monitoring between the cluster, hestia and

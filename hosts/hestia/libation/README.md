@@ -29,11 +29,29 @@ sudo chown -R 1001:1001 /mnt/main/apps/libation
 sudo chmod 700 /mnt/main/apps/libation/config    # holds a live Audible token
 ```
 
-### 2. Start the container
+### 2. Create the Custom App in the SCALE UI (one-time)
+
+**Auto-deploy cannot do the initial create** — same as every other hestia
+workload. Do this once by hand:
+
+- Apps → Discover Apps → **Custom App**
+- Name: **`libation`** (must match the directory name — `deploy-hestia.yml`
+  derives the app name from the parent directory for a plain
+  `docker-compose.yml`)
+- Paste the contents of `docker-compose.yml` from this directory
+- Install, and wait for it to reach **Running**
+
+After this bootstrap, **every change to `docker-compose.yml` on `master`
+auto-deploys**: `.github/workflows/deploy-hestia.yml` calls
+`scripts/truenas-update-app.sh libation ...` on the self-hosted runner and
+applies the new compose over the TrueNAS WebSocket API. This directory has no
+`x-deploy.archived` block, so it is in scope for that workflow.
+
+To roll back: revert the commit and merge — auto-deploy applies the old compose.
 
 ```bash
-cd /mnt/main/apps/libation && docker compose up -d
-docker logs -f libation      # confirm what the entrypoint actually does
+# confirm what the entrypoint actually did
+ssh truenas_admin@10.42.2.10 'sudo -n docker logs libation 2>&1 | head -20'
 ```
 
 Watch that first log. It should say **`running every 86400`**. If it instead

@@ -25,7 +25,7 @@ on hestia rather than as a sidecar in the cluster.
 
 ```bash
 sudo mkdir -p /mnt/main/apps/libation/config
-sudo chown -R 950:950 /mnt/main/apps/libation
+sudo chown -R 1001:1001 /mnt/main/apps/libation
 sudo chmod 700 /mnt/main/apps/libation/config    # holds a live Audible token
 ```
 
@@ -36,11 +36,32 @@ cd /mnt/main/apps/libation && docker compose up -d
 docker logs -f libation      # confirm what the entrypoint actually does
 ```
 
-Watch that first log. It settles the one thing this compose file could not
-verify at authoring time: whether the image loops on `SLEEP_TIME` or runs once
-and exits. If it exits, remove `restart: unless-stopped` and drive it from a
-systemd timer instead — a restarting one-shot container is an accidental
-hot loop against Audible's API, which is exactly what you don't want.
+Watch that first log. It should say **`running every 86400`**. If it instead
+says `running once`, `SLEEP_TIME` is not reaching the container and you have an
+accidental hot loop — the container will exit after each pass, Docker will
+restart it, and it will run again immediately, hammering Audible's API. Stop it
+and fix the env before letting it continue.
+
+This was verified against the image on 2026-08-18 by reading `liberate.sh`:
+
+```bash
+if [[ -z "${SLEEP_TIME}" ]]; then SLEEP_TIME=-1; fi
+while true; do
+  run
+  if [ "${SLEEP_TIME}" == -1 ]; then break; fi   # default: run once, exit
+  sleep "${SLEEP_TIME}"
+done
+```
+
+So `SLEEP_TIME=86400` is load-bearing, not a tuning knob. The image default of
+`-1` combined with `restart: unless-stopped` is the failure mode.
+
+**Ownership: the container runs as `1001:1001`.** That is the image's own
+`User`, and it is neither the `APP_UID=1654` env var the image also sets nor a
+PUID/PGID convention — `liberate.sh` contains no PUID/PGID/useradd/chown
+handling at all, so those variables are silently ignored. If the host
+directories are owned by anything else, the container starts normally and
+simply cannot write, which is a slow and confusing way to discover the problem.
 
 ### 3. Authenticate to Audible — interactive, cannot be automated
 
@@ -119,7 +140,7 @@ miss most. Check one file explicitly rather than assuming.
 ## Operational notes
 
 **The config directory is a credential store.** `/mnt/main/apps/libation/config`
-holds a live Audible auth token. It is `chmod 700`, owned by `950:950`, and
+holds a live Audible auth token. It is `chmod 700`, owned by `1001:1001`, and
 never enters this repo. Treat a leak the same as an account compromise: change
 the Amazon password, then re-run `account add`.
 

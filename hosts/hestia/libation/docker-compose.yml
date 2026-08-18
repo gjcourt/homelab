@@ -27,13 +27,26 @@
 # ONE-TIME step — Libation persists the token to /config and every subsequent
 # run is unattended. See README.md for the exact command.
 #
-# ─── UNVERIFIED: the env interface below ────────────────────────────────────
-# The image's entrypoint/env could not be introspected when this was written
-# (sshd on hestia was refusing connections). SLEEP_TIME is Libation's documented
-# loop interval, but CONFIRM against `docker inspect rmcrackan/libation:13.7.8`
-# and the container's first-run logs before trusting the schedule. If the image
-# turns out to be one-shot rather than looping, drop `restart: unless-stopped`
-# and drive it from a systemd timer instead — see README.md.
+# ─── VERIFIED 2026-08-18 against the image's liberate.sh ────────────────────
+# Read directly from rmcrackan/libation:13.7.8. Three things that were guessed
+# at when this was written, now confirmed:
+#
+# 1. SLEEP_TIME semantics. The image default is -1, which means "run once, then
+#    exit". Any other value loops in-container: `while true; do run; sleep
+#    $SLEEP_TIME; done`. So SLEEP_TIME=86400 below is REQUIRED, not cosmetic —
+#    with `restart: unless-stopped` and the default -1, the container would exit
+#    after each pass, Docker would restart it, and it would immediately run
+#    again. That is a hot loop against Audible's API.
+#
+# 2. The container runs as 1001:1001 (image `User`), NOT the APP_UID=1654 env
+#    var and NOT PUID/PGID. liberate.sh contains no PUID/PGID/useradd/chown
+#    handling whatsoever — this is not a linuxserver.io image, and those
+#    variables are silently ignored. Host directories must be owned by 1001.
+#
+# 3. LIBATION_DB_DIR=/db is deliberately left unmounted. liberate.sh checks
+#    `is_mounted $LIBATION_DB_DIR` and falls back to $LIBATION_CONFIG_DIR, which
+#    IS mounted — so the library database persists in /config. A separate /db
+#    mount is optional tidiness, not a fix for data loss.
 
 services:
   libation:
@@ -46,8 +59,12 @@ services:
     container_name: libation
     restart: unless-stopped
     environment:
-      - PUID=950 # truenas_admin — matches the other hestia workloads
-      - PGID=950
+      # NOTE: PUID/PGID are deliberately absent. This is not a linuxserver.io
+      # image — liberate.sh has no code that reads them, so setting them would
+      # be inert and misleading. The container runs as the image's own
+      # User=1001:1001. Host paths must be chown'd to 1001:1001 accordingly
+      # (see README.md); getting this wrong fails silently — the container
+      # starts fine and simply cannot write.
       - TZ=America/New_York
       # Interval between `liberate` passes. New Audible purchases are rare, so
       # this is deliberately slow — a daily sweep is plenty and keeps the

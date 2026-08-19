@@ -24,6 +24,10 @@ on hestia rather than as a sidecar in the cluster.
 ### 1. Create the directories
 
 ```bash
+# a real dataset, matching the qbittorrent precedent — not a plain directory, so
+# it carries its own snapshots and properties
+sudo -n zfs list main/apps >/dev/null 2>&1 || sudo -n zfs create main/apps
+sudo -n zfs create main/apps/libation
 sudo -n mkdir -p /mnt/main/apps/libation/config
 sudo -n chown -R 1028:100 /mnt/main/apps/libation
 sudo -n chmod 700 /mnt/main/apps/libation/config    # holds a live Audible token
@@ -88,7 +92,11 @@ done
 ```
 
 So `SLEEP_TIME=86400` is load-bearing, not a tuning knob. The image default of
-`-1` combined with `restart: unless-stopped` is the failure mode.
+`-1` combined with `restart: unless-stopped` is the failure mode: the script
+exits 0 after a single pass, Docker restarts it, and any run long enough to
+reset Docker's 10s backoff timer restarts *immediately* — a genuine loop. See
+the compose file for why `unless-stopped` is still the right policy despite
+that, and why `on-failure` was tried and rejected.
 
 **Ownership: the container runs as `1028:100`, set by `user:` in the compose.**
 
@@ -142,7 +150,8 @@ sudo -n chown 1028:100 /mnt/main/apps/libation/config/Settings.json
 sudo -n chmod 644 /mnt/main/apps/libation/config/Settings.json
 ```
 
-**`TokenStorageMethod: Plaintext` is mandatory, not a preference.** Libation
+**`TokenStorageMethod: Plaintext` is the right choice here, and it must be set
+before the first login.** Libation
 defaults to `Encrypted`, which requires an OS secret store to hold the key. A
 container has none, so it falls back to a "last-resort" key written to
 `/config-internal` — which is ephemeral. Every container recreate mints a new key
@@ -190,7 +199,7 @@ Verify what Libation actually parsed before continuing:
 sudo -n docker run --rm --user 1028:100 \
   -v /mnt/main/apps/libation/config:/config \
   -v /mnt/main/family/media/audiobooks:/data \
-  rmcrackan/libation:13.7.8 \
+  rmcrackan/libation:13.7.8@sha256:8a6cd5c3a532512f7871401c3c63110acf3115a3b19e744ccb118a4a99bef186 \
   bash -c '/libation/LibationCli get-setting -b | grep -iE "Template|TokenStorage"'
 ```
 
@@ -207,7 +216,7 @@ command it is given:
 sudo -n docker run --rm -it --user 1028:100 \
   -v /mnt/main/apps/libation/config:/config \
   -v /mnt/main/family/media/audiobooks:/data \
-  rmcrackan/libation:13.7.8 \
+  rmcrackan/libation:13.7.8@sha256:8a6cd5c3a532512f7871401c3c63110acf3115a3b19e744ccb118a4a99bef186 \
   bash -c 'set -e
     /libation/LibationCli login-external \
       -a "<audible-account-email>" -l us \
@@ -244,7 +253,7 @@ letting ABS scan:
 
 ```bash
 # must be 0 — any audio file sitting directly in an author folder is wrong
-find /mnt/main/family/media/audiobooks -mindepth 2 -maxdepth 2 \
+find /mnt/main/family/media/audiobooks -mindepth 1 -maxdepth 2 \
      \( -name '*.m4b' -o -name '*.mp3' \) | wc -l
 ```
 
@@ -253,9 +262,6 @@ PDFs must live inside the book's own folder too, or ABS ignores them.
 Libation 13.7.8 ships an `upload` verb that pushes liberated books to
 Audiobookshelf over its API. It is deliberately unused: ABS reads this share
 directly, so uploading would write a second copy into ABS's own storage.
-
-*(A `docker` verification step existed here previously; there is no `ffprobe`
-in this image — see "Verifying it worked".)*
 
 **Repairing a bad layout does not require re-downloading.** Moving files on disk
 does not change `BookStatus` in the database, and `liberate` only processes books
@@ -303,6 +309,9 @@ sudo -n docker run --rm -v "$D":/data:ro \
 `-show_streams` is required: `-show_chapters` alone emits only the chapters
 array and will not show the audio or cover-art streams described below. The
 mount is read-only because that container runs as root.
+
+`linuxserver/ffmpeg:latest` is deliberately unpinned — a throwaway inspector
+that touches nothing, not a workload.
 
 A good file shows named chapters (`"title": "1. Effectiveness Can Be Learned"`),
 an `aac` audio stream, and an `mjpeg` stream — that last one is the embedded

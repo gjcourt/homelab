@@ -34,7 +34,7 @@ The compose YAML in each subdirectory is the canonical source.
 |---------|-----------|-------|
 | gha-runner | `actions-runner/` | Self-hosted GitHub Actions runner; auto-deploys other hestia apps |
 | immich-photos-backup | `immich-photos-backup/` | Daily rsync of the Immich photo library from alcatraz into ZFS |
-| libation | `libation/` | Audible → DRM-free M4B for Audiobookshelf; writes the ROX-mounted audiobooks share (operator bootstrap: interactive Audible auth) |
+| libation | `libation/` | Audible → DRM-free M4B for Audiobookshelf; writes the audiobooks dataset that Audiobookshelf mounts read-only over NFS (operator bootstrap: interactive Audible auth) |
 | qbittorrent | `qbittorrent/` | P2P client, private-tracker downloads |
 | thermalscope | `thermalscope/` | Thermal + power telemetry, Prometheus metrics over host networking |
 | ipmi-exporter | `monitoring/` | IPMI metrics (`docker-compose-ipmi-exporter.yml`) |

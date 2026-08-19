@@ -74,19 +74,30 @@ services:
     # resolves correctly regardless of architecture.
     image: rmcrackan/libation:13.7.8@sha256:8a6cd5c3a532512f7871401c3c63110acf3115a3b19e744ccb118a4a99bef186
     container_name: libation
-    # NOT `unless-stopped`. SLEEP_TIME only paces the SUCCESS path: liberate.sh
-    # `run()` does `LibationCli scan; if scan fails -> exit $scan_exit`, so a
-    # failing scan (expired token, Audible API change, network) never reaches
-    # the `sleep`. Under `unless-stopped` Docker restarts it immediately and its
-    # backoff resets once the container survives ~10s — which is exactly the hot
-    # loop against Audible's API this file otherwise warns about. Capping
-    # restarts bounds that. The healthy path never exits (infinite in-container
-    # loop), so this policy only bites on failure.
+    # `unless-stopped`, deliberately, after trying `on-failure:5` and reverting.
     #
-    # Trade-off, accept knowingly: after 5 consecutive failures the app stays
-    # DOWN and nothing alerts on it. Check `docker ps -a --filter name=libation`
-    # if new purchases stop appearing.
-    restart: on-failure:5
+    # The failure path is real: liberate.sh `run()` does `LibationCli scan; if
+    # scan fails -> exit $scan_exit`, so a failing scan (expired token, Audible
+    # API change, network blip) exits without ever reaching the `sleep`. The
+    # question is what should happen next.
+    #
+    # `on-failure:5` was wrong here. Docker's on-failure backoff is
+    # 100/200/400/800/1600ms, so the entire retry budget is spent in about THREE
+    # SECONDS. Any fault lasting longer than that stops the container
+    # permanently, and nothing on this host alerts on container state — an
+    # unattended archival job would die silently and stay dead until somebody
+    # noticed missing books.
+    #
+    # The hot-loop fear that motivated the change does not apply. Docker resets
+    # its backoff only after the container stays up ~10s; a scan that fails in
+    # ~1s never earns that reset, so the interval grows to the 60s cap and stays
+    # there. Observed live while unauthenticated: restarts spaced 13s, then 26s,
+    # climbing. One attempt per minute against an account you own is not abuse.
+    #
+    # So: retry forever, bounded by backoff, and self-heal when the fault
+    # clears. Check `docker ps -a --filter name=libation` if new purchases stop
+    # appearing — there is still no alerting.
+    restart: unless-stopped
     # Override the image's User=1001:1001 with the owner of the audiobooks
     # dataset. See note 2 in the header for why. /mnt/main/apps/libation must
     # be chown'd to match — 1001 there would break the database create.

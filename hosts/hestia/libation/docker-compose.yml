@@ -24,8 +24,11 @@
 # ─── OPERATOR BOOTSTRAP REQUIRED BEFORE FIRST RUN ───────────────────────────
 # Audible authentication is interactive: it needs the account password and an
 # OTP, so it cannot be automated and is deliberately not scripted here. It is a
-# ONE-TIME step — Libation persists the token to /config and every subsequent
-# run is unattended. See README.md for the exact command.
+# ONE-TIME step, but it is NOT self-persisting: LibationCli writes
+# AccountsSettings.json to /config-internal, which is ephemeral and regenerated
+# from /config on every start. The login must be copied back to /config by hand
+# or it is lost on the next container recreate. See README.md step 4 — do not
+# improvise this command.
 #
 # ─── VERIFIED 2026-08-18 against the image's liberate.sh ────────────────────
 # Read directly from rmcrackan/libation:13.7.8. Three things that were guessed
@@ -71,7 +74,19 @@ services:
     # resolves correctly regardless of architecture.
     image: rmcrackan/libation:13.7.8@sha256:8a6cd5c3a532512f7871401c3c63110acf3115a3b19e744ccb118a4a99bef186
     container_name: libation
-    restart: unless-stopped
+    # NOT `unless-stopped`. SLEEP_TIME only paces the SUCCESS path: liberate.sh
+    # `run()` does `LibationCli scan; if scan fails -> exit $scan_exit`, so a
+    # failing scan (expired token, Audible API change, network) never reaches
+    # the `sleep`. Under `unless-stopped` Docker restarts it immediately and its
+    # backoff resets once the container survives ~10s — which is exactly the hot
+    # loop against Audible's API this file otherwise warns about. Capping
+    # restarts bounds that. The healthy path never exits (infinite in-container
+    # loop), so this policy only bites on failure.
+    #
+    # Trade-off, accept knowingly: after 5 consecutive failures the app stays
+    # DOWN and nothing alerts on it. Check `docker ps -a --filter name=libation`
+    # if new purchases stop appearing.
+    restart: on-failure:5
     # Override the image's User=1001:1001 with the owner of the audiobooks
     # dataset. See note 2 in the header for why. /mnt/main/apps/libation must
     # be chown'd to match — 1001 there would break the database create.
@@ -84,6 +99,10 @@ services:
       # getting this wrong does not always fail loudly — a bad /data only
       # surfaces on the first download, long after the container looks healthy.
       - TZ=America/New_York
+      # 1028 has no /etc/passwd entry in this image, so HOME resolves to `/`,
+      # which it cannot write. Not currently load-bearing (the entrypoint forces
+      # InProgress=/tmp) but cheap insurance against a .NET component wanting one.
+      - HOME=/tmp
       # Interval between `liberate` passes. New Audible purchases are rare, so
       # this is deliberately slow — a daily sweep is plenty and keeps the
       # account's request pattern unremarkable.
@@ -92,5 +111,7 @@ services:
       - /mnt/main/apps/libation/config:/config
       - /mnt/main/family/media/audiobooks:/data
     # No ports: this is a headless producer with no web UI to expose. Everything
-    # is driven through `docker exec` or the config directory.
+    # is driven through one-off `docker run` containers (the entrypoint execs any
+    # command passed to it) or through the config directory. Note `docker exec`
+    # is NOT usable before authentication — the container is not up long enough.
     network_mode: bridge

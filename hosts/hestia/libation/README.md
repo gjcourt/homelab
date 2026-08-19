@@ -24,9 +24,9 @@ on hestia rather than as a sidecar in the cluster.
 ### 1. Create the directories
 
 ```bash
-sudo mkdir -p /mnt/main/apps/libation/config
-sudo chown -R 1028:100 /mnt/main/apps/libation
-sudo chmod 700 /mnt/main/apps/libation/config    # holds a live Audible token
+sudo -n mkdir -p /mnt/main/apps/libation/config
+sudo -n chown -R 1028:100 /mnt/main/apps/libation
+sudo -n chmod 700 /mnt/main/apps/libation/config    # holds a live Audible token
 ```
 
 **Do this BEFORE installing the app.** If the directories do not exist when the
@@ -44,7 +44,18 @@ workload. Do this once by hand:
   derives the app name from the parent directory for a plain
   `docker-compose.yml`)
 - Paste the contents of `docker-compose.yml` from this directory
-- Install, and wait for it to reach **Running**
+- Install
+
+**Do not wait for `Running` here — it will crash-loop, and that is correct.**
+With no Audible account configured yet, `liberate.sh` exits 3 on
+`No accounts. Exiting.` and Docker restarts it. The app only settles after step
+4. Judging the install by container state at this point will look like a broken
+deploy when nothing is wrong.
+
+**This create must happen BEFORE the PR merges.** `deploy-hestia.yml` fires on
+every push touching `hosts/hestia/**/docker-compose*.yml`, and
+`scripts/truenas-update-app.sh` exits `app 'libation' not found on TrueNAS` if
+the app does not already exist. Merging first produces a red deploy run.
 
 After this bootstrap, **every change to `docker-compose.yml` on `master`
 auto-deploys**: `.github/workflows/deploy-hestia.yml` calls
@@ -142,12 +153,21 @@ Encrypted authentication tokens in AccountsSettings.json could not be decrypted
 on this machine.  Underlying error: Failed to decrypt ExistingAccessToken.
 ```
 
-`export-master-key` is **not** a workaround here — it fails outright with
+`export-master-key` cannot help *from inside the container* — it fails with
 `Cannot export the encryption master key because the OS secret store is
-unavailable`. There is no encrypted-token configuration that survives a restart
-in this deployment. Plaintext tokens in a `chmod 700` directory are also not a
-meaningful downgrade: the alternative stores the decryption key in the same
-directory as the file it decrypts.
+unavailable`.
+
+To be precise about what is and isn't possible: `liberate.sh` does have an
+`init_master_key()` that honours `LIBATION_MASTER_KEY`, `LIBATION_MASTER_KEY_FILE`,
+and a `/config/libation-master.key` copied in on start — the same mechanism used
+for `AccountsSettings.json`. So encrypted tokens *can* be made to survive, but
+only with a key exported from a Libation install that has an OS secret store
+(i.e. a desktop install), which this deployment does not have.
+
+Plaintext is therefore a scoped trade-off, not a forced move — and it is chosen
+deliberately, because keeping the decryption key in the same directory as the
+file it decrypts is not a meaningful security gain over a `chmod 700` directory
+on the same pool. If a desktop Libation ever enters the picture, revisit.
 
 **Template syntax has two traps, both of which silently corrupt directory
 names.** Conditional tags close by repeating the full tag name:
@@ -192,9 +212,9 @@ sudo -n docker run --rm -it --user 1028:100 \
     /libation/LibationCli login-external \
       -a "<audible-account-email>" -l us \
       -o TokenStorageMethod="Plaintext"
-    set +e
     cp -v /config-internal/AccountsSettings.json /config/
     chmod 600 /config/AccountsSettings.json
+    ls -l /config/AccountsSettings.json
     /libation/LibationCli list-accounts'
 ```
 
@@ -230,6 +250,13 @@ find /mnt/main/family/media/audiobooks -mindepth 2 -maxdepth 2 \
 
 PDFs must live inside the book's own folder too, or ABS ignores them.
 
+Libation 13.7.8 ships an `upload` verb that pushes liberated books to
+Audiobookshelf over its API. It is deliberately unused: ABS reads this share
+directly, so uploading would write a second copy into ABS's own storage.
+
+*(A `docker` verification step existed here previously; there is no `ffprobe`
+in this image — see "Verifying it worked".)*
+
 **Repairing a bad layout does not require re-downloading.** Moving files on disk
 does not change `BookStatus` in the database, and `liberate` only processes books
 marked `NotLiberated` — so a layout fix is a `mv` loop, not a re-download. Do not
@@ -258,7 +285,7 @@ end-to-end — until then it is "automated download, manual publish".
 D=/mnt/main/family/media/audiobooks
 ls "$D" | head                                    # authors appear
 find "$D" -name '*.m4b' | wc -l                   # book count
-find "$D" -mindepth 2 -maxdepth 2 -name '*.m4b' | wc -l   # MUST be 0 (see step 5)
+find "$D" -mindepth 1 -maxdepth 2 \( -name '*.m4b' -o -name '*.mp3' \) | wc -l  # MUST be 0 (step 5)
 find "$D" -mindepth 2 -maxdepth 2 -type d -name '*<-if>*' # MUST be empty (template leak)
 ```
 
@@ -267,10 +294,15 @@ miss most. There is **no `ffprobe` on hestia and none in the Libation image**, s
 check with a throwaway container:
 
 ```bash
-sudo -n docker run --rm -v "$D":/data \
+sudo -n docker run --rm -v "$D":/data:ro \
   --entrypoint /usr/local/bin/ffprobe linuxserver/ffmpeg:latest \
-  -v error -show_chapters -print_format json "/data/<author>/<title>/<title>.m4b" | head -40
+  -v error -show_chapters -show_streams -print_format json \
+  "/data/<author>/<title>/<title>.m4b" | head -60
 ```
+
+`-show_streams` is required: `-show_chapters` alone emits only the chapters
+array and will not show the audio or cover-art streams described below. The
+mount is read-only because that container runs as root.
 
 A good file shows named chapters (`"title": "1. Effectiveness Can Be Learned"`),
 an `aac` audio stream, and an `mjpeg` stream — that last one is the embedded

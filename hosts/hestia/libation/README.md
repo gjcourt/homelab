@@ -25,9 +25,14 @@ on hestia rather than as a sidecar in the cluster.
 
 ```bash
 sudo mkdir -p /mnt/main/apps/libation/config
-sudo chown -R 1001:1001 /mnt/main/apps/libation
+sudo chown -R 1028:100 /mnt/main/apps/libation
 sudo chmod 700 /mnt/main/apps/libation/config    # holds a live Audible token
 ```
+
+**Do this BEFORE installing the app.** If the directories do not exist when the
+container first starts, Docker creates them itself as `root:root` mode 755, the
+container cannot write, and it crash-loops on `unable to create database, check
+permissions on host`. That is not a subtle failure, but it is an avoidable one.
 
 ### 2. Create the Custom App in the SCALE UI (one-time)
 
@@ -74,60 +79,163 @@ done
 So `SLEEP_TIME=86400` is load-bearing, not a tuning knob. The image default of
 `-1` combined with `restart: unless-stopped` is the failure mode.
 
-**Ownership: the container runs as `1001:1001`.** That is the image's own
-`User`, and it is neither the `APP_UID=1654` env var the image also sets nor a
-PUID/PGID convention — `liberate.sh` contains no PUID/PGID/useradd/chown
-handling at all, so those variables are silently ignored. If the host
-directories are owned by anything else, the container starts normally and
-simply cannot write, which is a slow and confusing way to discover the problem.
+**Ownership: the container runs as `1028:100`, set by `user:` in the compose.**
 
-### 3. Authenticate to Audible — interactive, cannot be automated
+The image's own baked-in `User` is `1001:1001` — neither the `APP_UID=1654` env
+var it also sets, nor a PUID/PGID convention, since `liberate.sh` contains no
+PUID/PGID/useradd/chown handling at all and silently ignores those variables.
 
-Audible login needs the account password **and an OTP**, so this is deliberately
-a human step and is not scripted anywhere in this repo.
+We override it because `1001` is wrong for *this* deployment. Three uids meet on
+the audiobooks dataset:
+
+| Actor | uid:gid | Needs |
+|---|---|---|
+| existing dataset owner | `1028:100` | — |
+| Audiobookshelf pod | `1000:1000` | read (PV is ROX) |
+| Libation | `user:` override | **write** |
+
+`/mnt/main/family/media/audiobooks` is `1028:100` mode 755, so a `1001` process
+falls through to the `other` bits: it can read and traverse but cannot write. It
+would clear the database create, look healthy, and then fail on the first
+download. Running Libation as the dataset's existing owner keeps the whole tree
+single-owner and touches nothing that Audiobookshelf depends on — ABS reads
+through the `other` bits as `1000`, which is already how it reads the existing
+library, and Libation's output at default umask (`755`/`644`) stays readable to
+it.
+
+Chowning the dataset to `1001` was considered and rejected: it mutates a share
+with a second consumer to fix a problem that one compose line fixes. Adding
+`group_add: ["100"]` plus `chmod g+w` also works, but leaves correctness resting
+on a group-write bit that nothing enforces and any restore or replication drops.
+
+An explicit `user:` has one more benefit: it pins identity against an image bump
+silently changing the baked-in `User`, which would otherwise reintroduce exactly
+this failure with no diff to point at.
+
+### 3. Write `Settings.json` BEFORE authenticating
+
+Two settings are load-bearing and both must be in place **before** the first
+login and the first download. Write the file directly — `LibationCli` cannot be
+relied on to set these (`get-setting`/`-override` are documented only against
+other settings, and the templates are not shown as settable that way anywhere):
 
 ```bash
-docker exec -it libation libationcli account add
+sudo -n tee /mnt/main/apps/libation/config/Settings.json >/dev/null <<'JSON'
+{
+  "FolderTemplate": "<first author>/<if series-><first series><has series#-> Vol <series#><-has> - <-if series><title>",
+  "FileTemplate": "<title>",
+  "TokenStorageMethod": "Plaintext"
+}
+JSON
+sudo -n chown 1028:100 /mnt/main/apps/libation/config/Settings.json
+sudo -n chmod 644 /mnt/main/apps/libation/config/Settings.json
 ```
 
-It is one-time. Libation persists the token under `/config`, and every run after
-this is unattended. If the token is ever invalidated (password change, Amazon
-security event), re-run exactly this command — nothing else needs touching.
-
-### 4. Set the naming template — do this BEFORE the first bulk run
-
-Audiobookshelf infers author, title and series **from the directory layout**.
-Target:
+**`TokenStorageMethod: Plaintext` is mandatory, not a preference.** Libation
+defaults to `Encrypted`, which requires an OS secret store to hold the key. A
+container has none, so it falls back to a "last-resort" key written to
+`/config-internal` — which is ephemeral. Every container recreate mints a new key
+and orphans the tokens encrypted under the previous one, producing:
 
 ```
-/mnt/main/family/media/audiobooks/
-  └─ Malcolm Gladwell/
-      └─ Outliers/
-          └─ Outliers.m4b
+Encrypted authentication tokens in AccountsSettings.json could not be decrypted
+on this machine.  Underlying error: Failed to decrypt ExistingAccessToken.
 ```
 
-and for series:
+`export-master-key` is **not** a workaround here — it fails outright with
+`Cannot export the encryption master key because the OS secret store is
+unavailable`. There is no encrypted-token configuration that survives a restart
+in this deployment. Plaintext tokens in a `chmod 700` directory are also not a
+meaningful downgrade: the alternative stores the decryption key in the same
+directory as the file it decrypts.
+
+**Template syntax has two traps, both of which silently corrupt directory
+names.** Conditional tags close by repeating the full tag name:
 
 ```
-  └─ Author Name/
-      └─ Series Name Vol 2 - Title/
-          └─ Title.m4b
+<if series->...<-if series>      correct
+<if series->...<-if>             WRONG — unmatched
 ```
 
-Set Libation's folder and file templates to produce that before liberating
-anything. **Retrofitting the layout across a whole library afterwards is
-genuinely painful** — ABS caches its inferred metadata, so a later rename means
-re-matching every book by hand.
+An unmatched closer does not error. For non-series books it swallows the rest of
+the template (every book collapses into `<Author>/` with no title folder); for
+series books it renders `<-if>` **literally into the folder name on disk**.
+Likewise `<series#>` is empty for series that have no number, so it must be
+guarded by `<has series#-> ... <-has>` or you get `Series Vol  - Title` with a
+doubled space.
+
+Verify what Libation actually parsed before continuing:
+
+```bash
+sudo -n docker run --rm --user 1028:100 \
+  -v /mnt/main/apps/libation/config:/config \
+  -v /mnt/main/family/media/audiobooks:/data \
+  rmcrackan/libation:13.7.8 \
+  bash -c '/libation/LibationCli get-setting -b | grep -iE "Template|TokenStorage"'
+```
+
+### 4. Authenticate to Audible — one-off container, not `docker exec`
+
+Audible login needs a browser round-trip, so it is a human step. It **cannot** be
+done with `docker exec` against the running app: pre-authentication the container
+exits with `No accounts. Exiting.` (exit 3) and Docker restarts it on a backoff,
+so there is never a running container to exec into. Use a one-off container
+instead — the entrypoint runs its full config setup and then execs whatever
+command it is given:
+
+```bash
+sudo -n docker run --rm -it --user 1028:100 \
+  -v /mnt/main/apps/libation/config:/config \
+  -v /mnt/main/family/media/audiobooks:/data \
+  rmcrackan/libation:13.7.8 \
+  bash -c 'set -e
+    /libation/LibationCli login-external \
+      -a "<audible-account-email>" -l us \
+      -o TokenStorageMethod="Plaintext"
+    set +e
+    cp -v /config-internal/AccountsSettings.json /config/
+    chmod 600 /config/AccountsSettings.json
+    /libation/LibationCli list-accounts'
+```
+
+Notes, each of which was a failed attempt first:
+
+- The binary is `/libation/LibationCli`, not `libationcli`.
+- The verb is `login-external`. There is **no** `account add` verb in 13.7.8.
+- It prints a URL; sign in in a browser and paste the final address-bar URL back.
+  The browser session determines which account is bound — the `-a` flag only
+  names it. Use a private window if the browser is signed into another account.
+- **The copy-back is required.** `LibationCli` writes `AccountsSettings.json` into
+  `/config-internal`, which is ephemeral and regenerated from `/config` on every
+  start. Only the database is symlinked out. Without the `cp` the login is lost
+  on the next container recreate.
 
 ### 5. First bulk run
 
+Once an account exists, the app container clears `No accounts` on its next
+restart and begins downloading unattended. Nothing else is needed.
+
+**Every book must end up in its own folder.** Audiobookshelf identifies a book by
+the folder containing audio files, so two loose `.m4b` files in one author folder
+are ingested as *one book with two tracks*. The ABS docs call this out explicitly,
+and the remedy is expensive — remove the item in the UI and rescan, losing
+listening progress. The `FolderTemplate` above is what prevents it; verify before
+letting ABS scan:
+
 ```bash
-docker exec libation libationcli scan        # refresh the library list
-docker exec libation libationcli liberate    # download + decrypt everything
+# must be 0 — any audio file sitting directly in an author folder is wrong
+find /mnt/main/family/media/audiobooks -mindepth 2 -maxdepth 2 \
+     \( -name '*.m4b' -o -name '*.mp3' \) | wc -l
 ```
 
-<100 titles — expect a single evening, not a multi-day backfill. No throttling
-configured, and none needed at this size.
+PDFs must live inside the book's own folder too, or ABS ignores them.
+
+**Repairing a bad layout does not require re-downloading.** Moving files on disk
+does not change `BookStatus` in the database, and `liberate` only processes books
+marked `NotLiberated` — so a layout fix is a `mv` loop, not a re-download. Do not
+reach for `set-status -d` to "re-detect" moved files: it matches against the path
+recorded at download time, not the current template, so it will not find them and
+you will conclude wrongly that the files must be re-fetched.
 
 ### 6. Trigger the ABS scan — it will NOT self-detect
 
@@ -147,20 +255,44 @@ end-to-end — until then it is "automated download, manual publish".
 ## Verifying it worked
 
 ```bash
-ls /mnt/main/family/media/audiobooks | head          # authors appear
-find /mnt/main/family/media/audiobooks -name '*.m4b' | wc -l
-ffprobe -v error -show_chapters <a-file>.m4b | head  # chapters survived
+D=/mnt/main/family/media/audiobooks
+ls "$D" | head                                    # authors appear
+find "$D" -name '*.m4b' | wc -l                   # book count
+find "$D" -mindepth 2 -maxdepth 2 -name '*.m4b' | wc -l   # MUST be 0 (see step 5)
+find "$D" -mindepth 2 -maxdepth 2 -type d -name '*<-if>*' # MUST be empty (template leak)
 ```
 
 Chapters are the thing most likely to be silently wrong, and the thing you'll
-miss most. Check one file explicitly rather than assuming.
+miss most. There is **no `ffprobe` on hestia and none in the Libation image**, so
+check with a throwaway container:
+
+```bash
+sudo -n docker run --rm -v "$D":/data \
+  --entrypoint /usr/local/bin/ffprobe linuxserver/ffmpeg:latest \
+  -v error -show_chapters -print_format json "/data/<author>/<title>/<title>.m4b" | head -40
+```
+
+A good file shows named chapters (`"title": "1. Effectiveness Can Be Learned"`),
+an `aac` audio stream, and an `mjpeg` stream — that last one is the embedded
+cover art.
 
 ## Operational notes
 
 **The config directory is a credential store.** `/mnt/main/apps/libation/config`
-holds a live Audible auth token. It is `chmod 700`, owned by `1001:1001`, and
-never enters this repo. Treat a leak the same as an account compromise: change
-the Amazon password, then re-run `account add`.
+holds a live Audible auth token, and by design (see step 3) it is **unencrypted**.
+It is `chmod 700`, owned by `1028:100`, and never enters this repo. Treat a leak
+the same as an account compromise: change the Amazon password, then re-run the
+`login-external` step.
+
+**`main/apps` is snapshotted — it was not before this app existed.** The Libation
+database (`LibationContext.db`) is the record of which books have been downloaded.
+Lose it and Libation re-downloads the entire library, because it matches on the
+path stored at download time and cannot re-detect existing files. `main/apps` had
+**no** periodic snapshot task while `main/family` and `main/homes` did; a daily
+task with 14-day retention was added (TrueNAS task id 10, mirroring `main/family`).
+That covers every other app config on that dataset too. This lives in TrueNAS
+config, not in this repo, so it will not appear in any diff — if the dataset is
+ever rebuilt, recreate the task.
 
 **Storage is not a constraint.** ~16T free on `main` against a <100-title
 library. The `audiobooks` PV is provisioned 1Ti.

@@ -38,10 +38,24 @@
 #    after each pass, Docker would restart it, and it would immediately run
 #    again. That is a hot loop against Audible's API.
 #
-# 2. The container runs as 1001:1001 (image `User`), NOT the APP_UID=1654 env
-#    var and NOT PUID/PGID. liberate.sh contains no PUID/PGID/useradd/chown
-#    handling whatsoever — this is not a linuxserver.io image, and those
-#    variables are silently ignored. Host directories must be owned by 1001.
+# 2. The container's baked-in identity is 1001:1001 (image `User`), NOT the
+#    APP_UID=1654 env var and NOT PUID/PGID. liberate.sh contains no
+#    PUID/PGID/useradd/chown handling whatsoever — this is not a
+#    linuxserver.io image, and those variables are silently ignored.
+#
+#    We deliberately override that with `user: "1028:100"` below. 1001 is
+#    wrong for this deployment: /mnt/main/family/media/audiobooks is owned
+#    1028:100 and is mode 755, so a 1001 process lands on the `other` bits —
+#    it can read and traverse but cannot write, and would fail on the first
+#    download after appearing to start correctly. Chowning that dataset to
+#    1001 was rejected: it is shared with Audiobookshelf, and a dataset with
+#    two owners is a slower problem than a one-line user override.
+#
+#    Running as the dataset's existing owner keeps every file under
+#    audiobooks/ single-owner, and pins the identity against a future image
+#    bump silently changing `User`. Audiobookshelf is unaffected either way —
+#    its pod runs as 1000:1000 and reads through the `other` bits, which is
+#    already how it reads the existing library.
 #
 # 3. LIBATION_DB_DIR=/db is deliberately left unmounted. liberate.sh checks
 #    `is_mounted $LIBATION_DB_DIR` and falls back to $LIBATION_CONFIG_DIR, which
@@ -58,13 +72,17 @@ services:
     image: rmcrackan/libation:13.7.8@sha256:8a6cd5c3a532512f7871401c3c63110acf3115a3b19e744ccb118a4a99bef186
     container_name: libation
     restart: unless-stopped
+    # Override the image's User=1001:1001 with the owner of the audiobooks
+    # dataset. See note 2 in the header for why. /mnt/main/apps/libation must
+    # be chown'd to match — 1001 there would break the database create.
+    user: "1028:100"
     environment:
       # NOTE: PUID/PGID are deliberately absent. This is not a linuxserver.io
       # image — liberate.sh has no code that reads them, so setting them would
-      # be inert and misleading. The container runs as the image's own
-      # User=1001:1001. Host paths must be chown'd to 1001:1001 accordingly
-      # (see README.md); getting this wrong fails silently — the container
-      # starts fine and simply cannot write.
+      # be inert and misleading. Identity is set by `user:` above, not here.
+      # Host paths must be readable AND writable by 1028:100 (see README.md);
+      # getting this wrong does not always fail loudly — a bad /data only
+      # surfaces on the first download, long after the container looks healthy.
       - TZ=America/New_York
       # Interval between `liberate` passes. New Audible purchases are rare, so
       # this is deliberately slow — a daily sweep is plenty and keeps the

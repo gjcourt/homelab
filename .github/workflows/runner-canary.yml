@@ -1,0 +1,125 @@
+name: Runner canary
+
+# Hourly liveness proof for the self-hosted GitHub Actions runner on hestia.
+#
+# WHY THIS EXISTS
+# On 2026-08-18 a merge to master produced a `deploy-hestia.yml` run that sat
+# QUEUED INDEFINITELY: the runner container was crash-looping on a deprecated
+# runner version and GitHub reported it `status=offline`. Nothing alerted.
+# GitHub emails on workflow *failure*; a run nobody ever picks up never fails.
+# Runner `status=offline` is visible only in a Settings page nothing polls.
+#
+# WHAT IT PROVES
+# Strictly more than "the container is running". A green check proves the whole
+# path that was broken: GitHub can dispatch a run -> the runner is online and
+# picks the job up -> the runner executes a step. Only the last of those three
+# is observable from inside hestia.
+#
+# WHY IT LIVES OFF-CLUSTER
+# Every other alert for this blind spot is in-cluster: a container writes a
+# textfile, node-exporter serves it, Prometheus scrapes it, a rule evaluates.
+# On 2026-08-13 Prometheus' PVC went read-only and it kept evaluating rules
+# while ingesting nothing — every in-cluster alert sat silently "healthy" on
+# frozen data. This canary shares no failure domain with the cluster: the
+# scheduler is GitHub's, the executor is hestia's, and the judge is
+# healthchecks.io. It is the only piece of this that survives Prometheus going
+# mute, which is also why it must never be reimplemented as a Prometheus rule.
+#
+# FAILURE SEMANTICS — two independent, complementary signals:
+#   1. Runner offline / run stuck queued / GitHub can't dispatch
+#      => no ping arrives => healthchecks.io goes red and emails.
+#         Detection <= Period + Grace = ~2h. This is the case GitHub is
+#         structurally silent about, and the reason the canary exists.
+#   2. Runner ran but the ping failed (no egress, healthchecks.io down,
+#      secret missing or wrong)
+#      => this workflow exits non-zero => GitHub emails on workflow failure,
+#         reusing a notification path that already works.
+#   Note the asymmetry: (2) also eventually triggers (1), because a failed
+#   ping is an absent ping. There is no state where both go quiet.
+#
+# See docs/plans/2026-08-18-hestia-deploy-monitoring-gap.md section B, and
+# docs/reference/monitoring.md section 7.
+
+on:
+  schedule:
+    # Hourly at :17 — deliberately off the hour. Scheduled workflows queue
+    # behind GitHub's global on-the-hour spike, and a canary whose own start is
+    # routinely delayed teaches you to ignore it.
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+# The canary needs no repository access at all. An empty permissions block
+# drops GITHUB_TOKEN to zero scopes, so a job that runs on a box reachable from
+# the LAN cannot touch this repo even if the step were compromised.
+permissions: {}
+
+concurrency:
+  group: runner-canary
+  # If the runner is down, hourly runs pile up in the queue. cancel-in-progress
+  # collapses that backlog to a single pending run, so recovery replays one
+  # canary rather than a dozen. Runs are an hour apart and take seconds, so
+  # this never cancels genuine in-flight work.
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    name: Ping healthchecks.io from hestia
+    # The label pair is the entire test. Reaching this step at all means
+    # GitHub dispatched and the hestia runner picked it up.
+    runs-on: [self-hosted, hestia]
+    # Bounds a wedged job so it cannot hold the runner against the next hour's
+    # canary. Note this covers EXECUTION time only — time spent queued is not
+    # counted, which is precisely the failure mode the absent ping catches.
+    timeout-minutes: 5
+
+    steps:
+      # No actions/checkout: the canary tests the runner, not the repo, and a
+      # checkout would make an unrelated git failure look like a dead runner.
+      - name: Ping the canary check
+        env:
+          # Repo secret — see hosts/hestia/actions-runner/README.md for the
+          # two manual setup steps. Never inline the URL: it is a capability,
+          # and anyone holding it can keep the check green and mask an outage.
+          PING_URL: ${{ secrets.HEALTHCHECKS_RUNNER_CANARY_URL }}
+        run: |
+          set -euo pipefail
+
+          # Fail loudly and specifically when the secret is unset. Without this
+          # curl would report "no URL specified", which reads as a curl bug
+          # rather than a missing secret. A fork or a re-created repo silently
+          # has no secrets, so this is the likeliest first-run failure.
+          if [ -z "${PING_URL}" ]; then
+            echo "::error::HEALTHCHECKS_RUNNER_CANARY_URL is not set."
+            echo "Create the repo secret (Settings -> Secrets and variables -> Actions)."
+            echo "See hosts/hestia/actions-runner/README.md, 'Runner canary'."
+            exit 1
+          fi
+
+          # -f  non-2xx becomes a non-zero exit (a 404 from a deleted check
+          #     must be a red run, not a silent success)
+          # -sS quiet, but still print the error on failure
+          # -m 10 / --retry 3 / --retry-connrefused: healthchecks.io's own
+          #     documented client recipe — absorbs a transient WAN blip without
+          #     masking a real outage, since a genuinely dead path still burns
+          #     every retry and then fails the run.
+          # No `set -x`, no echo of the URL. GitHub masks registered secrets in
+          # logs, but the ping URL should not be one command away from a paste.
+          curl -fsS -m 10 --retry 3 --retry-connrefused \
+            --user-agent "homelab-runner-canary" \
+            "${PING_URL}" > /dev/null
+
+          echo "Canary ping delivered from $(hostname)."
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Runner canary"
+            echo ""
+            echo "- Runner: \`$(hostname)\`"
+            echo "- Result: \`${{ job.status }}\`"
+            echo ""
+            echo "A red check on healthchecks.io means no ping arrived — the"
+            echo "runner is offline or runs are stuck queued. A red *run* here"
+            echo "means the runner executed but could not reach hc-ping.com."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -62,6 +62,8 @@ Access Grafana and verify that data is populating in the default dashboards.
 
 Both email receivers use Gmail SMTP (`smtp.gmail.com:587`, STARTTLS, auth `gjcourt@gmail.com`). Secrets are SOPS-encrypted in the `monitoring` namespace and mounted via `alertmanagerSpec.secrets`: `alertmanager-smtp` → `/etc/alertmanager/secrets/alertmanager-smtp/password` (`smtp_auth_password_file`), and `alertmanager-deadman` → `/etc/alertmanager/secrets/alertmanager-deadman/ping-url` (`url_file`).
 
+Alertmanager's deadman is not the only off-cluster check: a second healthchecks.io check is pinged hourly by the hestia GitHub Actions runner itself — see [Runner canary](#runner-canary--off-cluster-proof-the-hestia-deploy-path-is-alive) below.
+
 Note the default route receiver is `null`, so an alert carrying no `severity` label is silently dropped. Note also that the deadman proves the *webhook* leg only — a broken SMTP path would leave the check green while email alerts fail. See [plans/2026-06-17-alertmanager-smtp-alerting.md](../plans/2026-06-17-alertmanager-smtp-alerting.md).
 
 ### Dead man's switch — verified timings
@@ -102,6 +104,69 @@ Fail-closed test, **verified 2026-08-16** (procedure in the
 | Silence expired → resumed | 09:36:34Z → 09:41:11Z = **4m37s** |
 | Reported downtime | 8m59s |
 | Ping accounting | healthchecks.io "Total Pings" matched the Alertmanager counter at both points — **zero loss** cluster → endpoint |
+
+### Runner canary — off-cluster proof the hestia deploy path is alive
+
+`.github/workflows/runner-canary.yml` runs hourly (`cron: 17 * * * *`) on
+`runs-on: [self-hosted, hestia]` and `curl`s a **second, separate**
+healthchecks.io check. It is the only monitoring in this repo that observes
+hestia's GitHub Actions runner, and the only one that observes anything from
+outside the cluster.
+
+**Why it is not a Prometheus rule.** Everything else covering this blind spot is
+in-cluster: a container writes a textfile, node-exporter serves it, Prometheus
+scrapes it, a rule evaluates it. On
+[2026-08-13](../operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md)
+Prometheus' PVC remounted read-only and it kept evaluating rules while ingesting
+nothing — every in-cluster alert sat silently "healthy" on frozen data. This
+canary shares no failure domain with that: GitHub schedules it, hestia executes
+it, healthchecks.io judges it. Reimplementing it as a PromQL rule would delete
+the only property that makes it worth having.
+
+**What a green check proves** — strictly more than "the runner container is
+up": GitHub could dispatch a run, the runner was online and picked the job up,
+and the runner executed a step. That is the entire path that was dead during the
+2026-08-18 incident (design: `docs/plans/2026-08-18-hestia-deploy-monitoring-gap.md`, landing separately), where
+a `deploy-hestia.yml` run sat queued indefinitely against a crash-looping
+runner. GitHub emails on workflow *failure*; a run nobody picks up never fails,
+so GitHub is structurally silent about exactly that state.
+
+| | |
+|---|---|
+| Check config | Simple schedule, **Period 1h, Grace 1h** → ≤2h worst-case detection |
+| Ping URL | repo secret `HEALTHCHECKS_RUNNER_CANARY_URL` (Settings → Secrets and variables → Actions) — **not** SOPS; a GitHub-hosted schedule cannot read a cluster secret |
+| Notifications | `gjcourt+critical@gmail.com`, same reasoning as the deadman |
+
+Two independent failure signals, and they cannot both go quiet:
+
+- **No ping arrives** (runner offline, run stuck queued, GitHub cannot
+  dispatch) → the check goes red and healthchecks.io emails. This is the case
+  nothing else catches.
+- **The run itself fails** (no egress from hestia, healthchecks.io down, secret
+  missing or wrong) → the workflow exits non-zero and GitHub emails on failure.
+  A failed ping is also an absent ping, so this eventually trips the first
+  signal too.
+
+Operational notes:
+
+- **The runner is ephemeral**, so the canary costs **one runner container
+  restart per hour**. The `myoung34/github-runner` entrypoint *presence-tests*
+  `EPHEMERAL`, so the compose's `EPHEMERAL: "false"` still enables ephemeral
+  mode — the value is irrelevant, only the variable being set matters. Read any
+  hestia restart-rate alert with that hourly baseline in mind; the planned
+  `increase(homelabscope_container_restarts_total[1h]) > 5` arm sits well above
+  it.
+- **`concurrency: cancel-in-progress: true`** means a backlog built up while the
+  runner was down collapses to a single pending run, so recovery replays one
+  canary rather than a dozen.
+- **GitHub disables `schedule` triggers after 60 days of repository inactivity.**
+  This repo is kept active by Renovate, but a long quiet period would stop the
+  canary silently — the check going red is what surfaces it.
+- **Two checks now share one healthchecks.io account.** A lapsed or closed
+  account silently kills both, and nothing in-cluster notices, because a dead
+  check cannot alert on itself.
+
+Setup and troubleshooting: [`hosts/hestia/actions-runner/README.md`](../../hosts/hestia/actions-runner/README.md).
 
 ## 8. Disaster Recovery
 - **Backup Strategy**:

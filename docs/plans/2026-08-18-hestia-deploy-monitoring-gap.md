@@ -61,9 +61,15 @@ structurally silent about precisely this state.
 
 ### The failure was self-concealing
 
-`DISABLE_AUTO_UPDATE: "true"` means the runner cannot upgrade past GitHub's
-minimum version on its own. The fix is a digest bump, which Renovate does open
-and merge — but `hosts/hestia/actions-runner/` is **unconditionally excluded**
+> **Correction (2026-08-19).** The variable's *value* was never the mechanism.
+> The image entrypoint tests it with `[ -n "${DISABLE_AUTO_UPDATE}" ]` — a
+> presence test — so every non-empty value (`"true"`, `"false"`, `"0"`) turns
+> the flag ON, identically. The flag is disabled only by REMOVING the variable,
+> which this repo now does. See `hosts/hestia/actions-runner/docker-compose.yml`.
+
+Setting `DISABLE_AUTO_UPDATE` at all means the runner cannot upgrade past
+GitHub's minimum version on its own. The fix is a digest bump, which Renovate
+does open and merge — but `hosts/hestia/actions-runner/` is **unconditionally excluded**
 from `deploy-hestia.yml`. So the repair for the broken deploy path was itself
 gated behind a manual step nobody was nagged about, and the runner could not
 deploy its own fix.
@@ -217,11 +223,14 @@ deploy its own fix.
 
 ## Open questions
 
-- **`DISABLE_AUTO_UPDATE: "true"` — keep or flip?** Keeping it is deterministic
-  and Renovate-pinnable but **guarantees this recurs** at the next deprecation.
-  Flipping it self-heals but makes the runner permanently diverge from its
-  pinned digest, turning the C2 drift check into permanent noise for that app.
-  These conflict; pick one and write down which.
+- ~~**`DISABLE_AUTO_UPDATE: "true"` — keep or flip?**~~ **RESOLVED 2026-08-19:
+  removed.** Keeping it guaranteed a repeat at the next deprecation, which is
+  not an acceptable trade for digest determinism on the one container that
+  gates every deploy. Note there is no "flip" — the entrypoint presence-tests
+  the variable, so `"false"` keeps the flag ON. The variable is now absent from
+  both runner composes. The runner self-updating past its pinned digest is
+  expected; exempt `gha-runner` from the C2 drift check rather than reading it
+  as drift.
 - **Should `hosts/hestia/actions-runner/` stay excluded from auto-apply?**
   Recommended: keep manual, rely on the C2 nag. The alternative is a two-phase
   detached self-deploy with a real risk of bricking the deploy path.

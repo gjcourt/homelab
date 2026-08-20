@@ -57,14 +57,144 @@ Access Grafana and verify that data is populating in the default dashboards.
 |---|---|---|
 | `email-critical` | `severity = "critical"` | `gjcourt+critical@gmail.com` (no skip-inbox filter), `send_resolved: true`, `repeat_interval: 4h` |
 | `email-warning` | `severity = "warning"` | `gjcourt+alerts@gmail.com` behind a Gmail skip-inbox label, `send_resolved: false`, `repeat_interval: 24h` |
-| `deadman` | `Watchdog` only | Webhook POST to an off-cluster healthchecks.io check every 5m — the **dead man's switch**; the check alerts on the ping's *absence*. Notifies `gjcourt+critical@gmail.com` (see below). See [plans/2026-08-09-local-deadman-mesh.md](../plans/2026-08-09-local-deadman-mesh.md) |
-| `null` | `overture-prod` KubePdb, `*-stage` warnings, and the default route | Discarded |
+| `deadman` | `IngestionWatchdog` only | Webhook POST to an off-cluster healthchecks.io check every 5m — the **dead man's switch**; the check alerts on the ping's *absence*. Notifies `gjcourt+critical@gmail.com` (see below). See [Mute Prometheus](#mute-prometheus--why-the-deadman-is-gated-on-ingestion) and [plans/2026-08-09-local-deadman-mesh.md](../plans/2026-08-09-local-deadman-mesh.md) |
+| `null` | the chart's `Watchdog`, `overture-prod` KubePdb, `*-stage` warnings, and the default route | Discarded |
 
 Both email receivers use Gmail SMTP (`smtp.gmail.com:587`, STARTTLS, auth `gjcourt@gmail.com`). Secrets are SOPS-encrypted in the `monitoring` namespace and mounted via `alertmanagerSpec.secrets`: `alertmanager-smtp` → `/etc/alertmanager/secrets/alertmanager-smtp/password` (`smtp_auth_password_file`), and `alertmanager-deadman` → `/etc/alertmanager/secrets/alertmanager-deadman/ping-url` (`url_file`).
 
 Alertmanager's deadman is not the only off-cluster check: a second healthchecks.io check is pinged hourly by the hestia GitHub Actions runner itself — see [Runner canary](#runner-canary--off-cluster-proof-the-hestia-deploy-path-is-alive) below.
 
 Note the default route receiver is `null`, so an alert carrying no `severity` label is silently dropped. Note also that the deadman proves the *webhook* leg only — a broken SMTP path would leave the check green while email alerts fail. See [plans/2026-06-17-alertmanager-smtp-alerting.md](../plans/2026-06-17-alertmanager-smtp-alerting.md).
+
+### Mute Prometheus — why the deadman is gated on ingestion
+
+The deadman's heartbeat is **`IngestionWatchdog`**, defined in
+`infra/configs/alerts/prometheus-ingestion-rules.yaml`. The chart's `Watchdog`
+still evaluates — it is upstream's rule and is left alone — but it is routed to
+`null` and no longer pings anything.
+
+`Watchdog`'s expression is `vector(1)`. It is computed without reading a single
+stored sample, so it is true on a Prometheus that has ingested nothing for
+twelve hours. That is not hypothetical: on
+[2026-08-13](../operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md)
+Prometheus' PVC remounted read-only, `prometheus-0` stayed `Running` with 0
+restarts, kept evaluating rules against frozen data, and appended its last
+sample at 10:05:10 UTC. `Watchdog` flowed the whole time, the check stayed
+green, and monitoring was blind for 12h32m with nothing paging.
+
+`IngestionWatchdog` adds the missing conjunct:
+
+```promql
+vector(1)
+and on()
+(sum(rate(prometheus_tsdb_head_samples_appended_total{job="kube-prometheus-stack-prometheus", namespace="monitoring"}[5m])) > 0)
+```
+
+Prometheus scrapes itself, so when ingestion stops the counter goes stale, the
+`rate` returns empty after one lookback delta, the `and` yields nothing, the
+alert **resolves**, the Alertmanager group empties, the pings stop, and
+healthchecks.io alerts on their absence. `and on()` matches on the empty label
+set, so one healthy replica is enough to keep the heartbeat — which is correct:
+alerting is not blind while any replica has fresh data. A single mute replica is
+covered instead by `PrometheusIngestionStalled` below.
+
+It **strictly dominates** `Watchdog`: a dead Prometheus, a dead Alertmanager or
+a broken webhook silence both. Nothing was given up by re-pointing the route.
+Leaving `Watchdog` *also* pinging the same check would have restored the exact
+blind spot, since the ungated heartbeat alone keeps the check green through a
+total ingestion outage.
+
+Replayed against the retained incident data (all four expressions, 9.7 days at
+120s resolution):
+
+| Expression | Result |
+|---|---|
+| `IngestionWatchdog` | true at **6603 / 6983** steps; exactly one gap, **08-13 10:03 → 22:47 UTC** (764m) — the blackout, and nothing else |
+| `PrometheusIngestionAbsent` | true at **377** steps, one contiguous run **08-13 10:11 → 22:43 UTC** (752m); zero truthy steps otherwise |
+| `PrometheusIngestionStalled` | zero truthy steps in 9.7 days |
+| `PrometheusWALWriteFailures` | zero truthy steps in 9.7 days |
+
+The heartbeat re-armed **4 minutes** after both replicas were deleted during the
+2026-08-13 recovery, so a routine restart costs far less than the 21m budget.
+
+#### The in-cluster half, and the staleness trap that shapes it
+
+| Alert | Vantage | Fires when | `for:` |
+|---|---|---|---|
+| `PrometheusIngestionStalled` | peer-observed | one replica is scrapable but its append counter is flat | 5m |
+| `PrometheusIngestionAbsent` | self-observed | **no** replica has appended a sample in 10m — monitoring is blind | 5m |
+| `PrometheusWALWriteFailures` | peer-observed | WAL writes are failing (names the cause: read-only volume) | 5m |
+
+All three are **`severity: critical`** and reach `gjcourt+critical@gmail.com`.
+They live inside the thing they watch, so they are a faster tier, never a
+substitute for the off-cluster deadman.
+
+Two traps worth keeping in mind before editing these expressions:
+
+- **A mute Prometheus cannot observe its own muteness with `rate`.** It stops
+  appending its own metrics too, so within one lookback delta (5m)
+  `prometheus_tsdb_head_samples_appended_total` disappears from its own view and
+  `rate(...) == 0` returns *empty*, not `0`. It can never satisfy a `for:`
+  longer than that narrow band. This is why the chart's own
+  `PrometheusNotIngestingSamples` (severity `warning`, `for: 10m`) did not fire
+  on 2026-08-13 despite being the textbook expression, and why
+  `PrometheusIngestionAbsent` uses `absent_over_time`, which is true precisely
+  when there are no samples.
+- **`prometheus_tsdb_head_samples_appended_total` carries a `type` label.** The
+  `type="histogram"` series sits at a constant `0` on a healthy Prometheus, so
+  the bare `rate(...) == 0` form matches every replica at all times — verified
+  live, it returned 2 series on a healthy cluster. `sum without (type)` is
+  load-bearing, not tidying. Upstream does the same for the same reason.
+
+`prometheus_tsdb_wal_writes_failed_total` is also exported by Loki
+(`job="monitoring/loki"`), so that alert is scoped by `job`. It is the one arm
+that could **not** be validated against the incident: the retained data has the
+counter at `0` on both replicas right up to the last sample, because a
+Prometheus that cannot write its WAL cannot record the counter proving its WAL
+writes failed. It is kept as a cause-naming supplement, peer-observed only.
+
+#### Testing it for real
+
+The replay above is evidence, not proof — it shows the expressions would have
+behaved correctly on recorded data, not that the whole chain fires. To exercise
+the chain, take ingestion away from **both** replicas and watch two independent
+things happen:
+
+```bash
+# Freeze ingestion without destroying data: scale the StatefulSet to 0.
+# Flux will revert this, so suspend it first.
+flux suspend helmrelease kube-prometheus-stack -n monitoring
+kubectl -n monitoring scale statefulset prometheus-kube-prometheus-stack-prometheus --replicas=0
+```
+
+Expected, in order:
+
+1. **~15m** — `PrometheusIngestionAbsent` cannot fire, because there is no
+   Prometheus left to evaluate it. This is the point of the second half, and
+   the reason scaling to 0 is a *weaker* test than a read-only volume.
+2. **~21m** — the healthchecks.io check goes red and emails
+   `gjcourt+critical@gmail.com`. This is the signal that matters.
+
+For the failure this was actually built for — live but mute — make the volume
+read-only instead of scaling down, so rule evaluation keeps running:
+
+```bash
+kubectl -n monitoring exec prometheus-kube-prometheus-stack-prometheus-0 -c prometheus \
+  -- sh -c 'mount -o remount,ro /prometheus'   # requires a privileged context
+```
+
+Then expect `PrometheusIngestionAbsent` (critical, email) at ~15m **and** the
+deadman at ~21m — two independent paths, which is the whole design. Restore
+with `flux resume helmrelease kube-prometheus-stack -n monitoring` and a pod
+delete per replica.
+
+Distinguishing the two failure classes from the outside:
+
+| What you see | What it means |
+|---|---|
+| Deadman red, no email | Alertmanager or the notification path died — the classic case |
+| Deadman red **and** a `PrometheusIngestionAbsent` email | Prometheus went mute; alerting still works but every other alert is computed on frozen data |
+| `PrometheusIngestionStalled` email, deadman green | One replica is mute, the other is healthy. Not urgent-blind, but fix it before the second one goes |
 
 ### Dead man's switch — verified timings
 

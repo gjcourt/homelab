@@ -549,14 +549,34 @@ alertmanager:
       repeat_interval: 12h
       receiver: 'null'
       routes:
-      # DEAD MAN'S SWITCH. Watchdog is an always-firing alert (`vector(1)`) that
-      # measures nothing — it is purely a heartbeat. Routed to 'null' it was
-      # generated and discarded, which left the one failure ordinary alerting
-      # cannot catch: alerting itself dying, where the silence is
-      # indistinguishable from "nothing is wrong". It now POSTs to a
-      # healthchecks.io check that alerts on the ping's ABSENCE. That receiver
-      # MUST stay off-cluster — a deadman inside the failure domain it watches
-      # cannot report that domain failing.
+      # DEAD MAN'S SWITCH — GATED ON INGESTION.
+      #
+      # The heartbeat routed here is `IngestionWatchdog`
+      # (infra/configs/alerts/prometheus-ingestion-rules.yaml), NOT the chart's
+      # `Watchdog`. The chart's rule is left exactly as it ships; only this
+      # route moved. See the Watchdog route immediately below.
+      #
+      # WHY. `Watchdog` is `vector(1)` — computed without touching stored data,
+      # so it is true on a Prometheus that has ingested nothing for twelve
+      # hours. On 2026-08-13 Prometheus' PVC remounted read-only, it kept
+      # evaluating rules against frozen data, `Watchdog` kept flowing, this
+      # check stayed green, and monitoring was blind for 12h32m with nothing
+      # paging. `IngestionWatchdog` is `vector(1) and on() (rate(head samples
+      # appended) > 0)`: when every replica stops appending, the counter goes
+      # stale, the rate returns empty, the alert RESOLVES, this group empties,
+      # the pings stop, and healthchecks.io alerts on their absence. Replayed
+      # against the retained incident data it is empty for exactly
+      # 10:03–22:47 UTC on 2026-08-13 and true at every other step across 9.7
+      # days. See #1299.
+      #
+      # It strictly dominates `Watchdog`: a dead Prometheus, a dead
+      # Alertmanager or a broken webhook silence both. Nothing is lost.
+      #
+      # The receiver MUST stay off-cluster — a deadman inside the failure
+      # domain it watches cannot report that domain failing. That is also why
+      # the in-cluster `PrometheusIngestionAbsent` alert exists alongside this
+      # rather than instead of it: it pages faster (~15m) but it is evaluated
+      # by the very thing it is judging.
       #
       # SCOPE: this proves the *webhook* leg only. Real alerts leave over Gmail
       # SMTP, which is never exercised here — an expired app password keeps the
@@ -572,20 +592,34 @@ alertmanager:
       # (--cluster.peer-timeout) *before* dedup, so small intervals let peer 1
       # win ticks early and the period goes ragged.
       #
-      # Replicas ticker independently and never re-sync (the group never
-      # empties), so after a restart both may POST within one period. Harmless:
-      # only the gap matters and it stays <= 5m. Measured cadence is 5m03-5m04s
-      # (the POST round-trip slips each tick), so the check Period is 6m, not
-      # 5m; against a 15m grace that is 21m worst-case detection, confirmed
-      # empirically at 21m0s on 2026-08-16. group_wait 0s saves a real 30s on the first
-      # flush — gossip settles in seconds, well short of the 60s
+      # Replicas ticker independently, so after a restart both may POST within
+      # one period. Harmless: only the gap matters. NOTE this group can now
+      # EMPTY, which an ungated `Watchdog` never allowed — that is the fix, not
+      # a fault. Measured cadence is 5m03-5m04s (the POST round-trip slips each
+      # tick), so the check Period is 6m, not 5m; against a 15m grace that is
+      # 21m worst-case detection, confirmed empirically at 21m0s on 2026-08-16.
+      # Re-arming after BOTH replicas restart cost 4m when measured against the
+      # 2026-08-13 recovery (heartbeat resumed 22:47 after the 22:43/22:45 pod
+      # deletes) — well inside the 21m budget. group_wait 0s saves a real 30s
+      # on the first flush — gossip settles in seconds, well short of the 60s
       # --cluster.settle-timeout ceiling.
       - receiver: 'deadman'
         matchers:
-          - alertname = "Watchdog"
+          - alertname = "IngestionWatchdog"
         group_wait: 0s
         group_interval: 5m
         repeat_interval: 1m
+      # The chart's `Watchdog` is deliberately NOT deleted or overridden —
+      # fighting the chart costs more than it buys. It is routed to 'null'
+      # because `IngestionWatchdog` supersedes it as the deadman source;
+      # leaving both pinging the same check would restore the exact 2026-08-13
+      # blind spot, since an ungated Watchdog on its own keeps the check green
+      # straight through a total ingestion outage. Explicit rather than relying
+      # on fall-through: Watchdog carries `severity: none` so it would reach
+      # the default 'null' receiver anyway, but silence should be written down.
+      - receiver: 'null'
+        matchers:
+          - alertname = "Watchdog"
       # overture is intentionally OFF: the Deployment is scaled 0/0 and its CNPG
       # cluster is hibernated (cnpg.io/hibernation=on), so the PodDisruptionBudget
       # (minAvailable=1) permanently reports 0 healthy pods and

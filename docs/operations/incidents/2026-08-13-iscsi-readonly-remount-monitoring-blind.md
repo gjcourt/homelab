@@ -276,7 +276,7 @@ kubectl -n <ns> exec <pod> -c <ctr> -- sh -c 'touch /path/.wtest && rm -f /path/
 
 | Gap | Action |
 |---|---|
-| Prometheus can go mute undetected | Alert on ingestion stalling, and extend the deadman to cover a live-but-mute Prometheus rather than only a dead Alertmanager |
+| Prometheus can go mute undetected | **Done 2026-08-19 ([#1299](https://github.com/gjcourt/homelab/issues/1299)).** Three `critical` ingestion alerts (`PrometheusIngestionAbsent`, `PrometheusIngestionStalled`, `PrometheusWALWriteFailures`) plus `IngestionWatchdog` — a heartbeat gated on samples actually flowing, which now drives the healthchecks.io deadman in place of `Watchdog`. Replayed against this incident's retained data, the gated heartbeat is silent for exactly 10:03–22:47 UTC and `PrometheusIngestionAbsent` is true from 10:10:40 — a page ~15m in, instead of 12h32m. See [reference/monitoring.md](../../reference/monitoring.md#mute-prometheus--why-the-deadman-is-gated-on-ingestion) |
 | Read-only remounts are invisible | Alert on `node_filesystem_readonly` and/or a write-canary probe across PVCs |
 | Readiness probes pass on read-only volumes | For stateful workloads, make readiness actually touch the volume (`exec` write, or an HTTP `/healthz` that does a trivial DB write) |
 | Recovery knowledge was scattered across six incident docs | Consolidated into `AGENTS.md` → "Recovering read-only iSCSI volumes", the first place an operator or agent looks |

@@ -1,0 +1,161 @@
+# Detect a MUTE Prometheus — one that is Running, evaluating rules, and
+# ingesting nothing.
+#
+# Origin: the 2026-08-13 incident
+# (docs/operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md).
+# Prometheus' PVC remounted read-only at ~10:02 UTC. `prometheus-0` stayed
+# `Running` with 0 restarts, kept evaluating rules, and appended its last sample
+# at 10:05:10. Nothing paged for 12h32m, because:
+#
+#   - the chart's `Watchdog` heartbeat is `vector(1)`, which needs no ingested
+#     data, so the healthchecks.io dead man's switch (#1286) stayed green;
+#   - every `absent()`-based alert fired instead, naming 19 healthy components,
+#     which reads as "monitoring is broken" — indistinguishable from
+#     "everything is broken" at 03:00 local.
+#
+# This file adds the alert that would have been true and unambiguous, plus the
+# gated heartbeat that makes the OFF-CLUSTER deadman notice. Both halves are
+# needed and they fail in different directions: the alerts below live inside
+# the thing they watch, so they are not trustworthy alone; `IngestionWatchdog`
+# is trustworthy precisely because its failure mode is silence, judged
+# elsewhere.
+#
+# Prometheus selects this rule via ruleSelector matchLabels
+# `release: kube-prometheus-stack` (verified live on the Prometheus CR), so the
+# label below is load-bearing, not decoration.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: prometheus-ingestion-alerts
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    # -------------------------------------------------------------------------
+    # Ingestion liveness
+    #
+    # THE STALENESS TRAP, which dictates every expression here. When a
+    # Prometheus goes mute it stops appending its OWN metrics too, so within one
+    # lookback delta (5m) `prometheus_tsdb_head_samples_appended_total` vanishes
+    # from its own view. A `rate(...) == 0` self-check is therefore true only in
+    # a narrow band and then returns EMPTY, never `0` — it can never satisfy a
+    # `for:` longer than the band. This is exactly why the chart's own
+    # `PrometheusNotIngestingSamples` (severity: warning, for: 10m) did not fire
+    # on 2026-08-13 even though it is the textbook expression for this failure.
+    # Verified against the retained incident data: from 10:10:40 onward the
+    # metric had no samples in a 10m window at all.
+    #
+    # So the two arms observe from different vantage points:
+    #   - Stalled: PEER-observed. Replica A scrapes replica B's /metrics (which
+    #     keeps serving fine — a read-only WAL does not break the HTTP handler)
+    #     and sees B's counter flat. Catches ONE replica going mute; names it.
+    #   - Absent:  SELF-observed, and survives staleness because
+    #     `absent_over_time` is true precisely when there are no samples.
+    #     Catches ALL replicas going mute, which is the 2026-08-13 case.
+    # -------------------------------------------------------------------------
+    - name: prometheus-ingestion
+      rules:
+        - alert: PrometheusIngestionStalled
+          # `sum without (type)` is NOT cosmetic. This counter carries a
+          # `type` label with values "float" and "histogram"; the histogram
+          # series sits at a constant 0 on a perfectly healthy Prometheus, so
+          # the bare `rate(...) == 0` form returns a match for every replica at
+          # all times. Verified live 2026-08-19: without the sum, the expression
+          # returned 2 series on a healthy cluster — a guaranteed false page.
+          expr: >
+            sum without (type) (
+              rate(prometheus_tsdb_head_samples_appended_total{job="kube-prometheus-stack-prometheus", namespace="monitoring"}[5m])
+            ) == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Prometheus {{ $labels.pod }} has ingested no samples for 5m"
+            description: >
+              {{ $labels.pod }} is up and serving /metrics but its TSDB head has appended zero samples for over 5 minutes. It is still evaluating rules against frozen data, so every alert it owns is now meaningless — absent() alerts will fire for healthy components and firing alerts will never resolve. The usual cause is the PVC remounting read-only (`write to WAL: ... read-only file system`). Fix: kubectl -n monitoring delete pod {{ $labels.pod }} to force an iSCSI detach/reattach. Runbook: docs/operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md
+        - alert: PrometheusIngestionAbsent
+          # The 2026-08-13 alert. True when NO Prometheus replica has appended a
+          # sample in 10m — i.e. this evaluator's view of the world is frozen.
+          # `absent_over_time` is the only form that survives the staleness trap
+          # above. Returns the matcher labels {job, namespace}; there is no pod
+          # label, by construction — the claim is about the fleet, not a pod.
+          expr: >
+            absent_over_time(prometheus_tsdb_head_samples_appended_total{job="kube-prometheus-stack-prometheus", namespace="monitoring"}[10m])
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Prometheus has ingested no samples at all for 10m — monitoring is BLIND"
+            description: >
+              No Prometheus replica has appended a sample in the last 10 minutes. Rule evaluation is still running, so alerts will keep arriving — but they are computed on frozen data and are all untrustworthy. Treat any other alert firing right now as unproven. Almost certainly the monitoring PVC has remounted read-only; check `kubectl -n monitoring logs prometheus-kube-prometheus-stack-prometheus-0 -c prometheus | grep -i read-only` and recover with a pod delete on each replica. Runbook: docs/operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md
+        - alert: PrometheusWALWriteFailures
+          # Names the CAUSE rather than the symptom. Scoped by job because
+          # `prometheus_tsdb_wal_writes_failed_total` is also exported by Loki
+          # (job="monitoring/loki") — verified live 2026-08-19.
+          #
+          # HONEST CAVEAT: unlike the two arms above, this one could not be
+          # validated against the incident. The retained data shows the counter
+          # at 0 on both replicas right up to the last sample at 10:05:10 —
+          # because a Prometheus that cannot write its WAL cannot record the
+          # counter proving its WAL writes failed. It is therefore useful only
+          # PEER-observed, and is kept as a cause-naming supplement, never as
+          # the primary detection.
+          expr: >
+            increase(prometheus_tsdb_wal_writes_failed_total{job="kube-prometheus-stack-prometheus", namespace="monitoring"}[10m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Prometheus {{ $labels.pod }} is failing WAL writes"
+            description: >
+              {{ $labels.pod }} has failed {{ $value }} WAL write(s) in the last 10 minutes. Samples are being dropped on the floor — this is silent data loss, and it precedes the pod going fully mute. Check the pod logs for `read-only file system` and delete the pod to force a CSI detach/reattach.
+    # -------------------------------------------------------------------------
+    # Dead man's switch heartbeat — GATED ON INGESTION
+    #
+    # This replaces the chart's `Watchdog` as the source of the healthchecks.io
+    # ping. The chart's rule is deliberately left ALONE (it still evaluates and
+    # still routes, now to `null`); only the Alertmanager route in
+    # infra/controllers/kube-prometheus-stack/values.yaml moved.
+    #
+    # Why `Watchdog` had to be replaced rather than extended: its expression is
+    # `vector(1)`, which is computed with no reference to stored data. It is
+    # true on a Prometheus that has ingested nothing for twelve hours. It
+    # measured the wrong thing.
+    #
+    # `IngestionWatchdog` is `vector(1)` AND a proof that samples are flowing.
+    # `and on()` matches on the empty label set, so the left side survives if
+    # ANY series on the right exists — one healthy replica is enough, which is
+    # correct: alerting is not blind while one replica has fresh data. When
+    # every replica goes mute the counter goes stale, `rate` returns empty, the
+    # `and` yields nothing, the alert RESOLVES, Alertmanager's group empties,
+    # the pings stop, and healthchecks.io alerts on their absence.
+    #
+    # It strictly dominates `Watchdog`: everything that silenced `Watchdog`
+    # (dead Prometheus, dead Alertmanager, broken webhook) also silences this,
+    # plus the mute case. Nothing is lost by re-pointing.
+    #
+    # severity is `none`, matching the chart's `Watchdog`, NOT `critical`. This
+    # is a heartbeat that fires forever by design; `critical` would page every
+    # 4h in perpetuity. It reaches the deadman via an `alertname` route that
+    # sits above the severity routes, so `none` costs nothing — and if that
+    # route is ever deleted the alert falls through to the default `null`
+    # receiver rather than into the inbox.
+    #
+    # Verified against the retained 2026-08-13 data: this expression evaluated
+    # to EMPTY from 10:05 UTC through 22:47 UTC — the entire blackout — while
+    # `Watchdog` was `1` throughout.
+    # -------------------------------------------------------------------------
+    - name: prometheus-ingestion-watchdog
+      rules:
+        - alert: IngestionWatchdog
+          expr: >
+            vector(1)
+            and on()
+            (sum(rate(prometheus_tsdb_head_samples_appended_total{job="kube-prometheus-stack-prometheus", namespace="monitoring"}[5m])) > 0)
+          labels:
+            severity: none
+          annotations:
+            summary: "Ingestion-gated dead man's switch — this alert firing means Prometheus is ingesting"
+            description: >
+              An always-firing heartbeat, gated on Prometheus actually appending samples. Its ARRIVAL at healthchecks.io means rule evaluation, ingestion, Alertmanager, routing and the webhook are all intact. Its ABSENCE is the alert, raised off-cluster. If you are reading this in an inbox, the routing is wrong — it should only ever reach the `deadman` webhook receiver.

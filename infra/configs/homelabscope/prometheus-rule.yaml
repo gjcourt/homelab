@@ -303,7 +303,27 @@ spec:
         # deploy-hestia app.update recreate (seconds) and an operator Stop/Start,
         # and is >2 probe intervals so a single latched sample can't fire it.
         - alert: HomelabscopeContainerDown
-          expr: homelabscope_container_running{name!="gha-runner"} == 0
+          # EXPLICIT MUST-RUN ALLOWLIST -- not `name!="gha-runner"`.
+          #
+          # The probe is generic over EVERY container the daemon knows, running
+          # or not. A negative matcher therefore sweeps up long-dead one-shots:
+          # on 2026-08-20 this fired pending for 8 of them -- apfs, apfs-reader,
+          # capsule-copy, gdrive-dd, macmini-import, macmini-photo-manifest,
+          # ix-radarr-permissions-1 (an init container that exits 0 by design)
+          # and ix-rmlint-rmlint-1, several exited SIX WEEKS earlier. All eight
+          # would have paged +critical@.
+          #
+          # Deliberately excluded and why:
+          #   thermalscope  -- carries x-deploy.archived: true yet is up=1; the
+          #                    plan proves x-deploy.archived untrustworthy, so it
+          #                    is neither reliably should-run nor should-not-run.
+          #   ix-*          -- TrueNAS Apps manages its own lifecycle; init
+          #                    containers legitimately sit exited.
+          #   gha-runner    -- covered by the ephemeral arm below.
+          #
+          # Adding a service here is the deliberate act of declaring it
+          # must-always-run. Keep it sorted.
+          expr: homelabscope_container_running{name=~"github-mirror|homelabscope-heartbeat|immich-photos-backup|ipmi-exporter|libation|netscope|node-exporter|qbittorrent"} == 0
           for: 15m
           labels:
             # `lifecycle` splits the two arms of each pair. It is not routed on
@@ -371,7 +391,7 @@ spec:
         # This is the plan's original threshold and it is correct HERE — it is
         # only wrong for the ephemeral runner, which is split out below.
         - alert: HomelabscopeContainerRestartLoop
-          expr: increase(homelabscope_container_restarts_total{name!="gha-runner"}[1h]) > 5
+          expr: increase(homelabscope_container_restarts_total{name=~"github-mirror|homelabscope-heartbeat|immich-photos-backup|ipmi-exporter|libation|netscope|node-exporter|qbittorrent"}[1h]) > 5
           for: 10m
           labels:
             lifecycle: long-lived

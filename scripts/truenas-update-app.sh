@@ -39,13 +39,23 @@ if [ -z "${TRUENAS_API_KEY:-}" ]; then
 fi
 
 # Install websockets and pyyaml if missing. ubuntu-noble's python3 doesn't include them.
+#
+# --break-system-packages only exists in pip >= 23.0.1 (PEP 668). It is required on
+# noble (pip 24) and REJECTED by older pip, which exits 2 and fails the whole apply.
+# Detect rather than assume: a runner image variant change has silently moved this
+# base OS before (noble -> focal via a bare-digest Renovate bump, 2026-08-20).
+PIP_BSP=""
+if python3 -m pip install --help 2>/dev/null | grep -q -- "--break-system-packages"; then
+  PIP_BSP="--break-system-packages"
+fi
+
 if ! python3 -c "import websockets" 2>/dev/null; then
-  echo "+ pip install --quiet --user websockets" >&2
-  python3 -m pip install --quiet --user --break-system-packages websockets >&2
+  echo "+ python3 -m pip install --quiet --user $PIP_BSP websockets" >&2
+  python3 -m pip install --quiet --user $PIP_BSP websockets >&2
 fi
 if ! python3 -c "import yaml" 2>/dev/null; then
-  echo "+ pip install --quiet --user pyyaml" >&2
-  python3 -m pip install --quiet --user --break-system-packages pyyaml >&2
+  echo "+ python3 -m pip install --quiet --user $PIP_BSP pyyaml" >&2
+  python3 -m pip install --quiet --user $PIP_BSP pyyaml >&2
 fi
 
 export APP_NAME COMPOSE_FILE DRY_RUN

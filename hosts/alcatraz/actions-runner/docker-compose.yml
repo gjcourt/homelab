@@ -32,7 +32,7 @@ services:
     #               image (FROM myoung34/github-runner + install
     #               docker-compose-plugin) or the apply step will fail. See the
     #               plan's "gotchas" + README "Architecture caveats".
-    image: myoung34/github-runner@sha256:15da989f55ccb358f6bb408dec14dec84cd3442953fa05c42cea43e5d5120c0a
+    image: myoung34/github-runner:ubuntu-noble@sha256:de596f586947d12b6894faba4d69fa126e07c07419586c45f32c7d7b71f5a3b7
     container_name: gha-runner
     restart: unless-stopped
     environment:
@@ -44,7 +44,7 @@ services:
       LABELS: alcatraz,synology
       RUNNER_WORKDIR: /tmp/runner-work
       EPHEMERAL: "false"
-      DISABLE_AUTO_UPDATE: "true"
+      DISABLE_AUTO_UPDATE: "false"
       # A long-lived PAT (classic `repo`, or fine-grained with
       # `Administration: Read and write` + `Metadata: Read-only` on this repo)
       # OR a GitHub App installation token. The runner entrypoint exchanges it

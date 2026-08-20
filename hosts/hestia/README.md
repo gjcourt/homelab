@@ -2,7 +2,7 @@
 
 | Attribute | Value |
 |-----------|-------|
-| SSH | `truenas_admin@10.42.2.10` (no passwordless sudo; `/home` is `noexec`) |
+| SSH | `truenas_admin@10.42.2.10` (`NOPASSWD: ALL` — use `sudo -n`; `/home` is `noexec`) |
 | IPMI | ASRock Rack BMC at `10.42.2.13` (switch port 48) |
 | Role | TrueNAS storage + general-purpose compute (no GPUs since 2026-05-16) |
 | OS | TrueNAS SCALE |
@@ -34,6 +34,7 @@ The compose YAML in each subdirectory is the canonical source.
 |---------|-----------|-------|
 | gha-runner | `actions-runner/` | Self-hosted GitHub Actions runner; auto-deploys other hestia apps |
 | immich-photos-backup | `immich-photos-backup/` | Daily rsync of the Immich photo library from alcatraz into ZFS |
+| libation | `libation/` | Audible → DRM-free M4B for Audiobookshelf; writes the audiobooks dataset that Audiobookshelf mounts read-only over NFS (operator bootstrap: interactive Audible auth) |
 | qbittorrent | `qbittorrent/` | P2P client, private-tracker downloads |
 | thermalscope | `thermalscope/` | Thermal + power telemetry, Prometheus metrics over host networking |
 | ipmi-exporter | `monitoring/` | IPMI metrics (`docker-compose-ipmi-exporter.yml`) |
@@ -96,6 +97,7 @@ Operator-owned datasets (survive App deletion):
 | Dataset | Mount | Used by |
 |---------|-------|---------|
 | `main/apps/actions-runner` | `/mnt/main/apps/actions-runner` | runner registration + workspace |
+| `main/apps/libation` | `/mnt/main/apps/libation` | Audible auth token (plaintext, `chmod 700`) + `LibationContext.db`. **Losing the DB triggers a full re-download** — covered by a daily 14-day snapshot task on `main/apps` (TrueNAS task id 10) |
 | `main/family/images/photos` | `/mnt/main/family/images/photos` | Immich photo-backup rsync target |
 | `tank/apps/signal` | `/mnt/tank/apps/signal` | Legacy — signal-cli identity data from the removed Custom App (signal-cli now runs in-cluster) |
 

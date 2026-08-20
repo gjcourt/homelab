@@ -1,6 +1,6 @@
 services:
   runner:
-    image: myoung34/github-runner@sha256:15da989f55ccb358f6bb408dec14dec84cd3442953fa05c42cea43e5d5120c0a
+    image: myoung34/github-runner:ubuntu-noble@sha256:de596f586947d12b6894faba4d69fa126e07c07419586c45f32c7d7b71f5a3b7
     container_name: gha-runner
     restart: unless-stopped
     environment:
@@ -10,7 +10,7 @@ services:
       LABELS: hestia,truenas
       RUNNER_WORKDIR: /tmp/runner-work
       EPHEMERAL: "false"
-      DISABLE_AUTO_UPDATE: "true"
+      DISABLE_AUTO_UPDATE: "false"
       # ACCESS_TOKEN: a long-lived PAT (classic) or GitHub App installation
       # token with `actions:write` + `metadata:read` on this repo. The runner
       # entrypoint exchanges it for a registration token at startup so the

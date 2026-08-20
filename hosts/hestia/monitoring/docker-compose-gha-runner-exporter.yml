@@ -1,0 +1,225 @@
+# gha-runner-exporter — liveness signal for the self-hosted GitHub Actions
+# runner on hestia (hosts/hestia/actions-runner/).
+#
+# WHY THIS EXISTS
+# On 2026-08-18 the `gha-runner` container crash-looped 13,173 times: GitHub
+# deprecated the pinned runner version, the runner exited 1 on startup, and
+# `restart: unless-stopped` faithfully restarted it forever. A deploy job sat
+# queued at GitHub for over a day. NOTHING alerted — the runner is a TrueNAS
+# Custom App on a bare host outside the Talos node-exporter DaemonSet, so no
+# Prometheus series described it at all. This exporter is that missing signal.
+#
+# WHAT IT DOES
+# Every INTERVAL_SECONDS it asks the local Docker daemon about the runner
+# container and writes three gauges to the shared node-exporter textfile dir
+# (served on :9100 by docker-compose-node-exporter.yml and scraped by the
+# infra/configs/homelabscope ScrapeConfig):
+#
+#   homelab_gha_runner_up                            0/1 running AND healthy
+#   homelab_gha_runner_restart_count                 docker inspect .RestartCount
+#   homelab_gha_runner_last_check_timestamp_seconds  freshness of the check
+#
+# A crash loop shows up two ways: `up` sits at 0 (the container is either
+# restarting or its healthcheck never reaches `healthy`), and `restart_count`
+# climbs monotonically. rate() over restart_count is the specific crash-loop
+# signature; up==0 is the generic "runner is not usable" signature.
+#
+# NO GITHUB CREDENTIAL — BY DESIGN
+# We deliberately do NOT ask the GitHub API whether the runner is registered or
+# online. The failure mode we got burned by is a LOCAL crash loop, and Docker
+# state describes it completely. Adding a third long-lived secret to this host
+# (it already holds ACCESS_TOKEN and TRUENAS_API_KEY) buys a strictly worse
+# trade. If we ever need "runner is Idle at GitHub" specifically, that is a
+# separate cluster-side exporter, not this one.
+#
+# READ-ONLY: it inspects one container and writes only its own .prom file.
+#
+# Image pinned to an explicit upstream release tag per the homelab image
+# discipline rule. Bump deliberately; never :latest or :cli.
+#
+# Why inline `configs:` instead of a co-located emit.sh: TrueNAS Custom Apps
+# take *only* the compose YAML — they don't sync sibling files from this repo
+# onto the host, and a relative bind mount gets auto-created as an empty
+# DIRECTORY. Embedding the script in the compose keeps the app self-contained.
+# Same pattern (and same hard-won reason) as docker-compose-ipmi-exporter.yml.
+#
+# ARCHIVED until the operator creates the Custom App once in the SCALE UI.
+# `scripts/truenas-update-app.sh` calls `app.query` first and exits non-zero
+# with "app 'gha-runner-exporter' not found on TrueNAS" for an app that has
+# never been installed — so shipping this un-archived would turn the very next
+# deploy-hestia run red. Operator step: paste this YAML into SCALE UI → Apps →
+# Custom App (name it exactly `gha-runner-exporter`), then flip `archived` to
+# false so deploy-hestia.yml owns it from then on. See ./README.md.
+x-deploy:
+  name: gha-runner-exporter
+  archived: true
+  archived-at: "2026-08-19"
+  archived-reason: >-
+    Not yet installed as a SCALE Custom App; truenas-update-app.sh fails on an
+    app that does not exist. Operator installs once, then flips to false.
+
+services:
+  gha-runner-exporter:
+    image: docker:29.7.2-cli
+    container_name: gha-runner-exporter
+    restart: unless-stopped
+    # The docker CLI image's default entrypoint is docker-entrypoint.sh, which
+    # would treat our script path as a `docker` subcommand. Override it and run
+    # the config-mounted script directly — configs mount mode 0444 (not +x), so
+    # it must be invoked via `sh <path>`, never executed.
+    entrypoint: ["/bin/sh", "/etc/gha-runner-exporter/emit.sh"]
+    # Root is required: /var/run/docker.sock on hestia is mode 0660 root:docker
+    # and the docker:cli image has no member of that group. The security
+    # boundary here is the socket mount itself, not the in-container user.
+    user: "0:0"
+    environment:
+      # Poll interval. Fast enough that a crash loop is visible within a
+      # scrape or two; slow enough to be free.
+      - INTERVAL_SECONDS=60
+      # Value of the `runner` label on every emitted series. FROZEN — the
+      # alert rules match on runner="hestia".
+      - RUNNER=hestia
+      # Space-separated candidate container names, tried in order. The runner
+      # compose sets `container_name: gha-runner`, which overrides the
+      # ix-<app>-<svc>-1 name TrueNAS would otherwise assign — but older docs
+      # and any future drop of container_name would produce the ix- form, so
+      # we probe both rather than silently reporting up=0 forever.
+      - CONTAINER_NAMES=gha-runner ix-gha-runner-runner-1
+      - TZ=America/New_York
+    volumes:
+      # Docker socket — the only input. :ro is defence-in-depth signalling and
+      # NOT a real capability boundary (the Docker API is request/response over
+      # this socket; a read-only bind still permits write calls). The actual
+      # constraint is that emit.sh only ever runs `docker version` and
+      # `docker inspect`.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Shared textfile collector dir — read-write here (we write the .prom),
+      # read-only in node-exporter.
+      - /var/lib/node-exporter/textfile:/var/lib/node-exporter/textfile
+    configs:
+      - source: gha-runner-exporter-script
+        target: /etc/gha-runner-exporter/emit.sh
+    healthcheck:
+      # The .prom file is the product; a wedged loop that a process-liveness
+      # check would call healthy shows up here as a stale mtime. `stat -c` and
+      # `$$(( ))` are both busybox-safe (this image is Alpine); GNU-only
+      # predicates like find -newermt are NOT, hence the arithmetic form.
+      # A missing file makes stat fail, the substitution empty, and the
+      # arithmetic error out non-zero — which is the correct unhealthy answer.
+      # Note: docker does not restart an unhealthy container, so this is
+      # `docker ps` visibility only; the real liveness signal is
+      # homelab_gha_runner_last_check_timestamp_seconds going stale.
+      test:
+        - CMD-SHELL
+        - >-
+          [ "$$(( $$(date +%s) -
+          $$(stat -c %Y /var/lib/node-exporter/textfile/gha-runner.prom 2>/dev/null) ))"
+          -lt 300 ]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+configs:
+  gha-runner-exporter-script:
+    # NOTE ON `$$`: docker compose interpolates `${VAR}` and `$VAR` across the
+    # whole compose file, INCLUDING this inline config content. Every shell `$`
+    # below is therefore written `$$`, which compose unescapes to a literal `$`
+    # when it materializes the file. Unescaped `$` here would be substituted
+    # away (usually to an empty string) before the shell ever sees it.
+    content: |
+      #!/bin/sh
+      # gha-runner-exporter — see docker-compose-gha-runner-exporter.yml.
+      #
+      # Emits homelab_gha_runner_* to the node-exporter textfile collector.
+      # Metric names and the `runner` label are a FROZEN contract with the
+      # alert rules; do not rename them here without changing them there.
+      set -u
+
+      INTERVAL_SECONDS="$${INTERVAL_SECONDS:-60}"
+      TEXTFILE_DIR="$${TEXTFILE_DIR:-/var/lib/node-exporter/textfile}"
+      RUNNER="$${RUNNER:-hestia}"
+      CONTAINER_NAMES="$${CONTAINER_NAMES:-gha-runner ix-gha-runner-runner-1}"
+      OUT="$${TEXTFILE_DIR}/gha-runner.prom"
+
+      log() { echo "$$(date -u +%FT%TZ) $$*"; }
+
+      # emit <up> <restart_count> <now_epoch>
+      # Atomic: write .prom.tmp, then mv onto .prom. node-exporter's textfile
+      # collector globs *.prom only, so the temp file is never parsed, and the
+      # rename is atomic within the same filesystem — without this, scrapes
+      # intermittently read a half-written file and log parse errors.
+      emit() {
+        cat > "$${OUT}.tmp" <<PROM
+      # HELP homelab_gha_runner_up gha-runner container running and healthy (1) or not (0)
+      # TYPE homelab_gha_runner_up gauge
+      homelab_gha_runner_up{runner="$${RUNNER}"} $$1
+      # HELP homelab_gha_runner_restart_count Docker RestartCount for the gha-runner container
+      # TYPE homelab_gha_runner_restart_count gauge
+      homelab_gha_runner_restart_count{runner="$${RUNNER}"} $$2
+      # HELP homelab_gha_runner_last_check_timestamp_seconds Unix time of the last successful check
+      # TYPE homelab_gha_runner_last_check_timestamp_seconds gauge
+      homelab_gha_runner_last_check_timestamp_seconds{runner="$${RUNNER}"} $$3
+      PROM
+        mv "$${OUT}.tmp" "$${OUT}"
+      }
+
+      check() {
+        # Daemon reachability first. If the socket is gone we cannot say
+        # anything true about the runner, so we leave the previous .prom in
+        # place UNTOUCHED: last_check_timestamp_seconds goes stale and the
+        # alert rules catch the exporter itself. Writing up=0 here would
+        # blame the runner for the exporter's own blindness.
+        if ! docker version --format '{{.Server.Version}}' >/dev/null 2>&1; then
+          log "docker daemon unreachable; leaving $${OUT} untouched (last_check will go stale)"
+          return
+        fi
+
+        raw=""
+        for name in $${CONTAINER_NAMES}; do
+          raw="$$(docker inspect --format \
+            '{{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} {{.RestartCount}}' \
+            "$${name}" 2>/dev/null)"
+          if [ -n "$${raw}" ]; then
+            break
+          fi
+        done
+
+        now="$$(date +%s)"
+
+        # Docker answered, so the check itself succeeded — a container that is
+        # absent entirely (app deleted, never installed) is a real up=0, not an
+        # unknown. restart_count reports 0 because there is nothing restarting.
+        if [ -z "$${raw}" ]; then
+          log "no container matched [$${CONTAINER_NAMES}]; up=0 restart_count=0"
+          emit 0 0 "$${now}"
+          return
+        fi
+
+        # shellcheck disable=SC2086  # deliberate word split of the 3 fields
+        set -- $${raw}
+        running="$${1:-false}"
+        health="$${2:-none}"
+        restarts="$${3:-0}"
+
+        # up=1 only when running AND (healthy OR no healthcheck defined).
+        # `starting` and `unhealthy` both stay 0 — a crash-looping container
+        # never leaves `starting`, which is exactly the case that went
+        # unnoticed for a day.
+        up=0
+        if [ "$${running}" = "true" ]; then
+          if [ "$${health}" = "healthy" ] || [ "$${health}" = "none" ]; then
+            up=1
+          fi
+        fi
+
+        emit "$${up}" "$${restarts}" "$${now}"
+        log "up=$${up} running=$${running} health=$${health} restart_count=$${restarts}"
+      }
+
+      log "gha-runner-exporter starting (interval=$${INTERVAL_SECONDS}s out=$${OUT})"
+      mkdir -p "$${TEXTFILE_DIR}"
+      while true; do
+        check
+        sleep "$${INTERVAL_SECONDS}"
+      done

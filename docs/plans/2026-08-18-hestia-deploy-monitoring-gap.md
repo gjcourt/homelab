@@ -63,13 +63,13 @@ structurally silent about precisely this state.
 
 > **Correction (2026-08-19).** The variable's *value* was never the mechanism.
 > The image entrypoint tests it with `[ -n "${DISABLE_AUTO_UPDATE}" ]` — a
-> presence test — so `"true"`, `"false"`, `"0"` and `""` all behave identically
-> except the empty string. The flag is disabled only by REMOVING the variable,
+> presence test — so every non-empty value (`"true"`, `"false"`, `"0"`) turns
+> the flag ON, identically. The flag is disabled only by REMOVING the variable,
 > which this repo now does. See `hosts/hestia/actions-runner/docker-compose.yml`.
 
 Setting `DISABLE_AUTO_UPDATE` at all means the runner cannot upgrade past
-GitHub's minimum version on its own. The fix is a digest bump, which Renovate does open
-and merge — but `hosts/hestia/actions-runner/` is **unconditionally excluded**
+GitHub's minimum version on its own. The fix is a digest bump, which Renovate
+does open and merge — but `hosts/hestia/actions-runner/` is **unconditionally excluded**
 from `deploy-hestia.yml`. So the repair for the broken deploy path was itself
 gated behind a manual step nobody was nagged about, and the runner could not
 deploy its own fix.

@@ -21,9 +21,11 @@
 # A SECOND, independent family covers hestia CONTAINER health (the
 # homelabscope.containers group at the bottom of this file):
 #
-#   homelabscope_container_running{name}         1=running, 0=not
-#   homelabscope_container_restarts_total{name}  docker RestartCount (counter)
-#   homelabscope_container_health{name}          docker healthcheck status
+#   homelabscope_container_running{name}          1=running, 0=not
+#   homelabscope_container_restarts_total{name}   docker RestartCount (counter)
+#   homelabscope_container_last_exit_code{name}   last observed .State.ExitCode
+#   homelabscope_container_started_seconds{name}  current instance start, epoch
+#   homelabscope_container_health{name}           docker healthcheck status
 #
 # It answers a different question — "is this thing up", not "did this thing
 # finish on time" — for a host that has no cAdvisor and is not a cluster node.
@@ -262,19 +264,34 @@ spec:
     # containers, keyed on `name` — NOT runner-specific, so every future hestia
     # container is covered with no rule change:
     #
-    #   homelabscope_container_running{name}         1 = running, 0 = not
-    #   homelabscope_container_restarts_total{name}  docker RestartCount, COUNTER
-    #   homelabscope_container_health{name}          docker healthcheck status
+    #   homelabscope_container_running{name}          1 = running, 0 = not
+    #   homelabscope_container_restarts_total{name}   docker RestartCount, COUNTER
+    #   homelabscope_container_last_exit_code{name}   .State.ExitCode, GAUGE
+    #   homelabscope_container_started_seconds{name}  .State.StartedAt as epoch
+    #   homelabscope_container_health{name}           1 healthy / 0 unhealthy /
+    #                                                 2 starting; ABSENT when the
+    #                                                 container has no healthcheck
+    #   homelabscope_container_probe_success          1 = docker socket reachable
     #
-    # homelabscope_container_health is DELIBERATELY NOT ALERTED ON here. Its
-    # value encoding (none / starting / healthy / unhealthy) is the emitter's to
-    # define and is not yet fixed; a rule written against a guessed encoding is
-    # worse than no rule. Add it in a follow-up once the encoding is settled.
+    # There is NO jobs-completed counter in this family and there will not be:
+    # docker inspect exposes only the LAST exit, never a history, so a per-poll
+    # completed-jobs counter would be fabricated data. last_exit_code is the
+    # honest substitute — see the ephemeral restart-loop rule below.
     #
-    # The probe's emit interval (INTERVAL_SECONDS, 600s today) — not the 60s
-    # scrape — is the real detection granularity: a value is latched in the
-    # .prom for a full interval. Every `for:` below is sized against 600s, not
-    # against the scrape.
+    # homelabscope_container_health is DELIBERATELY NOT ALERTED ON here. The
+    # encoding above is now settled by the emitter, but "absent when the
+    # container declares no healthcheck" means an alert has to distinguish
+    # unhealthy from unmonitored, and no hestia container this rule file targets
+    # declares a healthcheck yet. Add it in a follow-up, once there is something
+    # for it to watch.
+    #
+    # The probe's emit interval — not the scrape — is the real detection
+    # granularity: a value is latched in the .prom for a full interval. The
+    # container probe runs on CONTAINER_INTERVAL_SECONDS (60s), tighter than the
+    # 600s INTERVAL_SECONDS the SSH/ZFS job families use, precisely so a
+    # point-in-time exit-code/started-at sample is trustworthy. The `for:`
+    # values below were sized conservatively against the 600s figure and are
+    # left as they are: at 60s granularity they simply carry more margin.
     # -----------------------------------------------------------------------
     - name: homelabscope.containers
       rules:
@@ -318,11 +335,16 @@ spec:
         # (Measured: RestartCount 0 -> 9 across a 10-job deploy.)
         #
         # The real gap between jobs is a few SECONDS, but the probe latches
-        # whatever it sampled for a full 600s interval — so one unlucky sample
-        # taken mid-restart pins running=0 for 10 minutes of series. `for: 30m`
-        # requires roughly three consecutive unlucky samples, which a
-        # seconds-wide window cannot plausibly produce, while still catching a
-        # genuinely dead runner well inside the hour.
+        # whatever it sampled for a full emit interval (60s for the container
+        # probe) — so one unlucky sample taken mid-restart pins running=0 for a
+        # minute of series. `for: 30m` requires a long unbroken run of such
+        # samples, which a seconds-wide window cannot plausibly produce, while
+        # still catching a genuinely dead runner well inside the hour.
+        #
+        # NOTE this rule cannot see a crash loop, by design and by Docker:
+        # .State.Running is TRUE while a container sits in restart backoff, so a
+        # looping runner reads running=1 here. The restart-loop rule below is
+        # what covers that case.
         - alert: HomelabscopeContainerDown
           expr: homelabscope_container_running{name="gha-runner"} == 0
           for: 30m
@@ -359,44 +381,93 @@ spec:
             description: >
               Container {{ $labels.name }} on hestia restarted {{ $value | printf "%.0f" }} times in the last hour. These containers are long-lived services; >5 restarts/hour is a crash loop, not churn. Check `docker logs ix-{{ $labels.name }}-*` on 10.42.2.10 for the repeating exit.
 
-        # THE RUNNER'S THRESHOLD IS DIFFERENT BY AN ORDER OF MAGNITUDE, because
-        # for an ephemeral runner a restart is the SUCCESS path, not a fault.
-        # Sizing, with margin deliberately wide on both sides:
-        #   legit ceiling  ~1 restart per job. deploy-hestia.yml is the only
-        #                  workflow on `runs-on: [self-hosted, hestia]`; even a
-        #                  Renovate merge storm plus the hourly canary is tens of
-        #                  jobs an hour, not hundreds.
-        #   observed loop  ~1 restart/sec => ~3600/hour (RestartCount hit 11894).
-        # 100/hour sits ~2x above the busiest plausible legitimate hour and ~36x
-        # below the observed loop, and is crossed ~100s into a fast loop.
+        # THE RUNNER'S EPHEMERAL ARM DISCRIMINATES ON EXIT CODE, NOT ON RATE
+        # ALONE, because for an ephemeral runner a restart is the SUCCESS path,
+        # not a fault. Rate alone cannot separate "restarting and doing work"
+        # from "restarting and completing nothing" — but the exit code can, and
+        # exactly, so this rule is a two-armed `or`:
         #
-        # THE `unless` ARM is the precision half: a runner that is restarting
-        # AND completing work is healthy by definition; a runner that is
-        # restarting and completing NOTHING is the 2026-08-18 incident exactly
-        # (it registered, was refused work, and completed zero jobs).
+        #   arm 1  increase(restarts[1h]) > 100                   — rate only
+        #   arm 2  increase(restarts[1h]) > 10  AND  a nonzero
+        #          last_exit_code seen in the last 5m             — qualified
         #
-        # IT IS A SOFT DEPENDENCY, ON PURPOSE. If the emitter does not publish
-        # homelabscope_container_jobs_completed_total (or publishes it under a
-        # different name, or with a label set that doesn't match), the right-hand
-        # vector is EMPTY, `unless` suppresses nothing, and this rule degrades
-        # cleanly to the bare 100/hour threshold — which is already safe on its
-        # own. Fail-open was chosen over fail-closed so a missing optional series
-        # can never silence the alert. If the emitter lands the counter under
-        # another name, change it here; nothing breaks in the meantime.
+        # WHY THE EXIT CODE IS AN EXACT DISCRIMINATOR. The probe emits
+        # homelabscope_container_last_exit_code from docker inspect's
+        # .State.ExitCode. Docker zeroes that field when a container enters the
+        # running state and sets it to the real code while the container sits in
+        # restart backoff — and .State.Running is TRUE during backoff, which is
+        # why HomelabscopeContainerDown above can never see a crash loop and why
+        # this rule has to exist at all. So under Docker's semantics a nonzero
+        # sample means "in crash backoff right now".
         #
-        # KNOWN RESIDUAL GAP, stated rather than papered over: a SLOW crash
-        # loop that hits Docker's 60s restart backoff cap tops out near
-        # 60/hour and stays under this threshold. It is not silent — the
-        # runner-canary workflow (plan section B) goes red off-cluster within
-        # ~2h on exactly that case, which is why the canary is step 1 of the
-        # plan and this rule is step 3. Narrowing the threshold instead would
-        # trade a real off-cluster catch for guaranteed false pages on busy
-        # deploy hours.
+        # The rule does not actually depend on that reading being exact. Even if
+        # a Docker version latched the previous code across the running window,
+        # the discrimination holds: a healthy --ephemeral runner exits 0 after
+        # every completed job (measured: RestartCount 0 -> 9 across a 10-job
+        # deploy, every exit 0), so a nonzero value can only come from an
+        # abnormal exit. Under both readings, healthy busy == 0 and crash loop
+        # != 0.
+        #
+        # THERE IS NO COMPLETED-JOBS COUNTER IN THIS FAMILY AND THERE WILL NOT
+        # BE ONE — do not write a rule arm against one. It is not observable
+        # from polled Docker state: inspect exposes only the LAST exit, never a
+        # history, so N restarts between two polls would all be attributed to
+        # one observed exit code. The emitter
+        # (images/homelabscope-heartbeat/heartbeat.sh) refuses to fabricate it
+        # and publishes last_exit_code instead. An earlier draft of this rule
+        # carried an `unless` arm against such a series; because the series does
+        # not exist the right-hand vector was ALWAYS empty, the `unless`
+        # suppressed nothing, and the rule silently degraded to a bare > 100.
+        #
+        # WHY max_over_time(...[5m]) AND NOT AN INSTANT READ. At the 60s restart
+        # backoff cap the container is in backoff for ~60s of every ~60s cycle,
+        # so the 60s container probe reads nonzero on essentially every sample —
+        # but "essentially" is not "always", and an instant read (or a
+        # min_over_time) would flap on the ~1-in-60 sample that lands mid-exec
+        # and reset the `for:` timer, possibly forever. max_over_time is stable
+        # across that.
+        #
+        # WHY THE WINDOW (5m) IS SHORTER THAN THE `for:` (10m). This is the
+        # guard against a ONE-OFF abnormal exit — a transient registration or
+        # network failure during an otherwise healthy deploy hour. A single
+        # nonzero sample at time s makes the max_over_time arm true only for
+        # [s, s+5m]: a 5-minute interval, which cannot satisfy a 10-minute
+        # `for:`. Firing therefore requires abnormal exits that RECUR across
+        # >10 minutes, which is a loop and not a blip. A real crash loop
+        # produces one every ~60s and holds the condition indefinitely.
+        #
+        # THRESHOLD: 100 -> 10 ON THE QUALIFIED ARM, AND THAT CLOSES THE
+        # DOCUMENTED BACKOFF-CAP GAP. The old bare 100/hour could not see a slow
+        # crash loop pinned at Docker's 60s backoff cap: that tops out near
+        # 60 restarts/hour and slipped under 100 forever. 10/hour is reached
+        # ~10 minutes into such a loop, so with `for: 10m` it pages ~20 minutes
+        # in instead of never. 10 is safe only BECAUSE of the exit-code
+        # conjunction — a healthy 10-job deploy is 9 restarts at exit 0 and
+        # fails both conjuncts, and even a Renovate merge storm at tens of jobs
+        # an hour never satisfies the exit-code half.
+        #
+        # ARM 1 IS KEPT AT 100 AS AN EXIT-CODE-INDEPENDENT BACKSTOP. It is what
+        # catches a pathological loop whose exits are 0, and it is what the rule
+        # degrades to if last_exit_code ever stops being emitted — the same
+        # fail-open property the old `unless` was reaching for, except this
+        # version actually has a live series on the other side. 100/hour is
+        # ~2x above the busiest plausible legitimate hour and ~36x below the
+        # observed fast loop (~1 restart/sec, RestartCount hit 11894), and is
+        # crossed ~100s into a fast loop.
+        #
+        # `and`/`or` match on the full label set, deliberately: both families
+        # come from the same .prom file on the same node-exporter target, so
+        # {name, instance, job} are identical by construction and an exact match
+        # is stricter than `on(name)` for free.
         - alert: HomelabscopeContainerRestartLoop
           expr: >
             increase(homelabscope_container_restarts_total{name="gha-runner"}[1h]) > 100
-            unless
-            increase(homelabscope_container_jobs_completed_total{name="gha-runner"}[1h]) > 0
+            or
+            (
+            increase(homelabscope_container_restarts_total{name="gha-runner"}[1h]) > 10
+            and
+            max_over_time(homelabscope_container_last_exit_code{name="gha-runner"}[5m]) > 0
+            )
           for: 10m
           labels:
             lifecycle: ephemeral
@@ -404,7 +475,7 @@ spec:
           annotations:
             summary: "hestia gha-runner is crash-looping"
             description: >
-              The hestia GitHub Actions runner restarted {{ $value | printf "%.0f" }} times in the last hour while completing no jobs. The runner is ephemeral so restarts are normal — this rate is not, and zero completed work alongside it means the deploy path is dead and runs are silently queueing. Most likely cause is the 2026-08-18 signature - GitHub refusing a deprecated runner version, which the runner CANNOT self-heal because --disableupdate is active and CANNOT self-deploy because hosts/hestia/actions-runner/ is excluded from deploy-hestia.yml. Check `docker logs ix-gha-runner-runner-1` on 10.42.2.10. Runbook: docs/operations/apps/gha-runner.md.
+              The hestia GitHub Actions runner restarted {{ $value | printf "%.0f" }} times in the last hour, with a non-zero exit code on its restarts (or at a rate no legitimate deploy hour reaches). The runner is ephemeral so restarts are normal and a clean restart exits 0 — restarts that exit non-zero mean it is not completing work, the deploy path is dead, and runs are silently queueing. Most likely cause is the 2026-08-18 signature - GitHub refusing a deprecated runner version, which the runner CANNOT self-heal because --disableupdate is active and CANNOT self-deploy because hosts/hestia/actions-runner/ is excluded from deploy-hestia.yml. Check `docker logs ix-gha-runner-runner-1` on 10.42.2.10; `docker inspect ix-gha-runner-runner-1` shows the same State.ExitCode this rule fired on. Runbook: docs/operations/apps/gha-runner.md.
 
         # ---- The series vanished entirely ------------------------------------
         # `== 0` cannot see a REMOVED container: it emits nothing at all, and a

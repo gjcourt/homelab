@@ -1,6 +1,10 @@
 # homelabscope-heartbeat — hestia-side collector for scheduled jobs that can't
 # run their own exporter (alcatraz-photos-pull over SSH + ZFS snapshot freshness).
 #
+# It also carries the homelabscope_container_* probe, which reads the local
+# Docker socket — see the comment block in heartbeat.sh and
+# docs/plans/2026-08-18-hestia-deploy-monitoring-gap.md section A.
+#
 # Designed to run on hestia as a TrueNAS Custom App. Compose at
 # hosts/hestia/monitoring/docker-compose-homelabscope-heartbeat.yml.
 #
@@ -23,6 +27,12 @@ FROM debian:bookworm-slim
 #                   we only need the read-only zfs/zpool CLI.
 # bash, coreutils — the script uses bash-isms + GNU `date -d`
 # ca-certificates — general TLS hygiene
+# curl, jq       — the container probe talks to the Docker Engine API over
+#                  /var/run/docker.sock (`curl --unix-socket`) and parses the
+#                  inspect JSON. Deliberately NOT the docker CLI: the CLI pulls
+#                  in ~30MB and a third-party apt repo to answer questions the
+#                  REST API answers in two GETs, and curl+jq add ~3MB from
+#                  Debian's own archive.
 RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         sed -i 's/^Components: main$/Components: main contrib/' /etc/apt/sources.list.d/debian.sources; \
     else \
@@ -34,6 +44,8 @@ RUN if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
         bash \
         coreutils \
         ca-certificates \
+        curl \
+        jq \
     && rm -rf /var/lib/apt/lists/*
 
 COPY heartbeat.sh /usr/local/bin/heartbeat.sh

@@ -284,3 +284,145 @@ spec:
             summary: "Flux GitRepository {{ $labels.exported_namespace }}/{{ $labels.name }} not ready"
             description: >
               GitRepository {{ $labels.exported_namespace }}/{{ $labels.name }} has been Ready=False for >15m — Flux can't fetch the source, so every Kustomization downstream is frozen at its last-applied revision. Check credentials and connectivity to the Git remote.
+
+    # -------------------------------------------------------------------------
+    # Self-hosted GitHub Actions runner (hestia, alcatraz)
+    #
+    # Added after the 2026-08-19 incident: the hestia runner crash-looped 13,173
+    # times and a deploy job sat queued for over a day with NOTHING alerting.
+    # Runner 2.334.0 had been deprecated by GitHub ("Runner version v2.334.0 is
+    # deprecated and cannot receive messages"), so it registered, was refused
+    # work, exited 1, and was restarted forever by `restart: unless-stopped`. It
+    # could not self-heal because DISABLE_AUTO_UPDATE was "true", and it could
+    # not deploy its own fix because hosts/hestia/actions-runner/ is excluded
+    # from deploy-hestia.yml by design. See docs/operations/apps/gha-runner.md
+    # and docs/plans/2026-08-18-hestia-deploy-monitoring-gap.md.
+    #
+    # Why the existing rules did not cover this: ContainerCrashLoopBackOff and
+    # friends read kube_pod_container_status_* / cAdvisor. hestia is not a node
+    # in this cluster and runs no cAdvisor, so those alert NAMES read as
+    # coverage the cluster does not have. And homelabscope's
+    # "last success + max-age budget" model does not fit a push-triggered deploy
+    # pipeline, which has no cadence to be late against.
+    #
+    # METRIC CONTRACT (emitted by the hestia container probe, exported through
+    # the node-exporter textfile collector on hestia). These names are frozen:
+    #
+    #   homelab_gha_runner_up{runner}                            1 = healthy, 0 = not
+    #   homelab_gha_runner_restart_count{runner}                 docker RestartCount, GAUGE
+    #   homelab_gha_runner_last_check_timestamp_seconds{runner}  unix seconds
+    #
+    # Deliberately NOT filtered to runner="hestia": alcatraz has the identical
+    # blind spot by construction, and templating {{ $labels.runner }} means its
+    # emitter is covered the day it lands with no rule change. Same shape as the
+    # homelabscope family, which is generic over {job}.
+    #
+    # ROUTING — verified against the Alertmanager config in
+    # infra/controllers/kube-prometheus-stack/values.yaml:
+    #   severity: critical -> receiver 'email-critical' -> gjcourt+critical@gmail.com,
+    #     repeat_interval 4h, send_resolved. +critical has NO Gmail skip-inbox
+    #     filter, so it reaches the inbox — i.e. a critical PAGES.
+    #   severity: warning  -> receiver 'email-warning'  -> gjcourt+alerts@gmail.com,
+    #     repeat_interval 24h, send_resolved:false. A Gmail filter labels and
+    #     SKIPS THE INBOX, so warnings are an opt-in daily nag, not a page.
+    #   No severity label at all -> falls through to the default receiver 'null'
+    #     and is silently discarded. Every rule below therefore carries one.
+    #   The `namespace =~ ".+-stage"` warning mute does not apply here: these
+    #     series carry no namespace label.
+    # A genuinely broken runner is a dead deploy path, so both runner-health
+    # rules are critical and page. Only the watchdog-on-the-watchdog is warning.
+    #
+    # KNOWN GAP, deliberately unguarded for now: all three expressions need the
+    # series to EXIST. If the emitter vanishes entirely the series go absent,
+    # `== 0` matches nothing and `time() - <gauge>` has nothing to evaluate, so
+    # GHARunnerMetricStale is the only thing standing between us and silence —
+    # and staleness itself stops working if the series disappears rather than
+    # going stale. The fix is an absent() guard, exactly like
+    # HomelabscopeJobMetricAbsent. It is NOT added here because the emitter is
+    # still being built: absent() over a series that is not yet live is a
+    # guaranteed false critical the moment the rule lands (the #1066 lesson).
+    # Add it as a follow-up PR once the series are confirmed live in Prometheus,
+    # which is the same two-PR pattern the homelabscope guards already use.
+    # -------------------------------------------------------------------------
+    - name: gha-runner
+      rules:
+        # The runner is not healthy: container down, not registered, or wedged
+        # so Runner.Listener is gone. 10m rides out a normal image bump /
+        # SCALE app recreate (seconds) and an operator restart, without letting
+        # a real outage sit unseen the way the 2026-08-19 one did for a day.
+        - alert: GHARunnerDown
+          expr: homelab_gha_runner_up == 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "GitHub Actions runner {{ $labels.runner }} is down"
+            description: >
+              Self-hosted runner {{ $labels.runner }} has reported unhealthy for >10m. Every workflow targeting it (deploy-hestia.yml on hestia, alcatraz-deploy.yaml on alcatraz) will sit QUEUED rather than fail, so GitHub will not email about it — this alert is the only signal. Runbook: docs/operations/apps/gha-runner.md. Check: ssh truenas_admin@10.42.2.10 'docker logs --tail 50 ix-gha-runner-runner-1'
+
+        # The 2026-08-19 detector. A crash loop restarting on `unless-stopped`
+        # keeps up=0 only intermittently (it is briefly "running" on each
+        # attempt), so restart VELOCITY is the durable signal, not up/down and
+        # not a log string — GitHub can reword the deprecation message, but a
+        # container that exits 1 forever always increments RestartCount.
+        #
+        # GAUGE ON PURPOSE, and increase() on purpose. RestartCount is docker's
+        # own counter, which resets to 0 whenever the container is RECREATED
+        # (image bump, SCALE UI redeploy, `compose up -d`), so the series drops
+        # e.g. 13173 -> 0. increase() applies counter-reset correction: on a
+        # sample lower than its predecessor it adds the predecessor as a
+        # correction, so the window evaluates to the POST-reset climb only,
+        # never a spurious 13173-sized spike and never a negative.
+        #
+        # Verified with `promtool test rules` over a 15-sample window holding a
+        # 13173 -> 0 recreate:
+        #   increase()                        ->      0   (correct, no fire)
+        #   delta()                           -> -14113   (nonsense, and would
+        #                                                  mask a real loop)
+        #   max_over_time - min_over_time     ->  13173   (SPURIOUS CRITICAL)
+        # and over the same recreate followed by a genuine loop (0,3,8,...,59):
+        #   increase()                        ->     63   (fires, correct)
+        # and over a flat healthy counter: no sample, no fire.
+        # So delta() is the gauge-native trap and max-min is the worse one;
+        # increase() is the only form that is both reset-safe and sensitive.
+        # `> 5` is additionally immune to negatives by construction.
+        #
+        # increase() extrapolates to the window edges, so a young series can
+        # read slightly high (4 real restarts in 5m of data reads as ~12). That
+        # bias is toward firing on a crash loop, which is the correct direction.
+        #
+        # 5 restarts in 15m is already pathological: healthy operation is a
+        # flat counter, and the incident ran at roughly one restart per second.
+        # for:5m matches the ContainerCrashLoopBackOff convention and means a
+        # fresh crash loop pages in ~6 minutes rather than after a day.
+        - alert: GHARunnerCrashLooping
+          expr: increase(homelab_gha_runner_restart_count[15m]) > 5
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "GitHub Actions runner {{ $labels.runner }} is crash-looping"
+            description: >
+              Runner {{ $labels.runner }} restarted {{ $value | printf "%.0f" }} times in the last 15m and is being restarted forever by `restart: unless-stopped`. The 2026-08-19 signature is a GitHub-side version deprecation ("Runner version vX.Y.Z is deprecated and cannot receive messages") — check the container log for it first. Runbook: docs/operations/apps/gha-runner.md. Check: ssh truenas_admin@10.42.2.10 'docker logs --tail 50 ix-gha-runner-runner-1 | grep -i deprecated'
+
+        # Watchdog on the watchdog. If the probe stops writing its textfile the
+        # two rules above go quiet and the silence is indistinguishable from a
+        # healthy runner — the exact failure class this whole group exists to
+        # kill. 900s is a wide margin over the probe's own loop interval, and
+        # for:10m matches HomelabscopeJobStale, so a single missed write or a
+        # scrape blip cannot trip it.
+        #
+        # warning, not critical: this says "we can no longer see the runner",
+        # not "the runner is broken". It routes to +alerts@ behind the
+        # skip-inbox filter as a 24h nag. Accepted trade-off, with eyes open —
+        # if a stale watchdog is ever found to have masked a real outage,
+        # promote it to critical rather than adding another rule.
+        - alert: GHARunnerMetricStale
+          expr: time() - homelab_gha_runner_last_check_timestamp_seconds > 900
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "GitHub Actions runner {{ $labels.runner }} health metric is stale"
+            description: >
+              No fresh health check for runner {{ $labels.runner }} in {{ $value | humanizeDuration }} (budget 15m). The runner itself may be fine — what has failed is our ability to see it, which also means GHARunnerDown and GHARunnerCrashLooping are now blind. Check the probe that emits homelab_gha_runner_* on hestia and the node-exporter textfile collector at :9100. Runbook: docs/operations/apps/gha-runner.md

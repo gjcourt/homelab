@@ -10,7 +10,7 @@ services:
       LABELS: hestia,truenas
       RUNNER_WORKDIR: /tmp/runner-work
       EPHEMERAL: "false"
-      DISABLE_AUTO_UPDATE: "true"
+      DISABLE_AUTO_UPDATE: "false"
       # ACCESS_TOKEN: a long-lived PAT (classic) or GitHub App installation
       # token with `actions:write` + `metadata:read` on this repo. The runner
       # entrypoint exchanges it for a registration token at startup so the

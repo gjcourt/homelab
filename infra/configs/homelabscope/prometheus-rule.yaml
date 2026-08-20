@@ -18,6 +18,19 @@
 #      the family. No new exporter — kube-state-metrics already exposes it.
 #   3. (future) anything else that can write the family directly.
 #
+# A SECOND, independent family covers hestia CONTAINER health (the
+# homelabscope.containers group at the bottom of this file):
+#
+#   homelabscope_container_running{name}         1=running, 0=not
+#   homelabscope_container_restarts_total{name}  docker RestartCount (counter)
+#   homelabscope_container_health{name}          docker healthcheck status
+#
+# It answers a different question — "is this thing up", not "did this thing
+# finish on time" — for a host that has no cAdvisor and is not a cluster node.
+# Same emitter (homelabscope-heartbeat), same textfile courier, same
+# ScrapeConfig, same Stale/MetricAbsent alert shape. See
+# docs/plans/2026-08-18-hestia-deploy-monitoring-gap.md section A.
+#
 # Alerting is a single templated pair over the whole family (see the
 # homelabscope.alerts group): a generic staleness alert that compares each
 # job's age to its own max_age budget, plus an absence alert that catches a
@@ -215,3 +228,222 @@ spec:
             summary: "Homelabscope job {{ $labels.job }} heartbeat is absent"
             description: >
               No homelabscope_job_last_success_seconds series exists for job {{ $labels.job }} for >1h. Its heartbeat has vanished entirely (textfile no longer written / exporter down, or the CronJob was removed) — distinct from "stale", which needs the series to still exist. Check the hestia node-exporter (:9100) and the homelabscope-heartbeat Custom App, or `kubectl get cronjob -A` for the CronJob-backed jobs.
+
+    # -----------------------------------------------------------------------
+    # Container health on hestia — homelabscope_container_* family.
+    #
+    # WHY THIS EXISTS. On 2026-08-18 a merge to master touching hosts/hestia/**
+    # produced a deploy-hestia.yml run that sat QUEUED INDEFINITELY. The
+    # self-hosted runner on hestia was crash-looping (RestartCount 11894) on
+    # "Runner version v2.334.0 is deprecated and cannot receive messages": it
+    # registered, was refused work, exited, and `restart: unless-stopped` put it
+    # straight back. Nothing alerted — not the crash loop, not the offline
+    # runner, not the queued run, not the image drift that accumulated behind
+    # it. Full diagnosis: docs/plans/2026-08-18-hestia-deploy-monitoring-gap.md
+    # (section A is what these rules implement). Runbook:
+    # docs/operations/apps/gha-runner.md.
+    #
+    # Why nothing existing covered it:
+    #   * ContainerCrashLoopBackOff / ContainerOOMKilled / ContainerHighCPU in
+    #     infra/configs/alerts/prometheus-rules.yaml read
+    #     kube_pod_container_status_* and cAdvisor. hestia is NOT a node in this
+    #     cluster and runs no cAdvisor — verified live,
+    #     count({__name__=~"container_.*", instance="hestia"}) is an EMPTY
+    #     vector. Those alert NAMES read as coverage the cluster does not have.
+    #   * The homelabscope_job_* family is "last success + max-age budget",
+    #     which is right for the 11 scheduled jobs it covers and structurally
+    #     wrong for a push-triggered pipeline: no cadence, so no freshness
+    #     budget to be late against.
+    #
+    # METRIC CONTRACT. Emitted by the homelabscope-heartbeat container probe on
+    # hestia (already privileged, gains /var/run/docker.sock:ro), written to the
+    # node-exporter textfile collector and scraped through the SAME
+    # hestia-homelabscope ScrapeConfig as the job family. Generic over hestia
+    # containers, keyed on `name` — NOT runner-specific, so every future hestia
+    # container is covered with no rule change:
+    #
+    #   homelabscope_container_running{name}         1 = running, 0 = not
+    #   homelabscope_container_restarts_total{name}  docker RestartCount, COUNTER
+    #   homelabscope_container_health{name}          docker healthcheck status
+    #
+    # homelabscope_container_health is DELIBERATELY NOT ALERTED ON here. Its
+    # value encoding (none / starting / healthy / unhealthy) is the emitter's to
+    # define and is not yet fixed; a rule written against a guessed encoding is
+    # worse than no rule. Add it in a follow-up once the encoding is settled.
+    #
+    # The probe's emit interval (INTERVAL_SECONDS, 600s today) — not the 60s
+    # scrape — is the real detection granularity: a value is latched in the
+    # .prom for a full interval. Every `for:` below is sized against 600s, not
+    # against the scrape.
+    # -----------------------------------------------------------------------
+    - name: homelabscope.containers
+      rules:
+        # ---- Not running -----------------------------------------------------
+        # The primary "not doing its job" signal. A container that is down stays
+        # down; `== 0` sustained is unambiguous in a way restart-rate is not.
+        #
+        # LONG-LIVED containers (everything except the runner). 15m rides out a
+        # deploy-hestia app.update recreate (seconds) and an operator Stop/Start,
+        # and is >2 probe intervals so a single latched sample can't fire it.
+        - alert: HomelabscopeContainerDown
+          expr: homelabscope_container_running{name!="gha-runner"} == 0
+          for: 15m
+          labels:
+            # `lifecycle` splits the two arms of each pair. It is not routed on
+            # (Alertmanager matches severity/namespace only) — it exists so the
+            # two rules that share an alert name never produce an identical
+            # label set, which promtool's duplicate-rule lint rejects, and so a
+            # silence or dashboard can target one lifecycle without the other.
+            lifecycle: long-lived
+            # critical because only severity=critical reaches the inbox:
+            # 'email-critical' -> gjcourt+critical@gmail.com, repeat_interval 4h.
+            # severity=warning routes to 'email-warning' (+alerts@), which a
+            # Gmail filter skips out of the inbox — a daily nag, not a page.
+            # No severity label at all falls through to the 'null' receiver and
+            # is silently discarded, so every rule here carries one. The
+            # `namespace =~ ".+-stage"` warning mute cannot apply: these series
+            # carry no namespace label.
+            severity: critical
+          annotations:
+            summary: "hestia container {{ $labels.name }} is not running"
+            description: >
+              Container {{ $labels.name }} on hestia has been not-running for >15m. hestia has no cAdvisor and is not a cluster node, so this family is the ONLY thing that can see it. Check `docker ps -a` on 10.42.2.10, `docker logs ix-{{ $labels.name }}-*`, and the app's state in the SCALE UI. Runbook: docs/operations/apps/gha-runner.md (runner) / hosts/hestia/README.md (Custom App model).
+
+        # THE RUNNER IS EPHEMERAL and needs its own, longer, `for:`.
+        # The image's /entrypoint.sh gates on PRESENCE, not truth:
+        #   if [ -n "${EPHEMERAL}" ]; then ARGS+=("--ephemeral"); fi
+        # so `EPHEMERAL: "false"` in hosts/hestia/actions-runner/docker-compose.yml
+        # STILL activates --ephemeral. The container therefore completes exactly
+        # one job, deregisters, exits 0, and is restarted by `unless-stopped`.
+        # (Measured: RestartCount 0 -> 9 across a 10-job deploy.)
+        #
+        # The real gap between jobs is a few SECONDS, but the probe latches
+        # whatever it sampled for a full 600s interval — so one unlucky sample
+        # taken mid-restart pins running=0 for 10 minutes of series. `for: 30m`
+        # requires roughly three consecutive unlucky samples, which a
+        # seconds-wide window cannot plausibly produce, while still catching a
+        # genuinely dead runner well inside the hour.
+        - alert: HomelabscopeContainerDown
+          expr: homelabscope_container_running{name="gha-runner"} == 0
+          for: 30m
+          labels:
+            lifecycle: ephemeral
+            severity: critical
+          annotations:
+            summary: "hestia gha-runner is not running"
+            description: >
+              The self-hosted GitHub Actions runner container on hestia has been not-running for >30m. The runner is ephemeral (one job per container life), so brief gaps are normal and 30m is not — deploy-hestia.yml runs are queueing with nobody to pick them up, which GitHub does NOT email about because a queued run never fails. Runbook: docs/operations/apps/gha-runner.md.
+
+        # ---- Restart loop ----------------------------------------------------
+        # increase(), NOT delta() and NOT resets(), on purpose:
+        #   * increase() applies counter-reset detection from the sample values,
+        #     so it survives RestartCount going back to 0 when the container is
+        #     RECREATED (image bump, SCALE app.update) rather than restarted.
+        #   * delta() has no reset detection and goes NEGATIVE across a recreate,
+        #     masking exactly the event we want to see.
+        #   * resets() counts recreates only. It would have scored ZERO on the
+        #     2026-08-18 incident, which was restart-policy churn on a single
+        #     container life — the whole failure mode.
+        #
+        # LONG-LIVED containers: >5 restarts in an hour is already pathological.
+        # This is the plan's original threshold and it is correct HERE — it is
+        # only wrong for the ephemeral runner, which is split out below.
+        - alert: HomelabscopeContainerRestartLoop
+          expr: increase(homelabscope_container_restarts_total{name!="gha-runner"}[1h]) > 5
+          for: 10m
+          labels:
+            lifecycle: long-lived
+            severity: critical
+          annotations:
+            summary: "hestia container {{ $labels.name }} is restarting repeatedly"
+            description: >
+              Container {{ $labels.name }} on hestia restarted {{ $value | printf "%.0f" }} times in the last hour. These containers are long-lived services; >5 restarts/hour is a crash loop, not churn. Check `docker logs ix-{{ $labels.name }}-*` on 10.42.2.10 for the repeating exit.
+
+        # THE RUNNER'S THRESHOLD IS DIFFERENT BY AN ORDER OF MAGNITUDE, because
+        # for an ephemeral runner a restart is the SUCCESS path, not a fault.
+        # Sizing, with margin deliberately wide on both sides:
+        #   legit ceiling  ~1 restart per job. deploy-hestia.yml is the only
+        #                  workflow on `runs-on: [self-hosted, hestia]`; even a
+        #                  Renovate merge storm plus the hourly canary is tens of
+        #                  jobs an hour, not hundreds.
+        #   observed loop  ~1 restart/sec => ~3600/hour (RestartCount hit 11894).
+        # 100/hour sits ~2x above the busiest plausible legitimate hour and ~36x
+        # below the observed loop, and is crossed ~100s into a fast loop.
+        #
+        # THE `unless` ARM is the precision half: a runner that is restarting
+        # AND completing work is healthy by definition; a runner that is
+        # restarting and completing NOTHING is the 2026-08-18 incident exactly
+        # (it registered, was refused work, and completed zero jobs).
+        #
+        # IT IS A SOFT DEPENDENCY, ON PURPOSE. If the emitter does not publish
+        # homelabscope_container_jobs_completed_total (or publishes it under a
+        # different name, or with a label set that doesn't match), the right-hand
+        # vector is EMPTY, `unless` suppresses nothing, and this rule degrades
+        # cleanly to the bare 100/hour threshold — which is already safe on its
+        # own. Fail-open was chosen over fail-closed so a missing optional series
+        # can never silence the alert. If the emitter lands the counter under
+        # another name, change it here; nothing breaks in the meantime.
+        #
+        # KNOWN RESIDUAL GAP, stated rather than papered over: a SLOW crash
+        # loop that hits Docker's 60s restart backoff cap tops out near
+        # 60/hour and stays under this threshold. It is not silent — the
+        # runner-canary workflow (plan section B) goes red off-cluster within
+        # ~2h on exactly that case, which is why the canary is step 1 of the
+        # plan and this rule is step 3. Narrowing the threshold instead would
+        # trade a real off-cluster catch for guaranteed false pages on busy
+        # deploy hours.
+        - alert: HomelabscopeContainerRestartLoop
+          expr: >
+            increase(homelabscope_container_restarts_total{name="gha-runner"}[1h]) > 100
+            unless
+            increase(homelabscope_container_jobs_completed_total{name="gha-runner"}[1h]) > 0
+          for: 10m
+          labels:
+            lifecycle: ephemeral
+            severity: critical
+          annotations:
+            summary: "hestia gha-runner is crash-looping"
+            description: >
+              The hestia GitHub Actions runner restarted {{ $value | printf "%.0f" }} times in the last hour while completing no jobs. The runner is ephemeral so restarts are normal — this rate is not, and zero completed work alongside it means the deploy path is dead and runs are silently queueing. Most likely cause is the 2026-08-18 signature - GitHub refusing a deprecated runner version, which the runner CANNOT self-heal because --disableupdate is active and CANNOT self-deploy because hosts/hestia/actions-runner/ is excluded from deploy-hestia.yml. Check `docker logs ix-gha-runner-runner-1` on 10.42.2.10. Runbook: docs/operations/apps/gha-runner.md.
+
+        # ---- The series vanished entirely ------------------------------------
+        # `== 0` cannot see a REMOVED container: it emits nothing at all, and a
+        # comparison over an absent series matches nothing and stays silent.
+        # This is the same lesson HomelabscopeJobMetricAbsent already encodes,
+        # and it is the specific shape of the 2026-08-18 failure — absence read
+        # as health.
+        #
+        # SCOPE DISCIPLINE (the #1066 lesson): absent() may only guard a series
+        # that is ACTUALLY LIVE in Prometheus. Guarding a not-yet-emitted series
+        # turns this into a guaranteed false critical the moment the rule lands,
+        # which is why this PR must merge AFTER the emitter is deployed and the
+        # series confirmed present — never alongside it.
+        #
+        # The shipped list is deliberately minimal: the two containers the
+        # emitter must see if it is working at all.
+        #   gha-runner             the container this whole mechanism exists for
+        #   homelabscope-heartbeat the emitter's own container. Circular by
+        #                          design and harmless: if the heartbeat dies
+        #                          both arms fire, and "the watcher is already
+        #                          watched" is precisely why the plan extends
+        #                          the heartbeat instead of adding an exporter.
+        #
+        # The remaining non-archived hestia containers — github-mirror,
+        # immich-photos-backup, netscope, qbittorrent, node-exporter,
+        # ipmi-exporter — are all long-lived and all WANT this guard, but each
+        # must be confirmed emitting before it is added. Do that as a follow-up,
+        # one confirmed batch, same two-step pattern. Do NOT derive the list from
+        # x-deploy.archived: the plan documents thermalscope as archived: true in
+        # the repo and up=1 on the box right now, so that field is not a
+        # trustworthy should-be-running source.
+        - alert: HomelabscopeContainerMetricAbsent
+          expr: >
+            absent(homelabscope_container_running{name="gha-runner"})
+            or absent(homelabscope_container_running{name="homelabscope-heartbeat"})
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "hestia container metric {{ $labels.name }} is absent"
+            description: >
+              No homelabscope_container_running series exists for {{ $labels.name }} on hestia for >1h. The container was removed, or the homelabscope-heartbeat probe stopped writing its textfile — distinct from "not running", which needs the series to still exist. A removed container emits nothing, so this is the only rule that can see it. Check the homelabscope-heartbeat Custom App and the hestia node-exporter textfile dir (/var/lib/node-exporter/textfile) on 10.42.2.10.

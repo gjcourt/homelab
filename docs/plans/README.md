@@ -79,10 +79,12 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (16)
+### Planned (18)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-08-18-hestia-sshd-refused-diagnosis.md](2026-08-18-hestia-sshd-refused-diagnosis.md) | 2026-08-18 | hestia's sshd intermittently refuses port 22 while every other service stays up; the MaxStartups theory carried across sessions is disproven, so collect wedged-state evidence before changing any setting — **blocked:** Evidence from the wedged state, which has been destroyed 4-5 times by restarting the service before capturing it. Next wedge: capture from the TrueNAS web Shell over 443 BEFORE restarting. |
+| [2026-08-18-hestia-deploy-monitoring-gap.md](2026-08-18-hestia-deploy-monitoring-gap.md) | 2026-08-18 | hestia has no per-container metrics and no signal when the GitHub runner dies, so deploys failed silently for days; close it with an off-cluster canary, post-apply verification, and a container probe on the heartbeat that already exists |
 | [2026-08-09-local-deadman-mesh.md](2026-08-09-local-deadman-mesh.md) | 2026-08-09 | Cross-monitor k8s, hestia and alcatraz so each reports the others' death, with healthchecks.io as the arbiter that tells one-box failure from a site event — **blocked:** Operator: are the Talos nodes, hestia and alcatraz on the same UPS/circuit? Determines how much this buys. |
 | [2026-08-08-alertmanager-local-durability.md](2026-08-08-alertmanager-local-durability.md) | 2026-08-09 | Gap 2 (deadman) resolved 2026-08-09; the remaining open item is node-local volumes for state across a simultaneous restart |
 | [2026-08-05-alertmanager-alert-history.md](2026-08-05-alertmanager-alert-history.md) | 2026-08-05 | Fired-alert history: Grafana state-timeline over Prometheus ALERTS vs. a notification-log webhook receiver |

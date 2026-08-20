@@ -43,8 +43,44 @@ services:
       # descriptive second label. Never overlaps the hestia runner's labels.
       LABELS: alcatraz,synology
       RUNNER_WORKDIR: /tmp/runner-work
-      EPHEMERAL: "false"
-      DISABLE_AUTO_UPDATE: "false"
+      # =====================================================================
+      # TRAP — READ BEFORE EDITING THE TWO VARIABLES BELOW.
+      #
+      # The image entrypoint tests these for PRESENCE, not truthiness:
+      #
+      #   /entrypoint.sh:161  if [ -n "${EPHEMERAL}" ];           then ARGS+=("--ephemeral")
+      #   /entrypoint.sh:166  if [ -n "${DISABLE_AUTO_UPDATE}" ]; then ARGS+=("--disableupdate")
+      #
+      # `[ -n ... ]` is "non-empty string". ANY non-empty value turns the flag
+      # ON — including the strings "false", "no" and "0". The ONLY way to turn
+      # one of these OFF is to REMOVE the variable entirely.
+      #
+      # This already cost an outage. `DISABLE_AUTO_UPDATE` was set here, so the
+      # runner ran with `--disableupdate` and could not upgrade past GitHub's
+      # mandated minimum version. On 2026-08-19 runner 2.334.0 was deprecated,
+      # GitHub refused to dispatch jobs to it, the runner exited 1, and
+      # `restart: unless-stopped` looped it 13,173 times while every deploy sat
+      # queued. The follow-up "fix" changed the value from "true" to "false"
+      # and changed NOTHING, because "false" is still a non-empty string.
+      #
+      # So: DO NOT reintroduce `DISABLE_AUTO_UPDATE` here, in any form. Not
+      # "false", not "", not "0". Its ABSENCE below is the fix — it is what
+      # lets the runner self-update at the next deprecation.
+      # =====================================================================
+
+      # Deliberately ON. This container bind-mounts /var/run/docker.sock and is
+      # therefore root-equivalent on the host; a fresh runner per job, with its
+      # registration credentials removed after each one, is the posture GitHub
+      # recommends for exactly that exposure.
+      #
+      # Consequence: the container exits 0 and restarts after EVERY job, so a
+      # restart count that tracks job count is normal here and is NOT a crash
+      # loop. Container alerting distinguishes the two via a `lifecycle` label
+      # that gives ephemeral runners a different restart threshold from
+      # long-lived containers, so do not flip this to off (i.e. delete it)
+      # without re-tuning those thresholds.
+      EPHEMERAL: "true"
+
       # A long-lived PAT (classic `repo`, or fine-grained with
       # `Administration: Read and write` + `Metadata: Read-only` on this repo)
       # OR a GitHub App installation token. The runner entrypoint exchanges it

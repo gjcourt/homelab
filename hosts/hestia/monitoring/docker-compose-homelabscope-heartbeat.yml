@@ -27,7 +27,7 @@ x-deploy:
 
 services:
   homelabscope-heartbeat:
-    image: ghcr.io/gjcourt/homelabscope-heartbeat:2026-07-07
+    image: ghcr.io/gjcourt/homelabscope-heartbeat:2026-08-20
     container_name: homelabscope-heartbeat
     restart: unless-stopped
     # Root + privileged + /dev/zfs so `zfs list -t snapshot` can talk to the
@@ -51,6 +51,15 @@ services:
       - /mnt/main/apps/immich-photos-backup/ssh/known_hosts:/root/.ssh/known_hosts
       # Shared textfile collector dir — heartbeat writes homelabscope-*.prom here.
       - /var/lib/node-exporter/textfile:/var/lib/node-exporter/textfile
+      # Container probe (2026-08-20). Read-only: the probe only calls GET on the
+      # Docker REST API (/containers/json, /containers/<id>/json). It never
+      # starts, stops or creates anything.
+      #
+      # Added after the 2026-08-19 outage in which the gha-runner crash-looped
+      # 13,173 times with a deploy queued for over a day and NOTHING alerted --
+      # hestia had no per-container metrics at all. See
+      # docs/plans/2026-08-18-hestia-deploy-monitoring-gap.md section A.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       # ZFS snapshot fallback source (read-only) when `zfs list` is unavailable.
       - /mnt/main/family:/mnt/main/family:ro
       - /mnt/main/homes:/mnt/main/homes:ro

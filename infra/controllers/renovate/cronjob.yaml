@@ -27,6 +27,7 @@ spec:
                 - gjcourt/vitals
                 - gjcourt/soundbyte
                 - gjcourt/python-nginx-signing
+                - gjcourt/toppingctl
 
               env:
                 # Re-expose the platform token by name so it can be interpolated

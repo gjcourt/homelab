@@ -45,9 +45,63 @@ data:
             return json.loads(resp.read())
 
 
+    RENOVATE_BRANCH_PREFIX = "renovate/"
+
+    # Update types Renovate may report, and the subset we auto-merge.
+    UPDATE_TYPES = ("major", "minor", "patch", "digest", "pin", "pinDigest", "rollback")
+    SAFE_TYPES = {"patch", "digest", "pin", "pindigest", "minor"}
+
+    _VERSION = r"v?(\d+(?:\.\d+)+)"
+    # Renovate renders the arrow as a literal, an entity, or '->' depending
+    # on the platform and on whether the cell is inside a link.
+    _ARROW = r"(?:->|-&gt;|\u2192|&#8594;|&rarr;)"
+    CHANGE_RE = re.compile(_VERSION + r"`\s*" + _ARROW + r"\s*`" + _VERSION)
+
+
+    def updates_table(body):
+        """Return just Renovate's summary table.
+
+        Everything below the release-notes separator is upstream changelog
+        prose, which can contain its own tables and version strings. Parsing
+        the whole body risks classifying a PR off someone else's changelog."""
+        for marker in ("### Release Notes", "### Configuration", "\n---\n"):
+            idx = body.find(marker)
+            if idx != -1:
+                body = body[:idx]
+        return body
+
+
+    def bump_kind(a_str, b_str):
+        """Classify a version pair as major / minor / patch."""
+        a = [int(x) for x in a_str.split(".")]
+        b = [int(x) for x in b_str.split(".")]
+        while len(a) < 3:
+            a.append(0)
+        while len(b) < 3:
+            b.append(0)
+        if a[0] != b[0]:
+            return "major"
+        if a[1] != b[1]:
+            return "minor"
+        return "patch"
+
+
     def is_renovate_pr(pr):
+        """Renovate PRs are identified by branch prefix.
+
+        Title and author are both unreliable here: self-hosted Renovate
+        authenticates with a PAT, so it authors PRs as the token owner
+        (gjcourt) rather than renovate[bot], and not every Renovate preset
+        emits the 'chore(deps):' title prefix. The branch name is the one
+        signal Renovate always controls -- every branch it opens is created
+        under branchPrefix, which defaults to 'renovate/'.
+
+        Title and author are kept as fallbacks so a rebranded branchPrefix
+        or a genuine renovate[bot] PR still matches."""
+        head = (pr.get("head") or {}).get("ref") or ""
         return (
-            pr["title"].startswith("chore(deps):")
+            head.startswith(RENOVATE_BRANCH_PREFIX)
+            or pr["title"].startswith("chore(deps):")
             or "renovate" in pr["user"]["login"].lower()
         )
 
@@ -60,34 +114,44 @@ data:
         if "digest" in title:
             return True, "digest pin"
 
-        # Renovate includes an update-type column in its PR body table.
-        # Values: digest, pinDigest, pin, patch, minor, major, rollback
-        body = pr.get("body") or ""
+        # Renovate's summary table. Parse only the table, never the
+        # release notes below it.
+        table = updates_table(pr.get("body") or "")
+
+        # Preferred signal: the explicit Update column.
         types = re.findall(
-            r"\|\s*(major|minor|patch|digest|pin|pinDigest|rollback)\s*\|",
-            body,
+            r"\|\s*(" + "|".join(UPDATE_TYPES) + r")\s*\|",
+            table,
             re.IGNORECASE,
         )
         if types:
             kinds = {t.lower() for t in types}
-            if kinds <= {"patch", "digest", "pin", "pindigest", "minor"}:
+            if kinds <= SAFE_TYPES:
                 return True, "update type: " + ", ".join(sorted(kinds))
             return False, "update type: " + ", ".join(sorted(kinds))
 
-        # Fallback: parse two version strings from title and compare.
+        # Not every table has an Update column -- some render as
+        # | Package | Change | Age | Confidence |. The Change column still
+        # carries both versions ("`2.55.16` -> `2.55.19`"), so derive the
+        # bump from there before falling back to the title, which usually
+        # names only the target version.
+        pairs = CHANGE_RE.findall(table)
+        if pairs:
+            kinds = {bump_kind(a, b) for a, b in pairs}
+            detail = ", ".join(f"{a} -> {b}" for a, b in pairs[:3])
+            if len(pairs) > 3:
+                detail += f", +{len(pairs) - 3} more"
+            label = "/".join(sorted(kinds)) + " bump"
+            if kinds <= SAFE_TYPES:
+                return True, f"{label} ({detail})"
+            return False, f"{label} ({detail})"
+
+        # Last resort: two version strings in the title.
         versions = re.findall(r"\d+\.\d+(?:\.\d+)*", pr["title"])
         if len(versions) >= 2:
-            a = [int(x) for x in versions[0].split(".")]
-            b = [int(x) for x in versions[-1].split(".")]
-            while len(a) < 3:
-                a.append(0)
-            while len(b) < 3:
-                b.append(0)
-            if a[0] != b[0]:
-                return False, f"major bump ({versions[0]} -> {versions[-1]})"
-            if a[1] != b[1]:
-                return True, f"minor bump ({versions[0]} -> {versions[-1]})"
-            return True, f"patch bump ({versions[0]} -> {versions[-1]})"
+            kind = bump_kind(versions[0], versions[-1])
+            detail = f"{kind} bump ({versions[0]} -> {versions[-1]})"
+            return kind in SAFE_TYPES, detail
 
         return False, "cannot determine update type"
 

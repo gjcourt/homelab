@@ -51,11 +51,19 @@ data:
     UPDATE_TYPES = ("major", "minor", "patch", "digest", "pin", "pinDigest", "rollback")
     SAFE_TYPES = {"patch", "digest", "pin", "pindigest", "minor"}
 
-    _VERSION = r"v?(\d+(?:\.\d+)+)"
     # Renovate renders the arrow as a literal, an entity, or '->' depending
     # on the platform and on whether the cell is inside a link.
     _ARROW = r"(?:->|-&gt;|\u2192|&#8594;|&rarr;)"
-    CHANGE_RE = re.compile(_VERSION + r"`\s*" + _ARROW + r"\s*`" + _VERSION)
+    # Every "`old` -> `new`" cell in the Change column, whatever it holds:
+    # versions, suffixed tags, digests, junk. cell_kind() then decides per
+    # cell, and anything it cannot decide fails the whole PR closed.
+    CHANGE_CELL_RE = re.compile(
+        r"`([^`\n]{1,60})`\s*" + _ARROW + r"\s*`([^`\n]{1,60})`"
+    )
+    VERSION_ONLY_RE = re.compile(r"^v?(\d+(?:\.\d+)*)$")
+    DIGEST_RE = re.compile(r"^(?:sha256:)?[0-9a-f]{7,}$", re.IGNORECASE)
+    # Renovate's digest titles always end "... digest to <short sha>".
+    DIGEST_TITLE_RE = re.compile(r"\bdigest to [0-9a-f]{7,}\s*$")
 
 
     def updates_table(body):
@@ -86,6 +94,33 @@ data:
         return "patch"
 
 
+    def cell_kind(a_raw, b_raw):
+        """Classify one "`a` -> `b`" Change cell.
+
+        Returns major / minor / patch / digest, or None when the cell
+        cannot be compared. None is deliberately not "safe": an unparsed
+        cell must never be silently dropped from a multi-row table, or a
+        major bump hiding behind a suffix ("1.26-alpine" -> "2.0-alpine")
+        would automerge on the strength of its well-formed neighbours."""
+        a, b = a_raw.strip(), b_raw.strip()
+        # Shared non-numeric suffix ("1.26-alpine" -> "1.27-alpine",
+        # "1.2.3-rc1" -> "2.0.0-rc1"): compare the numeric heads. A
+        # differing suffix stays uncomparable and falls through to None.
+        for sep in ("-", "+"):
+            if sep in a and sep in b:
+                a_head, _, a_tail = a.partition(sep)
+                b_head, _, b_tail = b.partition(sep)
+                if a_tail == b_tail:
+                    a, b = a_head, b_head
+                    break
+        ma, mb = VERSION_ONLY_RE.match(a), VERSION_ONLY_RE.match(b)
+        if ma and mb:
+            return bump_kind(ma.group(1), mb.group(1))
+        if DIGEST_RE.match(a) and DIGEST_RE.match(b):
+            return "digest"
+        return None
+
+
     def is_renovate_pr(pr):
         """Renovate PRs are identified by branch prefix.
 
@@ -110,17 +145,16 @@ data:
         """Return (safe: bool, reason: str) based on title and PR body."""
         title = pr["title"].lower()
 
-        # Digest pins are always safe — content-addressed, same logical version.
-        if "digest" in title:
-            return True, "digest pin"
-
         # Renovate's summary table. Parse only the table, never the
         # release notes below it.
         table = updates_table(pr.get("body") or "")
 
-        # Preferred signal: the explicit Update column.
+        # Preferred signal: the explicit Update column. The closing pipe is
+        # matched by lookahead rather than consumed, so two type words that
+        # share a pipe ("| minor | major |") both register -- consuming it
+        # would hide the second and let a major bump read as safe.
         types = re.findall(
-            r"\|\s*(" + "|".join(UPDATE_TYPES) + r")\s*\|",
+            r"\|\s*(" + "|".join(UPDATE_TYPES) + r")\s*(?=\|)",
             table,
             re.IGNORECASE,
         )
@@ -130,21 +164,35 @@ data:
                 return True, "update type: " + ", ".join(sorted(kinds))
             return False, "update type: " + ", ".join(sorted(kinds))
 
-        # Not every table has an Update column -- some render as
+        # Not every table has an Update column -- with the merge-confidence
+        # columns enabled Renovate renders
         # | Package | Change | Age | Confidence |. The Change column still
         # carries both versions ("`2.55.16` -> `2.55.19`"), so derive the
         # bump from there before falling back to the title, which usually
         # names only the target version.
-        pairs = CHANGE_RE.findall(table)
-        if pairs:
-            kinds = {bump_kind(a, b) for a, b in pairs}
-            detail = ", ".join(f"{a} -> {b}" for a, b in pairs[:3])
-            if len(pairs) > 3:
-                detail += f", +{len(pairs) - 3} more"
+        cells = CHANGE_CELL_RE.findall(table)
+        if cells:
+            kinds = {cell_kind(a, b) for a, b in cells}
+            detail = ", ".join(f"{a} -> {b}" for a, b in cells[:3])
+            if len(cells) > 3:
+                detail += f", +{len(cells) - 3} more"
+            if None in kinds:
+                # At least one row is uncomparable. Classifying off the
+                # rows we *could* parse would let a major bump ride along
+                # with its patch-bump neighbours, so hold the whole PR.
+                return False, f"unparseable change cell ({detail})"
             label = "/".join(sorted(kinds)) + " bump"
             if kinds <= SAFE_TYPES:
                 return True, f"{label} ({detail})"
             return False, f"{label} ({detail})"
+
+        # Digest pins are content-addressed -- same logical version -- but
+        # trust the title only once the table has said nothing, and only for
+        # Renovate's own "... digest to <sha>" phrasing. A bare "digest"
+        # substring also matches package names like "node-digest", which
+        # would wave a major bump of that package straight through.
+        if DIGEST_TITLE_RE.search(title):
+            return True, "digest pin"
 
         # Last resort: two version strings in the title.
         versions = re.findall(r"\d+\.\d+(?:\.\d+)*", pr["title"])

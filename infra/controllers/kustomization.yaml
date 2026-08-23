@@ -13,6 +13,7 @@ resources:
   - promtail
   - renovate
   - renovate-automerge
+  - renovate-review
   - snapshot
   - unpoller
   - vector

@@ -46,6 +46,10 @@ data:
 
 
     RENOVATE_BRANCH_PREFIX = "renovate/"
+    # Applied by the renovate-review CronJob when two independent reviewers agree
+    # a PR needs a human. Honoured here so that hold is binding rather than
+    # advisory -- the reviewer has no merge rights and cannot enforce it itself.
+    HOLD_LABEL = "held-by-review"
 
     # Update types Renovate may report, and the subset we auto-merge.
     UPDATE_TYPES = ("major", "minor", "patch", "digest", "pin", "pinDigest", "rollback")
@@ -282,6 +286,12 @@ data:
         merged, held = [], []
         for pr in renovate:
             print(f"\n  PR #{pr['number']}: {pr['title']}", flush=True)
+            if any((lab or {}).get("name") == HOLD_LABEL for lab in pr.get("labels") or []):
+                reason = f"held by dependency review ({HOLD_LABEL})"
+                print(f"    -> hold: {reason}", flush=True)
+                held.append({"pr": pr, "reason": reason})
+                continue
+
             safe, reason = classify_pr(pr)
             if not safe:
                 print(f"    -> hold: {reason}", flush=True)

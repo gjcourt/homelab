@@ -1,0 +1,59 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: renovate-review
+  namespace: renovate
+spec:
+  # Renovate itself runs @daily at 00:00 and takes ~5m. Start at 01:00 so the
+  # day's PRs exist and their CI has settled before they are reviewed.
+  schedule: "0 1 * * *"
+  # Suspended until secret-renovate-review-env exists. Without it every pod
+  # fails on the missing secretRef. Flip to false in the same change that
+  # lands the SOPS secret -- see secret.yaml.example for the required scopes.
+  suspend: true
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      # Auto-delete finished jobs after 1h so a stray failure doesn't linger as
+      # a persistent KubeJobFailed alert.
+      # A hung model call must not wedge the CronJob: concurrencyPolicy is
+      # Forbid, so one stuck Job would block every future run, silently.
+      activeDeadlineSeconds: 1800
+      ttlSecondsAfterFinished: 3600
+      backoffLimit: 0 # never retry: a re-run would duplicate PR comments
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: review
+              # python 3.14-slim
+              image: python@sha256:297cf11d0b98b38ac26a56136f0279df845314bcd0347c1f6383fee6e75125ee
+              command: ["python3", "/scripts/review.py"]
+              args: ["--mode", "$(REVIEW_MODE)"]
+              envFrom:
+                - configMapRef:
+                    name: renovate-review-env
+                - secretRef:
+                    name: secret-renovate-review-env
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 65534
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+          volumes:
+            - name: script
+              configMap:
+                name: renovate-review-script

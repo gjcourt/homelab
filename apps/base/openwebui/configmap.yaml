@@ -24,6 +24,14 @@ data:
   # v0.9.5 tag, which is the digest pinned in deployment.yaml.
 
   # Most of the vars below are upstream "PersistentConfig" values: they are read
+
+  # Blast radius is wider than the auth vars: this bypasses the entire
+
+  # PERSISTENT_CONFIG_REGISTRY, so EVERY Admin-UI setting from the previous run
+
+  # (model lists, RAG config, prompt templates, WEBUI_URL) reverts to its
+
+  # upstream default on boot -- not just the five settings below.
   # from the environment on FIRST launch only, then stored in the DB on the PVC
   # and served from there on every later boot. The PVC already holds a database
   # from the pre-2026-05 run, so without this the hardening below would be

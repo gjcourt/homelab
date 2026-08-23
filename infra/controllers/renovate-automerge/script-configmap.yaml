@@ -55,6 +55,53 @@ data:
     UPDATE_TYPES = ("major", "minor", "patch", "digest", "pin", "pinDigest", "rollback")
     SAFE_TYPES = {"patch", "digest", "pin", "pindigest", "minor"}
 
+    # Language/interpreter runtimes are never auto-merged, whatever Renovate
+    # calls the update. Renovate's version model treats the x in "3.x" as the
+    # MINOR field, so a Python 3.12 -> 3.14 jump arrives tagged "minor", lands
+    # inside SAFE_TYPES above, and merges itself. An interpreter change is
+    # breaking in practice regardless of what semver says.
+    #
+    # Observed live: toppingctl#1 "Update dependency python to 3.14" carries
+    # "| python | uses-with | minor | 3.12 -> 3.14 |".
+    #
+    # Digest updates are held here too, unlike everywhere else in this file. A
+    # floating runtime tag such as python:3.12 gets re-pointed at a new build,
+    # so "same logical version" is not true for runtimes the way it is for a
+    # pinned application image.
+    #
+    # Two independent signals, because they become available at different times:
+    #   - the branch prefix from the shared preset's runtime carve-out
+    #     (additionalBranchPrefix: "runtime-"): precise, but only in repos that
+    #     have adopted the preset.
+    #   - the dependency name in the summary table: works in every repo,
+    #     including ones that never adopt it.
+    # Neither is load-bearing alone, and the preset's own automerge:false does
+    # NOT bind this script -- that governs Renovate's merging; this script
+    # merges through the API on its own schedule.
+    RUNTIME_BRANCH_MARKER = "runtime-"
+    # Matched as WHOLE dep names, never by path segment. "cloud.google.com/go"
+    # and "@types/node" both end in a runtime word and are ordinary libraries;
+    # holding them would be noise that teaches people to ignore holds.
+    #
+    # Both spellings of each runtime are needed. The setup-action form
+    # ("java", "dotnet-sdk") is what Renovate reports for a uses-with bump; the
+    # image form ("eclipse-temurin", "mcr.microsoft.com/dotnet/sdk") is what it
+    # reports for a base-image bump. Listing only the first lets a JDK 21 -> 22
+    # base image through as "minor".
+    RUNTIME_DEPS = {
+        # toolchains / setup actions
+        "python", "go", "golang", "node", "nodejs", "java", "ruby",
+        "dotnet-sdk", "rust", "php", "erlang", "pypy",
+        # JVM images
+        "eclipse-temurin", "openjdk", "amazoncorretto", "ibm-semeru-runtimes",
+        "bellsoft/liberica-openjdk-alpine",
+        # .NET images
+        "mcr.microsoft.com/dotnet/sdk", "mcr.microsoft.com/dotnet/runtime",
+        "mcr.microsoft.com/dotnet/aspnet",
+        # other runtime images
+        "oven/bun", "denoland/deno",
+    }
+
     # Renovate renders the arrow as a literal, an entity, or '->' depending
     # on the platform and on whether the cell is inside a link.
     _ARROW = r"(?:->|-&gt;|\u2192|&#8594;|&rarr;)"
@@ -145,6 +192,43 @@ data:
         )
 
 
+    def _cell_name(cell):
+        """Normalise one table cell to a bare dependency name, lowercased.
+
+        Renovate renders the package cell as `python`, **python**,
+        [golang](url), or "golang ([source](url))" depending on what metadata
+        the dep has.
+        """
+        name = cell.strip()
+        link = re.match(r"\[([^\]]+)\]", name)
+        if link:
+            name = link.group(1)
+        else:
+            # "golang ([source](url))" -> "golang"
+            name = name.split(" (", 1)[0]
+        return name.strip("`*_ ").lower()
+
+
+    def runtime_deps_in_table(table):
+        """Language runtimes named anywhere in Renovate's summary table.
+
+        Every cell is checked rather than column 0, so a reordered
+        prBodyColumns cannot hide the package name. Matching is on the WHOLE
+        name: the other columns hold update types, ages and version strings,
+        none of which collide with a runtime name.
+        """
+        found = set()
+        for line in table.splitlines():
+            line = line.strip()
+            if not line.startswith("|"):
+                continue
+            for cell in line.strip("|").split("|"):
+                name = _cell_name(cell)
+                if name in RUNTIME_DEPS:
+                    found.add(name)
+        return found
+
+
     def classify_pr(pr):
         """Return (safe: bool, reason: str) based on title and PR body."""
         title = pr["title"].lower()
@@ -152,6 +236,15 @@ data:
         # Renovate's summary table. Parse only the table, never the
         # release notes below it.
         table = updates_table(pr.get("body") or "")
+
+        # Runtime upgrades are held before any update-type reasoning, because
+        # the update type is exactly what is misleading about them.
+        branch = (pr.get("head") or {}).get("ref") or ""
+        if branch.startswith(RENOVATE_BRANCH_PREFIX + RUNTIME_BRANCH_MARKER):
+            return False, "language runtime upgrade (runtime- branch)"
+        runtimes = runtime_deps_in_table(table)
+        if runtimes:
+            return False, "language runtime upgrade: " + ", ".join(sorted(runtimes))
 
         # Preferred signal: the explicit Update column. The closing pipe is
         # matched by lookahead rather than consumed, so two type words that
@@ -189,6 +282,15 @@ data:
             if kinds <= SAFE_TYPES:
                 return True, f"{label} ({detail})"
             return False, f"{label} ({detail})"
+
+        # The paths below run only when the table said nothing, which means the
+        # body was cleared or hand-edited. Both of them return "safe" without
+        # any runtime awareness, so re-check the title first: a runtime word in
+        # a PR whose table we could not read is exactly the case to fail closed
+        # on rather than fall through to a version-string comparison.
+        if any(re.search(r"(?<![\w./-])" + re.escape(d) + r"(?![\w./-])", title)
+               for d in RUNTIME_DEPS):
+            return False, "possible runtime upgrade, unreadable update table"
 
         # Digest pins are content-addressed -- same logical version -- but
         # trust the title only once the table has said nothing, and only for

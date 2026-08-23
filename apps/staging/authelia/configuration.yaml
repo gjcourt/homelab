@@ -16,6 +16,8 @@ access_control:
   rules:
     - domain: "music.stage.burntbytes.com"
       policy: one_factor
+    - domain: "chat.stage.burntbytes.com"
+      policy: one_factor
     - domain: "auth.stage.burntbytes.com"
       policy: bypass
       resources:

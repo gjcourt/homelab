@@ -345,7 +345,14 @@ jobs:
 #              - run: |
 #                  r='${{ needs.go-ci.outputs.test }}'
 #                  echo "reusable Test job: $r"
-#                  [ "$r" = success ] || [ "$r" = skipped ]
+#                  [ "$r" = success ]
 #
 # Alias jobs cost a few seconds of runner time each and must use `if: always()`
 # so they still run (and fail) when the upstream job failed.
+#
+# Assert `success` ONLY -- do not also accept `skipped`. A required status check
+# is a branch-protection control; if the alias passes on `skipped`, then setting
+# `test: false` in a caller's `with:` block turns that required check green with
+# nothing having run. That converts a gate only a repo admin can change into one
+# any repo writer can switch off from a workflow file. To genuinely retire a job,
+# remove it from the required contexts (step 5), do not silently satisfy it.

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Shared Renovate defaults for gjcourt repos. Extend with: github>gjcourt/homelab//renovate/default — see renovate/README.md for the rationale behind each rule.",
+  "extends": ["config:recommended"],
+  "labels": ["dependencies"],
+  "postUpdateOptions": ["gomodTidy"],
+  "packageRules": [
+    {
+      "description": "Group GitHub Actions bumps into a single PR per cycle instead of one per action.",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions"
+    },
+    {
+      "description": "Language/interpreter runtimes get their own branch and are never grouped or auto-merged. Renovate classifies a setup-python 3.12->3.14 bump as updateType 'minor' (Python's 3.x IS the minor field), so without this it rides inside the routine github-actions group. Interpreter bumps are breaking in practice regardless of what semver says. This rule must stay AFTER the grouping rule above: package rules apply in order and the last match wins.",
+      "matchDepNames": ["python", "go", "golang", "node", "java", "ruby", "dotnet-sdk"],
+      "groupName": null,
+      "additionalBranchPrefix": "runtime-",
+      "separateMinorPatch": true,
+      "automerge": false,
+      "labels": ["dependencies", "runtime-upgrade"],
+      "commitMessageTopic": "{{depName}} runtime"
+    }
+  ]
+}

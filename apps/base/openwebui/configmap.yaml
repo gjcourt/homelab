@@ -10,9 +10,47 @@ data:
   OPENAI_API_BASE_URL: "http://10.42.2.10:8000/v1"
   # llama.cpp does not validate API keys; field is required by Open WebUI
   OPENAI_API_KEY: "not-needed"
-  # Use Open WebUI's built-in auth (Authelia SSO is redundant with its own login)
-  WEBUI_AUTH: "True"
   WEBUI_NAME: "Chat"
   DEFAULT_MODELS: "Qwen3.6-35B-A3B"
   # Store all data under the mounted PVC
   DATA_DIR: "/app/backend/data"
+
+  # --- Authentication hardening (defence in depth) ---
+  # chat.burntbytes.com is gated at the gateway by Authelia ext_authz
+  # (one_factor — see apps/production/authelia/configuration.yaml and
+  # docs/architecture/gateway-auth.md). Everything below is the second layer,
+  # so a request that somehow reaches the pod still cannot mint an account.
+  # Names verified against backend/open_webui/{env,config}.py at the upstream
+  # v0.9.5 tag, which is the digest pinned in deployment.yaml.
+
+  # Most of the vars below are upstream "PersistentConfig" values: they are read
+
+  # Blast radius is wider than the auth vars: this bypasses the entire
+
+  # PERSISTENT_CONFIG_REGISTRY, so EVERY Admin-UI setting from the previous run
+
+  # (model lists, RAG config, prompt templates, WEBUI_URL) reverts to its
+
+  # upstream default on boot -- not just the five settings below.
+  # from the environment on FIRST launch only, then stored in the DB on the PVC
+  # and served from there on every later boot. The PVC already holds a database
+  # from the pre-2026-05 run, so without this the hardening below would be
+  # silently ignored. False makes the environment authoritative on every boot.
+  # Trade-off: settings changed in the Admin UI that also appear here are reset
+  # on restart — intentional, this file is the source of truth.
+  ENABLE_PERSISTENT_CONFIG: "False"
+
+  # Require a login; do not run in open single-user mode.
+  WEBUI_AUTH: "True"
+  # No self-registration. A visitor who reaches the login page cannot create an
+  # account; accounts are provisioned by an admin.
+  ENABLE_SIGNUP: "False"
+  # Same for the OAuth path (already the upstream default; pinned explicitly so
+  # it cannot drift or be flipped from the Admin UI).
+  ENABLE_OAUTH_SIGNUP: "False"
+  # Any account that does get created lands with no access until an admin
+  # promotes it (upstream default; pinned explicitly).
+  DEFAULT_USER_ROLE: "pending"
+  # Non-admin users cannot mint Open WebUI API keys, which would otherwise be a
+  # gateway-bypassing credential for the backend (upstream default; pinned).
+  ENABLE_API_KEYS: "False"

@@ -18,6 +18,9 @@ spec:
     spec:
       # Auto-delete finished jobs after 1h so a stray failure doesn't linger as
       # a persistent KubeJobFailed alert.
+      # A hung model call must not wedge the CronJob: concurrencyPolicy is
+      # Forbid, so one stuck Job would block every future run, silently.
+      activeDeadlineSeconds: 1800
       ttlSecondsAfterFinished: 3600
       backoffLimit: 0 # never retry: a re-run would duplicate PR comments
       template:
@@ -25,7 +28,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: review
-              # python 3.14-slim — same base as the automerge job
+              # python 3.14-slim
               image: python@sha256:297cf11d0b98b38ac26a56136f0279df845314bcd0347c1f6383fee6e75125ee
               command: ["python3", "/scripts/review.py"]
               args: ["--mode", "$(REVIEW_MODE)"]

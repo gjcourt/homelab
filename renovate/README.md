@@ -14,11 +14,16 @@ Consumer repos extend it instead of each carrying their own drifting copy.
 
 ## Why `.json` and not `.json5`
 
-**Subdirectory presets only resolve `.json`.** `github>gjcourt/homelab//renovate/default`
-resolves to `renovate/default.json`; Renovate does not try `.json5` for an
-implicit filename. Explicit extensions are documented only for the root-level
-`owner/repo:file.json5` form, not for the `//path/file` form — so a `.json5`
-preset here would rely on undocumented behaviour.
+**The implicit `default` lookup resolves `.json` only.** In Renovate's
+`fetchPreset` (`lib/config/presets/util.ts`), a preset whose filename is exactly
+`default` is fetched as `<path>/default.json`, with a single deprecated fallback
+to `<path>/renovate.json`. `default.json5` is never attempted. So
+`github>gjcourt/homelab//renovate/default` requires the file to be `default.json`.
+
+A `.json5` file would work, but only if every consumer spelled the extension out —
+`github>gjcourt/homelab//renovate/default.json5` — because the explicit-filename
+branch does accept `.json5`. That trades a clean, uniform `extends` line across ten
+repos for comment support in one file. Not worth it.
 
 The cost is that JSON has no comments, which is why every rule carries a
 `description` field and the reasoning lives in this file.

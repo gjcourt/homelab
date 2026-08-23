@@ -79,9 +79,27 @@ data:
     # NOT bind this script -- that governs Renovate's merging; this script
     # merges through the API on its own schedule.
     RUNTIME_BRANCH_MARKER = "runtime-"
+    # Matched as WHOLE dep names, never by path segment. "cloud.google.com/go"
+    # and "@types/node" both end in a runtime word and are ordinary libraries;
+    # holding them would be noise that teaches people to ignore holds.
+    #
+    # Both spellings of each runtime are needed. The setup-action form
+    # ("java", "dotnet-sdk") is what Renovate reports for a uses-with bump; the
+    # image form ("eclipse-temurin", "mcr.microsoft.com/dotnet/sdk") is what it
+    # reports for a base-image bump. Listing only the first lets a JDK 21 -> 22
+    # base image through as "minor".
     RUNTIME_DEPS = {
-        "python", "go", "golang", "node", "nodejs",
-        "java", "ruby", "dotnet-sdk", "rust", "php",
+        # toolchains / setup actions
+        "python", "go", "golang", "node", "nodejs", "java", "ruby",
+        "dotnet-sdk", "rust", "php", "erlang", "pypy",
+        # JVM images
+        "eclipse-temurin", "openjdk", "amazoncorretto", "ibm-semeru-runtimes",
+        "bellsoft/liberica-openjdk-alpine",
+        # .NET images
+        "mcr.microsoft.com/dotnet/sdk", "mcr.microsoft.com/dotnet/runtime",
+        "mcr.microsoft.com/dotnet/aspnet",
+        # other runtime images
+        "oven/bun", "denoland/deno",
     }
 
     # Renovate renders the arrow as a literal, an entity, or '->' depending
@@ -174,28 +192,40 @@ data:
         )
 
 
-    def runtime_deps_in_table(table):
-        """Language runtimes named in the first column of Renovate's summary table.
+    def _cell_name(cell):
+        """Normalise one table cell to a bare dependency name, lowercased.
 
-        Rows look like: | [python](https://...) | uses-with | minor | `3.12` -> `3.14` |
-        The name may be a markdown link, backticked, bare, or a monorepo path
-        ("actions/setup-go"), so the last path segment is checked too.
+        Renovate renders the package cell as `python`, **python**,
+        [golang](url), or "golang ([source](url))" depending on what metadata
+        the dep has.
+        """
+        name = cell.strip()
+        link = re.match(r"\[([^\]]+)\]", name)
+        if link:
+            name = link.group(1)
+        else:
+            # "golang ([source](url))" -> "golang"
+            name = name.split(" (", 1)[0]
+        return name.strip("`*_ ").lower()
+
+
+    def runtime_deps_in_table(table):
+        """Language runtimes named anywhere in Renovate's summary table.
+
+        Every cell is checked rather than column 0, so a reordered
+        prBodyColumns cannot hide the package name. Matching is on the WHOLE
+        name: the other columns hold update types, ages and version strings,
+        none of which collide with a runtime name.
         """
         found = set()
         for line in table.splitlines():
             line = line.strip()
             if not line.startswith("|"):
                 continue
-            cells = [c.strip() for c in line.strip("|").split("|")]
-            if not cells:
-                continue
-            name = cells[0]
-            link = re.match(r"\[([^\]]+)\]", name)
-            if link:
-                name = link.group(1)
-            name = name.strip("`*_ ").lower()
-            if name in RUNTIME_DEPS or name.rsplit("/", 1)[-1] in RUNTIME_DEPS:
-                found.add(name)
+            for cell in line.strip("|").split("|"):
+                name = _cell_name(cell)
+                if name in RUNTIME_DEPS:
+                    found.add(name)
         return found
 
 
@@ -252,6 +282,15 @@ data:
             if kinds <= SAFE_TYPES:
                 return True, f"{label} ({detail})"
             return False, f"{label} ({detail})"
+
+        # The paths below run only when the table said nothing, which means the
+        # body was cleared or hand-edited. Both of them return "safe" without
+        # any runtime awareness, so re-check the title first: a runtime word in
+        # a PR whose table we could not read is exactly the case to fail closed
+        # on rather than fall through to a version-string comparison.
+        if any(re.search(r"(?<![\w./-])" + re.escape(d) + r"(?![\w./-])", title)
+               for d in RUNTIME_DEPS):
+            return False, "possible runtime upgrade, unreadable update table"
 
         # Digest pins are content-addressed -- same logical version -- but
         # trust the title only once the table has said nothing, and only for

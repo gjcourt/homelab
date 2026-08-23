@@ -1,23 +1,57 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Shared Renovate defaults for gjcourt repos. Extend with: github>gjcourt/homelab//renovate/default — see renovate/README.md for the rationale behind each rule.",
-  "extends": ["config:recommended"],
-  "labels": ["dependencies"],
-  "postUpdateOptions": ["gomodTidy"],
+  "description": "Shared Renovate defaults for gjcourt repos. Extend with: github>gjcourt/homelab//renovate/default \u2014 see renovate/README.md for the rationale behind each rule.",
+  "extends": [
+    "config:recommended"
+  ],
+  "labels": [
+    "dependencies"
+  ],
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
   "packageRules": [
     {
       "description": "Group GitHub Actions bumps into a single PR per cycle instead of one per action.",
-      "matchManagers": ["github-actions"],
+      "matchManagers": [
+        "github-actions"
+      ],
       "groupName": "github-actions"
     },
     {
       "description": "Language/interpreter runtimes get their own branch and are never grouped or auto-merged. Renovate classifies a setup-python 3.12->3.14 bump as updateType 'minor' (Python's 3.x IS the minor field), so without this it rides inside the routine github-actions group. Interpreter bumps are breaking in practice regardless of what semver says. This rule must stay AFTER the grouping rule above: package rules apply in order and the last match wins.",
-      "matchDepNames": ["python", "go", "golang", "node", "java", "ruby", "dotnet-sdk"],
+      "matchDepNames": [
+        "python",
+        "go",
+        "golang",
+        "node",
+        "nodejs",
+        "java",
+        "ruby",
+        "dotnet-sdk",
+        "rust",
+        "php",
+        "erlang",
+        "pypy",
+        "eclipse-temurin",
+        "openjdk",
+        "amazoncorretto",
+        "ibm-semeru-runtimes",
+        "bellsoft/liberica-openjdk-alpine",
+        "mcr.microsoft.com/dotnet/sdk",
+        "mcr.microsoft.com/dotnet/runtime",
+        "mcr.microsoft.com/dotnet/aspnet",
+        "oven/bun",
+        "denoland/deno"
+      ],
       "groupName": null,
       "additionalBranchPrefix": "runtime-",
       "separateMinorPatch": true,
       "automerge": false,
-      "labels": ["dependencies", "runtime-upgrade"],
+      "labels": [
+        "dependencies",
+        "runtime-upgrade"
+      ],
       "commitMessageTopic": "{{depName}} runtime"
     }
   ]

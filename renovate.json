@@ -16,6 +16,34 @@
       "automerge": true,
       "automergeType": "pr",
       "platformAutomerge": false
+    },
+    {
+      "description": "Language/interpreter runtimes are never automerged by Renovate itself. The rule above automerges every digest/pin/patch/minor update, and Renovate calls a Python 3.12->3.14 bump 'minor' because 3.x IS the minor field in its version model -- so without this an interpreter upgrade self-merges on the daily run. Must stay AFTER that rule: package rules apply in order, last match wins. The renovate-automerge CronJob holds these too, but it is a separate mechanism and does not govern Renovate's own merging.",
+      "matchDepNames": [
+        "python",
+        "go",
+        "golang",
+        "node",
+        "nodejs",
+        "java",
+        "ruby",
+        "dotnet-sdk",
+        "rust",
+        "php",
+        "erlang",
+        "pypy",
+        "eclipse-temurin",
+        "openjdk",
+        "amazoncorretto",
+        "ibm-semeru-runtimes",
+        "bellsoft/liberica-openjdk-alpine",
+        "mcr.microsoft.com/dotnet/sdk",
+        "mcr.microsoft.com/dotnet/runtime",
+        "mcr.microsoft.com/dotnet/aspnet",
+        "oven/bun",
+        "denoland/deno"
+      ],
+      "automerge": false
     }
   ]
 }

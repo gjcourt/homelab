@@ -1,3 +1,7 @@
+# Staging front door: https://chat.stage.burntbytes.com via the Cilium gateway.
+# Authelia ext_authz on the staging gateway gates every route; the one_factor
+# rule for this host lives in apps/staging/authelia/configuration.yaml. See
+# docs/architecture/gateway-auth.md.
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:

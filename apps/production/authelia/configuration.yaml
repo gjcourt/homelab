@@ -24,6 +24,10 @@ access_control:
       policy: one_factor
     - domain: "finance.burntbytes.com"
       policy: one_factor
+    # Open WebUI (chat.burntbytes.com) fronts a funded Anthropic API key, so the
+    # gateway must authenticate every request before it reaches the pod.
+    - domain: "chat.burntbytes.com"
+      policy: one_factor
     - domain: "auth.burntbytes.com"
       policy: bypass
       resources:

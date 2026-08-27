@@ -3,7 +3,8 @@ kind: PrometheusRule
 metadata:
   name: pvc-writeprobe
   namespace: monitoring
-  labels: { release: kube-prometheus-stack }
+  labels:
+    release: kube-prometheus-stack
 spec:
   groups:
     - name: pvc-writeprobe
@@ -11,7 +12,8 @@ spec:
         - alert: PvcNotWritable
           expr: homelab_pvc_writable == 0
           for: 10m
-          labels: { severity: critical }
+          labels:
+            severity: critical
           annotations:
             summary: 'PVC {{ $labels.namespace }}/{{ $labels.pvc }} is not writable'
             description: >-
@@ -27,7 +29,8 @@ spec:
         - alert: PvcWriteProbeStale
           expr: time() - homelab_pvc_writeprobe_last_run_seconds > 1800
           for: 5m
-          labels: { severity: warning }
+          labels:
+            severity: warning
           annotations:
             summary: 'pvc-writeprobe has not completed a sweep in 30m'
             description: 'PVC writability is currently unmonitored.'
@@ -35,7 +38,8 @@ spec:
         - alert: PvcWriteProbeAbsent
           expr: absent(homelab_pvc_writeprobe_last_run_seconds)
           for: 15m
-          labels: { severity: warning }
+          labels:
+            severity: warning
           annotations:
             summary: 'pvc-writeprobe is not reporting at all'
             description: 'PVC writability is currently unmonitored.'

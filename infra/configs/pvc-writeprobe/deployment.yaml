@@ -3,41 +3,58 @@ kind: Deployment
 metadata:
   name: pvc-writeprobe
   namespace: monitoring
-  labels: { app: pvc-writeprobe }
+  labels:
+    app: pvc-writeprobe
 spec:
   replicas: 1
   selector:
-    matchLabels: { app: pvc-writeprobe }
+    matchLabels:
+      app: pvc-writeprobe
   template:
     metadata:
-      labels: { app: pvc-writeprobe }
+      labels:
+        app: pvc-writeprobe
     spec:
       serviceAccountName: pvc-writeprobe
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
-        seccompProfile: { type: RuntimeDefault }
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: probe
           image: ghcr.io/gjcourt/pvc-writeprobe:placeholder
           env:
-            - { name: INTERVAL_SECONDS, value: '300' }
+            - name: INTERVAL_SECONDS
+              value: '300'
           ports:
-            - { name: metrics, containerPort: 9105 }
+            - name: metrics
+              containerPort: 9105
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
-            capabilities: { drop: ['ALL'] }
+            capabilities:
+              drop:
+                - ALL
           volumeMounts:
-            - { name: metrics, mountPath: /metrics }
-            - { name: tmp, mountPath: /tmp }
+            - name: metrics
+              mountPath: /metrics
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
-            httpGet: { path: /metrics, port: metrics }
+            httpGet:
+              path: /metrics
+              port: metrics
             initialDelaySeconds: 10
             periodSeconds: 30
           resources:
-            requests: { cpu: 10m, memory: 32Mi }
-            limits: { memory: 128Mi }
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
       volumes:
-        - { name: metrics, emptyDir: {} }
-        - { name: tmp, emptyDir: {} }
+        - name: metrics
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

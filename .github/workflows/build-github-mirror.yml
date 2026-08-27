@@ -33,18 +33,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Mirrors the YYYY-MM-DD / YYYY-MM-DD-N convention in AGENTS.md and the
-      # immich-photos-backup / signal-bridge / mopidy workflows.
-      - name: Generate date tag
+      # Immutable per-commit tag (date + short SHA) — avoids the same-day tag
+      # collision that a bare YYYY-MM-DD hits when code is rebuilt twice in a day.
+      - name: Generate date-sha tag
         id: tag
-        run: |
-          DATE=$(date -u +%Y-%m-%d)
-          ATTEMPT="${{ github.run_attempt }}"
-          if [ "$ATTEMPT" = "1" ]; then
-            echo "tag=$DATE" >> $GITHUB_OUTPUT
-          else
-            echo "tag=$DATE-$ATTEMPT" >> $GITHUB_OUTPUT
-          fi
+        run: echo "tag=$(date -u +%Y-%m-%d)-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Build and push
         uses: docker/build-push-action@v7

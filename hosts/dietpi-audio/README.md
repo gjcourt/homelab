@@ -47,18 +47,30 @@ takes effect on DietPi's end-of-first-run reboot.)
 | `/etc/asound.conf` | shared dmix (`default` → `hw:0`) |
 | `/usr/local/bin/snapclient-autodev` | waits for a USB DAC, runs snapclient via dmix |
 | `snapclient.service.d/override.conf` | uses the wrapper, retries indefinitely |
-| `/etc/udev/rules.d/99-audio-node.rules` | restart both on DAC add/remove |
+| `/usr/local/bin/audio-dmix-refresh` | writes `asound.conf` at the DAC's **current** card index |
+| `/etc/udev/rules.d/99-audio-node.rules` | refresh config, then restart both, on DAC add/remove |
+| `/root/.ssh/authorized_keys` | root SSH key, so a node is reachable without a password from first boot |
 
 ## Knobs (env vars at the top of the script)
 
 - `SNAPSERVER_HOST` (default `10.42.2.37`) · `GLR_VERSION` (`v0.7.4`) ·
-  `ZEROCONF_PORT` (`4070`).
+  `ZEROCONF_PORT` (`4070`) · `SSH_PUBKEY` (defaults to the operator key; extra
+  keys can also be dropped one-per-line in `/boot/authorized_keys` and are merged).
+
+**Why the key is provisioned:** `kitchen` and `living-room` were both briefly
+reachable by nobody — password auth with a password that had since changed, and
+no key installed. The recovery path was physically pulling the SD card. A node
+should arrive reachable.
 
 ## Notes
 
-- **DAC assumption:** the USB DAC is ALSA card `0` (the only sound card on a
-  headless node). If you enable onboard/HDMI audio, the dmix slave (`hw:0`) needs
-  to follow the USB card index instead.
+- **DAC card index is detected, not assumed.** `audio-dmix-refresh` finds the USB
+  card in `/proc/asound/cards` and writes `asound.conf` to match, re-running on
+  every plug/unplug via udev. This used to hardcode `hw:0` on the assumption that
+  the USB DAC was the only sound card — **an assumption that was already false**:
+  with onboard audio enabled, `bcm2835` takes card 0 and the DAC lands on card 1,
+  so every stream went to the 3.5 mm headphone jack while both services reported
+  healthy. Silence, no error. Verified and fixed on `office`, 2026-08-27.
 - **Software volume** (`--mixer software`) is deliberate — it survives DAC swaps
   (no dependence on the DAC exposing a hardware mixer). HASS controls it via the
   native Snapcast integration (server control port `1705`).

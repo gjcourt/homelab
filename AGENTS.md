@@ -126,12 +126,48 @@ Pods stay `Running` and often `Ready` — **status lies here**. Look for
 `read-only file system` in logs, and confirm per-pod rather than trusting status:
 
 ```bash
-kubectl -n <ns> exec <pod> -c <ctr> -- sh -c 'touch <mount>/.wtest && rm -f <mount>/.wtest'
+kubectl -n <ns> exec <pod> -c <ctr> -- sh -c 'printf ok > <mount>/.wtest && rm -f <mount>/.wtest'
 ```
 
-`NodeFilesystemReadOnly` (`infra/configs/alerts/prometheus-rules.yaml`) alerts on
-this — but it is evaluated *by Prometheus*, so if Prometheus' own PVC is affected
-it goes mute and the alert never fires. Do not assume silence means healthy.
+Write bytes, don't just `touch`: creating a zero-byte file can succeed on a
+filesystem with no free space, so `touch` alone passes a volume that is full.
+
+### Why the metric will not tell you (measured 2026-08-26)
+
+**`NodeFilesystemReadOnly` cannot detect this failure.** Not "sometimes misses
+it" — cannot. On 2026-08-13 both AdGuard `work` volumes went read-only and the
+alert stayed silent for 13 days. Both of these were true at the same instant:
+
+```text
+kubectl -n adguard-prod exec adguard-0 -c adguard -- \
+  sh -c 'printf ok > /opt/adguardhome/work/.p'
+  -> sh: can't create ...: Read-only file system          # hard EROFS
+
+node_filesystem_readonly{fstype="ext4"} == 1  ->  0 series  # "everything fine"
+```
+
+The mount was **not** unmonitored — `node_filesystem_readonly` scrapes the CSI
+globalmounts (69 series). The metric was scraped and it was **wrong**. ext4's
+`emergency_ro` error mode fails every write with `EROFS` while leaving the mount
+still advertising `rw`; node-exporter reports what the mount claims, so the gauge
+stays `0` forever.
+
+**No mount-flag scan can close this gap, because the mount flag is the thing that
+is lying.** Only an actual write distinguishes a working volume from a dead one.
+That is what `pvc-writeprobe` (`infra/configs/pvc-writeprobe/`) does — it execs a
+few bytes into `<mount>/.homelab-writeprobe` in every pod that mounts a PVC
+read-write, removes it, and exports `homelab_pvc_writable{namespace,pvc,pod}`.
+Alert: `PvcNotWritable`.
+
+Two caveats that are also load-bearing:
+
+- The probe is evaluated **by Prometheus**, so if Prometheus' own PVC is affected
+  it goes mute. Silence is not health — `PvcWriteProbeStale` / `PvcWriteProbeAbsent`
+  exist to make the silence itself alert.
+- Volumes mounted `readOnly: true` (Jellyfin/audiobookshelf media, immich
+  homevideo) are deliberately **not** probed — a write there would fail by design.
+  To exclude anything else, annotate the pod
+  `homelab.burntbytes.com/writeprobe-skip: "all"` or `"<pvc>,<pvc>"`.
 
 ### Recovery, by workload type
 

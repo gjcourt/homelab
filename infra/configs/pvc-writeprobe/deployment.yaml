@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pvc-writeprobe
+  namespace: monitoring
+  labels:
+    app: pvc-writeprobe
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pvc-writeprobe
+  template:
+    metadata:
+      labels:
+        app: pvc-writeprobe
+    spec:
+      serviceAccountName: pvc-writeprobe
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: probe
+          # PLACEHOLDER TAG. build-pvc-writeprobe.yml publishes an immutable
+          # YYYY-MM-DD-<sha7> tag plus :latest; pin the immutable tag in a
+          # follow-up PR (see the workflow's step summary), per the homelab
+          # image-discipline rule. :latest is used here rather than an
+          # invented tag because the workflow actually publishes it, so this
+          # self-heals once the first build lands. Until then the Deployment
+          # will not pull and PvcWriteProbeAbsent will fire, which is
+          # expected pre-build.
+          image: "ghcr.io/gjcourt/pvc-writeprobe:latest"
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: INTERVAL_SECONDS
+              value: '300'
+          ports:
+            - name: metrics
+              containerPort: 9105
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: metrics
+              mountPath: /metrics
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+      volumes:
+        - name: metrics
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}

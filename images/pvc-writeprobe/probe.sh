@@ -104,7 +104,13 @@ sweep() {
   | while IFS=$'\t' read -r ns pod ctr pvc mnt; do
       [ -z "${mnt:-}" ] && continue
       local target="${mnt%/}/${PROBE_FILE}"
-      local labels="namespace=\"$ns\",pvc=\"$pvc\",pod=\"$pod\",mountpath=\"$mnt\""
+      # `container` is part of the identity, not decoration. Two containers in
+      # one pod can mount the SAME pvc at the SAME path -- jellyfin and its
+      # transcode-janitor sidecar both mount jellyfin-cache at /cache -- and
+      # without this label those emit byte-identical series. That is invalid
+      # exposition: the probe wrote 77 lines and Prometheus stored 75,
+      # silently discarding the duplicates.
+      local labels="namespace=\"$ns\",pvc=\"$pvc\",pod=\"$pod\",container=\"$ctr\",mountpath=\"$mnt\""
       local err="" rc=1 attempt=0
 
       # An exec can fail for reasons that have nothing to do with the volume:

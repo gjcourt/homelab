@@ -21,6 +21,17 @@ metadata:
   labels:
     release: kube-prometheus-stack
 spec:
+  # busybox httpd serves a file named `metrics` (no extension) and sends NO
+  # Content-Type header. Prometheus 3.x rejects that outright:
+  #
+  #   non-compliant scrape target sending blank Content-Type and no
+  #   fallback_scrape_protocol specified for target
+  #
+  # So the probe served correct metrics, Prometheus could reach it, and the
+  # target still stayed down -- TargetDown + PvcWriteProbeAbsent firing while
+  # the endpoint was perfectly healthy. Declare what it actually speaks, which
+  # is what emit() writes.
+  fallbackScrapeProtocol: PrometheusText0.0.4
   selector:
     matchLabels:
       app: pvc-writeprobe

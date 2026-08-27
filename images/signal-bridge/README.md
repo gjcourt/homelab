@@ -84,4 +84,4 @@ curl -N "http://localhost:8080/api/v1/events?account=+16179397251"
 Images are published to `ghcr.io/gjcourt/signal-bridge` by the GHA workflow
 `.github/workflows/build-signal-bridge.yml` on every push to `master` that touches this directory.
 
-Tag format: `YYYY-MM-DD` (first build of the day) or `YYYY-MM-DD-N` (reruns).
+Tag format: immutable `YYYY-MM-DD-<sha7>` (UTC date + 7-char commit SHA).

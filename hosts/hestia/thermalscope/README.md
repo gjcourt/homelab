@@ -5,7 +5,7 @@ Hestia thermal + power telemetry agent. Reads `/sys/class/{hwmon,thermal}` and e
 | Attribute | Value |
 |---|---|
 | Image | `ghcr.io/gjcourt/thermalscope` (built from [`gjcourt/thermalscope`](https://github.com/gjcourt/thermalscope), Go + distroless) |
-| Tag scheme | git short SHA from the source repo (NOT the homelab YYYY-MM-DD convention — the image is owned by a different repo) |
+| Tag scheme | git short SHA from the source repo (NOT the homelab `YYYY-MM-DD-<sha7>` convention — the image is owned by a different repo) |
 | Network | `host` (Prometheus scrapes hestia directly) |
 | Privileges | `privileged: true` — required to read kernel sysfs sensors |
 | Bind mounts | `/sys/class/hwmon`, `/sys/class/thermal`, `/usr/bin/nvidia-smi` (all RO) |

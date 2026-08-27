@@ -129,7 +129,7 @@ First run pulls ~425 GB over gigabit (~30-60 min). Detach-safe via `docker logs 
 
 ## Subsequent updates
 
-Every change to `images/immich-photos-backup/**` on `master` triggers `.github/workflows/build-immich-photos-backup.yml` → publishes `ghcr.io/gjcourt/immich-photos-backup:YYYY-MM-DD` (with `:latest` mirror). Bump the digest in `docker-compose.yml` in a follow-up PR; `.github/workflows/deploy-hestia.yml` then auto-applies via `truenas-update-app.sh`.
+Every change to `images/immich-photos-backup/**` on `master` triggers `.github/workflows/build-immich-photos-backup.yml` → publishes `ghcr.io/gjcourt/immich-photos-backup:YYYY-MM-DD-<sha7>` (with `:latest` mirror). Bump the digest in `docker-compose.yml` in a follow-up PR; `.github/workflows/deploy-hestia.yml` then auto-applies via `truenas-update-app.sh`.
 
 The sudoers entry in section 3a is a **prerequisite** for any image whose script invokes `sudo -n /bin/chmod` (currently: all images since 2026-06-09). If the entry was wiped by a DSM upgrade and the script is updated in the meantime, the next 01:00 cron will fail until the entry is restored — verify before each digest bump if alcatraz had recent firmware updates.
 

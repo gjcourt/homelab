@@ -40,7 +40,14 @@ set -uo pipefail
 
 PROBE_FILE="${PROBE_FILE:-.homelab-writeprobe}"
 INTERVAL="${INTERVAL_SECONDS:-300}"
-EXEC_TIMEOUT="${EXEC_TIMEOUT:-15s}"
+# Seconds, not "15s": this is busybox `timeout`, not a kubectl flag.
+#
+# This was previously passed as a kubectl flag, and it silently broke
+# EVERYTHING. Measured on kubectl v1.35.0 in-cluster: passing that flag at
+# any position, on any subcommand, makes kubectl lose in-cluster config and
+# fall back to http://localhost:8080, so every probe returned UNKNOWN while
+# the tool looked healthy. Wrap the call; do not ask kubectl to time itself.
+EXEC_TIMEOUT="${EXEC_TIMEOUT:-15}"
 OUT="${OUT_FILE:-/metrics/metrics}"
 # Namespaces to skip entirely (system namespaces own no app data worth probing).
 SKIP_NS="${SKIP_NS:-kube-system,kube-public,kube-node-lease}"
@@ -113,8 +120,8 @@ sweep() {
       # we say "don't know" instead and alert separately if that persists.
       while [ $attempt -lt 3 ]; do
         attempt=$((attempt + 1))
-        err="$(kubectl exec --request-timeout="${EXEC_TIMEOUT}" \
-                 -n "$ns" "$pod" -c "$ctr" -- \
+        err="$(timeout "${EXEC_TIMEOUT}" \
+                 kubectl exec -n "$ns" "$pod" -c "$ctr" -- \
                  sh -c "printf ok > \"$target\" && rm -f \"$target\"" 2>&1)"
         rc=$?
         [ $rc -eq 0 ] && break

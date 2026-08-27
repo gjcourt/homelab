@@ -22,6 +22,23 @@ spec:
               not reflect this failure. Most likely an iSCSI read-only remount.
               Runbook: AGENTS.md "Recovering read-only iSCSI volumes".
 
+        # A sustained "unknown" is not the same as a failure, but it IS a
+        # blind spot: we are not currently able to tell whether that volume
+        # works. Warning, not critical -- it does not mean data is at risk, it
+        # means we cannot see. Long window so a rolling restart stays quiet.
+        - alert: PvcWriteProbeUnknown
+          expr: homelab_pvc_probe_unknown == 1
+          for: 45m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'Cannot determine writability of {{ $labels.namespace }}/{{ $labels.pvc }}'
+            description: >-
+              The probe could not classify a write to {{ $labels.mountpath }} in
+              pod {{ $labels.pod }} -- exec failed, or the error was not a
+              recognised filesystem refusal. This volume is unmonitored, not
+              known-bad. Check the pvc-writeprobe logs for the raw error.
+
         # The probe going silent looks identical to everything being fine, so
         # the absence of data is itself an alert. Both halves are needed: the
         # first catches a wedged probe still serving stale metrics, the second

@@ -40,6 +40,7 @@ set -uo pipefail
 
 PROBE_FILE="${PROBE_FILE:-.homelab-writeprobe}"
 INTERVAL="${INTERVAL_SECONDS:-300}"
+EXEC_TIMEOUT="${EXEC_TIMEOUT:-15s}"
 OUT="${OUT_FILE:-/metrics/metrics}"
 # Namespaces to skip entirely (system namespaces own no app data worth probing).
 SKIP_NS="${SKIP_NS:-kube-system,kube-public,kube-node-lease}"
@@ -56,6 +57,8 @@ emit() {
   {
     echo "# HELP homelab_pvc_writable Whether a real write to the PVC succeeded (1) or failed (0)."
     echo "# TYPE homelab_pvc_writable gauge"
+    echo "# HELP homelab_pvc_probe_unknown Probe could not determine writability (exec failed, or an unrecognised error)."
+    echo "# TYPE homelab_pvc_probe_unknown gauge"
     cat "$1"
     echo "# HELP homelab_pvc_writeprobe_last_run_seconds Unix time of the last completed sweep."
     echo "# TYPE homelab_pvc_writeprobe_last_run_seconds gauge"
@@ -86,16 +89,59 @@ sweep() {
       | (($c.volumeMounts // [])[] | select(.name == $v.vol and (.readOnly // false) == false))
       | [$pod.metadata.namespace, $pod.metadata.name, $c.name, $v.pvc, .mountPath]
       | @tsv' 2>/dev/null \
-  | sort -u -k1,1 -k4,4 \
+  | sort -u \
+  `# Whole-line dedupe, NOT -k1,1 -k4,4. Keying on (namespace, pvc) drops every`\
+  `# pod but one when several share an RWX volume -- immich-microservices runs 4`\
+  `# replicas on immich-photos-pvc. emergency_ro is per-mount and per-node, so`\
+  `# each pod's mount is a distinct thing that can die on its own.` \
   | while IFS=$'\t' read -r ns pod ctr pvc mnt; do
       [ -z "${mnt:-}" ] && continue
       local target="${mnt%/}/${PROBE_FILE}"
-      if kubectl exec -n "$ns" "$pod" -c "$ctr" -- \
-           sh -c "printf ok > '$target' && rm -f '$target'" >/dev/null 2>&1; then
-        echo "homelab_pvc_writable{namespace=\"$ns\",pvc=\"$pvc\",pod=\"$pod\",mountpath=\"$mnt\"} 1" >> "$body"
+      local labels="namespace=\"$ns\",pvc=\"$pvc\",pod=\"$pod\",mountpath=\"$mnt\""
+      local err="" rc=1 attempt=0
+
+      # An exec can fail for reasons that have nothing to do with the volume:
+      # the pod is Terminating, the container is restarting, the apiserver is
+      # throttling, a node is draining. Those are exactly the events that hit
+      # MANY pods at once, so treating a failed exec as "not writable" would
+      # turn one cluster hiccup into a storm of critical storage pages.
+      #
+      # So: retry, then classify by what the kernel actually said. Only a real
+      # filesystem refusal counts as 0. Anything we cannot classify is reported
+      # as UNKNOWN -- no writable series at all -- because a wrong 0 pages
+      # someone at 3am and a wrong 1 is a silent lie. Neither is acceptable, so
+      # we say "don't know" instead and alert separately if that persists.
+      while [ $attempt -lt 3 ]; do
+        attempt=$((attempt + 1))
+        err="$(kubectl exec --request-timeout="${EXEC_TIMEOUT}" \
+                 -n "$ns" "$pod" -c "$ctr" -- \
+                 sh -c "printf ok > \"$target\" && rm -f \"$target\"" 2>&1)"
+        rc=$?
+        [ $rc -eq 0 ] && break
+        case "$err" in
+          *"Read-only file system"*|*"No space left on device"*) break ;;
+        esac
+        sleep 2
+      done
+
+      if [ $rc -eq 0 ]; then
+        echo "homelab_pvc_writable{$labels} 1" >> "$body"
       else
-        echo "homelab_pvc_writable{namespace=\"$ns\",pvc=\"$pvc\",pod=\"$pod\",mountpath=\"$mnt\"} 0" >> "$body"
-        log "NOT WRITABLE ${ns}/${pvc} at ${mnt} (pod ${pod})"
+        case "$err" in
+          *"Read-only file system"*)
+            echo "homelab_pvc_writable{$labels} 0" >> "$body"
+            log "NOT WRITABLE (read-only) ${ns}/${pvc} at ${mnt} pod=${pod}" ;;
+          *"No space left on device"*)
+            echo "homelab_pvc_writable{$labels} 0" >> "$body"
+            log "NOT WRITABLE (full) ${ns}/${pvc} at ${mnt} pod=${pod}" ;;
+          *)
+            # Could not reach the pod, or the write failed in a way we do not
+            # recognise (a non-root container that cannot write the mount ROOT
+            # while the app writes a subdirectory quite happily would land
+            # here). Deliberately NOT a 0.
+            echo "homelab_pvc_probe_unknown{$labels} 1" >> "$body"
+            log "UNKNOWN ${ns}/${pvc} at ${mnt} pod=${pod}: $(echo "$err" | tr '\n' ' ' | cut -c1-160)" ;;
+        esac
       fi
     done
   emit "$body"

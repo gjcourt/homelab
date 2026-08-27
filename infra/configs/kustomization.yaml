@@ -10,6 +10,7 @@ resources:
   - homelabscope
   - ipmi-exporter
   - netscope
+  - pvc-writeprobe
   - network-policies
   - thermalscope
   - unpoller

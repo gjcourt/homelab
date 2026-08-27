@@ -1,0 +1,39 @@
+# The probe needs to read pod specs (to find which PVC is mounted where) and to
+# exec a write into each one.
+#
+# `pods/exec` cluster-wide is a strong grant -- it is command execution in every
+# workload -- so it is scoped as tightly as the job allows: read-only on pods,
+# create-only on exec, and nothing else. No secrets, no configmaps, no writes to
+# any API object. The image carries no shell payload beyond the probe loop, and
+# the only command it ever runs in another container is
+# `sh -c "printf ok > <mount>/.homelab-writeprobe && rm -f ..."`.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pvc-writeprobe
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pvc-writeprobe
+rules:
+  - apiGroups: ['']
+    resources: ['pods']
+    verbs: ['get', 'list']
+  - apiGroups: ['']
+    resources: ['pods/exec']
+    verbs: ['create']
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pvc-writeprobe
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: pvc-writeprobe
+subjects:
+  - kind: ServiceAccount
+    name: pvc-writeprobe
+    namespace: monitoring

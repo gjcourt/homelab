@@ -9,7 +9,11 @@ FROM alpine:3.20
 # in-repo of what is actually running. Bump this deliberately.
 ARG KUBECTL_VERSION=v1.35.0
 
-RUN apk add --no-cache bash curl jq \
+# busybox-extras carries the `httpd` applet. Alpine's BASE busybox does NOT --
+# shipping without this produced a container that ran happily, served nothing
+# on :9105, failed its readiness probe, and blocked the infra-configs
+# Kustomization (and therefore apps-production) until it was fixed.
+RUN apk add --no-cache bash curl jq busybox-extras \
  && ARCH="$(uname -m)" \
  && case "$ARCH" in x86_64) K=amd64 ;; aarch64) K=arm64 ;; *) echo "unsupported $ARCH" && exit 1 ;; esac \
  && BASE="https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/${K}" \
@@ -18,7 +22,9 @@ RUN apk add --no-cache bash curl jq \
  && echo "$(cat /tmp/kubectl.sha256)  /usr/local/bin/kubectl" | sha256sum -c - \
  && rm -f /tmp/kubectl.sha256 \
  && chmod +x /usr/local/bin/kubectl \
- && kubectl version --client=true
+ && kubectl version --client=true \
+ `# Fail the BUILD if httpd is missing, rather than discovering it in-cluster.` \
+ && command -v httpd
 
 COPY probe.sh /usr/local/bin/probe.sh
 RUN chmod +x /usr/local/bin/probe.sh && mkdir -p /metrics

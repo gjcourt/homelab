@@ -32,7 +32,12 @@ spec:
           # will not pull and PvcWriteProbeAbsent will fire, which is
           # expected pre-build.
           image: "ghcr.io/gjcourt/pvc-writeprobe:latest"
-          imagePullPolicy: IfNotPresent
+          # Always, not IfNotPresent, while this tracks :latest. With
+          # IfNotPresent the node keeps its cached :latest forever, so a
+          # rebuild never reaches the pod -- which would have made the fix
+          # in this PR a no-op. Precedent: apps/base/finance-dashboard.
+          # Revert to IfNotPresent when the immutable date-sha tag is pinned.
+          imagePullPolicy: Always
           env:
             - name: INTERVAL_SECONDS
               value: '300'

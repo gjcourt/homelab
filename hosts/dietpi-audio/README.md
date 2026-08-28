@@ -44,7 +44,7 @@ takes effect on DietPi's end-of-first-run reboot.)
 | `/usr/local/bin/go-librespot` | Spotify Connect daemon (release `v0.7.4`) |
 | `/root/.config/go-librespot/config.yml` | device name = hostname, output via dmix, zeroconf on `4070` |
 | `/etc/systemd/system/go-librespot.service` | runs it, `Restart=always` |
-| `/etc/asound.conf` | shared dmix (`default` → `hw:0`) |
+| `/etc/asound.conf` | generated: shared dmix at the DAC's **detected** card index, plus a plug-wrapped `pcm.snapdmix` alias. Written `0644` — ALSA silently ignores a root-only config for unprivileged clients and falls back to card 0 |
 | `/usr/local/bin/snapclient-autodev` | waits for a USB DAC, runs snapclient via dmix |
 | `snapclient.service.d/override.conf` | uses the wrapper, retries indefinitely |
 | `/usr/local/bin/audio-dmix-detect` | prints the first **playback-capable** USB card index |

@@ -167,6 +167,39 @@ If the native Spotify service cannot be cleanly disabled, as a workaround you ca
 - Verify the client is not muted in Snapweb.
 - Check snapserver logs for FIFO read errors: `kubectl logs -n snapcast-prod deploy/snapcast -c snapserver`
 
+### HA volume moves the client but nothing gets quieter
+
+**Symptom:** the HA slider *does* change the Snapcast client volume server-side
+(verifiable via `Server.GetStatus`), but the audible level does not change.
+
+**Cause:** the node is running `snapclient --mixer software`, which attenuates
+**only the Snapcast stream**. `go-librespot` is a separate process writing to
+the same dmix, so whenever **Spotify Connect** is what is playing, the software
+mixer changes nothing you can hear. Confirm who actually holds the DAC:
+
+```bash
+ssh root@<node> 'fuser -v /dev/snd/pcmC1D0p'
+# root … go-librespot   -> Spotify is playing; the Snapcast mixer is irrelevant
+```
+
+**Fix:** drive the DAC's own mixer instead, which sits *under* every source on
+the node. `hosts/dietpi-audio/` now detects this automatically
+(`--mixer "hardware:<control>"`); older nodes may need it applied by hand.
+A named PCM also needs a matching CTL — `ctl.snapdmix` alongside
+`pcm.snapdmix` — or snapclient fails with `Invalid CTL snapdmix`.
+
+⚠️ **The DAC's front-panel volume is a SEPARATE stage in series** with the USB
+(UAC2) control, and the two multiply. Measured on both the D30 Pro and the
+DX5 II: driving the UAC2 control does not move the front-panel reading at all.
+Set the physical knob once as a ceiling; drive day-to-day level from HA.
+Otherwise a slider at 100% can still be quiet, and nothing about that looks
+broken.
+
+**Historical note:** nodes with the HiFiBerry DAC+ DSP did not have this problem
+— `snap-dsp-volume-bridge` set the SigmaDSP master, which sat beneath all
+sources. Retiring the HAT removes that, and the DAC's own mixer is the
+replacement.
+
 ### HA volume control stops working after swapping a Pi between rooms
 
 **Symptom:** a room's volume slider in Home Assistant does nothing, or the card

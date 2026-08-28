@@ -304,9 +304,9 @@ cat > /etc/udev/rules.d/99-audio-node.rules <<'EOF'
 # card index, then restart them. Order matters: restarting first would re-read
 # a stale config.
 ACTION=="add",    SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/usr/local/bin/audio-dmix-refresh"
-ACTION=="add",    SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/bin/systemctl --no-block restart snapclient go-librespot"
+ACTION=="add",    SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/bin/systemctl --no-block restart snapclient go-librespot tvloop"
 ACTION=="remove", SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/usr/local/bin/audio-dmix-refresh"
-ACTION=="remove", SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/bin/systemctl --no-block restart snapclient go-librespot"
+ACTION=="remove", SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/bin/systemctl --no-block restart snapclient go-librespot tvloop"
 EOF
 
 # ---- 7. root SSH key so the node is never password-only ---------------------
@@ -381,46 +381,53 @@ chmod 755 /usr/local/bin/toppingctl
 # Installed on every node; it simply idles where no capture device exists.
 cat > /usr/local/bin/tvloop-autodev <<'EOF'
 #!/bin/bash
-# Bridge the TV's optical input into the shared dmix, and survive the TV being
-# off -- which is most of the day.
+# Bridge the TV's optical input into the shared dmix, and survive both the TV
+# being off (most of the day) and this node having no capture device at all
+# (every node except the living room).
 #
-# WHY THE POLL LOOP EXISTS. With no optical carrier the receiver has nothing to
-# clock off, so the capture device opens and then errors ("Poll FD
-# initialization failed" / arecord: "Input/output error"). alsaloop treats that
-# as fatal and exits. Left to systemd's Restart=, that is a crash loop for every
-# hour the TV is off: measured 7,650 journal lines/hour on a node whose
-# /var/log is a 50 MB tmpfs. Polling quietly here keeps the node silent while
-# idle and still reconnects within ~5s of the TV coming on.
+# WHY THIS NEVER EXITS. Two failure states are normal, not exceptional:
+#   1. No capture hardware -- true on most nodes, permanently.
+#   2. No optical carrier -- true whenever the TV is off. The device opens and
+#      then errors ("Poll FD initialization failed" / arecord "Input/output
+#      error"), and alsaloop treats that as fatal.
+# Exiting on either turns systemd's Restart= into a crash loop. Measured on the
+# living-room node: 7,650 journal lines/hour, onto a /var/log that is a 50 MB
+# tmpfs. So both states are handled here by waiting quietly instead.
+#
+# WHY DETECTION IS INSIDE THE LOOP. Card indices renumber on USB re-enumeration
+# -- the whole reason audio-dmix-detect exists. Resolving the capture card once
+# at startup would leave a long-running process pinned to a stale hw:X,0 after a
+# renumber, silently looping the wrong device.
 set -uo pipefail
 
-ccard=$(/usr/local/bin/audio-capture-detect) || { echo "tvloop: no capture device"; exit 1; }
-/usr/local/bin/audio-dmix-detect >/dev/null 2>&1 || { echo "tvloop: no playback device"; exit 1; }
-dev="hw:${ccard},0"
-echo "tvloop: capture $dev -> snapdmix"
+last=""
+say() { [ "$1" = "$last" ] || { echo "tvloop: $1"; last="$1"; }; }
 
-# Is there actually a signal? This is the same open alsaloop performs, so it
-# fails in exactly the cases alsaloop would fail -- no carrier, or the device
-# held by something else.
-has_signal() { timeout 3 arecord -D "$dev" -f S16_LE -c 2 -r 48000 -d 1 -q /dev/null >/dev/null 2>&1; }
-
-state=init
 while :; do
-  if has_signal; then
-    [ "$state" = running ] || echo "tvloop: signal present, starting loop"
-    state=running
+  if ! ccard=$(/usr/local/bin/audio-capture-detect 2>/dev/null); then
+    say "no capture device on this node, idling"
+    sleep 60; continue
+  fi
+  if ! /usr/local/bin/audio-dmix-detect >/dev/null 2>&1; then
+    say "capture present but no playback device yet, waiting"
+    sleep 15; continue
+  fi
+  dev="hw:${ccard},0"
+
+  # Same open alsaloop performs, so it fails in exactly the cases alsaloop
+  # would. Sequential with alsaloop below -- never concurrent, so no contention
+  # for the capture device.
+  if timeout 3 arecord -D "$dev" -f S16_LE -c 2 -r 48000 -d 1 -q /dev/null >/dev/null 2>&1; then
+    say "signal on $dev, starting loop"
     # -t 20000 chosen EMPIRICALLY, not derived. 5000 produced 22 underruns and
     # an explicit -B 1024 -E 256 produced 9; 20000 runs clean. Measured A/V
     # offset is ~75 ms and does NOT respond to this value or to the dmix buffer
     # size -- the delay is upstream (TV and/or capture hardware). Do NOT tune
     # this to chase lip-sync; it costs underruns and buys nothing.
     alsaloop -C "$dev" -P snapdmix -r 48000 -f S16_LE -c 2 -t 20000
-    # alsaloop returning means the format changed or the signal dropped. Say so
-    # once, then fall back to quiet polling rather than spinning.
-    [ "$state" = waiting ] || echo "tvloop: capture ended, waiting for signal"
-    state=waiting
+    say "capture ended, waiting for signal"
   else
-    [ "$state" = waiting ] || echo "tvloop: no signal, waiting"
-    state=waiting
+    say "no signal on $dev, waiting"
   fi
   sleep 5
 done
@@ -441,10 +448,10 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 ExecStart=/usr/local/bin/tvloop-autodev
-# Backstop only: the wrapper handles signal loss and format changes internally
-# by polling, so a restart here means it died outright. 30s because the only
-# reasons left are "no capture hardware on this node" (idle forever) and a real
-# crash, neither of which benefits from a fast retry.
+# Backstop only. The wrapper never exits under any normal condition -- no
+# capture hardware, no playback device and no optical signal are all handled by
+# waiting inside it -- so a restart here means it genuinely died. Nothing that
+# gets here benefits from a fast retry.
 Restart=always
 RestartSec=30
 Nice=-10

@@ -84,8 +84,18 @@ mixes with music instead of fighting for the device, and inherits the Home
 Assistant volume control for free — that drives the DAC's own hardware mixer,
 underneath all three sources.
 
-`tvloop.service` is installed on **every** node and simply idles where there is
-no capture device, so provisioning stays uniform.
+`tvloop.service` is installed on **every** node, so provisioning stays uniform.
+On a node with no capture device it logs one line and waits — the wrapper never
+exits, so `Restart=` never fires. That distinction matters: an earlier revision
+exited when detection failed, which turned `Restart=always` into a 30s crash
+loop on every node except the living room. **Two states that look like errors
+here are normal** — no capture hardware (permanent, most nodes) and no optical
+carrier (whenever the TV is off) — and neither may be allowed to reach systemd.
+
+Card detection runs **inside** the loop, not once at startup, so a USB
+renumbering is picked up on the next pass rather than leaving a long-running
+process pinned to a stale `hw:X,0`. The udev rule restarts `tvloop` alongside
+`snapclient` and `go-librespot` for the same reason.
 
 **Why the wrapper polls instead of letting systemd restart it.** With no optical
 carrier the receiver has nothing to clock off, so the capture device opens and
@@ -103,7 +113,7 @@ values, nor to the dmix buffer size — halving dmix was predicted to cut 22 ms
 and instead moved 9 ms the wrong way. The delay is upstream, in the TV and/or
 the capture hardware. `buffer_size` is a ring capacity, not a fixed delay.
 
-- - **`audio-dmix-refresh` writes `/etc`, so it is root-only.** `snapclient` runs
+- **`audio-dmix-refresh` writes `/etc`, so it is root-only.** `snapclient` runs
   unprivileged and must not call it; the unit invokes it via `ExecStartPre=+`
   (which runs as root regardless of `User=`), and the wrapper only *gates* on
   `audio-dmix-detect`.

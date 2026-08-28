@@ -207,6 +207,35 @@ It never fired, because **it is evaluated by the Prometheus whose own volume had
 read-only**. This is the sharpest lesson available here: writing the right alert is not
 enough when the evaluator shares a failure domain with the thing it watches.
 
+> **CORRECTION, 2026-08-26.** The paragraph above is wrong about the cause, and the
+> error flattered us: it implies that a healthy Prometheus would have caught this. It
+> would not have. `NodeFilesystemReadOnly` **cannot detect this failure at all.**
+>
+> AdGuard's two `work` volumes stayed read-only from 2026-08-13 until 2026-08-26 — 13
+> days *after* Prometheus recovered and resumed ingesting normally. Throughout that
+> window, measured at the same instant:
+>
+> ```text
+> kubectl -n adguard-prod exec adguard-0 -c adguard -- \
+>   sh -c 'printf ok > /opt/adguardhome/work/.p'
+>   -> sh: can't create ...: Read-only file system      # hard EROFS
+>
+> node_filesystem_readonly{fstype="ext4"} == 1  ->  0 series   # "everything fine"
+> ```
+>
+> The mount was **not** unmonitored — `node_filesystem_readonly` does scrape the CSI
+> globalmounts (69 series). It was scraped, and it was **wrong**. ext4's `emergency_ro`
+> error mode fails every write with `EROFS` while leaving the mount still advertising
+> `rw`, so node-exporter reports `rw` and the gauge stays `0` indefinitely.
+>
+> The mute-Prometheus hazard in the paragraph above is real and worth keeping — it is
+> just not what happened here. Both were true at once, and only one of them was fixable
+> by making Prometheus more reliable. **No mount-flag scan can close this gap, because
+> the mount flag is the thing that is lying.** Only an actual write distinguishes a
+> working volume from a dead one.
+>
+> Fixed by `pvc-writeprobe` (`infra/configs/pvc-writeprobe/`, PR #1350).
+
 The 19 criticals were, ironically, *evidence* of the outage — but they read as
 "everything is broken", which is indistinguishable from "the monitoring is broken", and
 they were delivered into a mailbox with no one watching at 03:00 local time.
@@ -277,7 +306,7 @@ kubectl -n <ns> exec <pod> -c <ctr> -- sh -c 'touch /path/.wtest && rm -f /path/
 | Gap | Action |
 |---|---|
 | Prometheus can go mute undetected | **Done 2026-08-19 ([#1299](https://github.com/gjcourt/homelab/issues/1299)).** Three `critical` ingestion alerts (`PrometheusIngestionAbsent`, `PrometheusIngestionStalled`, `PrometheusWALWriteFailures`) plus `IngestionWatchdog` — a heartbeat gated on samples actually flowing, which now drives the healthchecks.io deadman in place of `Watchdog`. Replayed against this incident's retained data, the gated heartbeat is silent for exactly 10:03–22:47 UTC and `PrometheusIngestionAbsent` is true from 10:10:40 — a page ~15m in, instead of 12h32m. See [reference/monitoring.md](../../reference/monitoring.md#mute-prometheus--why-the-deadman-is-gated-on-ingestion) |
-| Read-only remounts are invisible | Alert on `node_filesystem_readonly` and/or a write-canary probe across PVCs |
+| Read-only remounts are invisible | **A write-canary probe across PVCs — `pvc-writeprobe`, PR #1350.** Not `node_filesystem_readonly`: see the 2026-08-26 correction above, it reports `rw` throughout `emergency_ro` and categorically cannot detect this |
 | Readiness probes pass on read-only volumes | For stateful workloads, make readiness actually touch the volume (`exec` write, or an HTTP `/healthz` that does a trivial DB write) |
 | Recovery knowledge was scattered across six incident docs | Consolidated into `AGENTS.md` → "Recovering read-only iSCSI volumes", the first place an operator or agent looks |
 

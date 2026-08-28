@@ -63,6 +63,6 @@ kubectl -n finance-dashboard rollout restart deploy/finance-dashboard   # re-ren
 ## Image builds
 
 Push to `master` touching `images/finance-dashboard/**` → `build-finance-dashboard.yml`
-→ `ghcr.io/gjcourt/finance-dashboard:YYYY-MM-DD`. Pin that tag in
+→ `ghcr.io/gjcourt/finance-dashboard:YYYY-MM-DD-<sha7>`. Pin that tag in
 `apps/base/finance-dashboard/deployment.yaml` (Renovate bumps it thereafter).
 Only **code/layout** changes need a rebuild; data changes don't (data is mounted).

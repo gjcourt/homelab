@@ -271,7 +271,47 @@ hardware while the dashboard refers to names.
 - Ensure all clients and the server have accurate NTP time synchronization.
 - Adjust the latency offset for specific clients in the Snapweb UI if necessary.
 
-## 11. Network policy
+## 11. Living room: DietPi + UR27 (as-built 2026-08-28)
+
+The living room was rebuilt and **the HiFiBerry DAC+DSP HAT is gone**. Any doc
+describing that room as Pi -> I2S -> HAT -> S/PDIF -> D30 Pro is stale.
+
+| Stage | Was | Is now |
+|---|---|---|
+| OS | HiFiBerryOS + Docker extension | DietPi Trixie, `snapclient` native |
+| Pi -> DAC | I2S to HAT, S/PDIF out to D30 Pro | **USB direct** to Topping D30 Pro (ALSA card 1) |
+| TV audio | TV optical -> HAT S/PDIF in | TV optical -> **HiFime UR27** (`SA9227`, ALSA card 0) -> `alsaloop` -> shared dmix |
+| Volume | SigmaDSP master via `snap-dsp-volume-bridge` | D30 Pro's own UAC2 mixer, `--mixer hardware:'D30 Pro'` |
+| DSP / PEQ | SigmaDSP profile on the HAT | **none** — nothing replaced it in this room |
+
+**Three sources now share one dmix**: `snapclient`, `go-librespot`, and the TV
+capture. They mix rather than contend, and all three inherit the Home Assistant
+volume because that drives the DAC's hardware mixer *underneath* all of them.
+
+**Retiring the HAT dropped the room's DSP.** The D30 Pro has no PEQ. If the room
+needed correction, it is not being applied now — that is a real regression, not
+an oversight to rediscover later.
+
+**Measured, and not worth re-litigating:**
+
+- **A/V offset is ~75 ms** and does **not** respond to `alsaloop -t`, nor to the
+  dmix buffer size. Halving dmix was predicted to save 22 ms and moved it 9 ms
+  the *wrong* way. `buffer_size` is a ring capacity, not a fixed delay. The
+  delay is upstream in the TV and/or capture hardware. Do not tune Pi buffers
+  for lip-sync.
+- `alsaloop -t 20000` is the lowest that ran clean: `5000` gave 22 underruns,
+  explicit `-B 1024 -E 256` gave 9.
+- **Sample-rate split is unresolved**: TV optical is 48 kHz, Navidrome/Spotify
+  are 44.1 kHz, and dmix resamples one of them. Nobody has measured which, or
+  what it costs.
+
+⚠️ **The node is on `10.42.2.137` by DHCP, not the `10.42.2.39` this repo says
+elsewhere.** `/etc/network/interfaces` is `inet dhcp`; no static address is
+configured on the node. A lease change will move it and break anything pinned to
+an address. See also section 10 on Snapcast client-ID rebinding — a rebuilt Pi
+does not carry its old client identity.
+
+## 12. Network policy
 
 The snapcast CNP uses `fromEntities: world` (not `fromCIDR: 10.42.2.0/24`) for ports 1704/1705/1780. This is intentional: Cilium SNATs LB traffic to a node IP before it reaches the pod, so a CIDR rule for the LAN subnet never matches. The security boundary is the LAN VLAN — `10.42.2.37` is unreachable from outside VLAN 2.
 
@@ -280,7 +320,7 @@ Cilium handles LoadBalancer traffic, not of what the client runs. It lived insid
 the HiFiBerry section for historical reasons only. See also
 `docs/operations/2026-08-15-networking-gotchas.md`.
 
-## 12. HifiBerry Clients (kitchen / living-room) — SUPERSEDED
+## 13. HifiBerry Clients (kitchen / living-room) — SUPERSEDED
 
 > ⚠️ **This section describes the previous architecture and is kept for history.**
 > Both endpoints now run **DietPi (Debian)** with `snapclient` installed

@@ -218,7 +218,14 @@ card=\$(/usr/local/bin/audio-dmix-detect) || { echo "snapclient-autodev: no play
 # Detected rather than hardcoded, so a DAC swap does not need a config edit.
 # Note the DAC's own front-panel volume remains a SEPARATE stage in series --
 # set that once as a ceiling and drive day-to-day level from here.
-ctl=\$(amixer -c "\$card" scontrols 2>/dev/null | sed -n "s/^Simple mixer control '\(.*\)',0\$/\1/p" | head -1)
+# Prefer a PLAYBACK-capable control. Taking "the first control" would bind the
+# hardware mixer to a CAPTURE control on any DAC that exposes one (ADC or
+# loopback), which makes the Home Assistant slider a silent no-op -- it moves,
+# and nothing gets quieter. Measured 2026-08-28: the D30 Pro and the D50s each
+# expose exactly one control and no capture control, so this is defensive rather
+# than a fix for observed breakage. It is worth the two extra greps because the
+# failure mode is silent and looks like a broken integration, not a wrong mixer.
+ctl=\$(amixer -c "\$card" scontents 2>/dev/null | grep -A1 '^Simple mixer control' | grep -B1 'Capabilities:.*pvolume' | sed -n "s/^Simple mixer control '\(.*\)',0\$/\1/p" | head -1)
 if [ -n "\$ctl" ]; then
   exec /usr/bin/snapclient --logsink=system --host "\$HOST" -s snapdmix --mixer "hardware:\$ctl"
 fi

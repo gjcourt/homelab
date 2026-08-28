@@ -152,6 +152,10 @@ pcm.dmixer {
   slave { pcm "hw:${card},0"; rate 48000; channels 2; period_size 1024; buffer_size 8192 }
 }
 ctl.!default { type hw; card ${card} }
+# A named PCM used with snapclient's --mixer hardware needs a CTL of the SAME
+# name: snapclient calls snd_ctl_open("<-s name>") to reach the mixer. Without
+# this it dies with "Invalid CTL snapdmix".
+ctl.snapdmix { type hw; card ${card} }
 CONF
 # Only replace when it actually changed, so we do not churn the file (and the
 # dmix ipc segment) on every service restart.
@@ -188,7 +192,7 @@ HOST="\${SNAPSERVER_HOST:-${SNAPSERVER_HOST}}"
 # Gate only -- do not write /etc from here. This runs as the unprivileged
 # snapclient user; regeneration is done by root via ExecStartPre=+ below and by
 # the udev rule.
-/usr/local/bin/audio-dmix-detect >/dev/null || { echo "snapclient-autodev: no playback-capable USB card yet"; exit 1; }
+card=\$(/usr/local/bin/audio-dmix-detect) || { echo "snapclient-autodev: no playback-capable USB card yet"; exit 1; }
 # -s snapdmix, NOT "default". snapclient matches -s against its own enumerated
 # device list by DESCRIPTION as well as name, and the entry described "Default
 # Audio Device" is 'sysdefault' (idx 1), not the PCM named 'default' (idx 2).
@@ -197,6 +201,27 @@ HOST="\${SNAPSERVER_HOST:-${SNAPSERVER_HOST}}"
 # misleading "unable to open slave". Naming our dmix PCM directly is
 # unambiguous. Stream format is 48000:16:2, matching the dmix slave exactly, so
 # no plug conversion is needed.
+# Prefer the DAC's OWN mixer over snapclient's software mixer.
+#
+# --mixer software attenuates ONLY the Snapcast stream. go-librespot is a
+# separate process writing to the same dmix, so whenever Spotify Connect is what
+# is playing, a software mixer changes nothing audible -- which presents as "the
+# Home Assistant volume slider does nothing". Measured on living-room
+# 2026-08-28: HA moved the client 70% -> 30% server-side with no change in
+# output, because go-librespot held the DAC.
+#
+# The DAC's hardware control sits UNDER every source on this node (Snapcast,
+# Spotify, and later the TV capture -- all funnel through the same dmix), giving
+# one knob over all of them. That is what the retired HiFiBerry DSP bridge used
+# to provide, and it is what kitchen already does with its D50s.
+#
+# Detected rather than hardcoded, so a DAC swap does not need a config edit.
+# Note the DAC's own front-panel volume remains a SEPARATE stage in series --
+# set that once as a ceiling and drive day-to-day level from here.
+ctl=\$(amixer -c "\$card" scontrols 2>/dev/null | sed -n "s/^Simple mixer control '\(.*\)',0\$/\1/p" | head -1)
+if [ -n "\$ctl" ]; then
+  exec /usr/bin/snapclient --logsink=system --host "\$HOST" -s snapdmix --mixer "hardware:\$ctl"
+fi
 exec /usr/bin/snapclient --logsink=system --host "\$HOST" -s snapdmix --mixer software
 EOF
 chmod 755 /usr/local/bin/snapclient-autodev

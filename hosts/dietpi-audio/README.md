@@ -49,6 +49,9 @@ takes effect on DietPi's end-of-first-run reboot.)
 | `snapclient.service.d/override.conf` | uses the wrapper, retries indefinitely |
 | `/usr/local/bin/audio-dmix-detect` | prints the first **playback-capable** USB card index |
 | `/usr/local/bin/audio-dmix-refresh` | writes `asound.conf` at the DAC's **current** card index (root only) |
+| `/usr/local/bin/audio-capture-detect` | prints the first **capture-capable** USB card index (the TV optical input) |
+| `/usr/local/bin/tvloop-autodev` | bridges the TV optical input into the shared dmix; polls quietly while the TV is off |
+| `/etc/systemd/system/tvloop.service` | runs it; inert on nodes with no capture device |
 | `/opt/toppingctl-venv` + `/opt/toppingctl` | `toppingctl` and its `hid` binding |
 | `/usr/local/bin/toppingctl` | wrapper so it is on PATH without activating the venv |
 | `/etc/udev/rules.d/99-audio-node.rules` | refresh config, then restart both, on DAC add/remove |
@@ -72,6 +75,44 @@ should arrive reachable.
   come first. Measured on the living-room node 2026-08-28: card 0 was the
   capture device (`pcm0c`), card 1 the DAC (`pcm0p`) — picking "the first USB
   card" aimed dmix at the TV input. `audio-dmix-detect` requires a `pcm*p`.
+### TV optical input (`tvloop`)
+
+A node with a USB capture interface (living room: a HiFime UR27, which
+enumerates as `SA9227 USB Audio`) bridges the TV's optical output into the
+**same dmix** snapclient and go-librespot already share. TV audio therefore
+mixes with music instead of fighting for the device, and inherits the Home
+Assistant volume control for free — that drives the DAC's own hardware mixer,
+underneath all three sources.
+
+`tvloop.service` is installed on **every** node, so provisioning stays uniform.
+On a node with no capture device it logs one line and waits — the wrapper never
+exits, so `Restart=` never fires. That distinction matters: an earlier revision
+exited when detection failed, which turned `Restart=always` into a 30s crash
+loop on every node except the living room. **Two states that look like errors
+here are normal** — no capture hardware (permanent, most nodes) and no optical
+carrier (whenever the TV is off) — and neither may be allowed to reach systemd.
+
+Card detection runs **inside** the loop, not once at startup, so a USB
+renumbering is picked up on the next pass rather than leaving a long-running
+process pinned to a stale `hw:X,0`. The udev rule restarts `tvloop` alongside
+`snapclient` and `go-librespot` for the same reason.
+
+**Why the wrapper polls instead of letting systemd restart it.** With no optical
+carrier the receiver has nothing to clock off, so the capture device opens and
+then errors — `alsaloop` prints `Poll FD initialization failed` and exits 1, and
+`arecord` reports `Input/output error`. That is the normal state whenever the TV
+is off. Driven by `Restart=`, it becomes a crash loop: **7,650 journal lines per
+hour, measured 2026-08-28**, onto a `/var/log` that is a **50 MB tmpfs**. The
+wrapper polls every 5s and logs only on transitions — two full on/off cycles
+produce 10 lines — and still reconnects within ~5s of the TV coming on.
+
+**Do not tune the buffer settings to fix lip-sync.** `-t 20000` was chosen
+empirically: `5000` produced 22 underruns and an explicit `-B 1024 -E 256`
+produced 9. The measured A/V offset is ~75 ms and does **not** respond to these
+values, nor to the dmix buffer size — halving dmix was predicted to cut 22 ms
+and instead moved 9 ms the wrong way. The delay is upstream, in the TV and/or
+the capture hardware. `buffer_size` is a ring capacity, not a fixed delay.
+
 - **`audio-dmix-refresh` writes `/etc`, so it is root-only.** `snapclient` runs
   unprivileged and must not call it; the unit invokes it via `ExecStartPre=+`
   (which runs as root regardless of `User=`), and the wrapper only *gates* on

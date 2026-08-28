@@ -99,6 +99,25 @@ exit 1
 EOF
 chmod 755 /usr/local/bin/audio-dmix-detect
 
+cat > /usr/local/bin/audio-capture-detect <<'EOF'
+#!/bin/bash
+# Print the ALSA card index of the first CAPTURE-capable USB audio card
+# (e.g. an optical input feeding TV audio in). Exit 1 if there is none.
+#
+# Mirror of audio-dmix-detect, which finds the playback card. A node can have
+# both: the living room has a capture interface on card 0 and the DAC on card 1,
+# which is exactly why neither detector may assume "the first USB card".
+set -uo pipefail
+for n in $(awk '/USB/ && $1 ~ /^[0-9]+$/ {print $1}' /proc/asound/cards 2>/dev/null); do
+  for pcm in /proc/asound/card"$n"/pcm*c; do
+    [ -e "$pcm" ] || continue
+    echo "$n"; exit 0
+  done
+done
+exit 1
+EOF
+chmod 755 /usr/local/bin/audio-capture-detect
+
 cat > /usr/local/bin/audio-dmix-refresh <<'EOF'
 #!/bin/bash
 # Write /etc/asound.conf pointing dmix at the USB DAC's current card index.
@@ -285,9 +304,9 @@ cat > /etc/udev/rules.d/99-audio-node.rules <<'EOF'
 # card index, then restart them. Order matters: restarting first would re-read
 # a stale config.
 ACTION=="add",    SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/usr/local/bin/audio-dmix-refresh"
-ACTION=="add",    SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/bin/systemctl --no-block restart snapclient go-librespot"
+ACTION=="add",    SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/bin/systemctl --no-block restart snapclient go-librespot tvloop"
 ACTION=="remove", SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/usr/local/bin/audio-dmix-refresh"
-ACTION=="remove", SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/bin/systemctl --no-block restart snapclient go-librespot"
+ACTION=="remove", SUBSYSTEM=="sound", KERNEL=="card*", RUN+="/bin/systemctl --no-block restart snapclient go-librespot tvloop"
 EOF
 
 # ---- 7. root SSH key so the node is never password-only ---------------------
@@ -353,12 +372,102 @@ exec /opt/toppingctl-venv/bin/python /opt/toppingctl/toppingctl.py "$@"
 EOF
 chmod 755 /usr/local/bin/toppingctl
 
-# ---- 9. enable + (re)start --------------------------------------------------
+# ---- 9. TV capture loop: optical input -> the same shared dmix ---------------
+# Bridges a USB capture interface (optical from the TV) into the dmix that
+# snapclient and go-librespot already share, so TV audio mixes with music
+# instead of fighting for the device -- and inherits the same Home Assistant
+# volume, because that drives the DAC's own mixer underneath all of them.
+#
+# Installed on every node; it simply idles where no capture device exists.
+cat > /usr/local/bin/tvloop-autodev <<'EOF'
+#!/bin/bash
+# Bridge the TV's optical input into the shared dmix, and survive both the TV
+# being off (most of the day) and this node having no capture device at all
+# (every node except the living room).
+#
+# WHY THIS NEVER EXITS. Two failure states are normal, not exceptional:
+#   1. No capture hardware -- true on most nodes, permanently.
+#   2. No optical carrier -- true whenever the TV is off. The device opens and
+#      then errors ("Poll FD initialization failed" / arecord "Input/output
+#      error"), and alsaloop treats that as fatal.
+# Exiting on either turns systemd's Restart= into a crash loop. Measured on the
+# living-room node: 7,650 journal lines/hour, onto a /var/log that is a 50 MB
+# tmpfs. So both states are handled here by waiting quietly instead.
+#
+# WHY DETECTION IS INSIDE THE LOOP. Card indices renumber on USB re-enumeration
+# -- the whole reason audio-dmix-detect exists. Resolving the capture card once
+# at startup would leave a long-running process pinned to a stale hw:X,0 after a
+# renumber, silently looping the wrong device.
+set -uo pipefail
+
+last=""
+say() { [ "$1" = "$last" ] || { echo "tvloop: $1"; last="$1"; }; }
+
+while :; do
+  if ! ccard=$(/usr/local/bin/audio-capture-detect 2>/dev/null); then
+    say "no capture device on this node, idling"
+    sleep 60; continue
+  fi
+  if ! /usr/local/bin/audio-dmix-detect >/dev/null 2>&1; then
+    say "capture present but no playback device yet, waiting"
+    sleep 15; continue
+  fi
+  dev="hw:${ccard},0"
+
+  # Same open alsaloop performs, so it fails in exactly the cases alsaloop
+  # would. Sequential with alsaloop below -- never concurrent, so no contention
+  # for the capture device.
+  if timeout 3 arecord -D "$dev" -f S16_LE -c 2 -r 48000 -d 1 -q /dev/null >/dev/null 2>&1; then
+    say "signal on $dev, starting loop"
+    # -t 20000 chosen EMPIRICALLY, not derived. 5000 produced 22 underruns and
+    # an explicit -B 1024 -E 256 produced 9; 20000 runs clean. Measured A/V
+    # offset is ~75 ms and does NOT respond to this value or to the dmix buffer
+    # size -- the delay is upstream (TV and/or capture hardware). Do NOT tune
+    # this to chase lip-sync; it costs underruns and buys nothing.
+    alsaloop -C "$dev" -P snapdmix -r 48000 -f S16_LE -c 2 -t 20000
+    say "capture ended, waiting for signal"
+  else
+    say "no signal on $dev, waiting"
+  fi
+  sleep 5
+done
+EOF
+chmod 755 /usr/local/bin/tvloop-autodev
+
+cat > /etc/systemd/system/tvloop.service <<'EOF'
+[Unit]
+Description=TV optical capture -> shared dmix -> DAC
+After=sound.target snapclient.service
+Wants=sound.target
+# Restart is NOT optional: alsaloop opens the capture with fixed parameters and
+# dies ("Poll FD initialization failed") whenever the TV changes audio format or
+# drops the optical signal -- which happens on every app or source change.
+# Without this, TV audio stops silently and never comes back.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/tvloop-autodev
+# Backstop only. The wrapper never exits under any normal condition -- no
+# capture hardware, no playback device and no optical signal are all handled by
+# waiting inside it -- so a restart here means it genuinely died. Nothing that
+# gets here benefits from a fast retry.
+Restart=always
+RestartSec=30
+Nice=-10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# ---- 10. enable + (re)start --------------------------------------------------
 systemctl daemon-reload
 udevadm control --reload-rules || true
 systemctl enable --now go-librespot
 systemctl enable snapclient
+systemctl enable tvloop
 systemctl restart snapclient || true
+systemctl restart tvloop || true
 
 log "done — node '${NODE_NAME}': snapclient=$(systemctl is-active snapclient) go-librespot=$(systemctl is-active go-librespot)"
 log "plug a USB DAC in and both bind automatically (dmix-shared)."

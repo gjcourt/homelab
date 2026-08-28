@@ -279,18 +279,22 @@ describing that room as Pi -> I2S -> HAT -> S/PDIF -> D30 Pro is stale.
 | Stage | Was | Is now |
 |---|---|---|
 | OS | HiFiBerryOS + Docker extension | DietPi Trixie, `snapclient` native |
-| Pi -> DAC | I2S to HAT, S/PDIF out to D30 Pro | **USB direct** to Topping D30 Pro (ALSA card 1) |
+| Pi -> DAC | I2S to HAT, S/PDIF out to D30 Pro | **USB direct** to Topping **D90 III Discrete** |
 | TV audio | TV optical -> HAT S/PDIF in | TV optical -> **HiFime UR27** (`SA9227`, ALSA card 0) -> `alsaloop` -> shared dmix |
-| Volume | SigmaDSP master via `snap-dsp-volume-bridge` | D30 Pro's own UAC2 mixer, `--mixer hardware:'D30 Pro'` |
+| Volume | SigmaDSP master via `snap-dsp-volume-bridge` | the DAC's own UAC2 mixer, auto-detected (`--mixer hardware:'D90 III Discrete'`) |
 | DSP / PEQ | SigmaDSP profile on the HAT | **none** — nothing replaced it in this room |
 
 **Three sources now share one dmix**: `snapclient`, `go-librespot`, and the TV
 capture. They mix rather than contend, and all three inherit the Home Assistant
 volume because that drives the DAC's hardware mixer *underneath* all of them.
 
-**Retiring the HAT dropped the room's DSP.** The D30 Pro has no PEQ. If the room
-needed correction, it is not being applied now — that is a real regression, not
-an oversight to rediscover later.
+**Retiring the HAT dropped the room's DSP, and the D90 III restores the
+capability.** The D30 Pro that first replaced the HAT has no PEQ, so the room
+ran uncorrected. The D90 III has a 10-band PEQ (`EQ Max NUM:10`, read off the
+device), applied on **every input except I2S**. It ships **disabled** — setup
+item 12, register `0x9E sub 01` — so a loaded curve does nothing until it is
+switched on. No curve is loaded yet: ten bands without a measurement are tone
+controls, so this needs REW and a calibration mic before it means anything.
 
 **Measured, and not worth re-litigating:**
 
@@ -305,11 +309,47 @@ an oversight to rediscover later.
   are 44.1 kHz, and dmix resamples one of them. Nobody has measured which, or
   what it costs.
 
-⚠️ **The node is on `10.42.2.137` by DHCP, not the `10.42.2.39` this repo says
-elsewhere.** `/etc/network/interfaces` is `inet dhcp`; no static address is
-configured on the node. A lease change will move it and break anything pinned to
-an address. See also section 10 on Snapcast client-ID rebinding — a rebuilt Pi
-does not carry its old client identity.
+**Addressing: the node is on `10.42.2.39`, but not because the node says so.**
+`/etc/network/interfaces` is `inet dhcp` — there is no static address configured
+on the box. `.39` comes from a router reservation. Both facts are true and only
+one of them is visible from the node, which is how an earlier revision of this
+document came to claim `.137` (a lease it briefly held mid-rebuild). If the
+reservation is removed the node moves silently. See also section 10: a rebuilt
+Pi does not carry its old Snapcast client identity.
+
+### Why the TV goes through the UR27 and not straight into the DAC
+
+The obvious simplification is to drop the UR27 and feed the TV's optical
+straight into the DAC: one box fewer, no `alsaloop`, no resample, and the
+D90 III even auto-selects the live input (setup item 1, `SIG`). **It was tried
+on 2026-08-28 and reverted, because it costs all software volume control of TV
+audio.** Three independent confirmations, so do not spend another evening on it:
+
+1. **No HID volume register.** Enumerating all 74 device fields while the front
+   panel was moved from -0.5 dB to -20.0 dB showed no field tracking the change.
+   Topping's own Tune app never touches `0x71` in 298 captured frames.
+2. **The UAC2/ALSA mixer does not reach the optical input.** With TV audio
+   playing over TOSLINK, cycling the USB stage between -20 dB and -55 dB four
+   times was inaudible. That stage is on the USB path only.
+3. **The TV cannot vary its own optical output.** The S95C manual, line 11172:
+   *"If a device is connected via Optical, volume control may not be possible,
+   depending on the device."* There is no "Digital Output Audio Volume" setting
+   — only Format and Delay. Confirmed independently against Samsung community
+   reports for this exact model.
+
+Routing TV audio in over USB puts it in the same volume domain as everything
+else, which is why the UR27 is load-bearing rather than transitional. The cost
+is the ~75 ms offset documented above.
+
+**The one path that would give both** is an IR emitter driven from Home
+Assistant: the DAC's remote does control volume on any input. It is open-loop —
+HA could send up/down but never read the level back — so the slider becomes a
+pair of buttons. Untried.
+
+**ARC/eARC is why soundbars do not have this problem.** HDMI-CEC System Audio
+Control lets a TV remote drive a connected device's volume. The D90 III has no
+HDMI input, so it cannot participate. This is a limitation of the connection
+type, not of this room.
 
 ## 12. Network policy
 

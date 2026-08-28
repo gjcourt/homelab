@@ -271,7 +271,16 @@ hardware while the dashboard refers to names.
 - Ensure all clients and the server have accurate NTP time synchronization.
 - Adjust the latency offset for specific clients in the Snapweb UI if necessary.
 
-## 11. HifiBerry Clients (kitchen / living-room) — SUPERSEDED
+## 11. Network policy
+
+The snapcast CNP uses `fromEntities: world` (not `fromCIDR: 10.42.2.0/24`) for ports 1704/1705/1780. This is intentional: Cilium SNATs LB traffic to a node IP before it reaches the pod, so a CIDR rule for the LAN subnet never matches. The security boundary is the LAN VLAN — `10.42.2.37` is unreachable from outside VLAN 2.
+
+This is **current and applies to the DietPi nodes too** — it is a property of how
+Cilium handles LoadBalancer traffic, not of what the client runs. It lived inside
+the HiFiBerry section for historical reasons only. See also
+`docs/operations/2026-08-15-networking-gotchas.md`.
+
+## 12. HifiBerry Clients (kitchen / living-room) — SUPERSEDED
 
 > ⚠️ **This section describes the previous architecture and is kept for history.**
 > Both endpoints now run **DietPi (Debian)** with `snapclient` installed
@@ -293,7 +302,7 @@ Historically, two HifiBerry OS devices ran snapclient as a Docker extension:
 - `kitchen` — `10.42.2.38`
 - `living-room` — `10.42.2.39`
 
-### Image
+### Image (historical — no longer deployed)
 
 The upstream HifiBerry extension image (`ghcr.io/hifiberry/extension_snapcast:0.28.0`) has two bugs that prevent snapclient from running. A patched image is maintained at `ghcr.io/gjcourt/snapcast-hifiberry` with a build pipeline in `images/snapcast-hifiberry/`. See `images/snapcast-hifiberry/README.md` for full details on the bugs and upgrade procedure.
 
@@ -301,19 +310,19 @@ The upstream HifiBerry extension image (`ghcr.io/hifiberry/extension_snapcast:0.
 1. Runtime audio libs missing from the final build stage — `libasound`, `libvorbis`, `libogg`, `libFLAC`, `libopus`, `libsoxr` are built in the compile stage but not installed in the runtime image.
 2. Wrong binary path — `snapcastmpris.py` hardcodes `/bin/snapclient` but the binary lands at `/usr/local/bin/snapclient`. The patch adds a symlink.
 
-### Device setup
+### Device setup (historical — no longer deployed)
 
-Each device has:
+Each device *had*:
 - `/data/extensions/snapcast/docker-compose.yaml` — extension config; references `ghcr.io/gjcourt/snapcast-hifiberry:<tag>`
 - `/etc/snapcastmpris.conf` — INI file (no section header) with `server = 10.42.2.37` (the production LB VIP)
 
-To check status:
+Status was checked with — **this no longer applies; both nodes run DietPi**:
 ```bash
 ssh root@10.42.2.38 "docker exec snapcast ps aux"
 # Should show: /usr/bin/python3 snapcastmpris.py AND /bin/snapclient -e -h 10.42.2.37
 ```
 
-To pull and deploy a new image on both devices:
+Images were rolled out with — **do not run this; there are no HiFiBerry nodes left**:
 ```bash
 for ip in 10.42.2.38 10.42.2.39; do
   ssh root@$ip "
@@ -323,7 +332,3 @@ for ip in 10.42.2.38 10.42.2.39; do
   "
 done
 ```
-
-### Network policy note
-
-The snapcast CNP uses `fromEntities: world` (not `fromCIDR: 10.42.2.0/24`) for ports 1704/1705/1780. This is intentional: Cilium SNATs LB traffic to a node IP before it reaches the pod, so a CIDR rule for the LAN subnet never matches. The security boundary is the LAN VLAN — `10.42.2.37` is unreachable from outside VLAN 2.

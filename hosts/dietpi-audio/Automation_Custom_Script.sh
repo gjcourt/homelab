@@ -99,6 +99,25 @@ exit 1
 EOF
 chmod 755 /usr/local/bin/audio-dmix-detect
 
+cat > /usr/local/bin/audio-capture-detect <<'EOF'
+#!/bin/bash
+# Print the ALSA card index of the first CAPTURE-capable USB audio card
+# (e.g. an optical input feeding TV audio in). Exit 1 if there is none.
+#
+# Mirror of audio-dmix-detect, which finds the playback card. A node can have
+# both: the living room has a capture interface on card 0 and the DAC on card 1,
+# which is exactly why neither detector may assume "the first USB card".
+set -uo pipefail
+for n in $(awk '/USB/ && $1 ~ /^[0-9]+$/ {print $1}' /proc/asound/cards 2>/dev/null); do
+  for pcm in /proc/asound/card"$n"/pcm*c; do
+    [ -e "$pcm" ] || continue
+    echo "$n"; exit 0
+  done
+done
+exit 1
+EOF
+chmod 755 /usr/local/bin/audio-capture-detect
+
 cat > /usr/local/bin/audio-dmix-refresh <<'EOF'
 #!/bin/bash
 # Write /etc/asound.conf pointing dmix at the USB DAC's current card index.
@@ -321,12 +340,95 @@ exec /opt/toppingctl-venv/bin/python /opt/toppingctl/toppingctl.py "$@"
 EOF
 chmod 755 /usr/local/bin/toppingctl
 
-# ---- 9. enable + (re)start --------------------------------------------------
+# ---- 9. TV capture loop: optical input -> the same shared dmix ---------------
+# Bridges a USB capture interface (optical from the TV) into the dmix that
+# snapclient and go-librespot already share, so TV audio mixes with music
+# instead of fighting for the device -- and inherits the same Home Assistant
+# volume, because that drives the DAC's own mixer underneath all of them.
+#
+# Installed on every node; it simply idles where no capture device exists.
+cat > /usr/local/bin/tvloop-autodev <<'EOF'
+#!/bin/bash
+# Bridge the TV's optical input into the shared dmix, and survive the TV being
+# off -- which is most of the day.
+#
+# WHY THE POLL LOOP EXISTS. With no optical carrier the receiver has nothing to
+# clock off, so the capture device opens and then errors ("Poll FD
+# initialization failed" / arecord: "Input/output error"). alsaloop treats that
+# as fatal and exits. Left to systemd's Restart=, that is a crash loop for every
+# hour the TV is off: measured 7,650 journal lines/hour on a node whose
+# /var/log is a 50 MB tmpfs. Polling quietly here keeps the node silent while
+# idle and still reconnects within ~5s of the TV coming on.
+set -uo pipefail
+
+ccard=$(/usr/local/bin/audio-capture-detect) || { echo "tvloop: no capture device"; exit 1; }
+/usr/local/bin/audio-dmix-detect >/dev/null 2>&1 || { echo "tvloop: no playback device"; exit 1; }
+dev="hw:${ccard},0"
+echo "tvloop: capture $dev -> snapdmix"
+
+# Is there actually a signal? This is the same open alsaloop performs, so it
+# fails in exactly the cases alsaloop would fail -- no carrier, or the device
+# held by something else.
+has_signal() { timeout 3 arecord -D "$dev" -f S16_LE -c 2 -r 48000 -d 1 -q /dev/null >/dev/null 2>&1; }
+
+state=init
+while :; do
+  if has_signal; then
+    [ "$state" = running ] || echo "tvloop: signal present, starting loop"
+    state=running
+    # -t 20000 chosen EMPIRICALLY, not derived. 5000 produced 22 underruns and
+    # an explicit -B 1024 -E 256 produced 9; 20000 runs clean. Measured A/V
+    # offset is ~75 ms and does NOT respond to this value or to the dmix buffer
+    # size -- the delay is upstream (TV and/or capture hardware). Do NOT tune
+    # this to chase lip-sync; it costs underruns and buys nothing.
+    alsaloop -C "$dev" -P snapdmix -r 48000 -f S16_LE -c 2 -t 20000
+    # alsaloop returning means the format changed or the signal dropped. Say so
+    # once, then fall back to quiet polling rather than spinning.
+    [ "$state" = waiting ] || echo "tvloop: capture ended, waiting for signal"
+    state=waiting
+  else
+    [ "$state" = waiting ] || echo "tvloop: no signal, waiting"
+    state=waiting
+  fi
+  sleep 5
+done
+EOF
+chmod 755 /usr/local/bin/tvloop-autodev
+
+cat > /etc/systemd/system/tvloop.service <<'EOF'
+[Unit]
+Description=TV optical capture -> shared dmix -> DAC
+After=sound.target snapclient.service
+Wants=sound.target
+# Restart is NOT optional: alsaloop opens the capture with fixed parameters and
+# dies ("Poll FD initialization failed") whenever the TV changes audio format or
+# drops the optical signal -- which happens on every app or source change.
+# Without this, TV audio stops silently and never comes back.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/tvloop-autodev
+# Backstop only: the wrapper handles signal loss and format changes internally
+# by polling, so a restart here means it died outright. 30s because the only
+# reasons left are "no capture hardware on this node" (idle forever) and a real
+# crash, neither of which benefits from a fast retry.
+Restart=always
+RestartSec=30
+Nice=-10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# ---- 10. enable + (re)start --------------------------------------------------
 systemctl daemon-reload
 udevadm control --reload-rules || true
 systemctl enable --now go-librespot
 systemctl enable snapclient
+systemctl enable tvloop
 systemctl restart snapclient || true
+systemctl restart tvloop || true
 
 log "done — node '${NODE_NAME}': snapclient=$(systemctl is-active snapclient) go-librespot=$(systemctl is-active go-librespot)"
 log "plug a USB DAC in and both bind automatically (dmix-shared)."

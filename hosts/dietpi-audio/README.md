@@ -47,7 +47,10 @@ takes effect on DietPi's end-of-first-run reboot.)
 | `/etc/asound.conf` | shared dmix (`default` → `hw:0`) |
 | `/usr/local/bin/snapclient-autodev` | waits for a USB DAC, runs snapclient via dmix |
 | `snapclient.service.d/override.conf` | uses the wrapper, retries indefinitely |
-| `/usr/local/bin/audio-dmix-refresh` | writes `asound.conf` at the DAC's **current** card index |
+| `/usr/local/bin/audio-dmix-detect` | prints the first **playback-capable** USB card index |
+| `/usr/local/bin/audio-dmix-refresh` | writes `asound.conf` at the DAC's **current** card index (root only) |
+| `/opt/toppingctl-venv` + `/opt/toppingctl` | `toppingctl` and its `hid` binding |
+| `/usr/local/bin/toppingctl` | wrapper so it is on PATH without activating the venv |
 | `/etc/udev/rules.d/99-audio-node.rules` | refresh config, then restart both, on DAC add/remove |
 | `/root/.ssh/authorized_keys` | root SSH key, so a node is reachable without a password from first boot |
 
@@ -64,6 +67,23 @@ should arrive reachable.
 
 ## Notes
 
+- **Detection is playback-aware.** A node with a USB *capture* interface (an
+  optical input for TV audio) enumerates that as a sound card too, and it can
+  come first. Measured on the living-room node 2026-08-28: card 0 was the
+  capture device (`pcm0c`), card 1 the DAC (`pcm0p`) — picking "the first USB
+  card" aimed dmix at the TV input. `audio-dmix-detect` requires a `pcm*p`.
+- **`audio-dmix-refresh` writes `/etc`, so it is root-only.** `snapclient` runs
+  unprivileged and must not call it; the unit invokes it via `ExecStartPre=+`
+  (which runs as root regardless of `User=`), and the wrapper only *gates* on
+  `audio-dmix-detect`.
+- **`toppingctl` is installed on every node but is inert** until used: it refuses
+  to drive any device whose USB product string is not a confirmed model. Five
+  Topping models share USB product ID `0x152a:8750` with colliding register maps,
+  so PID cannot identify hardware.
+- ⚠️ **Do not `apt install python3-hid`** — Debian ships cython-hidapi under that
+  name (`hid.device()`), while `toppingctl` needs `hid.Device(path=...)` from the
+  PyPI `hid` package. The apt one installs cleanly, imports fine, then fails on a
+  missing attribute. Hence the venv.
 - **DAC card index is detected, not assumed.** `audio-dmix-refresh` finds the USB
   card in `/proc/asound/cards` and writes `asound.conf` to match, re-running on
   every plug/unplug via udev. This used to hardcode `hw:0` on the assumption that

@@ -167,17 +167,142 @@ If the native Spotify service cannot be cleanly disabled, as a workaround you ca
 - Verify the client is not muted in Snapweb.
 - Check snapserver logs for FIFO read errors: `kubectl logs -n snapcast-prod deploy/snapcast -c snapserver`
 
+### HA volume moves the client but nothing gets quieter
+
+**Symptom:** the HA slider *does* change the Snapcast client volume server-side
+(verifiable via `Server.GetStatus`), but the audible level does not change.
+
+**Cause:** the node is running `snapclient --mixer software`, which attenuates
+**only the Snapcast stream**. `go-librespot` is a separate process writing to
+the same dmix, so whenever **Spotify Connect** is what is playing, the software
+mixer changes nothing you can hear. Confirm who actually holds the DAC:
+
+```bash
+ssh root@<node> 'fuser -v /dev/snd/pcmC1D0p'
+# root … go-librespot   -> Spotify is playing; the Snapcast mixer is irrelevant
+```
+
+**Fix:** drive the DAC's own mixer instead, which sits *under* every source on
+the node. `hosts/dietpi-audio/` now detects this automatically
+(`--mixer "hardware:<control>"`); older nodes may need it applied by hand.
+A named PCM also needs a matching CTL — `ctl.snapdmix` alongside
+`pcm.snapdmix` — or snapclient fails with `Invalid CTL snapdmix`.
+
+⚠️ **The DAC's front-panel volume is a SEPARATE stage in series** with the USB
+(UAC2) control, and the two multiply. Measured on both the D30 Pro and the
+DX5 II: driving the UAC2 control does not move the front-panel reading at all.
+Set the physical knob once as a ceiling; drive day-to-day level from HA.
+Otherwise a slider at 100% can still be quiet, and nothing about that looks
+broken.
+
+**Historical note:** nodes with the HiFiBerry DAC+ DSP did not have this problem
+— `snap-dsp-volume-bridge` set the SigmaDSP master, which sat beneath all
+sources. Retiring the HAT removes that, and the DAC's own mixer is the
+replacement.
+
+### HA volume control stops working after swapping a Pi between rooms
+
+**Symptom:** a room's volume slider in Home Assistant does nothing, or the card
+looks greyed out, after the node for that room was replaced or re-flashed.
+
+**Cause — two identifiers that drift apart.** The HA dashboard binds entities by
+a *name-derived* ID:
+
+```yaml
+entity: media_player.living_room_snapcast_client
+```
+
+but the Snapcast integration keys each entity's `unique_id` on the **client ID,
+which is the Pi's MAC address**. Snapserver likewise identifies clients by MAC,
+not by hostname. So a new Pi registers as a **brand-new client that happens to
+share the old one's name** — leaving two clients called `living-room`, one dead
+and one live, and an HA entity still bound to the dead one.
+
+⚠️ **MACs follow the Pi, not the SD card.** Moving a card between machines does
+*not* carry the client identity with it. Worse, if Pi A used to be `living-room`
+and later becomes `office`, its MAC is still the ID HA has recorded as
+"living-room" — so an entity named for one room will control another.
+
+**A second failure rides along with it:** a newly-registered client lands in its
+own group on whatever stream is default, not the stream the room used to be on.
+So even once the slider works, the room can be fed the wrong source.
+
+**Fix — server-side first, UI second.**
+
+```bash
+SNAP() { kubectl -n snapcast-prod exec deploy/snapcast -c snapserver -- sh -c \
+  "wget -qO- --post-data='$1' --header='Content-Type: application/json' \
+   http://localhost:1780/jsonrpc"; }
+
+# 1. Find duplicates: same name, one connected=false
+SNAP '{"id":1,"jsonrpc":"2.0","method":"Server.GetStatus"}' \
+  | jq -r '.result.server.groups[]?.clients[]? | "\(.id)  \(.host.name)  connected=\(.connected)"'
+
+# 2. Delete the stale client. Reversible -- clients re-register on connect,
+#    losing only their stored volume/latency.
+SNAP '{"id":2,"jsonrpc":"2.0","method":"Server.DeleteClient","params":{"id":"<old-mac>"}}'
+
+# 3. Put the live client on the right stream (deleting clients re-shuffles groups)
+SNAP '{"id":3,"jsonrpc":"2.0","method":"Group.SetStream","params":{"id":"<group>","stream_id":"spotify"}}'
+```
+
+Then in HA: **Settings → Devices & Services → Snapcast → ⋮ → Reload**. With the
+stale client gone, the integration usually re-binds the existing entity to the
+live client and nothing else is needed. Only if an orphan remains (shown
+*Unavailable*) do you delete it and rename the live entity to the ID the
+dashboard expects — the rename fails while the old entity still holds that ID.
+
+**Verify by the loop, not the icon.** An entity can render perfectly and command
+nothing. Move the slider and confirm the change server-side:
+
+```bash
+SNAP '{"id":4,"jsonrpc":"2.0","method":"Server.GetStatus"}' \
+  | jq -r '.result.server.groups[]?.clients[]? | select(.connected==true) | "\(.host.name) \(.config.volume.percent)%"'
+```
+
+If the percentage moves, control is genuinely wired. An absent error icon proves
+only that HA has an entity.
+
+**Expect to repeat this on every hardware swap.** It is not a misconfiguration
+to be fixed once — it is the predictable consequence of identity living in the
+hardware while the dashboard refers to names.
+
 ### Audio sync issues
 - Ensure all clients and the server have accurate NTP time synchronization.
 - Adjust the latency offset for specific clients in the Snapweb UI if necessary.
 
-## 11. HifiBerry Clients (kitchen / living-room)
+## 11. Network policy
 
-Two HifiBerry OS devices run snapclient as a Docker extension:
+The snapcast CNP uses `fromEntities: world` (not `fromCIDR: 10.42.2.0/24`) for ports 1704/1705/1780. This is intentional: Cilium SNATs LB traffic to a node IP before it reaches the pod, so a CIDR rule for the LAN subnet never matches. The security boundary is the LAN VLAN — `10.42.2.37` is unreachable from outside VLAN 2.
+
+This is **current and applies to the DietPi nodes too** — it is a property of how
+Cilium handles LoadBalancer traffic, not of what the client runs. It lived inside
+the HiFiBerry section for historical reasons only. See also
+`docs/operations/2026-08-15-networking-gotchas.md`.
+
+## 12. HifiBerry Clients (kitchen / living-room) — SUPERSEDED
+
+> ⚠️ **This section describes the previous architecture and is kept for history.**
+> Both endpoints now run **DietPi (Debian)** with `snapclient` installed
+> natively — not HiFiBerryOS, and not a Docker extension. Verified 2026-08-28:
+> `kitchen` runs `/usr/bin/snapclient … --mixer "hardware:D50s "` as the
+> unprivileged `snapclient` user, and `living-room` was rebuilt on DietPi Trixie
+> with a USB DAC.
+>
+> **Current provisioning: `hosts/dietpi-audio/`** — one script provisions a node
+> end to end (snapclient, go-librespot, shared dmix at the detected USB card
+> index, udev re-detection, root SSH key, `toppingctl`). Design record:
+> [lab `01-016`](https://github.com/gjcourt/lab/blob/main/01-audio-midi/01-016-diy-digital-domain-streamer.md).
+>
+> **The patched `ghcr.io/gjcourt/snapcast-hifiberry` image therefore has no
+> consumers.** Check before deleting it — but it is maintenance surface being
+> carried for nothing if both endpoints are DietPi.
+
+Historically, two HifiBerry OS devices ran snapclient as a Docker extension:
 - `kitchen` — `10.42.2.38`
 - `living-room` — `10.42.2.39`
 
-### Image
+### Image (historical — no longer deployed)
 
 The upstream HifiBerry extension image (`ghcr.io/hifiberry/extension_snapcast:0.28.0`) has two bugs that prevent snapclient from running. A patched image is maintained at `ghcr.io/gjcourt/snapcast-hifiberry` with a build pipeline in `images/snapcast-hifiberry/`. See `images/snapcast-hifiberry/README.md` for full details on the bugs and upgrade procedure.
 
@@ -185,19 +310,19 @@ The upstream HifiBerry extension image (`ghcr.io/hifiberry/extension_snapcast:0.
 1. Runtime audio libs missing from the final build stage — `libasound`, `libvorbis`, `libogg`, `libFLAC`, `libopus`, `libsoxr` are built in the compile stage but not installed in the runtime image.
 2. Wrong binary path — `snapcastmpris.py` hardcodes `/bin/snapclient` but the binary lands at `/usr/local/bin/snapclient`. The patch adds a symlink.
 
-### Device setup
+### Device setup (historical — no longer deployed)
 
-Each device has:
+Each device *had*:
 - `/data/extensions/snapcast/docker-compose.yaml` — extension config; references `ghcr.io/gjcourt/snapcast-hifiberry:<tag>`
 - `/etc/snapcastmpris.conf` — INI file (no section header) with `server = 10.42.2.37` (the production LB VIP)
 
-To check status:
+Status was checked with — **this no longer applies; both nodes run DietPi**:
 ```bash
 ssh root@10.42.2.38 "docker exec snapcast ps aux"
 # Should show: /usr/bin/python3 snapcastmpris.py AND /bin/snapclient -e -h 10.42.2.37
 ```
 
-To pull and deploy a new image on both devices:
+Images were rolled out with — **do not run this; there are no HiFiBerry nodes left**:
 ```bash
 for ip in 10.42.2.38 10.42.2.39; do
   ssh root@$ip "
@@ -207,7 +332,3 @@ for ip in 10.42.2.38 10.42.2.39; do
   "
 done
 ```
-
-### Network policy note
-
-The snapcast CNP uses `fromEntities: world` (not `fromCIDR: 10.42.2.0/24`) for ports 1704/1705/1780. This is intentional: Cilium SNATs LB traffic to a node IP before it reaches the pod, so a CIDR rule for the LAN subnet never matches. The security boundary is the LAN VLAN — `10.42.2.37` is unreachable from outside VLAN 2.

@@ -66,7 +66,7 @@ L2 announcements (`docs/plans/2026-05-06-network-resilience-and-bgp-completion.m
 |---|---|---|
 | Apple TV | `10.42.2.19` | Wired via switch; DNS configured manually in tvOS UI |
 | HifiBerry kitchen | `10.42.2.38` | Snapcast client; static IP via OS config |
-| `living-room` (DietPi) | `10.42.2.137` **(DHCP)** | Snapcast client + TV optical capture. **Rebuilt 2026-08-28**: HiFiBerry HAT retired, now DietPi Trixie on a new Pi with a USB DAC. ⚠️ Intended static `10.42.2.39` is **not in effect** — `/etc/network/interfaces` is `inet dhcp` and the node holds a `.137` lease. Docs elsewhere still say `.39`. |
+| `living-room` (DietPi) | `10.42.2.39` | Snapcast client + TV optical capture. **Rebuilt 2026-08-28**: HiFiBerry HAT retired, DietPi Trixie on a new Pi feeding a Topping D90 III Discrete over USB. ⚠️ `.39` comes from a **router reservation**, not the node — `/etc/network/interfaces` is `inet dhcp`. Remove the reservation and it moves silently. See `docs/operations/apps/snapcast.md` §11. |
 | `kitchen-pi` | `10.42.2.143` | Raspberry Pi 4; `bcmgenet` NIC with EEE disabled (see incident `2026-03-10`) |
 
 ## Wireless

@@ -288,8 +288,8 @@ describing that room as Pi -> I2S -> HAT -> S/PDIF -> D30 Pro is stale.
 capture. They mix rather than contend, and all three inherit the Home Assistant
 volume because that drives the DAC's hardware mixer *underneath* all of them.
 
-**Retiring the HAT dropped the room's DSP, and the D90 III restores the
-capability.** The D30 Pro that first replaced the HAT has no PEQ, so the room
+**Retiring the HAT dropped the room's DSP, and it has not been replaced.**
+The D90 III has the hardware to do it, but the room is uncorrected today. The D30 Pro that first replaced the HAT has no PEQ, so the room
 ran uncorrected. The D90 III has a 10-band PEQ (`EQ Max NUM:10`, read off the
 device), applied on **every input except I2S**. It ships **disabled** — setup
 item 12, register `0x9E sub 01` — so a loaded curve does nothing until it is

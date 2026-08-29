@@ -1,7 +1,7 @@
 ---
 status: planned
-last_modified: 2026-07-20
-summary: "Repeatable CD-rip pipeline: XLD rip -> verify -> tag -> organize -> rsync-over-SSH to hestia dataset -> Navidrome scan"
+last_modified: 2026-08-29
+summary: "Repeatable CD-rip pipeline: rip (XLD on macOS / EAC on Windows) -> verify -> tag -> organize -> rsync-over-SSH to hestia dataset -> Navidrome scan"
 ---
 
 # CD-Rip → Music Library Pipeline (repeatable runbook)
@@ -213,6 +213,55 @@ Only after Navidrome shows the albums, prune the Mac-side copy from `~/Music`.
 
 ---
 
+## Alternate route — Windows (EAC) rips  ✅ executed 2026-08-29
+
+The XLD route above is the **macOS** path. Most ripping actually happens on the
+Windows box (Exact Audio Copy + MusicBrainz Picard), and that route is different
+enough to write down. Run end-to-end 2026-08-29: **13 albums / 229 FLACs / 4.5 GB**.
+
+**Shape of the source.** EAC/Picard write well-tagged `.flac` **flat into
+`C:\Rips`** — `NN Title.flac`, *not* in album folders, with many albums
+interleaved in one directory. So the grouping must come from **tags**, never
+from filenames or directory structure.
+
+| Step | Command |
+| :--- | :--- |
+| 1. Organize on Windows | read `album_artist`/`album` per file with `ffprobe`, copy to `C:\RipsOrg\<Artist>\<Album>\`, sanitising `/\:*?"<>\|` to `-` |
+| 2. Transfer | `scp -r "C:\RipsOrg" truenas_admin@<host>:<scratch>/` — key auth Windows→hestia is set up, so this is **one hop**, no Mac relay |
+| 3. Land | `sudo rsync -a --ignore-existing --chown=george:users --chmod=D755,F644 <scratch>/RipsOrg/ <library>/` |
+| 4. Scan | `kubectl -n navidrome-prod rollout restart deployment/navidrome` |
+| 5. Refresh dedup | update `owned_albums.txt` (03-029) — **union, see below** |
+
+### Gotchas, all of which cost time on the 2026-08-29 run
+
+- **Quote hell over `ssh` → `cmd` → PowerShell.** Build the script locally and send
+  it as `powershell -EncodedCommand <base64 UTF-16LE>`. Avoid `<`, `>`, `<<<` in
+  one-liners. Set `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` or
+  tags with diacritics come back mangled.
+- **Dedup on `Artist` + `Album`, never album title alone.** "The Montreux Years"
+  is a *series* — `Nina Simone/The Montreux Years` was already in the library and
+  a title-only match would have wrongly skipped the new
+  `Monty Alexander/The Montreux Years`.
+- **Check Unicode normalization before landing.** An existing artist dir like
+  `Cécile McLorin Salvant` will silently become a **second** artist folder if the
+  incoming `é` differs (NFC vs NFD). Confirm with a `--dry-run --itemize-changes`:
+  `.d..t......` on the artist dir means it *merges*; `cd+++++++++` means it is
+  being **created**, and that is the bug.
+- **A constant byte delta is tags, not audio.** 11 files differed from the library
+  copy by exactly 52 bytes each. FLAC stores an MD5 of the *decoded* audio in
+  STREAMINFO at bytes `[26:42]` — comparing that proved the audio was bit-identical
+  and only tag padding differed. Do this before deleting any source.
+- **`owned_albums.txt` must be UNIONed, not overwritten.** Regenerating it purely
+  from the filesystem *loses* entries: folder names are sanitised (`Amazing Grace-
+  The Complete Recordings`) while the old list holds real punctuation
+  (`Amazing Grace: The Complete Recordings`), and the punctuated form is what
+  matches the SFPL catalogue. Overwriting dropped 37 entries and would have caused
+  re-borrowing of owned albums. `cat old new | sort -u`.
+- **Snapshot first.** `music` is a plain directory inside `main/family`, **not its
+  own dataset**, so `zfs snapshot main/family@pre-music-import-<date>` covers all
+  of `family`. Cheap (O(1)) but a rollback reverts more than music — prefer
+  deleting the added album dirs for a targeted undo.
+
 ## First-run checklist (drain the `~/Music` backlog)
 
 - [ ] `flac -t ~/Music/*.flac` — integrity pass on the backlog.
@@ -239,10 +288,13 @@ Only after Navidrome shows the albums, prune the Mac-side copy from `~/Music`.
 
 ## Open questions
 
-- **Navidrome scan trigger** (unresolved by design choice) — script
-  `startScan.view` (needs a Subsonic token in the runbook) vs. a manual UI
-  Rescan click. **Recommendation: manual UI** — keeps secrets operator-only and
-  out of any committed script. Left open for the operator to decide per taste.
+- ~~**Navidrome scan trigger**~~ — **RESOLVED 2026-08-29.** Neither option was
+  needed: `kubectl -n navidrome-prod rollout restart deployment/navidrome` triggers
+  the scan-on-startup path and completes in seconds (2.81s for a 221-album library),
+  with no Subsonic token and no UI click. Verify from the pod log — each folder
+  logs `tracksImported=N tracksMissing=0`, ending in `Scan completed`. On the
+  2026-08-29 run that summed to exactly 229 imported / 0 missing / 0 errors, which
+  is a real check that the transfer landed, not just that the scan ran.
 - **Backlog `~/Music` also contains the Apple Music.app library** (`Music/…`); the
   script's `--src ~/Music` only walks audio files and will also see anything Apple
   has downloaded there. Point `--src` at a rips-only subfolder if that library

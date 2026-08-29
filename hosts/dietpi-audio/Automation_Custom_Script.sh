@@ -278,7 +278,14 @@ StartLimitIntervalSec=0
 [Service]
 # '+' runs this as root regardless of the unit's User=, which is required
 # because it writes /etc/asound.conf and snapclient itself is unprivileged.
-ExecStartPre=+/usr/local/bin/audio-dmix-refresh
+# '-' makes a non-zero exit non-fatal. Without it, a node with no DAC fails the
+# unit HERE, before ExecStart ever runs, so the wrapper's wait loop is never
+# reached and the service restart-loops anyway -- measured on 'office'
+# 2026-08-28 after the wrapper was fixed and the loop persisted.
+# Nothing is lost by continuing: the wrapper waits for the DAC, and the udev
+# rule re-runs audio-dmix-refresh and restarts this unit on card add, so
+# asound.conf is regenerated at the moment it becomes possible.
+ExecStartPre=+-/usr/local/bin/audio-dmix-refresh
 ExecStart=
 ExecStart=/usr/local/bin/snapclient-autodev
 Restart=always

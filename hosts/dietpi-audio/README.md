@@ -30,8 +30,12 @@ This is the "convert all audio nodes to one setup" bundle — the design record 
      custom script silently never ran, and because the key lived only inside it
      the node was unreachable by key — the one thing section 7 exists to
      prevent.
-3. Copy **`Automation_Custom_Script.sh`** to the boot partition root as
-   `/boot/Automation_Custom_Script.sh`.
+3. Copy **`Automation_Custom_Script.sh`** to the **root of the FAT boot
+   partition**. That is what you see when the card is mounted on a workstation;
+   on the running node the same partition appears at `/boot/firmware` on current
+   RPi images and at `/boot` on older ones. DietPi looks in both, so copying to
+   the partition root is correct either way — just do not assume a single path
+   when you go looking for it later.
 4. **Boot.** DietPi installs snapclient, then runs the script: it dual-homes the
    node (both NICs — see below), then sets up go-librespot, the dmix
    `asound.conf`, the auto-detect wrapper + systemd overrides, and the udev
@@ -46,7 +50,10 @@ This is the "convert all audio nodes to one setup" bundle — the design record 
    idempotent, so just run it by hand and it will finish the job:
 
    ```bash
-   ssh root@<node> 'bash /boot/firmware/Automation_Custom_Script.sh'
+   # the FAT partition is /boot on some images and /boot/firmware on others,
+   # so take whichever exists rather than guessing
+   ssh root@<node> 'bash "$(ls /boot/firmware/Automation_Custom_Script.sh \
+                              /boot/Automation_Custom_Script.sh 2>/dev/null | head -1)"'
    ```
 
 **Why step 5 exists.** On `office` (2026-08-28) DietPi completed its own first

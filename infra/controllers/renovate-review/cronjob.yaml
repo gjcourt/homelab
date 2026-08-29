@@ -29,7 +29,7 @@ spec:
           containers:
             - name: review
               # python 3.14-slim
-              image: python@sha256:297cf11d0b98b38ac26a56136f0279df845314bcd0347c1f6383fee6e75125ee
+              image: python@sha256:b0aed0e0059e9b1527ef57689a7206f32526627b0713e2228a916df62880188a
               command: ["python3", "/scripts/review.py"]
               args: ["--mode", "$(REVIEW_MODE)"]
               envFrom:

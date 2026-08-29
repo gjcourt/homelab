@@ -284,3 +284,44 @@ spec:
             summary: "Flux GitRepository {{ $labels.exported_namespace }}/{{ $labels.name }} not ready"
             description: >
               GitRepository {{ $labels.exported_namespace }}/{{ $labels.name }} has been Ready=False for >15m — Flux can't fetch the source, so every Kustomization downstream is frozen at its last-applied revision. Check credentials and connectivity to the Git remote.
+    # -------------------------------------------------------------------------
+    # Slow-burn container restarts
+    #
+    # The gap this closes: kube-prometheus-stack's ContainerCrashLoopBackOff
+    # keys off kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"},
+    # which only becomes true once kubelet has entered *backoff* — i.e. a
+    # container failing fast and repeatedly. A container that runs happily for
+    # hours and then dies once is restarted immediately, never enters
+    # CrashLoopBackOff, and reports Ready=True the whole time in between. That
+    # class of failure was structurally invisible.
+    #
+    # Two live examples, both running for months with zero alerts:
+    #   - democratic-csi csi-driver: 550 restarts since 2026-07-03, killed by a
+    #     failing liveness probe every few hours (fixed in #1367).
+    #   - truenas-iscsi-exporter: SIGSEGV roughly every 9.6h since 2026-08-17,
+    #     each time after ~8h of clean operation (instrumented in #1368).
+    #
+    # Threshold rationale: restarts_total is per-POD, and an evicted/drained pod
+    # is *replaced* (new pod, counter resets to 0) rather than restarted — so
+    # node drains and rollouts do not trip this. A healthy container restarts
+    # zero times. Evaluated against live cluster data at 2026-08-29, `>= 2 in
+    # 24h` matched exactly the two containers above and nothing else, so this
+    # ships with a measured false-positive rate of zero rather than a guess.
+    #
+    # `for: 1h` is deliberate dampening — this is a chronic-condition alert, not
+    # a page. Severity warning routes to gjcourt+alerts@.
+    # -------------------------------------------------------------------------
+    - name: container-restarts
+      rules:
+        - alert: ContainerRestartingSlowly
+          expr: >
+            sum by (namespace, pod, container) (
+              increase(kube_pod_container_status_restarts_total[24h])
+            ) >= 2
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) is restarting repeatedly"
+            description: >
+              {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} has restarted {{ $value | printf "%.0f" }} times in 24h without ever entering CrashLoopBackOff, so ContainerCrashLoopBackOff cannot see it. The pod may be reporting Ready between restarts. Check `kubectl logs {{ $labels.pod }} -n {{ $labels.namespace }} -c {{ $labels.container }} --previous` and the container's lastState.terminated exitCode/reason.

@@ -38,13 +38,29 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              pip install --user websockets kubernetes prometheus_client && python /app/exporter.py
+              pip install --user \
+                websockets==17.0.1 \
+                kubernetes==36.0.3 \
+                prometheus_client==0.26.0 \
+                urllib3==2.7.0 \
+                && python /app/exporter.py
           env:
             # HOME=/tmp lets `pip install --user` write to ~/.local under
             # readOnlyRootFilesystem — the /tmp emptyDir is the writable target.
             - name: HOME
               value: "/tmp"
             - name: PYTHONUNBUFFERED
+              value: "1"
+            # Diagnostic, not a fix. The exporter dies with a bare
+            # "Segmentation fault" (exit 139) roughly every 9.6h — 30 times
+            # since 2026-08-17 — with no Python traceback, so there is
+            # nothing to attribute it to. faulthandler installs a SIGSEGV
+            # handler that dumps the C-level stack to stderr, which lands in
+            # `kubectl logs --previous`. websockets.speedups IS loaded as a
+            # compiled cp314 extension in this image, so a frame naming
+            # speedups.c, _ssl, _datetime or gc is the thing to look for.
+            # Remove once the crash is identified and fixed.
+            - name: PYTHONFAULTHANDLER
               value: "1"
             - name: TRUENAS_HOST
               value: "10.42.2.10"

@@ -202,7 +202,9 @@ chmod 755 /usr/local/bin/audio-dmix-refresh
 cat > /usr/local/bin/snapclient-autodev <<EOF
 #!/bin/bash
 # Wait for a USB DAC, then run snapclient through the shared dmix 'default'
-# device so it coexists with go-librespot. systemd retries until a DAC appears.
+# device so it coexists with go-librespot. This WAITS rather than exiting: a node
+# with no DAC is a normal state, not a failure, and exiting turns it into a
+# restart loop.
 HOST="\${SNAPSERVER_HOST:-${SNAPSERVER_HOST}}"
 # Point dmix at whatever card the DAC is on RIGHT NOW, then start. This also
 # gates startup: refresh exits non-zero when no USB DAC is present, and systemd
@@ -211,7 +213,23 @@ HOST="\${SNAPSERVER_HOST:-${SNAPSERVER_HOST}}"
 # Gate only -- do not write /etc from here. This runs as the unprivileged
 # snapclient user; regeneration is done by root via ExecStartPre=+ below and by
 # the udev rule.
-card=\$(/usr/local/bin/audio-dmix-detect) || { echo "snapclient-autodev: no playback-capable USB card yet"; exit 1; }
+# Wait for a DAC rather than exiting. Exiting hands the problem to systemd's
+# Restart=, which on a node parked WITHOUT a DAC is a slow crash loop --
+# measured on 'office' 2026-08-28: 79 restarts while simply sitting there with
+# no DAC attached. tvloop already learned this lesson; snapclient had not.
+# Logs once per state change, so an idle node is quiet.
+card=""
+announced=0
+while [ -z "\$card" ]; do
+  card=\$(/usr/local/bin/audio-dmix-detect) && break
+  card=""
+  if [ "\$announced" = "0" ]; then
+    echo "snapclient-autodev: no playback-capable USB card, waiting"
+    announced=1
+  fi
+  sleep 10
+done
+echo "snapclient-autodev: DAC on card \$card, starting"
 # -s snapdmix, NOT "default". snapclient matches -s against its own enumerated
 # device list by DESCRIPTION as well as name, and the entry described "Default
 # Audio Device" is 'sysdefault' (idx 1), not the PCM named 'default' (idx 2).
@@ -260,7 +278,14 @@ StartLimitIntervalSec=0
 [Service]
 # '+' runs this as root regardless of the unit's User=, which is required
 # because it writes /etc/asound.conf and snapclient itself is unprivileged.
-ExecStartPre=+/usr/local/bin/audio-dmix-refresh
+# '-' makes a non-zero exit non-fatal. Without it, a node with no DAC fails the
+# unit HERE, before ExecStart ever runs, so the wrapper's wait loop is never
+# reached and the service restart-loops anyway -- measured on 'office'
+# 2026-08-28 after the wrapper was fixed and the loop persisted.
+# Nothing is lost by continuing: the wrapper waits for the DAC, and the udev
+# rule re-runs audio-dmix-refresh and restarts this unit on card add, so
+# asound.conf is regenerated at the moment it becomes possible.
+ExecStartPre=+-/usr/local/bin/audio-dmix-refresh
 ExecStart=
 ExecStart=/usr/local/bin/snapclient-autodev
 Restart=always
@@ -403,6 +428,18 @@ set -uo pipefail
 last=""
 say() { [ "$1" = "$last" ] || { echo "tvloop: $1"; last="$1"; }; }
 
+# Same idea for alsaloop's own output. Surfacing it is the point -- xruns and
+# ALSA errors should reach the journal -- but a genuinely flaky signal repeats
+# the SAME error every session, so dedupe it the same way state messages are
+# deduped. A new/changed error still prints immediately.
+lastout=""
+sayout() {
+  [ -z "$1" ] && return 0
+  [ "$1" = "$lastout" ] && return 0
+  printf '%s\n' "$1"
+  lastout="$1"
+}
+
 while :; do
   if ! ccard=$(/usr/local/bin/audio-capture-detect 2>/dev/null); then
     say "no capture device on this node, idling"
@@ -414,22 +451,46 @@ while :; do
   fi
   dev="hw:${ccard},0"
 
-  # Same open alsaloop performs, so it fails in exactly the cases alsaloop
-  # would. Sequential with alsaloop below -- never concurrent, so no contention
-  # for the capture device.
-  if timeout 3 arecord -D "$dev" -f S16_LE -c 2 -r 48000 -d 1 -q /dev/null >/dev/null 2>&1; then
-    say "signal on $dev, starting loop"
-    # -t 20000 chosen EMPIRICALLY, not derived. 5000 produced 22 underruns and
-    # an explicit -B 1024 -E 256 produced 9; 20000 runs clean. Measured A/V
-    # offset is ~75 ms and does NOT respond to this value or to the dmix buffer
-    # size -- the delay is upstream (TV and/or capture hardware). Do NOT tune
-    # this to chase lip-sync; it costs underruns and buys nothing.
-    alsaloop -C "$dev" -P snapdmix -r 48000 -f S16_LE -c 2 -t 20000
-    say "capture ended, waiting for signal"
+  # No separate probe. alsaloop IS the detector: it opens the capture and
+  # either runs or exits ~50 ms later, which is faster and more accurate than
+  # asking arecord the same question first. Measured on living-room 2026-08-28:
+  # the arecord probe cost ~600 ms per pass and, with a 5 s sleep, meant TV
+  # audio could take ~5.6 s to start after the TV came on. That was the "not
+  # snappy" complaint, and it was self-inflicted.
+  #
+  # Distinguish a real session from a failed open by DURATION, not exit code --
+  # alsaloop exits 1 either way. Logging on the exit code alone would alternate
+  # two messages every retry and, because say() logs on change, emit two lines a
+  # second: worse than the crash loop this replaced.
+  # -t 20000 chosen EMPIRICALLY, not derived. 5000 produced 22 underruns and an
+  # explicit -B 1024 -E 256 produced 9; 20000 runs clean. The measured A/V offset
+  # is ~75 ms and does NOT respond to this value or to the dmix buffer size --
+  # the delay is upstream, in the TV and/or the capture hardware. Do NOT tune
+  # this to chase lip-sync; it costs underruns and buys nothing.
+  # Capture alsaloop's own output rather than discarding it. Silencing it
+  # outright hid xruns and ALSA errors that used to reach the journal; letting
+  # it through unfiltered spams, because the no-signal path prints "Poll FD
+  # initialization failed" on every retry. So: keep it, but only surface it when
+  # the attempt was a REAL session. `| tail -5` bounds what is held for a long
+  # run. alsaloop's exit code is not used -- duration is the signal -- so losing
+  # it to the pipe costs nothing.
+  t0=$(date +%s)
+  out=$(alsaloop -C "$dev" -P snapdmix -r 48000 -f S16_LE -c 2 -t 20000 2>&1 | tail -5)
+  ran=$(( $(date +%s) - t0 ))
+  if [ "$ran" -ge 2 ]; then
+    # Message text is CONSTANT on purpose. say() dedupes on the text, so
+    # interpolating the duration here would defeat it: a flaky signal produces
+    # sessions of differing whole-second lengths, each a "new" message, and the
+    # log becomes one line per session instead of one per state change.
+    say "capture ended, watching $dev"
+    sayout "$out"
   else
-    say "no signal on $dev, waiting"
+    say "no signal, watching $dev"
   fi
-  sleep 5
+  # Retry interval, so also the worst-case delay before TV audio starts. A
+  # failed attempt costs ~50 ms, making this roughly a 10% duty cycle on the
+  # capture device -- cheap for the responsiveness it buys.
+  sleep 0.5
 done
 EOF
 chmod 755 /usr/local/bin/tvloop-autodev

@@ -22,12 +22,49 @@ This is the "convert all audio nodes to one setup" bundle — the design record 
      (put the node on the IoT VLAN, same as the others).
    - `AUTO_SETUP_INSTALL_SOFTWARE_ID=192` — Snapcast Client (the script also
      installs it if missing).
-3. Copy **`Automation_Custom_Script.sh`** to the boot partition root as
-   `/boot/Automation_Custom_Script.sh`.
+   - ⚠️ **`AUTO_SETUP_SSH_PUBKEY=<your key>` — do not skip this.** Section 7 of
+     the script installs the same key, but the script runs *last*, so a node
+     whose script does not run is password-only and cannot be diagnosed
+     remotely. This option is handled by DietPi's own first-run, before the
+     script, so the two fail independently. Learned on `office` 2026-08-28: the
+     custom script silently never ran, and because the key lived only inside it
+     the node was unreachable by key — the one thing section 7 exists to
+     prevent.
+3. Copy **`Automation_Custom_Script.sh`** to the **root of the FAT boot
+   partition**. That is what you see when the card is mounted on a workstation;
+   on the running node the same partition appears at `/boot/firmware` on current
+   RPi images and at `/boot` on older ones. DietPi looks in both, so copying to
+   the partition root is correct either way — just do not assume a single path
+   when you go looking for it later.
 4. **Boot.** DietPi installs snapclient, then runs the script: it dual-homes the
    node (both NICs — see below), then sets up go-librespot, the dmix
    `asound.conf`, the auto-detect wrapper + systemd overrides, and the udev
    rule. When you plug a USB DAC in, both services bind automatically.
+5. **Verify the script actually ran** — do not assume it did:
+
+   ```bash
+   ssh root@<node> 'systemctl is-active go-librespot; command -v toppingctl'
+   ```
+
+   Both should answer. If they do not, DietPi did not execute the script. It is
+   idempotent, so just run it by hand and it will finish the job:
+
+   ```bash
+   # the FAT partition is /boot on some images and /boot/firmware on others,
+   # so take whichever exists rather than guessing
+   ssh root@<node> 'bash "$(ls /boot/firmware/Automation_Custom_Script.sh \
+                              /boot/Automation_Custom_Script.sh 2>/dev/null | head -1)"'
+   ```
+
+**Why step 5 exists.** On `office` (2026-08-28) DietPi completed its own first
+run — hostname set, network up, sshd listening, `.install_stage=2` — and never
+ran the custom script. The script was present at both `/boot` and
+`/boot/firmware`, mode 755, with `AUTO_SETUP_CUSTOM_SCRIPT_EXEC=1` in both
+`dietpi.txt` files, and running it manually worked first time. The cause is
+unknown and probably unknowable after the fact: `dietpi-ramlog` keeps `/var/log`
+in RAM, so the evidence is gone by the time anyone looks. Since `install_stage`
+is already `2`, DietPi will never retry it on its own — the node just sits there
+looking healthy and doing nothing. **Check, don't assume.**
 
 **Networking — dual-homed by default.** DietPi only configures its "primary"
 adapter and comments out the other, so a WiFi-provisioned node comes up
@@ -45,7 +82,7 @@ takes effect on DietPi's end-of-first-run reboot.)
 | `/root/.config/go-librespot/config.yml` | device name = hostname, output via dmix, zeroconf on `4070` |
 | `/etc/systemd/system/go-librespot.service` | runs it, `Restart=always` |
 | `/etc/asound.conf` | generated: shared dmix at the DAC's **detected** card index, plus a plug-wrapped `pcm.snapdmix` alias. Written `0644` — ALSA silently ignores a root-only config for unprivileged clients and falls back to card 0 |
-| `/usr/local/bin/snapclient-autodev` | waits for a USB DAC, runs snapclient via dmix |
+| `/usr/local/bin/snapclient-autodev` | **waits** for a USB DAC (does not exit), then runs snapclient via dmix on the DAC's own hardware mixer |
 | `snapclient.service.d/override.conf` | uses the wrapper, retries indefinitely |
 | `/usr/local/bin/audio-dmix-detect` | prints the first **playback-capable** USB card index |
 | `/usr/local/bin/audio-dmix-refresh` | writes `asound.conf` at the DAC's **current** card index (root only) |

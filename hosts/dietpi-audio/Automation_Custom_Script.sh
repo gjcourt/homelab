@@ -202,7 +202,9 @@ chmod 755 /usr/local/bin/audio-dmix-refresh
 cat > /usr/local/bin/snapclient-autodev <<EOF
 #!/bin/bash
 # Wait for a USB DAC, then run snapclient through the shared dmix 'default'
-# device so it coexists with go-librespot. systemd retries until a DAC appears.
+# device so it coexists with go-librespot. This WAITS rather than exiting: a node
+# with no DAC is a normal state, not a failure, and exiting turns it into a
+# restart loop.
 HOST="\${SNAPSERVER_HOST:-${SNAPSERVER_HOST}}"
 # Point dmix at whatever card the DAC is on RIGHT NOW, then start. This also
 # gates startup: refresh exits non-zero when no USB DAC is present, and systemd
@@ -211,7 +213,23 @@ HOST="\${SNAPSERVER_HOST:-${SNAPSERVER_HOST}}"
 # Gate only -- do not write /etc from here. This runs as the unprivileged
 # snapclient user; regeneration is done by root via ExecStartPre=+ below and by
 # the udev rule.
-card=\$(/usr/local/bin/audio-dmix-detect) || { echo "snapclient-autodev: no playback-capable USB card yet"; exit 1; }
+# Wait for a DAC rather than exiting. Exiting hands the problem to systemd's
+# Restart=, which on a node parked WITHOUT a DAC is a slow crash loop --
+# measured on 'office' 2026-08-28: 79 restarts while simply sitting there with
+# no DAC attached. tvloop already learned this lesson; snapclient had not.
+# Logs once per state change, so an idle node is quiet.
+card=""
+announced=0
+while [ -z "\$card" ]; do
+  card=\$(/usr/local/bin/audio-dmix-detect) && break
+  card=""
+  if [ "\$announced" = "0" ]; then
+    echo "snapclient-autodev: no playback-capable USB card, waiting"
+    announced=1
+  fi
+  sleep 10
+done
+echo "snapclient-autodev: DAC on card \$card, starting"
 # -s snapdmix, NOT "default". snapclient matches -s against its own enumerated
 # device list by DESCRIPTION as well as name, and the entry described "Default
 # Audio Device" is 'sysdefault' (idx 1), not the PCM named 'default' (idx 2).

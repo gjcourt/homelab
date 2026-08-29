@@ -26,7 +26,7 @@ data:
       iscsi.global → iscsi.global.config
     """
     import os, re, json, threading, time, logging, queue
-    from http.server import HTTPServer, BaseHTTPRequestHandler
+    from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
     from urllib.parse import urlparse
     import websocket
 
@@ -151,6 +151,18 @@ data:
     # HTTP handler
     # ------------------------------------------------------------------
     class Handler(BaseHTTPRequestHandler):
+        # HTTP/1.1 so keep-alive clients (the democratic-csi axios agent)
+        # reuse one connection instead of reconnecting per probe. Safe here:
+        # every send_json() already sets an accurate Content-Length.
+        protocol_version = "HTTP/1.1"
+
+        # Bound the per-connection read. BaseHTTPRequestHandler.timeout
+        # defaults to None, i.e. a handler blocks forever in readline()
+        # waiting for the next request on an idle keep-alive socket. With
+        # a threaded server that only strands one thread; without one it
+        # stalled the whole accept loop. Never leave this None.
+        timeout = 30
+
         def log_message(self, fmt, *args):
             log.info(fmt, *args)
 
@@ -226,9 +238,19 @@ data:
                 log.error("DELETE %s failed: %s", p, e)
                 self.send_json(500, {"error": str(e)})
 
+    class Server(ThreadingHTTPServer):
+        # socketserver.TCPServer defaults request_queue_size to 5. A
+        # single-threaded server that stalls in a handler fills that
+        # 5-deep accept backlog almost immediately; Linux then drops the
+        # SYN silently and the client eats a 1s/3s/7s retransmit backoff.
+        # democratic-csi's Probe gives up at 5s, so two drops = a failed
+        # liveness probe against a proxy that never saw the request.
+        request_queue_size = 128
+        daemon_threads = True
+
     if __name__ == "__main__":
         log.info("TrueNAS REST→WebSocket proxy listening on :%d", PORT)
-        HTTPServer(("", PORT), Handler).serve_forever()
+        Server(("", PORT), Handler).serve_forever()
 ---
 apiVersion: apps/v1
 kind: Deployment

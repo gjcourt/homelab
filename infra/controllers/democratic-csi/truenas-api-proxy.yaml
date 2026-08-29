@@ -161,7 +161,17 @@ data:
         # waiting for the next request on an idle keep-alive socket. With
         # a threaded server that only strands one thread; without one it
         # stalled the whole accept loop. Never leave this None.
-        timeout = 30
+        #
+        # MUST stay LONGER than the slowest client's request interval.
+        # democratic-csi probes every 60s (chart periodSeconds), so the
+        # first cut at 30s closed every pooled connection before the
+        # client's next probe: the client wrote into a socket the server
+        # had already dropped, the request never arrived, and axios timed
+        # out at 5s with nothing logged server-side. Verified against the
+        # live proxy — reusing a keep-alive connection after 35s idle
+        # returned RemoteDisconnected. 120s clears the 60s probe with
+        # margin while still reaping genuinely dead threads.
+        timeout = 120
 
         def log_message(self, fmt, *args):
             log.info(fmt, *args)

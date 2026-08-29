@@ -271,7 +271,148 @@ hardware while the dashboard refers to names.
 - Ensure all clients and the server have accurate NTP time synchronization.
 - Adjust the latency offset for specific clients in the Snapweb UI if necessary.
 
-## 11. Network policy
+## 11. Living room: DietPi + UR27 (as-built 2026-08-28)
+
+The living room was rebuilt and **the HiFiBerry DAC+DSP HAT is gone**. Any doc
+describing that room as Pi -> I2S -> HAT -> S/PDIF -> D30 Pro is stale.
+
+| Stage | Was | Is now |
+|---|---|---|
+| OS | HiFiBerryOS + Docker extension | DietPi Trixie, `snapclient` native |
+| Pi -> DAC | I2S to HAT, S/PDIF out to D30 Pro | **USB direct** to Topping **D90 III Discrete** |
+| TV audio | TV optical -> HAT S/PDIF in | TV optical -> **HiFime UR27** (`SA9227`, ALSA card 0) -> `alsaloop` -> shared dmix |
+| Volume | SigmaDSP master via `snap-dsp-volume-bridge` | the DAC's own UAC2 mixer, auto-detected (`--mixer hardware:'D90 III Discrete'`) |
+| DSP / PEQ | SigmaDSP profile on the HAT | **none** — nothing replaced it in this room |
+
+**Three sources now share one dmix**: `snapclient`, `go-librespot`, and the TV
+capture. They mix rather than contend, and all three inherit the Home Assistant
+volume because that drives the DAC's hardware mixer *underneath* all of them.
+
+**Retiring the HAT dropped the room's DSP, and it has not been replaced.**
+The D90 III has the hardware to do it, but the room is uncorrected today. The D30 Pro that first replaced the HAT has no PEQ, so the room
+ran uncorrected. The D90 III has a 10-band PEQ (`EQ Max NUM:10`, read off the
+device), applied on **every input except I2S**. It ships **disabled** — setup
+item 12, register `0x9E sub 01` — so a loaded curve does nothing until it is
+switched on. No curve is loaded yet: ten bands without a measurement are tone
+controls, so this needs REW and a calibration mic before it means anything.
+
+**Measured, and not worth re-litigating:**
+
+- **A/V offset is ~75 ms** and does **not** respond to `alsaloop -t`, nor to the
+  dmix buffer size. Halving dmix was predicted to save 22 ms and moved it 9 ms
+  the *wrong* way. `buffer_size` is a ring capacity, not a fixed delay. The
+  delay is upstream in the TV and/or capture hardware. Do not tune Pi buffers
+  for lip-sync.
+- `alsaloop -t 20000` is the lowest that ran clean: `5000` gave 22 underruns,
+  explicit `-B 1024 -E 256` gave 9.
+- **Sample-rate split is unresolved**: TV optical is 48 kHz, Navidrome/Spotify
+  are 44.1 kHz, and dmix resamples one of them. Nobody has measured which, or
+  what it costs.
+
+**Addressing: the node is on `10.42.2.39`, but not because the node says so.**
+`/etc/network/interfaces` is `inet dhcp` — there is no static address configured
+on the box. `.39` comes from a router reservation. Both facts are true and only
+one of them is visible from the node, which is how an earlier revision of this
+document came to claim `.137` (a lease it briefly held mid-rebuild). If the
+reservation is removed the node moves silently. See also section 10: a rebuilt
+Pi does not carry its old Snapcast client identity.
+
+### Volume on the D90 III: three stages, and only one should move
+
+There are **three** attenuators in series in this room, and they multiply. Two
+are on the DAC and are easy to mistake for one:
+
+| Stage | Driven by | Survives a power cycle? |
+|---|---|---|
+| ALSA `index 0` (per-channel) | `snapclient` / Home Assistant | **No** — resets to max, but snapclient re-applies it on reconnect |
+| ALSA `index 1` (master) | nothing should | **No** — resets to max |
+| Device volume (front panel) | knob / IR remote | **Yes** — setup item 19 saves it with the menu settings |
+
+**The two ALSA controls are the same USB Feature Unit** (Unit 10): `index 0` is
+the L+R pair (`cmask=0x3`), `index 1` is that unit's *master* channel
+(`cmask=0x0`). UAC combines them **additively in dB**, so setting both to -16
+gives -32, not -16. Read them with:
+
+```bash
+amixer -c <card> sget 'D90 III Discrete',0     # per-channel — what HA drives
+amixer -c <card> sget 'D90 III Discrete',1     # master — pin at 0 dB
+```
+
+Scale is 1/16 dB per step over -127..0 dB (2032 steps), so `-16 dB` is raw
+`1776`. Prefer `sset ... -16dB` over raw values — `cset numid=N 0` sets raw 0,
+which is **-127 dB**, not 0 dB. That mistake looks like a mute.
+
+**The rule: one stage owns volume, the rest are pinned.** Here that is
+`index 0` for Home Assistant, `index 1` pinned at `0 dB`, and the front-panel
+volume set once as a ceiling. If anything else starts moving, every level in
+the room is offset and nothing looks broken.
+
+**The asymmetry matters after a power cut.** The device stage persists; the USB
+stage comes back at maximum. What saves you is `snapclient` re-applying the
+stored Snapcast volume when it reconnects — verified after a firmware update
+and again after a setup-menu restart. If snapclient does *not* come back, the
+room is at full output on the USB stage with nothing to catch it.
+
+### PEQ: available, enabled, not yet driveable from code
+
+The D90 III reports `EQ Max NUM:10` and PEQ is enabled on the device. Curves
+are set with the **desktop Topping Tune** app (the web app at
+`home.toppingaudio.com` does not support this model), and `Export`/`Import`
+write curve files — so a curve belongs in this repo, with the device holding a
+copy, not the other way round.
+
+**Driving PEQ from `toppingctl` does not work yet, and the reason is not
+established.** Writes reach the device and are echoed back with correct values,
+PEQ is on, and still nothing is audible — a -20 dB notch parked on a 1 kHz test
+tone produced no change. The leading theory is that the device holds five
+built-in presets plus five custom slots (manual item 13) and our writes land in
+a slot that is not the active one. Settling it needs the DAC on a bench beside
+Topping Tune with the HID tap running, diffing vendor frames against ours.
+
+⚠️ **Test audio changes with a locally generated tone, never through Spotify.**
+`go-librespot` normalises, which rides the level on steady content and produced
+several convincing false positives here before it was spotted:
+
+```bash
+systemctl stop go-librespot          # remove normalisation from the path
+aplay -D snapdmix /tmp/tone1k.wav    # a locally generated sine
+```
+
+### Why the TV goes through the UR27 and not straight into the DAC
+
+The obvious simplification is to drop the UR27 and feed the TV's optical
+straight into the DAC: one box fewer, no `alsaloop`, no resample, and the
+D90 III even auto-selects the live input (setup item 1, `SIG`). **It was tried
+on 2026-08-28 and reverted, because it costs all software volume control of TV
+audio.** Three independent confirmations, so do not spend another evening on it:
+
+1. **No HID volume register.** Enumerating all 74 device fields while the front
+   panel was moved from -0.5 dB to -20.0 dB showed no field tracking the change.
+   Topping's own Tune app never touches `0x71` in 298 captured frames.
+2. **The UAC2/ALSA mixer does not reach the optical input.** With TV audio
+   playing over TOSLINK, cycling the USB stage between -20 dB and -55 dB four
+   times was inaudible. That stage is on the USB path only.
+3. **The TV cannot vary its own optical output.** The S95C manual, line 11172:
+   *"If a device is connected via Optical, volume control may not be possible,
+   depending on the device."* There is no "Digital Output Audio Volume" setting
+   — only Format and Delay. Confirmed independently against Samsung community
+   reports for this exact model.
+
+Routing TV audio in over USB puts it in the same volume domain as everything
+else, which is why the UR27 is load-bearing rather than transitional. The cost
+is the ~75 ms offset documented above.
+
+**The one path that would give both** is an IR emitter driven from Home
+Assistant: the DAC's remote does control volume on any input. It is open-loop —
+HA could send up/down but never read the level back — so the slider becomes a
+pair of buttons. Untried.
+
+**ARC/eARC is why soundbars do not have this problem.** HDMI-CEC System Audio
+Control lets a TV remote drive a connected device's volume. The D90 III has no
+HDMI input, so it cannot participate. This is a limitation of the connection
+type, not of this room.
+
+## 12. Network policy
 
 The snapcast CNP uses `fromEntities: world` (not `fromCIDR: 10.42.2.0/24`) for ports 1704/1705/1780. This is intentional: Cilium SNATs LB traffic to a node IP before it reaches the pod, so a CIDR rule for the LAN subnet never matches. The security boundary is the LAN VLAN — `10.42.2.37` is unreachable from outside VLAN 2.
 
@@ -280,7 +421,7 @@ Cilium handles LoadBalancer traffic, not of what the client runs. It lived insid
 the HiFiBerry section for historical reasons only. See also
 `docs/operations/2026-08-15-networking-gotchas.md`.
 
-## 12. HifiBerry Clients (kitchen / living-room) — SUPERSEDED
+## 13. HifiBerry Clients (kitchen / living-room) — SUPERSEDED
 
 > ⚠️ **This section describes the previous architecture and is kept for history.**
 > Both endpoints now run **DietPi (Debian)** with `snapclient` installed

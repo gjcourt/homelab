@@ -117,3 +117,51 @@ number.
 `libx265 -b:v 4700k -tag:v hvc1 -c:a aac -b:a 160k -ac 2 -c:s copy`, ~4.86 Mbps
 ABR. Encodes at roughly 1.1x realtime on the 5600X (6c/12t), so a 2-hour film is
 about 2 hours of wall time.
+
+---
+
+# import-music.ps1 — CD rips → the music library
+
+Separate pipeline, same box. EAC + Picard write well-tagged `.flac` **flat** into
+`C:\Rips` (`NN Title.flac`, several albums interleaved), so grouping comes from
+**tags**, never from filenames or directory layout.
+
+```powershell
+.\import-music.ps1 -DryRun     # report what would import, touch nothing
+.\import-music.ps1
+```
+
+read tags → group → dedup against the live library → organise → `scp` to a hestia
+scratch dir → `rsync` into the library with `--chown=george:users --chmod=D755,F644`.
+
+**No Kubernetes dependency.** The import is finished when rsync lands the files on
+hestia — that is the source of truth. Navidrome is a downstream *consumer*: it
+mounts the library read-only over NFS and rescans on `ND_SCANSCHEDULE=1h`, so it
+updates itself. `kubectl -n navidrome-prod rollout restart deployment/navidrome`
+only makes it immediate, and this box has no kubeconfig anyway.
+
+**It never deletes from `C:\Rips`.** Clearing source rips is operator-only and
+deliberately manual.
+
+## Guards, each earned on 2026-08-29
+
+| Guard | What went wrong without it |
+| :--- | :--- |
+| **255-*byte* filename cap** | Linux caps filenames at 255 **bytes**, not characters. A Marvin Gaye medley track came to 259 bytes (curly apostrophes cost 3 each in UTF-8); `scp` failed `Bad message` on that one file and left the album incomplete. Navidrome is tag-driven, so truncating loses nothing. |
+| **Windows trailing dot** | Windows forbids a directory ending in `.`, so `Harry Connick, Jr.` staged as `Harry Connick, Jr`. Restored on hestia via a rename manifest. |
+| **Colon → ` - `** | A naive `:`→`-` gives `True Love- A Celebration`; the library's 221 existing albums use space-dash-space (`Jazz Steps Out - Rare Masters`). |
+| **Unicode duplicate guard** | An existing artist dir silently becomes a *second* folder if the incoming `é` differs (NFC vs NFD). The rsync dry-run is inspected: `.d..t` on an existing artist means merge, `cd+++` means create — and the script **aborts** rather than making a duplicate. |
+| **Dedup on artist AND album** | "The Montreux Years" is a *series*. Title-only matching would have skipped a genuinely new Monty Alexander album because Nina Simone's was present. |
+| **Byte-count verification** | Transfer is checked file-for-file before anything touches the library. |
+
+Dedup normalises away punctuation, so a tag reading `True Love: A Celebration of
+Cole Porter` correctly matches the on-disk `True Love - A Celebration of Cole
+Porter` instead of re-importing it.
+
+## Afterwards, on the Mac
+
+Refresh `~/src/music-library/owned_albums.txt` so the SFPL borrow queue stops
+re-borrowing what you now own — **union it, never overwrite**. Folder names are
+sanitised while that list carries real punctuation (`Amazing Grace: The Complete
+Recordings` vs `Amazing Grace- …`), and regenerating from the filesystem silently
+drops entries. That list is not in git; it lives with the SFPL tooling.

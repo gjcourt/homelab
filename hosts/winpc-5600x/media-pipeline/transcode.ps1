@@ -115,12 +115,14 @@ foreach ($it in $runnable) {
   if (Test-Path $local) { Remove-Item $local -Force; Log "removed stale local for $name" }
   Log ("START $name  src=" + [math]::Round($it.Dur/60,1) + "min  free=" + [math]::Round($free,0) + "GB" + $(if ($it.NeedsColour) { '  (+BT.709)' } else { '' }))
 
-  $args = @('-nostdin','-y','-hide_banner','-loglevel','error','-i',$it.Src,
-            '-map','0:v:0','-map','0:a:0','-map','0:s?',
-            '-c:v','libx265','-b:v',"${Bitrate}k",'-tag:v','hvc1')
-  if ($it.NeedsColour) { $args += @('-colorspace','bt709','-color_primaries','bt709','-color_trc','bt709') }
-  $args += @('-c:a','aac','-b:a','160k','-ac','2','-c:s','copy',$local)
-  & $FF @args
+  # NB: do not name this variable after the PowerShell automatic one - assigning
+  # to it shadows the real one under [CmdletBinding()].
+  $ffArgs = @('-nostdin','-y','-hide_banner','-loglevel','error','-i',$it.Src,
+              '-map','0:v:0','-map','0:a:0','-map','0:s?',
+              '-c:v','libx265','-b:v',"${Bitrate}k",'-tag:v','hvc1')
+  if ($it.NeedsColour) { $ffArgs += @('-colorspace','bt709','-color_primaries','bt709','-color_trc','bt709') }
+  $ffArgs += @('-c:a','aac','-b:a','160k','-ac','2','-c:s','copy',$local)
+  & $FF @ffArgs
   if ($LASTEXITCODE -ne 0) { Log "FAIL encode (exit $LASTEXITCODE): $name"; continue }
 
   # ---- validation gate ------------------------------------------------

@@ -88,7 +88,7 @@ Layout under each person is `YYYY/MM` (`george/` has `2013`…`2026`, months
 
 | dir | size | what |
 |---|---|---|
-| `winpc-5800x/George/` | 108 G | Windows PC home. Contains `Apple/MobileSync/Backup/` = **97 G iPhone-13 backup** (GUID `00008110-…`, encrypted). |
+| `winpc-5600x/George/` | 108 G | Windows PC home. Contains `Apple/MobileSync/Backup/` = **97 G iPhone-13 backup** (GUID `00008110-…`, encrypted). |
 | `gauss/` | 69 G | Retina MacBook home (`Pictures` 6.8G incl iPhoto/Aperture, `Dropbox` 16G, etc.) |
 | `dropbox-cloud/` | 57 G | Dropbox cloud pull. Contains `Camera Uploads/` = **36 G, 2010–2018 photos**. |
 | `oldmac-unibody/` | 3.7 G | Dying 2011–2014 MacBook. `priority/MobileSync/` = **2012 iPhone backup**; `priority/Pictures` (Aug 2012). |
@@ -96,10 +96,12 @@ Layout under each person is `YYYY/MM` (`george/` has `2013`…`2026`, months
 | `photo-staging/` | **82 G** | **Transient scratch**: `iphone13-cameraroll/`, `messages-gauss/` (11G, 2013–2022), `extract.log`, `*.done` markers. |
 | `_tools/` | 18 K | `ibackup.py` (the iOS-backup extractor used this session). |
 
-> **Naming discrepancy to reconcile:** this dataset is `winpc-5800x` but the
-> companion plan `2026-07-05-mac-laptop-archive.md` calls the machine
-> `winpc-5600x`. Pick one machine-id and rename before it calcifies (see Open
-> Decision D6).
+> **Naming — RESOLVED 2026-08-29.** The machine id is **`winpc-5600x`**. The CPU
+> was verified on the box as an *AMD Ryzen 5 5600X (6c/12t)*, so `winpc-5800x` was
+> simply wrong. `archive/winpc-5800x` has been renamed to `archive/winpc-5600x`
+> (plain directory inside `main/archive`, so a metadata-only `mv`; the
+> `_inventory/cat_winpc-*.tsv` catalog was renamed to match). No NFS/SMB share
+> referenced the old path. See `hosts/winpc-5600x/`.
 
 **Snapshots (~120 as of the survey; the exact count drifts as periodic tasks fire).** Auto periodic tasks cover **`main/family`** (and its
 children) and **`main/homes`** only — 21 snapshots each: **daily** 05:00,
@@ -167,7 +169,7 @@ snapshotted).
 │   ├── movies/ [dataset,1M,1.03T] · music/ [1M] · tv-anime/ [1M] · tv-shows/ [1M]
 │
 ├── archive/            [dataset]  COLD per-machine backups — restore-only
-│   ├── winpc-5800x/    (108G)  ← promote to per-machine dataset (see D6 re: id)
+│   ├── winpc-5600x/    (108G)  ← promote to per-machine dataset (see D6 re: id)
 │   ├── gauss/          (69G)   ← promote to per-machine dataset
 │   ├── oldmac-unibody/ (3.7G)  ← promote to per-machine dataset
 │   ├── oldmac-salvage/ (392K)
@@ -193,8 +195,8 @@ source of truth, Immich gets a curated projection.
 
 | Artifact (current location) | Final home | Immich? | Cold archive? | Notes |
 |---|---|---|---|---|
-| Windows PC home `winpc-5800x/George/` | `archive/winpc-5800x/` (→ dataset) | photos only | **yes** | Machine backup. |
-| **iPhone-13 backup** `…/Apple/MobileSync/Backup/` (97G, encrypted) | stays inside `archive/winpc-5800x/` | **done** — camera roll (18,768 items) already extracted → `photo-staging/iphone13-cameraroll/`, awaiting Immich import | **yes** | Decrypt needs the **retained** backup password (`piano-…`); keep the raw backup cold. **If that password is lost, re-extraction is impossible** — gates the staging delete in §7.4. |
+| Windows PC home `winpc-5600x/George/` | `archive/winpc-5600x/` (→ dataset) | photos only | **yes** | Machine backup. |
+| **iPhone-13 backup** `…/Apple/MobileSync/Backup/` (97G, encrypted) | stays inside `archive/winpc-5600x/` | **done** — camera roll (18,768 items) already extracted → `photo-staging/iphone13-cameraroll/`, awaiting Immich import | **yes** | Decrypt needs the **retained** backup password (`piano-…`); keep the raw backup cold. **If that password is lost, re-extraction is impossible** — gates the staging delete in §7.4. |
 | **2012 iPhone backup** `oldmac-unibody/priority/MobileSync/` | stays inside `archive/oldmac-unibody/` | **yes** (extract) | **yes** | Oldest phone photos. |
 | `gauss/` MacBook home (69G) | `archive/gauss/` (→ dataset) | photos only (`Pictures/`, iPhoto/Aperture) | **yes** | Extract from library packages, not Photos.app. |
 | **Dropbox `Camera Uploads/`** (36G, 2010–2018) | `archive/dropbox-cloud/` | **yes** | **yes** | Prime source of pre-Immich photos. |
@@ -258,7 +260,7 @@ amplification on read).
 ### New dataset vs. subdirectory — the rule
 Make a **new child dataset** (not just a `mkdir`) when the child needs an
 **independent** snapshot schedule, quota, or recordsize. Concretely:
-- **Per-machine archive dirs → each its own dataset** (`archive/winpc-5800x`,
+- **Per-machine archive dirs → each its own dataset** (`archive/winpc-5600x`,
   `archive/gauss`, …) so a machine's snapshot/manifest is independent and a
   finished source can be snapshotted + frozen without touching others. (The
   mac-laptop-archive plan already assumes this for *new* machines; §7 back-fills the
@@ -277,7 +279,7 @@ Make a **new child dataset** (not just a `mkdir`) when the child needs an
 > recovery writes are done and per resource, verifying with a manifest first (§7).
 
 ### Naming
-- Datasets/dirs: lowercase kebab, machine-ids stable (`winpc-5800x`, `gauss`,
+- Datasets/dirs: lowercase kebab, machine-ids stable (`winpc-5600x`, `gauss`,
   `oldmac-unibody`, `oldmac-salvage`, `dropbox-cloud`, `capsule-tm-2014`).
 - Reserved `_`-prefixed helper dirs inside `archive/`: `_tools/`, `_manifests/`.
 
@@ -405,7 +407,7 @@ jobs are still writing** (§0 warning).
 - **D2 — Videos in Immich?** `family/videos` (home movies) — index in Immich
   alongside photos (one timeline, one face-search), keep separate for Jellyfin, or
   both? Affects whether `videos` sits under the Immich external-library root.
-- **D3 — Prune vs. keep whole machine dumps.** `winpc-5800x/George` is a full home
+- **D3 — Prune vs. keep whole machine dumps.** `winpc-5600x/George` is a full home
   incl. `AppData` (8.4G), caches, `.docker`, tool configs. Keep the machine
   bit-faithful forever, or, after sealing a manifest, prune obvious junk
   (caches/AppData) to shrink the cold set? Recommend **keep faithful** given 18.5T
@@ -418,9 +420,9 @@ jobs are still writing** (§0 warning).
   with per-category children at 1M — nothing to promote.)* Only open question: add
   per-category **quotas** (movies/tv/music) to cap a category, or leave unquota'd?
   Unquota'd is simplest given 18.5T free.
-- **D6 — machine-id reconciliation.** `winpc-5800x` (on disk) vs `winpc-5600x` (mac
-  plan). Confirm the real CPU and rename the dataset **before** it's referenced
-  further.
+- ~~**D6 — machine-id reconciliation.**~~ **DECIDED 2026-08-29: `winpc-5600x`.**
+  CPU verified on the box as a Ryzen 5 5600X, so the on-disk `winpc-5800x` was the
+  wrong one. Directory and inventory catalog renamed; repo references updated.
 - **D7 — Snapshot cadence for archive.** Sealed-on-write only, or also a light
   periodic (e.g. weekly, 4-deep) while machines are still being appended? Default
   proposal: sealed-on-write + weekly-4 until sealed.

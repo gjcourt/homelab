@@ -118,4 +118,4 @@ these Dropbox/machine folders route elsewhere:
 ## Basis
 
 Grounded in a 2026-07-06 live scan of `family/documents` plus the `dropbox-cloud`,
-`gauss`, `oldmac-unibody`, `winpc-5800x`, and hackintosh (`Poseidon`) archives on hestia.
+`gauss`, `oldmac-unibody`, `winpc-5600x`, and hackintosh (`Poseidon`) archives on hestia.

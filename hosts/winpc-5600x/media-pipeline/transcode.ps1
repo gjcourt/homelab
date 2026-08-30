@@ -19,15 +19,22 @@
      bitrate above a floor, AND a real decoded frame. Duration and bitrate alone
      are not enough - a broken stream can report the right duration.
 
-  2. COLOUR METADATA. One title reproducibly encodes to a stream whose packets
-     do not decode, while ffmpeg exits 0 and the duration reads correctly. The
-     mechanism is NOT established - color_space=unknown is not sufficient on its
-     own (another title is also unknown and encodes fine). What is established is
-     that adding explicit BT.709 tags to otherwise-identical arguments produces a
-     correct encode, on two separate runs. So this script injects them when a
-     source lacks colour metadata: a validated workaround, and independently
-     correct since BT.709 is right for HD Blu-ray. The validation gate above,
-     not this, is the actual protection - it does not depend on knowing why.
+  2. SUBTITLE BACKPRESSURE DEADLOCK - ROOT CAUSE, found 2026-08-29.
+     Mapping subtitles into the ENCODE pass (`-map 0:s?` + `-c:s copy`) can make
+     ffmpeg silently encode almost nothing. If any mapped output stream produces
+     packets very rarely - a forced-narrative subtitle track with 8 cues across a
+     137-minute film - its output queue never fills, so the demuxer never blocks.
+     ffmpeg then reads the ENTIRE source into RAM (21.5 GB observed on a 40 GB
+     input), reaches EOF, and shuts down CLEANLY with ~195,000 video packets
+     still queued and never encoded.
+     The result passes every naive check: exit code 0, correct container
+     duration, video packets present across the whole timeline. Only 1671 of
+     197,304 frames were actually encoded - and x265 encoded those 1671
+     perfectly, at 5028 kb/s and QP 19.56. The encoder was never the problem.
+     Fix: encode video+audio ONLY, then mux subtitles back in a separate
+     `-c copy` pass where nothing can starve. Colour metadata, frame rate and
+     rate control were all investigated and are all irrelevant - they were
+     coincidences of the one title that happened to have a sparse track.
 
 .PARAMETER Queue
   TSV file, one title per line: <source path><TAB><Library Name>
@@ -91,10 +98,9 @@ foreach ($i in $items) {
   if ($d -le 0) { Log ("  UNREADABLE   : " + $i.Name); continue }
   $rel = "media/video/movies/$($i.Name)/$($i.Name).mkv"
   if (OnHestia $rel) { Log ("  SKIP on hestia: " + $i.Name); continue }
-  $cs = Probe $i.Src 'stream=color_space' 'v:0'
-  $needsColour = (-not $cs) -or ($cs -match 'unknown') -or ($cs -match 'N/A')
-  Log ("  QUEUED       : " + $i.Name + "  " + [math]::Round($d/60,1) + "min" + $(if ($needsColour) { '  [will inject BT.709 - source colour metadata missing]' } else { '' }))
-  $runnable += [pscustomobject]@{ Src = $i.Src; Name = $i.Name; Dur = $d; NeedsColour = $needsColour }
+  $nsub = @(Probe $i.Src 'stream=index' 's').Count
+  Log ("  QUEUED       : " + $i.Name + "  " + [math]::Round($d/60,1) + "min  subs=" + $nsub + " (muxed after encode, never mapped into it)")
+  $runnable += [pscustomobject]@{ Src = $i.Src; Name = $i.Name; Dur = $d; Subs = $nsub }
 }
 Log ("== PREFLIGHT DONE: $($runnable.Count) to encode ==")
 if ($DryRun) { Log 'DRY RUN - stopping here'; exit 0 }
@@ -115,15 +121,47 @@ foreach ($it in $runnable) {
   if (Test-Path $local) { Remove-Item $local -Force; Log "removed stale local for $name" }
   Log ("START $name  src=" + [math]::Round($it.Dur/60,1) + "min  free=" + [math]::Round($free,0) + "GB" + $(if ($it.NeedsColour) { '  (+BT.709)' } else { '' }))
 
-  # NB: do not name this variable after the PowerShell automatic one - assigning
-  # to it shadows the real one under [CmdletBinding()].
-  $ffArgs = @('-nostdin','-y','-hide_banner','-loglevel','error','-i',$it.Src,
-              '-map','0:v:0','-map','0:a:0','-map','0:s?',
-              '-c:v','libx265','-b:v',"${Bitrate}k",'-tag:v','hvc1')
-  if ($it.NeedsColour) { $ffArgs += @('-colorspace','bt709','-color_primaries','bt709','-color_trc','bt709') }
-  $ffArgs += @('-c:a','aac','-b:a','160k','-ac','2','-c:s','copy',$local)
+  # STAGE 1 - video + audio ONLY. Subtitles are deliberately NOT mapped here:
+  # a sparse subtitle track defeats demuxer backpressure and silently drops
+  # ~99% of frames (see header). `-tag:v hvc1` is also gone - it is an
+  # MP4-family FourCC and meaningless in Matroska.
+  # `-v warning -stats` (not -loglevel error): the failing run was invisible
+  # precisely because ffmpeg's own frame=/time= line was suppressed.
+  $va = Join-Path $WORK "$name.va.mkv"
+  if (Test-Path $va) { Remove-Item $va -Force }
+  $ffArgs = @('-nostdin','-y','-hide_banner','-v','warning','-stats','-i',$it.Src,
+              '-map','0:v:0','-map','0:a:0',
+              '-c:v','libx265','-b:v',"${Bitrate}k",
+              '-c:a','aac','-b:a','160k','-ac','2',$va)
   & $FF @ffArgs
   if ($LASTEXITCODE -ne 0) { Log "FAIL encode (exit $LASTEXITCODE): $name"; continue }
+
+  # ---- FRAME-COUNT GATE: the check that would have caught this on day one ----
+  # ffmpeg exits 0 having encoded 0.85% of the frames, so exit code proves
+  # nothing. Compare frames actually present against duration x frame rate.
+  $fps = Probe $va 'stream=r_frame_rate' 'v:0'
+  $num,$den = ($fps -split '/')
+  $fpsVal = if ($den) { [double]$num / [double]$den } else { [double]$num }
+  $expected = [math]::Round($it.Dur * $fpsVal)
+  $actual = [int](Probe $va 'stream=nb_frames' 'v:0')
+  if ($actual -le 0) {
+    $cnt = & $FP -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of default=nw=1:nk=1 $va 2>$null
+    $actual = [int]$cnt
+  }
+  $framePct = if ($expected -gt 0) { $actual / $expected * 100 } else { 0 }
+  if ($framePct -lt 99) {
+    Log ("FAIL frame count: $name has $actual frames, expected ~$expected (" + [math]::Round($framePct,2) + "%) -- keeping local. This is the subtitle-backpressure signature.")
+    continue
+  }
+  Log ("  frames OK: $actual / ~$expected (" + [math]::Round($framePct,1) + "%)")
+
+  # STAGE 2 - mux the subtitle tracks back in a pure copy pass, where a sparse
+  # stream cannot starve anything.
+  if ($it.Subs -gt 0) {
+    & $FF -nostdin -y -hide_banner -v warning -i $va -i $it.Src -map '0:v:0' -map '0:a:0' -map '1:s' -c copy $local
+    if ($LASTEXITCODE -ne 0) { Log "FAIL subtitle mux: $name -- keeping $va"; continue }
+    Remove-Item $va -Force
+  } else { Move-Item $va $local -Force }
 
   # ---- validation gate ------------------------------------------------
   if (-not (Test-Path $local)) { Log "FAIL no output file: $name"; continue }

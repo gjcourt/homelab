@@ -61,35 +61,56 @@ extract a frame and check its size.
 
 On any failure the local copy is **kept**, never pushed and never deleted.
 
-### 2. libx265 can silently emit an undecodable stream
+### 2. Subtitle backpressure deadlock — ROOT CAUSE
 
-On this library exactly one title — *The Tale of the Princess Kaguya* — reproducibly
-encodes to a stream whose **packets do not decode into frames**, while ffmpeg exits 0
-and the container reports the correct 137-minute duration. It happened on 2026-08-04
-and again, identically, on 2026-08-29 (3m09s/110MB then 3m23s/106MB, both 108 kbps).
+**Mapping subtitles into the encode pass can make ffmpeg silently encode almost
+nothing.** Found 2026-08-29 after four wrong theories.
 
-**The mechanism is not established.** Recording what was actually tested, because
-several plausible-sounding explanations were checked and disproved:
+`-map "0:s?"` with `-c:s copy` maps every subtitle track into the *encoding*
+process. If any mapped output stream produces packets very rarely, its output
+queue never fills, so **the demuxer never blocks**. ffmpeg reads the entire
+source into RAM, hits EOF, and shuts down *cleanly* with the video queue still
+full.
 
-| Hypothesis | Verdict |
-| :--- | :--- |
-| Truncated / partial encode | **No** — output has video packets across the full 137 min |
-| Wrong stream picked by `-map 0:v:0` | **No** — the source has exactly one video stream |
-| Corrupt source | **No** — source has 24 fps of packets at every timestamp and extracts 2.3 MB frames |
-| Disk-space cascade from the preceding failed push | **No** — reproduced later with 570 GB free |
-| Missing colour metadata (`color_space=unknown`) | **Not sufficient** — *Marty Supreme* is also `unknown` and encodes healthily |
-| Exactly-24 fps (`24/1`) vs `24000/1001` | Correlates across n=3, **not isolated** — the follow-up test changed two variables |
+*The Tale of the Princess Kaguya* has four PGS tracks, one of which is a
+**forced-narrative French track carrying 8 subtitle cues across 137 minutes**:
 
-**What reliably works:** adding explicit BT.709 tags to the otherwise-identical real
-arguments produced a correct 4.8 Mbps decodable encode on two separate runs. So the
-script injects them when a source lacks colour metadata. That is a *validated
-workaround*, not a proven fix for a understood cause — and it is independently
-correct, since BT.709 is the right colour space for HD Blu-ray and those sources
-genuinely are missing it.
+```
+Input stream #0:9 (subtitle):     8 packets read
+Input stream #0:0 (video):   132753 packets read;  1671 frames decoded
+Output stream #0:0 (video):                        1671 frames encoded
+encoded 1671 frames in 152.90s (10.93 fps), 5028.15 kb/s, Avg QP:19.56
+ffmpeg RSS at time of failure: 21.5 GB   (healthy run: 0.9 GB)
+```
 
-**The validation gate, not the workaround, is the actual protection.** It does not
-depend on knowing the cause: any encode that fails to produce a decodable frame is
-refused, whatever produced it.
+**1,671 of 197,304 frames — 0.85%.** And x265 encoded those 1,671 *perfectly*, at
+5028 kb/s and QP 19.56. **The encoder was never the problem.** The file reads as
+108 kbps only because 1,671 frames are smeared across a 137-minute timeline.
+
+It passes every naive check: **exit code 0**, correct container duration, video
+packets present across the whole timeline.
+
+**Fix:** encode video + audio only, then mux subtitles back in a separate
+`-c copy` pass, where a sparse stream cannot starve anything.
+
+**Things that were investigated and are irrelevant** — all coincidences of the
+one title that happened to have a sparse track: colour metadata
+(`color_space=unknown`), frame rate (`24/1` vs `24000/1001`), rate control
+(CRF vs ABR), `-tag:v hvc1`, source integrity, and disk space. BT.709 tags
+"fixed" 60-second clips twice — clips are short enough that the queue never
+blows up, so *any* clip test passes and none of them predict full-file
+behaviour.
+
+**Why it hid for 25 days:** `-loglevel error` suppressed ffmpeg's own
+`frame= … time= … speed=` line. One look at `speed=53.8x` on a 137-minute film
+would have ended it immediately.
+
+### The frame-count gate
+
+Exit code proves nothing here, so the gate compares frames actually present
+against `duration × frame_rate` and fails below 99%. That is the check that
+would have caught this on day one, and it is cheap — ffmpeg already prints the
+number.
 
 ## Encoder settings
 

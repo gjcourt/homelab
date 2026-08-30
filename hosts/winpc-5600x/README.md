@@ -46,10 +46,16 @@ previous five scripts drifted. Only `queue.example.tsv` is tracked.
 **`winpc-5600x` is the machine id** — settled 2026-08-29. The CPU is a Ryzen 5
 5600X, verified on the box.
 
-⚠️ The hestia archive dataset is still `archive/winpc-5800x` and needs renaming to
-match. That is Open Question D6 in
-[`docs/plans/2026-07-06-hestia-data-organization.md`](../../docs/plans/2026-07-06-hestia-data-organization.md),
-now decided: rename the dataset, do not rename this directory.
+The hestia archive directory was renamed `archive/winpc-5800x` → `archive/winpc-5600x`
+on 2026-08-29 (metadata-only `mv` — it is a plain directory inside `main/archive`, not
+its own dataset; the `_inventory` catalog was renamed to match and no NFS/SMB share
+referenced it). Open Question D6 in
+[`docs/plans/2026-07-06-hestia-data-organization.md`](../../docs/plans/2026-07-06-hestia-data-organization.md)
+is closed.
+
+Note `gauss` in `archive/` is an **old MacBook**, not this box. An ssh key here carries
+a `gauss-transcode` comment purely because it was copied from that laptop — it is not a
+name for this machine, and it is dead on the GitHub account.
 
 Note `gauss` refers to an **old MacBook** in `archive/`, not this box.
 

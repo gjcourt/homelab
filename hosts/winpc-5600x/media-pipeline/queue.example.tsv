@@ -1,0 +1,14 @@
+# Transcode queue - TSV, one title per line: <source path>\t<Library Name>
+# Blank lines and # comments ignored. The Library Name becomes both the
+# directory and the filename on hestia: media/video/movies/<Name>/<Name>.mkv
+#
+# Pick the SOURCE by duration, not by filename - the main feature is NOT
+# always _t00. Check with:
+#   ffprobe -v quiet -show_entries format=duration -of csv=p=0 <file>
+#
+# Get the canonical "Title (Year)" from Radarr rather than guessing, and
+# match any directory that already exists on hestia EXACTLY (capitalisation
+# included) or you will create a duplicate.
+
+C:\Video\OLDBOY\title_t00.mkv	Oldboy (2003)
+C:\Video\Marty Supreme\Marty Supreme-FPL_MainFeature_t00.mkv	Marty Supreme (2025)

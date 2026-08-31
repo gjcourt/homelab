@@ -49,32 +49,29 @@ spec:
               value: info
             - name: ND_SCANSCHEDULE
               value: 1h
-            # Delete media_file rows whose files are gone, instead of keeping them
-            # forever (upstream default is "never").
+            # ND_SCANNER_PURGEMISSING is intentionally left at its upstream
+            # default ("never"). Do not set it to "full" as a standing config.
             #
-            # Why this is needed: after the 2026-07-22 bulk folder rename and the
-            # 2026-08-30 mojibake repair, 408 rows pointed at paths that no longer
-            # exist. Navidrome MARKS them missing but never removes them, and album
-            # aggregation COUNTS missing tracks — so "Sublime" showed as two albums
-            # of 17 and 18 tracks when only 17 files exist, and "40 Oz. To Freedom"
-            # showed alongside the real "40 Oz to Freedom".
+            # Navidrome MARKS rows missing when their file disappears but never
+            # removes them, and album aggregation COUNTS missing tracks — so stale
+            # rows surface as phantom duplicate albums. That backlog was cleared as
+            # a one-off on 2026-08-30/31 (408 rows from the bulk folder rename and
+            # mojibake repair, then 27 more from the State Radio folder split).
             #
-            # ⚠️ "full" only purges after a FULL scan. The hourly schedule runs a
-            # QUICK scan, where this setting is a silent no-op. Trigger a full scan
-            # explicitly after changing it.
+            # Why it is not left on: with purging enabled, a file that MOVES is
+            # deleted and re-added rather than re-linked, losing its play counts and
+            # ratings. This library gets bulk-renamed, so that is a live risk, and
+            # the blast radius of a mount blip plus a full scan is the whole table.
             #
-            # ⚠️ Do NOT verify from the scan log. Navidrome reports
-            # "tracksMissing=0, errors: 0" while stale rows persist (upstream #5514,
-            # open against 0.61.2 — this library was living proof: a 17-track phantom
-            # album survived five weeks of "clean" scans). Verify with SQL:
-            #   SELECT missing, count(*) FROM media_file GROUP BY missing;
-            #
-            # Trade-off: with purging on, a file that MOVES is deleted and re-added
-            # rather than re-linked, losing its play counts and ratings. That matters
-            # here because this library gets bulk-renamed. Revert to the default once
-            # the backlog is cleared.
-            - name: ND_SCANNER_PURGEMISSING
-              value: "full"
+            # To clear a future backlog, set it to "full" TEMPORARILY and revert:
+            #   ⚠️ "full" only purges after a FULL scan. The hourly schedule runs a
+            #      QUICK scan, where the setting is a silent no-op. Trigger
+            #      `/app/navidrome scan --full` explicitly.
+            #   ⚠️ Do NOT verify from the scan log. Navidrome reports
+            #      "tracksMissing=0, errors: 0" while stale rows persist (upstream
+            #      #5514, open against 0.61.2 — a 17-track phantom album survived
+            #      five weeks of "clean" scans here). Verify with SQL:
+            #        SELECT missing, count(*) FROM media_file GROUP BY missing;
             - name: ND_SESSIONTIMEOUT
               value: 24h
             - name: ND_EXTAUTH_TRUSTEDSOURCES

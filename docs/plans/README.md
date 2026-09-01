@@ -79,10 +79,11 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (18)
+### Planned (19)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-09-01-readonly-pvc-recovery.md](2026-09-01-readonly-pvc-recovery.md) | 2026-09-01 | read-only iSCSI remounts have recurred six times and always need an operator; detection is now solved by pvc-writeprobe, so close the remaining gap with a recovery script that encodes the runbook's traps — and deliberately do NOT build a controller that suspends Flux or restarts Postgres |
 | [2026-08-18-hestia-sshd-refused-diagnosis.md](2026-08-18-hestia-sshd-refused-diagnosis.md) | 2026-08-18 | hestia's sshd intermittently refuses port 22 while every other service stays up; the MaxStartups theory carried across sessions is disproven, so collect wedged-state evidence before changing any setting — **blocked:** Evidence from the wedged state, which has been destroyed 4-5 times by restarting the service before capturing it. Next wedge: capture from the TrueNAS web Shell over 443 BEFORE restarting. |
 | [2026-08-18-hestia-deploy-monitoring-gap.md](2026-08-18-hestia-deploy-monitoring-gap.md) | 2026-08-18 | hestia has no per-container metrics and no signal when the GitHub runner dies, so deploys failed silently for days; close it with an off-cluster canary, post-apply verification, and a container probe on the heartbeat that already exists |
 | [2026-08-09-local-deadman-mesh.md](2026-08-09-local-deadman-mesh.md) | 2026-08-09 | Cross-monitor k8s, hestia and alcatraz so each reports the others' death, with healthchecks.io as the arbiter that tells one-box failure from a site event — **blocked:** Operator: are the Talos nodes, hestia and alcatraz on the same UPS/circuit? Determines how much this buys. |
@@ -136,6 +137,5 @@ see `scripts/plans-index/`).
 | [2026-05-04-llama-cpp-benchmarking.md](2026-05-04-llama-cpp-benchmarking.md) | 2026-06-10 | Systematic llama.cpp benchmarking on hestia 4090s — moot after GPU sale |
 | [2026-05-02-signal-cli-hermes-rollout.md](2026-05-02-signal-cli-hermes-rollout.md) | 2026-05-03 | Signal-cli + signal-bridge as TrueNAS Custom App; went k8s-native instead — superseded by [2026-05-02-hermes-bot-k8s.md](2026-05-02-hermes-bot-k8s.md) |
 | [2026-03-08-bgp-rollout.md](2026-03-08-bgp-rollout.md) | 2026-06-10 | L2 → BGP LoadBalancer advertisement with the UCGF; phases 1-3 live, phase 4 reverted — superseded by [2026-05-06-network-resilience-and-bgp-completion.md](2026-05-06-network-resilience-and-bgp-completion.md) |
-| [2026-09-01-readonly-pvc-recovery.md](2026-09-01-readonly-pvc-recovery.md) | 2026-09-01 | read-only iSCSI remounts have recurred six times and always need an operator; detection is solved by pvc-writeprobe, so close the gap with a recovery script that encodes the runbook's traps — and deliberately do NOT build a controller that suspends Flux or restarts Postgres |
 
 <!-- END PLANS INDEX -->

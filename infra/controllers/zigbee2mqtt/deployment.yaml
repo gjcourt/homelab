@@ -17,6 +17,11 @@ spec:
       labels:
         app: zigbee2mqtt
     spec:
+      # zigbee2mqtt closes its SQLite database and writes coordinator_backup.json
+      # on SIGTERM. The 30s default can clip that on a slow iSCSI volume, and a
+      # half-written close is what the next attach has to recover from. Cheap
+      # insurance on a single-replica workload that is never in a hurry to stop.
+      terminationGracePeriodSeconds: 60
       initContainers:
         - name: init-config
           image: busybox@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
@@ -24,7 +29,28 @@ spec:
           # iSCSI target flap remounts the ext4 volume read-only, and z2m otherwise
           # starts and burns hundreds of restarts on a confusing `ENOENT mkdir` deep
           # in the app. Fail the init fast with a clear recovery hint instead.
-          command: ['sh', '-c', "SENTINEL=/app/data/.mount-writable; if ! ( touch $SENTINEL && rm -f $SENTINEL ) 2>/dev/null; then echo 'FATAL: /app/data not writable - stale/read-only iSCSI mount (see issue #1080); recover with: kubectl -n zigbee2mqtt scale deploy/zigbee2mqtt --replicas=0 then --replicas=1' >&2; exit 1; fi; if [ ! -s /app/data/configuration.yaml ]; then cp -L /tmp/config/configuration.yaml /app/data/configuration.yaml; fi"]
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              SENTINEL=/app/data/.mount-writable
+              # Write BYTES and read them back. `touch` alone succeeds on a
+              # filesystem with no free space, so it passes a volume that is
+              # full -- see AGENTS.md "Recovering read-only iSCSI volumes".
+              if ! printf writable > "$SENTINEL" 2>/dev/null || [ ! -s "$SENTINEL" ]; then
+                rm -f "$SENTINEL" 2>/dev/null || true
+                echo "FATAL: /app/data is not writable." >&2
+                echo "Most likely a read-only iSCSI remount (issue #1080), or the volume is full." >&2
+                echo "Do NOT just scale to 0/1 -- Flux reverts a scale-to-0 within the reconcile" >&2
+                echo "interval. Follow AGENTS.md 'Recovering read-only iSCSI volumes', which" >&2
+                echo "suspends the Kustomization first and waits for volumeattachment to clear." >&2
+                exit 1
+              fi
+              rm -f "$SENTINEL"
+              if [ ! -s /app/data/configuration.yaml ]; then
+                cp -L /tmp/config/configuration.yaml /app/data/configuration.yaml
+              fi
           volumeMounts:
             - name: config
               mountPath: /tmp/config

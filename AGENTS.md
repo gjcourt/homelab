@@ -209,6 +209,53 @@ comparison against `"0"` never matches and the loop hangs — with production
 reconciliation suspended. Use `-eq`, and if you abort partway, **resume Flux
 first**. Verify with `flux get kustomizations -A` showing `SUSPENDED=False`.
 
+### Testing the alert (game-day)
+
+`PvcNotWritable` guards the most common failure in this cluster and had **never
+fired** until 2026-09-01. Re-run this after any change to `pvc-writeprobe` or its
+rules — the first run found a bug that only appears when the alert renders.
+
+Use a throwaway namespace and an **ephemeral** StorageClass. Never test on a
+production PVC.
+
+```bash
+kubectl create ns readonly-gameday
+kubectl label ns readonly-gameday pod-security.kubernetes.io/enforce=privileged
+# PVC on truenas-iscsi-ephemeral (Delete reclaim) + a privileged busybox pod
+# mounting it at /data, then:
+kubectl -n readonly-gameday exec gameday -- mount -o remount,ro /data
+```
+
+Then watch, in order:
+
+| Stage | Expect | Timing |
+| --- | --- | --- |
+| Probe picks up the new PVC | sweep count increments in `kubectl -n monitoring logs deploy/pvc-writeprobe` | up to 5 min |
+| `homelab_pvc_writable` for it | flips `1` -> `0` | next sweep, `INTERVAL_SECONDS=300` |
+| `ALERTS{alertname="PvcNotWritable"}` | `pending` | within one scrape + eval interval of the flip |
+| Same | `firing` | `for: 10m` later |
+
+**Detection-to-page is therefore ~15–16 minutes** (300s sweep + 60s scrape +
+`for: 10m` + one rule-eval interval).
+[#1300](https://github.com/gjcourt/homelab/issues/1300) asks for an alert inside
+5 minutes; that is not currently met.
+
+⚠️ **`remount,ro` does not reproduce the real failure.** It sets the mount flag,
+which is the variant `node_filesystem_readonly` can already see. The failure this
+probe exists for is ext4 `emergency_ro` — writes return `EROFS` while the mount
+still advertises `rw`. This procedure tests the exec path, the metric and the
+alert plumbing; it does **not** test the discriminating advantage. For that you
+need a device-level error (dm-error, or an iSCSI target flap on a throwaway LUN).
+
+Tear down with `kubectl delete ns readonly-gameday`. The ephemeral StorageClass
+reclaims the volume.
+
+⚠️ **Query on `exported_namespace`, not `namespace`.** The ServiceMonitor scrape
+attaches the probe's own `namespace=monitoring` / `pod=pvc-writeprobe-...`,
+which collides with the labels the probe exports for the workload it tested, so
+Prometheus prefixes the target's with `exported_`. Filtering on bare `namespace`
+returns only `monitoring` and looks like the probe never saw your test volume.
+
 ### After recovery
 
 Re-check writability per pod (status will look fine either way), confirm CNPG

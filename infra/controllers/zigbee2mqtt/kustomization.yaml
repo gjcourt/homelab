@@ -25,10 +25,29 @@ configMapGenerator:
       #    The 493-restart crashloop was `ENOENT: mkdir '/app/data/log/<ts>'` on a
       #    read-only mount -- that code path now does not exist.
       #
-      # 2. It takes the volume from 14.9M to ~50K. Measured 2026-09-01: 14.8M of
-      #    the 14.9M was /app/data/log across 10 timestamped dirs. The state that
-      #    actually matters -- configuration.yaml, coordinator_backup.json,
-      #    database.db -- is about 30K. Less on iSCSI is less to lose.
+      # 2. It stops FUTURE log writes to the volume. Measured 2026-09-01: 14.8M
+      #    of the 14.9M was /app/data/log across 10 timestamped dirs; the state
+      #    that matters -- configuration.yaml, coordinator_backup.json,
+      #    database.db -- is about 30K.
+      #
+      #    ⚠️ It does NOT reclaim the existing 14.8M, and it makes that worse:
+      #    z2m's own pruner (`log_directories_to_keep`) lives inside the SAME
+      #    `includes("file")` branch as the mkdirSync, so turning off file output
+      #    also turns off the only janitor. Those 10 directories become
+      #    permanently orphaned. They need a one-time manual removal -- a
+      #    live-data operation, deliberately not done from a manifest.
+      #
+      # ⚠️ This is ONE-WAY. z2m's write() overlays env vars onto the object it
+      #    serialises, so `advanced: log_output: [console]` gets baked into
+      #    configuration.yaml ON THE PVC. Reverting this commit will not restore
+      #    file logging; read() never strips env-derived values back out. A
+      #    revert needs a manual edit of the PVC's configuration.yaml.
+      #
+      # ⚠️ May take one extra restart to bite. settings.get() reads defaults+file
+      #    and does NOT apply env vars; only write() overlays them, and the
+      #    logger initialises early. The first boot after this lands may still
+      #    read ["console","file"] and create a log dir. Verify after rollout
+      #    that no new /app/data/log/<ts> appears.
       #
       # Value must be JSON: applyEnvironmentVariables() JSON.parses array-typed
       # keys and silently falls back to the raw string on failure, so a bare

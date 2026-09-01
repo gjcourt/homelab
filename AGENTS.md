@@ -232,12 +232,20 @@ Then watch, in order:
 | --- | --- | --- |
 | Probe picks up the new PVC | sweep count increments in `kubectl -n monitoring logs deploy/pvc-writeprobe` | up to 5 min |
 | `homelab_pvc_writable` for it | flips `1` -> `0` | next sweep, `INTERVAL_SECONDS=300` |
-| `ALERTS{alertname="PvcNotWritable"}` | `pending` | immediately after the flip |
+| `ALERTS{alertname="PvcNotWritable"}` | `pending` | within one scrape + eval interval of the flip |
 | Same | `firing` | `for: 10m` later |
 
-**Detection-to-page is therefore up to ~15 minutes** (5 min sweep + 10 min
-`for`). [#1300](https://github.com/gjcourt/homelab/issues/1300) asks for an alert
-inside 5 minutes; that is not currently met.
+**Detection-to-page is therefore ~15–16 minutes** (300s sweep + 60s scrape +
+`for: 10m` + one rule-eval interval).
+[#1300](https://github.com/gjcourt/homelab/issues/1300) asks for an alert inside
+5 minutes; that is not currently met.
+
+⚠️ **`remount,ro` does not reproduce the real failure.** It sets the mount flag,
+which is the variant `node_filesystem_readonly` can already see. The failure this
+probe exists for is ext4 `emergency_ro` — writes return `EROFS` while the mount
+still advertises `rw`. This procedure tests the exec path, the metric and the
+alert plumbing; it does **not** test the discriminating advantage. For that you
+need a device-level error (dm-error, or an iSCSI target flap on a throwaway LUN).
 
 Tear down with `kubectl delete ns readonly-gameday`. The ephemeral StorageClass
 reclaims the volume.

@@ -35,19 +35,37 @@ spec:
             - |
               set -e
               SENTINEL=/app/data/.mount-writable
-              # Write BYTES and read them back. `touch` alone succeeds on a
-              # filesystem with no free space, so it passes a volume that is
-              # full -- see AGENTS.md "Recovering read-only iSCSI volumes".
-              if ! printf writable > "$SENTINEL" 2>/dev/null || [ ! -s "$SENTINEL" ]; then
-                rm -f "$SENTINEL" 2>/dev/null || true
-                echo "FATAL: /app/data is not writable." >&2
-                echo "Most likely a read-only iSCSI remount (issue #1080), or the volume is full." >&2
-                echo "Do NOT just scale to 0/1 -- Flux reverts a scale-to-0 within the reconcile" >&2
-                echo "interval. Follow AGENTS.md 'Recovering read-only iSCSI volumes', which" >&2
-                echo "suspends the Kustomization first and waits for volumeattachment to clear." >&2
+
+              fatal() {
+                echo "FATAL: $1" >&2
+                echo "Recover per AGENTS.md 'Recovering read-only iSCSI volumes'." >&2
+                echo "Do NOT just scale to 0/1 -- Flux reverts a scale-to-0 within the" >&2
+                echo "reconcile interval. NOTE this workload is reconciled by" >&2
+                echo "infra-controllers, NOT apps-production:" >&2
+                echo "  flux suspend kustomization infra-controllers -n flux-system" >&2
                 exit 1
+              }
+
+              # Free space, checked SEPARATELY from the write. A leftover sentinel
+              # from a SIGKILL between write and unlink defeats the write test on a
+              # full volume: `>` truncates it, freeing its block, and the rewrite
+              # reuses it -- so the guard passes a 100%-full filesystem. Measured on
+              # ext4 at 0K avail.
+              FREE_KB=$(df -Pk /app/data | awk 'NR==2 {print $4}')
+              case "$FREE_KB" in
+                ''|*[!0-9]*) fatal "could not read free space on /app/data" ;;
+              esac
+              [ "$FREE_KB" -ge 1024 ] || fatal "/app/data has only ${FREE_KB}K free."
+
+              # Then write BYTES and read them back. `touch` alone succeeds on a
+              # full filesystem -- see AGENTS.md. stderr is deliberately NOT
+              # suppressed: the kernel's errno ("Read-only file system" vs "No space
+              # left on device") is more precise than anything printed below.
+              if ! printf writable > "$SENTINEL" || [ ! -s "$SENTINEL" ]; then
+                rm -f "$SENTINEL" 2>/dev/null || true
+                fatal "/app/data is not writable (most likely a read-only iSCSI remount, issue #1080)."
               fi
-              rm -f "$SENTINEL"
+              rm -f "$SENTINEL" || true
               if [ ! -s /app/data/configuration.yaml ]; then
                 cp -L /tmp/config/configuration.yaml /app/data/configuration.yaml
               fi

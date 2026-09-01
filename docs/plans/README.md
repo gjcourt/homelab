@@ -79,10 +79,11 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (18)
+### Planned (19)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-09-01-recover-readonly-pvc-script.md](2026-09-01-recover-readonly-pvc-script.md) | 2026-09-01 | implementation plan for scripts/recover-readonly-pvc.sh — the Tier 1 deliverable from the read-only PVC recovery plan; encodes the AGENTS.md runbook with a trap so Flux always resumes, gates on volumeattachment rather than pod count, detects the owning Kustomization instead of hardcoding apps-production, and refuses CNPG outright |
 | [2026-08-18-hestia-sshd-refused-diagnosis.md](2026-08-18-hestia-sshd-refused-diagnosis.md) | 2026-08-18 | hestia's sshd intermittently refuses port 22 while every other service stays up; the MaxStartups theory carried across sessions is disproven, so collect wedged-state evidence before changing any setting — **blocked:** Evidence from the wedged state, which has been destroyed 4-5 times by restarting the service before capturing it. Next wedge: capture from the TrueNAS web Shell over 443 BEFORE restarting. |
 | [2026-08-18-hestia-deploy-monitoring-gap.md](2026-08-18-hestia-deploy-monitoring-gap.md) | 2026-08-18 | hestia has no per-container metrics and no signal when the GitHub runner dies, so deploys failed silently for days; close it with an off-cluster canary, post-apply verification, and a container probe on the heartbeat that already exists |
 | [2026-08-09-local-deadman-mesh.md](2026-08-09-local-deadman-mesh.md) | 2026-08-09 | Cross-monitor k8s, hestia and alcatraz so each reports the others' death, with healthchecks.io as the arbiter that tells one-box failure from a site event — **blocked:** Operator: are the Talos nodes, hestia and alcatraz on the same UPS/circuit? Determines how much this buys. |

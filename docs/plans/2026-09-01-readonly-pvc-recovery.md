@@ -132,6 +132,30 @@ of 2026-08-13 is every StatefulSet at once.
   recovered in about a minute on 8/13. The timeout is not the explanation, and
   changing it would be guessing at a mechanism we cannot evidence.
 
+## Game-day result — 2026-09-01
+
+**`PvcNotWritable` fired for the first time.** Run against a throwaway PVC on
+`truenas-iscsi-ephemeral` in namespace `readonly-gameday`, forced read-only with
+`mount -o remount,ro /data`:
+
+| Time (UTC) | Event |
+| --- | --- |
+| 18:24:22 | `homelab_pvc_writable` = 1 |
+| — | `mount -o remount,ro /data`; writes return `EROFS` |
+| 18:24:46 | metric flips to **0** (next sweep) |
+| 18:34:36 | alert **firing**, `exported_namespace=readonly-gameday` |
+
+**Remount to page: 10m 14s.** Procedure recorded in `AGENTS.md` §
+*Testing the alert (game-day)*.
+
+**It found a bug on the first run.** Every annotation used `{{ $labels.namespace }}`
+and `{{ $labels.pod }}`, which are the *probe's* labels, not the affected
+workload's — the scrape collision prefixes the target's with `exported_`. A real
+AdGuard failure would have paged `PVC monitoring/config-adguard-0`, sending the
+operator to the wrong namespace. Fixed in
+[#1389](https://github.com/gjcourt/homelab/pull/1389). The alert had never fired,
+so its annotation had never been rendered — that is the argument for game-days.
+
 ## Acceptance
 
 - A deliberate read-only remount on a test PVC is recovered by one invocation of

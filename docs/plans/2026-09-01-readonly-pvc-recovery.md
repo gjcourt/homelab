@@ -31,7 +31,16 @@ Roughly monthly.
 read-write PVC mount and exports `homelab_pvc_writable{namespace,pvc,pod}`, with
 `PvcNotWritable` (critical, `for: 10m`) plus `PvcWriteProbeUnknown` / `Stale` /
 `Absent` so that the probe's own silence alerts. Verified live 2026-09-01: **75
-PVCs probed, all writable, sweep completing every ~14 s.**
+PVCs probed, all writable.**
+
+⚠️ **Detection-to-page is up to ~15 minutes, not seconds.** `INTERVAL_SECONDS:
+300` — the probe sweeps every **5 minutes** — and `PvcNotWritable` has
+`for: 10m` on top. [#1300](https://github.com/gjcourt/homelab/issues/1300) asks
+for "an alert inside 5 minutes"; that criterion is **not currently met**.
+Closing it requires either accepting ~15m or shortening one of the two
+intervals. (An earlier draft of this plan said the sweep ran "every ~14s" —
+that was a misread of `time() - homelab_pvc_writeprobe_last_run_seconds`, which
+is the age of the last completed sweep, not the interval.)
 
 ⚠️ **Do not propose `node_filesystem_readonly` for this.** It cannot work.
 Measured 2026-08-26: ext4's `emergency_ro` error mode fails every write with

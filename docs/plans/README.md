@@ -136,5 +136,6 @@ see `scripts/plans-index/`).
 | [2026-05-04-llama-cpp-benchmarking.md](2026-05-04-llama-cpp-benchmarking.md) | 2026-06-10 | Systematic llama.cpp benchmarking on hestia 4090s — moot after GPU sale |
 | [2026-05-02-signal-cli-hermes-rollout.md](2026-05-02-signal-cli-hermes-rollout.md) | 2026-05-03 | Signal-cli + signal-bridge as TrueNAS Custom App; went k8s-native instead — superseded by [2026-05-02-hermes-bot-k8s.md](2026-05-02-hermes-bot-k8s.md) |
 | [2026-03-08-bgp-rollout.md](2026-03-08-bgp-rollout.md) | 2026-06-10 | L2 → BGP LoadBalancer advertisement with the UCGF; phases 1-3 live, phase 4 reverted — superseded by [2026-05-06-network-resilience-and-bgp-completion.md](2026-05-06-network-resilience-and-bgp-completion.md) |
+| [2026-09-01-readonly-pvc-recovery.md](2026-09-01-readonly-pvc-recovery.md) | 2026-09-01 | read-only iSCSI remounts have recurred six times and always need an operator; detection is solved by pvc-writeprobe, so close the gap with a recovery script that encodes the runbook's traps — and deliberately do NOT build a controller that suspends Flux or restarts Postgres |
 
 <!-- END PLANS INDEX -->

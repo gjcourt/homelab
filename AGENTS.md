@@ -206,7 +206,7 @@ after:   /dev/sdm on /var/lib/postgresql/data type ext4 (rw,relatime,...)
          node talos-2mz-rfj -> talos-ykb-uir
 ```
 
-### Deployments on RWO need the full cycle
+### Deployments on RWO: delete the pod; scale-to-0 is the fallback
 
 `rollout restart` creates the replacement pod **before** terminating the old one,
 so on a ReadWriteOnce volume the new pod attaches to the same errored device and
@@ -234,6 +234,12 @@ kubectl -n <ns> exec <pod> -c <ctr> -- sh -c 'printf ok > <mount>/.wtest && rm -
 Twice on 2026-09-04 a stale sweep was read as a regression on volumes that had
 just been fixed — compare the sweep timestamp against the pod's `.status.startTime`
 before believing it. Verify recovery with the exec above, not with the probe.
+
+#### Fallback: the scale-to-0 cycle
+
+Only needed when `kubectl delete pod` does not clear the device. Nothing recreates
+the pod here, so this **is** the case where waiting for `volumeattachment` to reach
+zero is the correct check.
 
 ```bash
 flux suspend kustomization apps-production -n flux-system   # else Flux undoes the scale

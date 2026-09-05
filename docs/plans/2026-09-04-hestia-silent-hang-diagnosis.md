@@ -172,19 +172,25 @@ log filled. It is unexplained, but it is not evidence for this.
 
 1. **Let the experiment run to ~2026-09-11**, then restart `gha-runner` regardless
    of outcome and record the result here.
-2. **Reboot into the armed settings at the next convenient window** — `console=`
+2. **Resolve whether freezes 2 and 4 were panics.** The ~3-minute gaps match
+   `panic=10` + POST, and if they were panics the model changes — `panic_on_oops`
+   was working and only 1 and 3 were true silent hangs. **Ask the operator whether
+   they reset the box at 07:51 and 16:06 on 09-04**; that is the cheapest possible
+   discriminator and the answer exists only in someone's memory. Failing that, a
+   future event with `console=`/kdump armed settles it permanently.
+3. **Reboot into the armed settings at the next convenient window** — `console=`
    and `crashkernel=` do nothing until then, and a reboot means another
    mass-read-only recovery, so it should be planned rather than incidental.
-3. **Verify SOL actually carries the console after that reboot.** It was blank on
+4. **Verify SOL actually carries the console after that reboot.** It was blank on
    09-04 because the kernel had no `console=`; that should now be fixed, but it is
    unverified.
-4. **Fix log retention.** With the runner stopped the volume drops enormously, but
+5. **Fix log retention.** With the runner stopped the volume drops enormously, but
    journald should be sized so a 2-day window cannot happen again — it is why the
    Sep 2–3 transition is unrecoverable.
-5. **Alert on hestia being unreachable.** Today the first signal was workloads
+6. **Alert on hestia being unreachable.** Today the first signal was workloads
    going read-only ~15 minutes later via `PvcNotWritable`. A direct ICMP/`:3260`
    probe would fire in under a minute.
-6. **Decide whether a beta OS belongs under all cluster storage.** TrueNAS
+7. **Decide whether a beta OS belongs under all cluster storage.** TrueNAS
    26.0.0-BETA.1 has been stable for two months, so this is a risk-posture
    question, not a diagnosis.
 

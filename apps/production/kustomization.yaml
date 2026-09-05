@@ -5,6 +5,7 @@ resources:
   - audiobookshelf
   - authelia
   - burntbytes
+  - cadence
   - certificates
   - changes
   - cloudflare-tunnel

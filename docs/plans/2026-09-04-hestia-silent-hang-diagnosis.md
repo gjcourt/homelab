@@ -1,7 +1,7 @@
 ---
 status: in-progress
-last_modified: 2026-09-04
-summary: "hestia froze four times in ~29 hours after 57 days of uptime, leaving no logs at all because the kernel was configured to hang silently; the detectors are now armed, one suspect is stopped as a live experiment, and the remaining work is to make the next hang produce evidence rather than silence"
+last_modified: 2026-09-05
+summary: "hestia failed four times in ~29 hours after 57 days of uptime in TWO distinct modes — two kernel panics that self-rebooted in ~3 min and two true hard lockups that sat until reset — and left no record of either because the box had no console, no crashkernel and an ERST pstore that captured nothing; detectors are now armed and one suspect is stopped as a live experiment"
 ---
 
 # hestia's silent hangs
@@ -15,9 +15,12 @@ was wrong on every count** — see [What #1400 got wrong](#what-1400-got-wrong).
 hestia **froze four times in ~29 hours** after running **57 days without a
 reboot**. Each freeze:
 
-- **Stopped logging mid-sentence.** No panic, no oops, no OOM, no soft-lockup,
-  no RCU stall, no hung-task warning, no MCE, no AER. The journal's last line is
-  routine and there is nothing after it.
+- **Stopped logging mid-sentence.** Nothing was *written* — no panic trace, no
+  oops, no OOM, no soft-lockup, no RCU stall, no hung-task warning, no MCE, no
+  AER. The journal's last line is routine and there is nothing after it.
+  ⚠️ **"Nothing logged" is not "nothing happened":** freezes 2 and 4 panicked and
+  rebooted, and still left no record, because the box had no `console=`, no
+  `crashkernel=`, and an ERST pstore that captured nothing.
 - **Left the machine powered.** Fans spinning, `VCORE` at 0.90 V, BMC answering
   ICMP in 3.5 ms. **This is not a power event** — a PSU fault powers the box
   *off*.
@@ -31,12 +34,38 @@ reboot**. Each freeze:
   | 3 | Sep 4 12:06:53 | Sep 4 15:56:50 | ~3.8 h |
   | 4 | Sep 4 16:06:12 | Sep 4 16:09:30 | **3 min** |
 
-  ⚠️ **~3 minutes is exactly `panic=10` plus POST on this board** (a BMC cold
-  reset took 120 s to come back). If freezes 2 and 4 were *panics that rebooted
-  themselves*, then `panic_on_oops=1` was working and only 1 and 3 were true
-  hangs — a materially different model. **But the operator was resetting the box
-  manually around both windows, so neither gap can be attributed.** Resolve this
-  before treating "it always hangs forever" as established.
+  ✅ **RESOLVED 2026-09-05 — there are two distinct failure modes.** The
+  operator confirms he reset the box only at the two long gaps (the `07:51` and
+  `15:56` boots). **Nobody restarted it at `07:54` or `16:09`.** Everything else
+  that could have is ruled out:
+
+  | Candidate | State at the time | Verdict |
+  | :--- | :--- | :--- |
+  | Operator | confirmed did not touch it | ❌ |
+  | IPMI watchdog | `Stopped`, `No action`, `Expiration Flags: None` | ❌ |
+  | BMC power action | SEL cleared 15:46 and recording; **no entry at 16:06** | ❌ |
+  | `ipmitool` from the operator's Mac | no power command issued after 15:52 | ❌ |
+
+  **hestia rebooted itself**, and with `panic_on_oops=1` + `panic=10` already set
+  that is a **kernel panic**. `~3 min` = the 10 s panic timeout plus POST (a BMC
+  cold reset needed 120 s, so POST on this board is minutes). journald confirms
+  the shutdown was unclean: *"File …/system.journal corrupted or uncleanly shut
+  down"* on the 16:09 boot.
+
+  | | Freezes 1 & 3 | Freezes 2 & 4 |
+  | :--- | :--- | :--- |
+  | Behaviour | sat until manual reset | **self-recovered in ~3 min** |
+  | Mechanism | true hard lockup — nothing detected it | **panic → auto-reboot** |
+
+  ⚠️ **The panic message did not survive.** `pstore` is mounted with the `erst`
+  backend but is **empty** — ERST captured nothing. With no `console=` and no
+  `crashkernel=` on that boot either, the panic rebooted the box without leaving
+  a single byte anywhere.
+
+  **This materially improves the outlook: the panic path demonstrably works on
+  this machine.** `hardlockup_panic=1` (now set) should therefore convert the
+  freeze-1/3 lockup mode into the same ~3-minute auto-reboot, and `crashkernel=`
+  (armed) should capture what ERST could not.
 
 ```text
 Jul 08 06:37  →  Sep 03 11:17     57 days, zero reboots
@@ -65,13 +94,15 @@ pressure, and any application-level trigger.**
 | **Memory / ECC** | zero MCE, zero EDAC errors across every boot (the 43 "matches" found were boot-time controller *enumeration*) | ❌ |
 | **PCIe / AER** | `aer_dev_correctable/fatal/nonfatal` all zero on both NICs and both bridges | ❌ |
 | **Power loss** | machine stayed **on** through every freeze — fans, CPU rails, BMC | ❌ |
-| **Software crash (oops)** | `panic_on_oops=1` + `panic=10` were already set, so an oops **reboots itself in 10 s**. Freezes 1 and 3 sat for hours, so those were not oopses. ⚠️ **Freezes 2 and 4 came back in ~3 min and cannot be ruled out** — see the gap table above | ⚠️ Partial |
+| **Software crash (oops/panic)** | `panic_on_oops=1` + `panic=10` were already set. Freezes 1 and 3 sat for hours, so those were **not** panics. ✅ **Freezes 2 and 4 self-rebooted in ~3 min with every other cause excluded — those WERE panics** | ✅ Confirmed for 2 & 4 |
 | **Application load** | freeze 2 happened 1 s into boot with nothing running | ❌ |
 
-**What is left is a total system freeze on healthy hardware** — every CPU stops
-servicing interrupts at once, which is why nothing can be written. ⚠️ That
-holds firmly for **freezes 1 and 3**; freezes 2 and 4 may have been panics that
-rebooted, and distinguishing them is an open question, not a settled one.
+**For freezes 1 and 3, what is left is a total system freeze on healthy
+hardware** — every CPU stops servicing interrupts at once, which is why nothing
+can be written. **Freezes 2 and 4 were panics** (resolved 2026-09-05, above), so
+the box has shown *two* failure modes and any theory has to account for both —
+or explain why one fault sometimes trips a detectable path and sometimes wedges
+everything.
 
 ## Why there is no evidence — the actual finding
 
@@ -172,12 +203,11 @@ log filled. It is unexplained, but it is not evidence for this.
 
 1. **Let the experiment run to ~2026-09-11**, then restart `gha-runner` regardless
    of outcome and record the result here.
-2. **Resolve whether freezes 2 and 4 were panics.** The ~3-minute gaps match
-   `panic=10` + POST, and if they were panics the model changes — `panic_on_oops`
-   was working and only 1 and 3 were true silent hangs. **Ask the operator whether
-   they reset the box at 07:51 and 16:06 on 09-04**; that is the cheapest possible
-   discriminator and the answer exists only in someone's memory. Failing that, a
-   future event with `console=`/kdump armed settles it permanently.
+2. ✅ **DONE 2026-09-05 — freezes 2 and 4 were panics.** See the gap table. The
+   remaining question is *what* panicked, which needs the armed capture below.
+   ⚠️ **Also worth fixing: `pstore`/ERST is mounted and captured nothing.** It
+   should have caught these panics and did not — so kdump is the only capture path
+   left, and it is unproven on this box.
 3. **Reboot into the armed settings at the next convenient window** — `console=`
    and `crashkernel=` do nothing until then, and a reboot means another
    mass-read-only recovery, so it should be planned rather than incidental.

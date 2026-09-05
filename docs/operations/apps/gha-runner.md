@@ -209,13 +209,24 @@ revert a manual change.
 
 #### Why this recurs
 
-**Nothing prevents the next bad self-update.** The runner will stage another one
-at the next deprecation, into the same persisted directory, with the same
-restart policy behind it. Options, none yet taken:
+**This is structural, not bad luck.** The runner stages into *persistent*
+storage and applies into *ephemeral* storage, and `EPHEMERAL: "true"` (§2.1)
+restarts the container after **every job** — so a restart between staging and
+applying is close to unavoidable.
+
+⚠️ **There is no evidence any self-update has ever succeeded on this
+deployment.** Auto-update was enabled 2026-08-19 (#1324); the image already
+shipped 2.336.0, so the first attempt it actually needed was
+2.336.0 -> 2.337.0 on 2026-09-02, and that is the one that broke. **n=1** — too
+few to call it certain, but the mechanism predicts recurrence and nothing has
+been changed to prevent it.
+
+Options, none yet taken:
 
 - **Stop persisting the work dir**, or persist a narrower path than the one the
   updater writes into. `RUNNER_WORKDIR` exists for job workspaces; the updater
-  colonising it is incidental.
+  colonising it is incidental, and it is the persistence that turns a failed
+  update into a permanent one. **Most likely the right fix.**
 - **Re-add `DISABLE_AUTO_UPDATE`** and accept manual upgrades — this trades back
   to the §3 failure, so it is not obviously better.
 - **Alert on the artifacts directly**, since neither existing rule catches this:

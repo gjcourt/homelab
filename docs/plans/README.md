@@ -60,10 +60,11 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (14)
+### In progress (15)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-09-04-hestia-silent-hang-diagnosis.md](2026-09-04-hestia-silent-hang-diagnosis.md) | 2026-09-04 | hestia froze four times in 29 hours after 58 days of uptime, leaving no logs at all because the kernel was configured to hang silently; the detectors are now armed, one suspect is stopped as a live experiment, and the remaining work is to make the next hang produce evidence rather than silence |
 | [2026-07-28-mealie-food-migration.md](2026-07-28-mealie-food-migration.md) | 2026-07-28 | Rename Mealie mealie.burntbytes.com -> food.burntbytes.com (301 old->new, LAN-only) and fix Site Settings: v3.22.0, BASE_URL, SMTP email, OIDC redirect URIs |
 | [2026-07-13-immich-photos-images-to-media.md](2026-07-13-immich-photos-images-to-media.md) | 2026-07-13 | Consolidate the Immich photo library from family/images/photos onto the canonical family/media/photos (all media under family/media/ per the assimilation plan); retire family/images/* |
 | [2026-07-04-homelabscope.md](2026-07-04-homelabscope.md) | 2026-07-04 | homelabscope — one Prometheus metric family (homelabscope_job_last_success_seconds{job}) + textfile collector + cronjob recording rules + templated staleness/absence alerts + Grafana table monitoring EVERY scheduled homelab job; fixes the orphaned (unscraped) immich-backup metric |

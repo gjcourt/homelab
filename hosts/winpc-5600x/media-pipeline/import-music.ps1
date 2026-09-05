@@ -68,6 +68,19 @@ $AUDIT     = Join-Path $AuditDir "$RUN_ID.files.tsv"
 $AUDIT_SUM = Join-Path $AuditDir "$RUN_ID.albums.tsv"
 
 function Log($m) { Write-Output ((Get-Date).ToString('yyyy-MM-dd HH:mm:ss') + ' ' + $m) }
+# Capturing a native command's stdout straight into a PowerShell variable
+# deadlocks under a non-interactive (session 0) host once the output grows past
+# a pipe buffer - reproduced on a clean box: `ssh ... | head -3` returns, the
+# same call unpiped hangs forever. Route every remote read through a temp file
+# so nothing depends on the pipe being drained.
+function SshRead([string]$cmd) {
+  $tmp = [IO.Path]::GetTempFileName()
+  try {
+    & cmd /c "ssh -n -o BatchMode=yes $HST `"$cmd`" > `"$tmp`" 2>nul" | Out-Null
+    if (Test-Path $tmp) { return @(Get-Content -LiteralPath $tmp) }
+    return @()
+  } finally { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+}
 function Norm([string]$s) {
   $t = $s.Normalize([Text.NormalizationForm]::FormKD) -replace "[\u2010\u2011]","-" -replace "[\u2018\u2019]","'"
   ($t.ToCharArray() | Where-Object { [Globalization.CharUnicodeInfo]::GetUnicodeCategory($_) -ne 'NonSpacingMark' }) -join '' `
@@ -207,8 +220,8 @@ if ($nBad -gt 0 -and -not $AllowIncomplete) {
 
 # ---- 2. dedup against the live library ----------------------------------
 Log '== querying the live library =='
-$existing = ssh -n -o BatchMode=yes $HST "sudo -n find '$LIB' -mindepth 2 -maxdepth 2 -type d -printf '%P\n'"
-if ($LASTEXITCODE -ne 0) { Log 'ABORT: could not list the library over ssh'; exit 1 }
+$existing = SshRead "sudo -n find '$LIB' -mindepth 2 -maxdepth 2 -type d -printf '%P\n'"
+if (-not $existing) { Log 'ABORT: could not list the library over ssh'; exit 1 }
 $have = @{}
 foreach ($l in $existing) {
   if ($l -match '/') { $a,$b = $l -split '/',2; $have[(Norm $a) + '|' + (Norm $b)] = $l }
@@ -269,7 +282,7 @@ foreach ($r in ($renames | Sort-Object Depth)) {
 
 # ---- 6. Unicode-duplicate guard, then import -----------------------------
 Log '== rsync dry-run (checking for duplicate artist folders) =='
-$dry = ssh -n -o BatchMode=yes $HST "sudo -n rsync -a --ignore-existing --chown=george:users --chmod=D755,F644 --itemize-changes --dry-run '$SCRATCH/$leaf/' '$LIB/'"
+$dry = SshRead "sudo -n rsync -a --ignore-existing --chown=george:users --chmod=D755,F644 --itemize-changes --dry-run '$SCRATCH/$leaf/' '$LIB/'"
 $created = @($dry | Where-Object { $_ -match '^cd\+{9}\s+[^/]+/$' })
 foreach ($c in $created) {
   $name = ($c -split '\s+',2)[1].TrimEnd('/')
@@ -282,8 +295,8 @@ foreach ($c in $created) {
 Log "  $(@($dry | Where-Object { $_ -match '^>f' }).Count) files to write, $($created.Count) new artist folder(s), no duplicates"
 
 Log '== rsync into the library =='
-$out = ssh -n -o BatchMode=yes $HST "sudo -n rsync -a --ignore-existing --chown=george:users --chmod=D755,F644 --stats '$SCRATCH/$leaf/' '$LIB/'"
-if ($LASTEXITCODE -ne 0) { Log 'FAIL rsync - scratch left in place'; exit 1 }
+$out = SshRead "sudo -n rsync -a --ignore-existing --chown=george:users --chmod=D755,F644 --stats '$SCRATCH/$leaf/' '$LIB/'"
+if (-not $out) { Log 'FAIL rsync - scratch left in place'; exit 1 }
 $out | Where-Object { $_ -match 'Number of regular files transferred|Total transferred file size' } | ForEach-Object { Log "  $_" }
 
 $bad = ssh -n -o BatchMode=yes $HST "sudo -n find '$LIB' \( ! -user george -o ! -group users \) | head -3"
@@ -310,7 +323,7 @@ else {
 $manLocal = Join-Path $env:TEMP "$RUN_ID.sha256"
 [IO.File]::WriteAllLines($manLocal, $man, [Text.UTF8Encoding]::new($false))
 scp -B -o BatchMode=yes $manLocal "$($HST):$SCRATCH.sha256" | Out-Null
-$chk = ssh -n -o BatchMode=yes $HST "cd '$LIB' && sudo -n sha256sum -c --quiet '$SCRATCH.sha256' 2>&1; echo EXIT=`$?"
+$chk = SshRead "cd '$LIB' && sudo -n sha256sum -c --quiet '$SCRATCH.sha256' 2>&1"
 $failed = @($chk | Where-Object { $_ -match ': (FAILED|No such file)' })
 if ($failed.Count -gt 0) {
   Log "VERIFY FAILED: $($failed.Count) file(s) do not match the audit trail:"

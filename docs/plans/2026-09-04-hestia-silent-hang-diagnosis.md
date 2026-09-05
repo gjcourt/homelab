@@ -1,7 +1,7 @@
 ---
 status: in-progress
 last_modified: 2026-09-04
-summary: "hestia froze four times in 29 hours after 58 days of uptime, leaving no logs at all because the kernel was configured to hang silently; the detectors are now armed, one suspect is stopped as a live experiment, and the remaining work is to make the next hang produce evidence rather than silence"
+summary: "hestia froze four times in ~29 hours after 57 days of uptime, leaving no logs at all because the kernel was configured to hang silently; the detectors are now armed, one suspect is stopped as a live experiment, and the remaining work is to make the next hang produce evidence rather than silence"
 ---
 
 # hestia's silent hangs
@@ -12,7 +12,7 @@ was wrong on every count** — see [What #1400 got wrong](#what-1400-got-wrong).
 
 ## The shape of the failure
 
-hestia **froze four times in 29 hours** after running **58 days without a
+hestia **froze four times in ~29 hours** after running **57 days without a
 reboot**. Each freeze:
 
 - **Stopped logging mid-sentence.** No panic, no oops, no OOM, no soft-lockup,
@@ -21,10 +21,25 @@ reboot**. Each freeze:
 - **Left the machine powered.** Fans spinning, `VCORE` at 0.90 V, BMC answering
   ICMP in 3.5 ms. **This is not a power event** — a PSU fault powers the box
   *off*.
-- **Never self-recovered.** Every one needed a manual reset.
+- **Recovery time was not uniform**, and this is unresolved. Two freezes sat for
+  hours; two came back in ~3 minutes:
+
+  | Freeze | Froze | Next boot | Gap |
+  | :--- | :--- | :--- | :--- |
+  | 1 | Sep 3 11:17:06 | Sep 4 07:51:43 | ~20.5 h |
+  | 2 | Sep 4 07:51:43 | Sep 4 07:54:45 | **3 min** |
+  | 3 | Sep 4 12:06:53 | Sep 4 15:56:50 | ~3.8 h |
+  | 4 | Sep 4 16:06:12 | Sep 4 16:09:30 | **3 min** |
+
+  ⚠️ **~3 minutes is exactly `panic=10` plus POST on this board** (a BMC cold
+  reset took 120 s to come back). If freezes 2 and 4 were *panics that rebooted
+  themselves*, then `panic_on_oops=1` was working and only 1 and 3 were true
+  hangs — a materially different model. **But the operator was resetting the box
+  manually around both windows, so neither gap can be attributed.** Resolve this
+  before treating "it always hangs forever" as established.
 
 ```text
-Jul 08 06:37  →  Sep 03 11:17     58 days, zero reboots
+Jul 08 06:37  →  Sep 03 11:17     57 days, zero reboots
 Sep 03 11:17     freeze 1  (~20 h before anyone noticed)
 Sep 04 07:51     freeze 2  — died ONE SECOND into boot, before ZFS imported
 Sep 04 12:06     freeze 3
@@ -50,11 +65,13 @@ pressure, and any application-level trigger.**
 | **Memory / ECC** | zero MCE, zero EDAC errors across every boot (the 43 "matches" found were boot-time controller *enumeration*) | ❌ |
 | **PCIe / AER** | `aer_dev_correctable/fatal/nonfatal` all zero on both NICs and both bridges | ❌ |
 | **Power loss** | machine stayed **on** through every freeze — fans, CPU rails, BMC | ❌ |
-| **Software crash** | `panic_on_oops=1` + `panic=10` were already set, so an oops would have **rebooted itself in 10 s**. It never did | ❌ Not an oops |
+| **Software crash (oops)** | `panic_on_oops=1` + `panic=10` were already set, so an oops **reboots itself in 10 s**. Freezes 1 and 3 sat for hours, so those were not oopses. ⚠️ **Freezes 2 and 4 came back in ~3 min and cannot be ruled out** — see the gap table above | ⚠️ Partial |
 | **Application load** | freeze 2 happened 1 s into boot with nothing running | ❌ |
 
 **What is left is a total system freeze on healthy hardware** — every CPU stops
-servicing interrupts at once, which is why nothing can be written.
+servicing interrupts at once, which is why nothing can be written. ⚠️ That
+holds firmly for **freezes 1 and 3**; freezes 2 and 4 may have been panics that
+rebooted, and distinguishing them is an open question, not a settled one.
 
 ## Why there is no evidence — the actual finding
 
@@ -125,7 +142,7 @@ A climbing uptime with no new import means no hang. **Baseline: booted
   crash-looping with no hang** in between.
 - **It is not single-variable.** A heavy OCR workload also stopped at the same
   time. Partial mitigation: freeze 1 happened with no OCR running.
-- **Absence of a hang is not proof.** hestia went 58 days between events; a quiet
+- **Absence of a hang is not proof.** hestia went 57 days between events; a quiet
   week is suggestive, not conclusive.
 - **Freeze 2 argues against it entirely** — one second into boot, before Docker
   or the runner existed.
@@ -143,7 +160,7 @@ Ordered by what the evidence supports. **All are unproven.**
 | **Kernel / out-of-tree module deadlock** | ZFS 2.4.1 and `iscsi_scst` (187 refs) are out-of-tree on a **beta** kernel (`6.18.13-production+truenas`, TrueNAS **26.0.0-BETA.1**) | Next panic trace via SOL/kdump names the subsystem. Check upstream bug trackers for the exact versions |
 | **Firmware / SMM** | An SMI storm freezes every core with the NMI watchdog unable to run — matches "watchdog enabled but silent" exactly | Compare BIOS/BMC versions (ASRock Rack SIENAD8-2L2T, BMC fw 2.05) against current; check errata |
 | **CPU / platform fault** | A freeze this complete on healthy-looking hardware is consistent with a VRM or SoC fault | Hard to test without a spare; treat as residual after the above |
-| **Something changed ~Sep 2–3** | 58 days stable then four freezes is a step change, not drift | ⚠️ **Unresolved.** Journal retention was ~2 days (the runner's 3,931 coredumps and 96 % of kernel-log volume rotated everything). Nothing on disk covers the transition |
+| **Something changed ~Sep 2–3** | 57 days stable then four freezes is a step change, not drift | ⚠️ **Unresolved.** Journal retention was ~2 days (the runner's 3,931 coredumps and 96 % of kernel-log volume rotated everything). Nothing on disk covers the transition |
 
 ⚠️ **The `PCI PERR` storm is NOT a live hypothesis.** 3,602 events, 04/27–05/13,
 attributed here twice to a NIC — wrongly. The reporting device is **bus `c6`, the

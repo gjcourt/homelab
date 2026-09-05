@@ -19,7 +19,7 @@ is down, every hestia deploy silently queues instead of failing.
 | Design | [`docs/plans/2026-05-02-hestia-gha-runner.md`](../../plans/2026-05-02-hestia-gha-runner.md) |
 | Monitoring | [`docs/plans/2026-08-18-hestia-deploy-monitoring-gap.md`](../../plans/2026-08-18-hestia-deploy-monitoring-gap.md) |
 
-## 2. The two facts that make this runner surprising
+## 2. The three facts that make this runner surprising
 
 ### 2.1 It is ephemeral, so constant restarting is NORMAL
 
@@ -45,18 +45,159 @@ job. Measured: `RestartCount` went **0 → 9 across a single 10-job deploy**.
 **Do not read a rising `RestartCount` as a fault.** Tens of restarts per hour is
 a busy deploy day. Thousands is a crash loop. See §4 for where the line is.
 
-### 2.2 Auto-update is disabled, and "false" will not turn it back on
+### 2.2 Auto-update is ENABLED, and "false" will not turn it off
 
 Same presence-test bug: setting `DISABLE_AUTO_UPDATE: "false"` still passes
-`--disableupdate`. **The only way to re-enable auto-update is to REMOVE the
-variable from the compose file entirely** — not to set it to `false`.
+`--disableupdate`. **The only way to turn auto-update off is to ADD the variable
+back; the only way to leave it on is for the variable to be ABSENT** — a value of
+`false` means "disabled", not "enabled".
 
-This matters because GitHub hard-deprecates old runner versions. With
-`--disableupdate` the runner cannot climb past the minimum version on its own,
-so the fix is a digest bump in Git — and `hosts/hestia/actions-runner/` is
-**unconditionally excluded** from `deploy-hestia.yml` (chicken-and-egg: the
-runner cannot reliably recreate its own container mid-job). So the runner can
-neither self-update nor self-deploy its own fix. Upgrades are manual (§6).
+**As of 2026-08-19 the variable is absent, so the runner self-updates.** That was
+the deliberate fix for the deprecation loop in §3: with `--disableupdate` the
+runner could not climb past GitHub's mandated minimum version, and because
+`hosts/hestia/actions-runner/` is **unconditionally excluded** from
+`deploy-hestia.yml` (chicken-and-egg: the runner cannot reliably recreate its own
+container mid-job) it could not self-deploy the digest bump either. Upgrades are
+manual (§6) — that has always been true and is unaffected by this setting.
+
+⚠️ **Enabling auto-update introduced a different failure**, because the runner
+writes its update into a bind-mounted directory that survives container
+restarts. See §2.3. The two settings trade one failure mode for another; neither
+is strictly safer.
+
+### 2.3 A failed self-update poisons the persisted work dir
+
+**This is the failure that auto-update buys you, and it is worse than a
+deprecation loop because it does not clear itself.**
+
+`RUNNER_WORKDIR=/tmp/runner-work` is bind-mounted from
+`/mnt/main/apps/actions-runner/work`, so it **persists across container
+restarts**. When the runner self-updates it stages the new version there as
+`_update/` plus a top-level `_update.sh`, then applies it on the next start.
+
+If that update is partial or corrupt, every subsequent start re-applies the same
+broken payload:
+
+```text
+Obtaining the token of the runner
+Ephemeral option is enabled
+Configuring
+Unhandled exception. System.IO.FileNotFoundException: Could not load file or
+  assembly 'System.Diagnostics.Tracing, Version=8.0.0.0, ...'
+./config.sh: line 81: Aborted (core dumped) ./bin/Runner.Listener configure
+```
+
+Container exits **134** (SIGABRT), `restart: unless-stopped` restarts it, and it
+fails identically. Forever.
+
+**The trap: `/actions-runner` is NOT persisted, so the image looks innocent.**
+Every diagnostic aimed at the image passes, which sends you looking in the wrong
+place. All of these came back clean while the app was crash-looping:
+
+```bash
+# assembly present in the image?
+docker run --rm --network none --entrypoint /bin/bash \
+  myoung34/github-runner:ubuntu-noble \
+  -c 'ls -la /actions-runner/bin/System.Diagnostics.Tracing.dll'   # -> present, 16168 bytes
+
+# binary runs?
+docker run --rm --network none --entrypoint /bin/bash \
+  myoung34/github-runner:ubuntu-noble \
+  -c 'cd /actions-runner && ./bin/Runner.Listener --version'       # -> 2.336.0
+
+# the exact failing code path?
+docker run --rm --network none --entrypoint /bin/bash \
+  myoung34/github-runner:ubuntu-noble \
+  -c 'cd /actions-runner && ./bin/Runner.Listener configure --url … --token XXXX --unattended'
+                                                                    # -> registration banner, no abort
+```
+
+**The image, the digest pin and the compose file are all irrelevant here.** The
+poison is host state.
+
+#### Recognising it
+
+```bash
+ssh truenas_admin@10.42.2.10 \
+  'sudo ls -la /mnt/main/apps/actions-runner/work/'
+```
+
+`_update/` and `_update.sh` present, with an **mtime matching when deploys
+stopped working**, is the signature. On 2026-09-04 both were stamped
+`Sep 2 08:32`; the last successful `deploy-hestia` run was `Sep 2 06:00`.
+
+Cross-check the last good deploy — a queued run is not a failed run (§4):
+
+```bash
+gh run list --repo gjcourt/homelab --workflow deploy-hestia.yml --limit 20 \
+  --json createdAt,status,conclusion \
+  --jq '.[] | "\(.createdAt[0:16])  \(.status)/\(.conclusion // "-")"'
+```
+
+#### Recovery
+
+**Quarantine, do not delete** — the artifacts are evidence, and `_update.sh` names
+the version it was trying to install.
+
+```bash
+W=/mnt/main/apps/actions-runner/work
+sudo mkdir -p $W/.broken-$(date +%F)
+sudo mv $W/_update $W/_update.sh $W/.broken-$(date +%F)/
+```
+
+⚠️ **Leave `_PipelineMapping/`, `_temp/` and the repo checkout alone.** Only the
+two `_update*` entries are the payload.
+
+Verify **before** restarting the app, using the real entrypoint against the
+cleaned work dir with a deliberately invalid token:
+
+```bash
+sudo timeout 90 docker run --rm --name gha-runner-TEST \
+  -e REPO_URL=https://github.com/gjcourt/homelab \
+  -e RUNNER_NAME=hestia-test -e RUNNER_SCOPE=repo \
+  -e RUNNER_WORKDIR=/tmp/runner-work -e EPHEMERAL=true \
+  -e ACCESS_TOKEN=invalid-on-purpose \
+  -v /mnt/main/apps/actions-runner/work:/tmp/runner-work \
+  myoung34/github-runner:ubuntu-noble
+```
+
+**Pass condition is reaching authentication**, because that is *past* the abort
+point:
+
+```text
+# Authentication
+Invalid configuration provided for token. Terminating unattended configuration.
+curl: (22) The requested URL returned error: 401
+```
+
+A clean `401` means the poison is gone. A `System.Diagnostics.Tracing` abort means
+it is not. Then start the app:
+
+```bash
+sudo midclt call app.start gha-runner
+```
+
+Use the app API, not `docker start` — middleware owns this container and will
+revert a manual change.
+
+#### Why this recurs
+
+**Nothing prevents the next bad self-update.** The runner will stage another one
+at the next deprecation, into the same persisted directory, with the same
+restart policy behind it. Options, none yet taken:
+
+- **Stop persisting the work dir**, or persist a narrower path than the one the
+  updater writes into. `RUNNER_WORKDIR` exists for job workspaces; the updater
+  colonising it is incidental.
+- **Re-add `DISABLE_AUTO_UPDATE`** and accept manual upgrades — this trades back
+  to the §3 failure, so it is not obviously better.
+- **Alert on the artifacts directly**, since neither existing rule catches this:
+  the container restarts at Docker's 60s backoff cap, which the §4 thresholds
+  treat as ephemeral-normal.
+
+⚠️ **The 2026-08-19 fix caused this incident.** Removing `DISABLE_AUTO_UPDATE`
+was correct for the deprecation loop and is what enabled the self-update that
+broke on 2026-09-02. Read §2.2 and §2.3 together before changing either.
 
 ## 3. The 2026-08-18 incident (why this runbook exists)
 
@@ -247,9 +388,11 @@ The runner cannot deploy its own fix. This is manual, by design.
    queued deploy: `gh run list --workflow=deploy-hestia.yml`, `gh run rerun <id>`.
 
 **Do not "fix" this by setting `DISABLE_AUTO_UPDATE: "false"`.** It is
-presence-tested (§2.2) and will change nothing. Remove the variable if you want
-auto-update back — accepting that the runner then drifts from the digest pinned
-in Git, which is why it is disabled today.
+presence-tested (§2.2) and will change nothing — `false` is a non-empty string and
+turns the flag ON. **The variable is currently absent, so auto-update is on**, and
+the runner therefore drifts from the digest pinned in Git. That drift is expected:
+on 2026-09-04 Git pinned `d46c0e6…` while hestia ran `de596f58…`. Confirm what is
+actually running (§7) rather than assuming the pin is live.
 
 ## 7. Related failure: a deploy that reports success and does nothing
 

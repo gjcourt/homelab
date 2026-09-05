@@ -83,6 +83,8 @@ function WinName([string]$s) {
   foreach ($c in @('*','?','"','<','>','|',':')) { $t = $t.Replace($c,'-') }
   $t.Trim().TrimEnd('.')
 }
+# First number only: Picard may write track as "3/12" or disc as "1/2".
+function Num([string]$v) { if ($v -match '(\d+)') { [int]$Matches[1] } else { 0 } }
 function TruncName([string]$fileName) {
   $ext  = [IO.Path]::GetExtension($fileName)
   $stem = [IO.Path]::GetFileNameWithoutExtension($fileName)
@@ -113,8 +115,6 @@ foreach ($f in $flacs) {
   $aa=$t['album_artist']; $ar=$t['artist']; $al=$t['album']
   $artist = if ($aa) { $aa } else { $ar }
   if (-not $artist -or -not $al -or $artist -like '*Unknown Artist*') { $untagged += $f.Name; continue }
-  # First number only: Picard may write track as "3/12" or disc as "1/2".
-  function Num([string]$v) { if ($v -match '(\d+)') { [int]$Matches[1] } else { 0 } }
   $disc      = Num $t['disc']
   $disctotal = [Math]::Max((Num $t['totaldiscs']), (Num $t['disctotal']))
   $track     = Num $t['track']
@@ -294,11 +294,19 @@ if ($bad) { Log "WARNING: files with unexpected ownership:"; $bad | ForEach-Obje
 # and nothing ever re-checks those. A truncated earlier import would persist
 # forever. Hash the destination against the audit trail and prove it.
 Log '== verifying destination checksums =='
+# Only verify what this run actually transferred. The audit is written before
+# dedup, so it also covers albums skipped as already-in-library - and a
+# pre-existing copy is legitimately allowed to differ (different rip, different
+# tags). Checking those would fail the run on a file it never touched.
+$importedSrc = @{}
+foreach ($g in $toImport) { foreach ($it in $g.Group) { $importedSrc[$it.File.FullName] = $true } }
 $man = New-Object System.Collections.Generic.List[string]
 foreach ($r in [IO.File]::ReadAllLines($AUDIT)) {
   $c = $r -split "`t"
-  if ($c.Count -ge 13) { $man.Add($c[0] + '  ./' + $c[12]) }
+  if ($c.Count -ge 13 -and $importedSrc.ContainsKey($c[11])) { $man.Add($c[0] + '  ./' + $c[12]) }
 }
+if ($man.Count -eq 0) { Log '  nothing transferred this run - skipping checksum verification' }
+else {
 $manLocal = Join-Path $env:TEMP "$RUN_ID.sha256"
 [IO.File]::WriteAllLines($manLocal, $man, [Text.UTF8Encoding]::new($false))
 scp -B -o BatchMode=yes $manLocal "$($HST):$SCRATCH.sha256" | Out-Null
@@ -313,6 +321,7 @@ if ($failed.Count -gt 0) {
   exit 3
 }
 Log "  all $($man.Count) file(s) match their source hash on hestia"
+}
 
 # Audit must outlive the source rips: keep a copy off this box.
 ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$AUDIT_REMOTE' && sudo -n chown truenas_admin '$AUDIT_REMOTE'" | Out-Null

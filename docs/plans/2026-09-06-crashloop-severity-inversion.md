@@ -150,9 +150,37 @@ it returns something — before it is trusted. All required series exist:
 1. A workload that is **down** because its volume is unwritable produces a
    **critical** page within ~15 minutes.
 2. The benign `probe_unknown` baseline does **not** page.
-3. Verified against the real case — not a synthetic one. The immich failure is
-   reproducible in staging: scale both consumers to 0, mark the volume read-only,
-   scale back up.
+3. Verified by an actual test, not by reading the expression.
+
+### How to test it
+
+⚠️ **Do not try to reproduce a read-only volume for this.** `remount,ro` does not
+reproduce the real failure (see the game-day section in
+[AGENTS.md](../../AGENTS.md#recovering-read-only-iscsi-volumes-recurring)), and
+this alert does not need it. The condition is *`probe_unknown` **and** pod not
+ready* — so the cheap, honest way to trigger it is to make a PVC-mounting pod
+crashloop for any reason:
+
+```bash
+# a staging workload that mounts a PVC; a bad tag is enough
+kubectl -n memos-stage set image deploy/memos memos=does-not-exist:0
+# pod goes not-ready; probe cannot classify its volume -> both halves true
+```
+
+Then check, in order:
+
+| Stage | Expect |
+| :--- | :--- |
+| `homelab_pvc_probe_unknown` for that pvc | flips to `1` (next sweep, `INTERVAL_SECONDS=300`) |
+| the alert expression | returns ≥1 series |
+| `ALERTS{alertname="PvcWorkloadDownUnknownVolume"}` | `pending`, then `firing` after `for: 10m` |
+| routing | lands in **`+critical@`**, not `+alerts@` — this is the whole point |
+
+Roll back with `kubectl -n memos-stage rollout undo deploy/memos`.
+
+⚠️ **Confirm it reaches the critical mailbox.** Everything else in this plan is
+about routing, so a test that stops at "the rule fires" has not tested the thing
+that actually failed on 2026-09-05.
 
 ## Open question worth resolving first
 

@@ -68,18 +68,26 @@ $AUDIT     = Join-Path $AuditDir "$RUN_ID.files.tsv"
 $AUDIT_SUM = Join-Path $AuditDir "$RUN_ID.albums.tsv"
 
 function Log($m) { Write-Output ((Get-Date).ToString('yyyy-MM-dd HH:mm:ss') + ' ' + $m) }
-# Capturing a native command's stdout straight into a PowerShell variable
-# deadlocks under a non-interactive (session 0) host once the output grows past
-# a pipe buffer - reproduced on a clean box: `ssh ... | head -3` returns, the
-# same call unpiped hangs forever. Route every remote read through a temp file
-# so nothing depends on the pipe being drained.
+# Win32-OpenSSH stalls ssh.exe when stdout is a non-console handle and the
+# output grows past a buffer. Reproduced on a clean box: the 227-line library
+# listing dies at EXACTLY 12288 bytes (3 x 4096) with ssh.exe blocked forever,
+# while the same query piped through `head -3` returns in milliseconds. It is
+# below PowerShell - redirecting to a file does not help, because the stall is
+# inside ssh itself.
+#
+# So never stream a large remote read through ssh stdout. Have the remote write
+# to a file and fetch it with scp, which is a different code path and moved
+# 3.6 GB without trouble.
 function SshRead([string]$cmd) {
-  $tmp = [IO.Path]::GetTempFileName()
+  $rtmp = "/tmp/.sshread." + [Guid]::NewGuid().ToString('N').Substring(0,12)
+  $ltmp = [IO.Path]::GetTempFileName()
   try {
-    & cmd /c "ssh -n -o BatchMode=yes $HST `"$cmd`" > `"$tmp`" 2>nul" | Out-Null
-    if (Test-Path $tmp) { return @(Get-Content -LiteralPath $tmp) }
+    & cmd /c "ssh -n -o BatchMode=yes $HST `"$cmd > $rtmp 2>/dev/null`" >nul 2>nul" | Out-Null
+    & cmd /c "scp -B -o BatchMode=yes $($HST):$rtmp `"$ltmp`" >nul 2>nul" | Out-Null
+    & cmd /c "ssh -n -o BatchMode=yes $HST `"rm -f $rtmp`" >nul 2>nul" | Out-Null
+    if (Test-Path $ltmp) { return @(Get-Content -LiteralPath $ltmp) }
     return @()
-  } finally { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+  } finally { Remove-Item $ltmp -Force -ErrorAction SilentlyContinue }
 }
 function Norm([string]$s) {
   $t = $s.Normalize([Text.NormalizationForm]::FormKD) -replace "[\u2010\u2011]","-" -replace "[\u2018\u2019]","'"

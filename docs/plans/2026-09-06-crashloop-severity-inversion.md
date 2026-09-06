@@ -80,27 +80,61 @@ fine.
 Add a **compound** rule: unknown writability **and** the pod is not ready. That is
 the case where the app is actually down, and it should page.
 
+⚠️ **The obvious expression does not work.** This is the version most people
+would write, and it was in the first draft of this plan:
+
+```promql
+homelab_pvc_probe_unknown == 1
+  and on(namespace, pod)
+(kube_pod_status_ready{condition="true"} == 0)
+```
+
+**Measured 2026-09-06: it returns `0` results — always.** The probe exports the
+workload's identity as **`exported_namespace` / `exported_pod`**, because the
+ServiceMonitor scrape overwrites bare `namespace`/`pod` with the *probe's own*
+(`monitoring` / `pvc-writeprobe-…`). The join therefore matches nothing, and the
+rule **looks permanently healthy** — the same trap already documented in
+[AGENTS.md](../../AGENTS.md#recovering-read-only-iscsi-volumes-recurring).
+
+**The working version**, validated against the live cluster:
+
 ```yaml
 - alert: PvcWorkloadDownUnknownVolume
   expr: |
-    homelab_pvc_probe_unknown == 1
+    label_replace(
+      label_replace(
+        homelab_pvc_probe_unknown == 1,
+        "namespace", "$1", "exported_namespace", "(.*)"
+      ),
+      "pod", "$1", "exported_pod", "(.*)"
+    )
       and on(namespace, pod)
     (kube_pod_status_ready{condition="true"} == 0)
   for: 10m
   labels:
     severity: critical
+  annotations:
+    summary: '{{ $labels.namespace }}/{{ $labels.pod }} is DOWN and its volume is unverifiable'
+    description: >-
+      The pod is not ready AND pvc-writeprobe cannot classify {{ $labels.pvc }}.
+      This is the crashloop-on-a-broken-volume case that PvcNotWritable cannot
+      see, because that alert needs a pod healthy enough to exec into.
+      Runbook: AGENTS.md "Recovering read-only iSCSI volumes".
 ```
 
-All required series exist and were confirmed present on 2026-09-06:
+**Both directions were tested on 2026-09-06**, which is what distinguishes this
+from the draft that silently matched nothing:
+
+| Test | Result | Meaning |
+| :--- | :--- | :--- |
+| join with `ready == 1` | **2 series** | the `label_replace` join **binds** |
+| join with `ready == 0` (the alert) | **0 series** | correctly **quiet** while everything is healthy |
+
+⚠️ **A rule that returns zero is indistinguishable from a rule that is working.**
+Any change here must be proven to bind — flip the comparison to `== 1` and check
+it returns something — before it is trusted. All required series exist:
 `kube_pod_status_ready`, `kube_pod_container_status_waiting_reason`,
 `kube_pod_status_phase`.
-
-⚠️ **Label join is the risk, not the logic.** The probe exports the workload's
-namespace/pod as **`exported_namespace` / `exported_pod`** — the ServiceMonitor
-scrape overwrites bare `namespace`/`pod` with the probe's own. Any join must
-`label_replace` those back before matching, or it will silently match nothing and
-the rule will look healthy forever. This is the same trap already documented in
-[AGENTS.md](../../AGENTS.md#recovering-read-only-iscsi-volumes-recurring).
 
 ### Alternatives considered
 

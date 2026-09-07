@@ -259,7 +259,7 @@ Log "== $($toImport.Count) new album(s), $(($toImport | ForEach-Object { $_.Coun
 if ($DryRun) { Log 'DRY RUN - stopping here'; exit 0 }
 
 # ---- 3. stage on Windows, recording any name that must be fixed on Linux --
-if (Test-Path $Staging) { Remove-Item $Staging -Recurse -Force }
+if (Test-Path -LiteralPath $Staging) { Remove-Item -LiteralPath $Staging -Recurse -Force }
 New-Item -ItemType Directory -Path $Staging | Out-Null
 $renames = @(); $truncated = 0
 foreach ($g in $toImport) {
@@ -277,8 +277,13 @@ foreach ($g in $toImport) {
     $n = TruncName $it.File.Name
     if ($n -ne $it.File.Name) { $truncated++; Log "  truncated (>${MaxNameBytes}B): $($it.File.Name.Substring(0,[Math]::Min(50,$it.File.Name.Length)))..." }
     $target = Join-Path $dir $n
-    if (Test-Path $target) { Log "  ABORT: would overwrite $target - two source files map to one destination"; exit 4 }
-    Copy-Item $it.File.FullName $target
+    # -LiteralPath is mandatory: Copy-Item/Test-Path glob by default, and a
+    # filename containing [ ] is read as a character-class wildcard that matches
+    # nothing - the copy then silently does nothing and raises NO error. Four of
+    # The Who's 21 tracks vanished exactly this way, and they were precisely the
+    # four with brackets ("[Take 15, March 16, 1971]", "[Original 1971 Vocal]").
+    if (Test-Path -LiteralPath $target) { Log "  ABORT: would overwrite $target - two source files map to one destination"; exit 4 }
+    Copy-Item -LiteralPath $it.File.FullName -Destination $target
   }
 }
 $plannedCount = ($toImport | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
@@ -293,7 +298,10 @@ Log "staged $srcCount files, $srcBytes bytes$(if ($truncated) { " ($truncated fi
 # ---- 4. transfer + verify ------------------------------------------------
 ssh -n -o BatchMode=yes $HST "rm -rf '$SCRATCH' && mkdir -p '$SCRATCH'" | Out-Null
 Log '== scp -> hestia scratch =='
-scp -B -r -o BatchMode=yes $Staging "$($HST):$SCRATCH/" | Out-Null
+# scp.exe carries the same Win32-OpenSSH defect as ssh.exe: with stdout on a
+# non-console handle it can finish the transfer and never return. Route it
+# through cmd with output discarded, exactly as SshRead does.
+& cmd /c "scp -B -r -o BatchMode=yes `"$Staging`" $($HST):$SCRATCH/ >nul 2>nul" | Out-Null
 if ($LASTEXITCODE -ne 0) { Log 'FAIL scp - staging left in place for inspection'; exit 1 }
 $leaf = Split-Path $Staging -Leaf
 $remCount = [int](ssh -n -o BatchMode=yes $HST "find '$SCRATCH/$leaf' -type f -name '*.flac' | wc -l")
@@ -349,7 +357,7 @@ if ($man.Count -eq 0) { Log '  nothing transferred this run - skipping checksum 
 else {
 $manLocal = Join-Path $env:TEMP "$RUN_ID.sha256"
 [IO.File]::WriteAllLines($manLocal, $man, [Text.UTF8Encoding]::new($false))
-scp -B -o BatchMode=yes $manLocal "$($HST):$SCRATCH.sha256" | Out-Null
+& cmd /c "scp -B -o BatchMode=yes `"$manLocal`" $($HST):$SCRATCH.sha256 >nul 2>nul" | Out-Null
 $chk = SshRead "cd '$LIB' && sudo -n sha256sum -c --quiet '$SCRATCH.sha256' 2>&1"
 $failed = @($chk | Where-Object { $_ -match ': (FAILED|No such file)' })
 if ($failed.Count -gt 0) {
@@ -365,7 +373,7 @@ Log "  all $($man.Count) file(s) match their source hash on hestia"
 
 # Audit must outlive the source rips: keep a copy off this box.
 ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$AUDIT_REMOTE' && sudo -n chown truenas_admin '$AUDIT_REMOTE'" | Out-Null
-scp -B -o BatchMode=yes $AUDIT $AUDIT_SUM "$($HST):$AUDIT_REMOTE/" | Out-Null
+& cmd /c "scp -B -o BatchMode=yes `"$AUDIT`" `"$AUDIT_SUM`" $($HST):$AUDIT_REMOTE/ >nul 2>nul" | Out-Null
 Log "  audit copied to hestia:$AUDIT_REMOTE/"
 ssh -n -o BatchMode=yes $HST "rm -f '$SCRATCH.sha256'" | Out-Null
 

@@ -106,6 +106,15 @@ function WinName([string]$s) {
 }
 # First number only: Picard may write track as "3/12" or disc as "1/2".
 function Num([string]$v) { if ($v -match '(\d+)') { [int]$Matches[1] } else { 0 } }
+# Multi-disc sets: the library convention is a [Disc N] suffix on the ALBUM
+# folder (Pink Floyd/The Wall [Disc 1]), not a subfolder. Without this both
+# discs stage into one directory and Copy-Item -Force silently overwrites -
+# The Who's 2xCD lost 4 of 21 tracks exactly that way, and the completeness
+# gate passed it because the gate validates the SOURCE, where all 21 exist.
+function DiscAlbum([string]$album, [int]$disc, [int]$discTotal) {
+  if ($discTotal -gt 1) { return "$album [Disc $disc]" }
+  return $album
+}
 function TruncName([string]$fileName) {
   $ext  = [IO.Path]::GetExtension($fileName)
   $stem = [IO.Path]::GetFileNameWithoutExtension($fileName)
@@ -167,7 +176,7 @@ $sha  = [Security.Cryptography.SHA256]::Create()
 foreach ($it in $items) {
   $fs = [IO.File]::OpenRead($it.File.FullName)
   try { $hash = [BitConverter]::ToString($sha.ComputeHash($fs)).Replace('-','').ToLower() } finally { $fs.Dispose() }
-  $dest = (LinuxName $it.Artist) + '/' + (LinuxName $it.Album) + '/' + (TruncName $it.File.Name)
+  $dest = (LinuxName $it.Artist) + '/' + (LinuxName (DiscAlbum $it.Album $it.Disc $it.DiscTotal)) + '/' + (TruncName $it.File.Name)
   $rows.Add(($hash, $it.File.Length, $it.Artist, $it.Album, $it.Disc, $it.DiscTotal,
              $it.Track, $it.TrackTotal, $it.Title, $it.Mbid, $it.Barcode,
              $it.File.FullName, $dest) -join "`t")
@@ -259,15 +268,25 @@ foreach ($g in $toImport) {
   $artW = WinName $artL;  $albW = WinName $albL
   if ($artW -ne $artL) { $renames += [pscustomobject]@{ From=$artW; To=$artL; Depth=1 } }
   if ($albW -ne $albL) { $renames += [pscustomobject]@{ From="$artW/$albW"; To="$artW/$albL"; Depth=2 } }
-  $dir = Join-Path $Staging (Join-Path $artW $albW)
-  New-Item -ItemType Directory -Path $dir -Force | Out-Null
   foreach ($it in $g.Group) {
+    $albDL = LinuxName (DiscAlbum $alb $it.Disc $it.DiscTotal)
+    $albDW = WinName $albDL
+    if ($albDW -ne $albDL) { $renames += [pscustomobject]@{ From="$artW/$albDW"; To="$artW/$albDL"; Depth=2 } }
+    $dir = Join-Path $Staging (Join-Path $artW $albDW)
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
     $n = TruncName $it.File.Name
     if ($n -ne $it.File.Name) { $truncated++; Log "  truncated (>${MaxNameBytes}B): $($it.File.Name.Substring(0,[Math]::Min(50,$it.File.Name.Length)))..." }
-    Copy-Item $it.File.FullName (Join-Path $dir $n) -Force
+    $target = Join-Path $dir $n
+    if (Test-Path $target) { Log "  ABORT: would overwrite $target - two source files map to one destination"; exit 4 }
+    Copy-Item $it.File.FullName $target
   }
 }
+$plannedCount = ($toImport | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum
 $srcCount = (Get-ChildItem $Staging -Recurse -File -Filter *.flac).Count
+if ($srcCount -ne $plannedCount) {
+  Log "ABORT: staged $srcCount files but planned $plannedCount - files were lost before transfer"
+  exit 4
+}
 $srcBytes = (Get-ChildItem $Staging -Recurse -File | Measure-Object Length -Sum).Sum
 Log "staged $srcCount files, $srcBytes bytes$(if ($truncated) { " ($truncated filename(s) truncated)" })"
 

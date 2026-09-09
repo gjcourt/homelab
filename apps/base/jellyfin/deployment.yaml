@@ -87,14 +87,26 @@ spec:
             timeoutSeconds: 5
             failureThreshold: 6
 
-          # Resource limits - generous for transcoding bursts
+          # Resource limits - generous for transcoding bursts.
+          #
+          # cpu raised 4000m -> 8000m (2026-09-02). Nodes are 12-core, and the
+          # 4-core ceiling was the binding constraint on transcode start-up
+          # latency: PGS (bitmap) subtitles cannot be passed through to a
+          # client, so Jellyfin burns them into the picture, and burn-in forces
+          # a full re-encode regardless of what the client can direct-play.
+          # Even with VAAPI enabled the subtitle overlay, scaling and format
+          # conversion run on CPU, so the cgroup cap throttled exactly the work
+          # that makes playback slow to start.
+          #
+          # requests stay at 100m deliberately: this is a burst ceiling, not a
+          # reservation, so scheduling and staging co-tenancy are unaffected.
           resources:
             requests:
               cpu: 100m
               memory: 512Mi
             limits:
               memory: 4Gi
-              cpu: 4000m
+              cpu: 8000m
 
         # Sidecar: periodically sweep orphaned transcode files. Jellyfin only
         # removes transcodes on a clean session-stop or at startup; abnormally

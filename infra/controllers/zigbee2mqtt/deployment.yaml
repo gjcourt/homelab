@@ -17,6 +17,11 @@ spec:
       labels:
         app: zigbee2mqtt
     spec:
+      # zigbee2mqtt closes its SQLite database and writes coordinator_backup.json
+      # on SIGTERM. The 30s default can clip that on a slow iSCSI volume, and a
+      # half-written close is what the next attach has to recover from. Cheap
+      # insurance on a single-replica workload that is never in a hurry to stop.
+      terminationGracePeriodSeconds: 60
       initContainers:
         - name: init-config
           image: busybox@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
@@ -24,7 +29,46 @@ spec:
           # iSCSI target flap remounts the ext4 volume read-only, and z2m otherwise
           # starts and burns hundreds of restarts on a confusing `ENOENT mkdir` deep
           # in the app. Fail the init fast with a clear recovery hint instead.
-          command: ['sh', '-c', "SENTINEL=/app/data/.mount-writable; if ! ( touch $SENTINEL && rm -f $SENTINEL ) 2>/dev/null; then echo 'FATAL: /app/data not writable - stale/read-only iSCSI mount (see issue #1080); recover with: kubectl -n zigbee2mqtt scale deploy/zigbee2mqtt --replicas=0 then --replicas=1' >&2; exit 1; fi; if [ ! -s /app/data/configuration.yaml ]; then cp -L /tmp/config/configuration.yaml /app/data/configuration.yaml; fi"]
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              SENTINEL=/app/data/.mount-writable
+
+              fatal() {
+                echo "FATAL: $1" >&2
+                echo "Recover per AGENTS.md 'Recovering read-only iSCSI volumes'." >&2
+                echo "Do NOT just scale to 0/1 -- Flux reverts a scale-to-0 within the" >&2
+                echo "reconcile interval. NOTE this workload is reconciled by" >&2
+                echo "infra-controllers, NOT apps-production:" >&2
+                echo "  flux suspend kustomization infra-controllers -n flux-system" >&2
+                exit 1
+              }
+
+              # Free space, checked SEPARATELY from the write. A leftover sentinel
+              # from a SIGKILL between write and unlink defeats the write test on a
+              # full volume: `>` truncates it, freeing its block, and the rewrite
+              # reuses it -- so the guard passes a 100%-full filesystem. Measured on
+              # ext4 at 0K avail.
+              FREE_KB=$(df -Pk /app/data | awk 'NR==2 {print $4}')
+              case "$FREE_KB" in
+                ''|*[!0-9]*) fatal "could not read free space on /app/data" ;;
+              esac
+              [ "$FREE_KB" -ge 1024 ] || fatal "/app/data has only ${FREE_KB}K free."
+
+              # Then write BYTES and read them back. `touch` alone succeeds on a
+              # full filesystem -- see AGENTS.md. stderr is deliberately NOT
+              # suppressed: the kernel's errno ("Read-only file system" vs "No space
+              # left on device") is more precise than anything printed below.
+              if ! printf writable > "$SENTINEL" || [ ! -s "$SENTINEL" ]; then
+                rm -f "$SENTINEL" 2>/dev/null || true
+                fatal "/app/data is not writable (most likely a read-only iSCSI remount, issue #1080)."
+              fi
+              rm -f "$SENTINEL" || true
+              if [ ! -s /app/data/configuration.yaml ]; then
+                cp -L /tmp/config/configuration.yaml /app/data/configuration.yaml
+              fi
           volumeMounts:
             - name: config
               mountPath: /tmp/config

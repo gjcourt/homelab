@@ -117,7 +117,8 @@ Recurrences: [2026-02-08](docs/operations/incidents/2026-02-08-pv-recovery.md) �
 [2026-02-15](docs/operations/incidents/2026-02-15-iscsi-targets-disabled.md) ·
 [2026-02-27](docs/operations/incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md) ·
 [2026-02-28](docs/operations/incidents/2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md) ·
-[2026-08-13](docs/operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md).
+[2026-08-13](docs/operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md) ·
+[2026-09-04](docs/operations/incidents/2026-09-04-hestia-down-mass-readonly.md) **(59/63 volumes — largest to date)**.
 Tracking issue: [#1080](https://github.com/gjcourt/homelab/issues/1080).
 
 ### Recognising it
@@ -179,20 +180,66 @@ force depends on the workload.
 | StatefulSet pod (Prometheus, Loki) | `kubectl delete pod <pod>` | Recreated in place; the delete is enough to detach |
 | **CNPG primary** | `kubectl delete pod <primary>` — **never the PVC** | The PVC *is* the data |
 | **CNPG replica** | delete the pod; if it still fails, **also delete its PVC** | A replica is reconstructible — CNPG re-clones from the primary. Precedent: 2026-02-28, where a replica PVC came back empty and only `delete pvc` recovered it |
-| Deployment on RWO | scale-to-0 cycle (below) | `rollout restart` is **not** sufficient — see below |
+| Deployment on RWO | `kubectl delete pod <pod>` | Terminates *before* recreating, so the device is released. `rollout restart` is **not** sufficient — see below |
 
 For CNPG, **restart the primary first**: replicas stream WAL from it and cannot
-sync until it serves. Before deleting a primary, confirm the replicas are
-*unready* — otherwise the delete triggers an unplanned switchover. `kubectl cnpg
-restart <cluster>` is the supported path when replicas are healthy.
+sync until it serves.
 
-### Deployments on RWO need the full cycle
+⚠️ **`kubectl cnpg restart <cluster>` does not work for this failure.** Measured
+2026-09-04: it printed `<cluster> restarted` and the pod was never recycled — its
+`.status.startTime` was still two months old and the volume stayed `emergency_ro`.
+Do not use it here; delete the pod.
+
+⚠️ **`kubectl cnpg fencing` does not release the volume either.** Fencing stops
+PostgreSQL *inside* the pod; the pod keeps running and keeps the device attached.
+It is the right tool for a stuck promote (see the WAL-corruption note), and the
+wrong tool here.
+
+**`kubectl delete pod` is sufficient for every workload type in the table above**,
+including RWO Deployments and CNPG primaries. The replacement is very often
+scheduled onto a *different node* and gets a brand-new device — the observable
+signature of a successful recovery:
+
+```text
+before:  /dev/sdj on /var/lib/postgresql/data type ext4 (rw,...,emergency_ro)
+after:   /dev/sdm on /var/lib/postgresql/data type ext4 (rw,relatime,...)
+         node talos-2mz-rfj -> talos-ykb-uir
+```
+
+### Deployments on RWO: delete the pod; scale-to-0 is the fallback
 
 `rollout restart` creates the replacement pod **before** terminating the old one,
 so on a ReadWriteOnce volume the new pod attaches to the same errored device and
-comes up read-only again. Two further traps: **Flux reverts a scale-to-0** within
-the reconcile interval, and pod termination is *not* proof the device was
-released — `volumeattachment` reaching zero is.
+comes up read-only again. **`kubectl delete pod` does not have this problem** — it
+terminates first — and on 2026-09-04 it recovered every affected Deployment
+(AdGuard, Authelia, Audiobookshelf, Jellyfin, Navidrome, Memos, Home Assistant,
+Vibrato, Mosquitto) in ~20–30 s each. **Prefer it.** The scale-to-0 cycle below is
+the fallback for when a delete alone does not clear the device.
+
+⚠️ **"`volumeattachment` reaching zero" only applies to the scale-to-0 cycle.**
+For anything that *self-recreates* — CNPG instances, Deployment pods — the
+replacement claims a new attachment as fast as the old one is released, so the
+count never reaches zero **even on a fully successful recovery**. On 2026-09-04
+this produced two false "still stuck" readings on volumes that were already
+healthy, and one 300-second wait for a condition that could never occur.
+
+**For self-recreating workloads the write test is the only ground truth:**
+
+```bash
+kubectl -n <ns> exec <pod> -c <ctr> -- sh -c 'printf ok > <mount>/.wtest && rm -f <mount>/.wtest'
+```
+
+⚠️ **`pvc-writeprobe` is a monitor, and monitors lag.** Its sweep interval is
+`INTERVAL_SECONDS=300`, so a sweep can be up to five minutes older than reality.
+Twice on 2026-09-04 a stale sweep was read as a regression on volumes that had
+just been fixed — compare the sweep timestamp against the pod's `.status.startTime`
+before believing it. Verify recovery with the exec above, not with the probe.
+
+#### Fallback: the scale-to-0 cycle
+
+Only needed when `kubectl delete pod` does not clear the device. Nothing recreates
+the pod here, so this **is** the case where waiting for `volumeattachment` to reach
+zero is the correct check.
 
 ```bash
 flux suspend kustomization apps-production -n flux-system   # else Flux undoes the scale

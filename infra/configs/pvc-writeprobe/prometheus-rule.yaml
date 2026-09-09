@@ -8,6 +8,14 @@ metadata:
 spec:
   groups:
     - name: pvc-writeprobe
+      # NOTE: use `exported_namespace` / `exported_pod`, not `namespace` / `pod`.
+      # The probe exports the AFFECTED workload's namespace and pod as labels,
+      # but the ServiceMonitor scrape already attaches namespace="monitoring"
+      # and pod="pvc-writeprobe-..." for the probe itself. Prometheus resolves
+      # that collision by prefixing the target's labels with `exported_`.
+      # Using the bare names renders every alert as "monitoring/<pvc>" and
+      # points the operator at the wrong namespace. Found 2026-09-01 during the
+      # first game-day; the alert had never fired, so it had never been seen.
       rules:
         - alert: PvcNotWritable
           expr: homelab_pvc_writable == 0
@@ -15,9 +23,10 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: 'PVC {{ $labels.namespace }}/{{ $labels.pvc }} is not writable'
+            summary: 'PVC {{ $labels.exported_namespace }}/{{ $labels.pvc }} is not writable'
             description: >-
-              A real write to {{ $labels.mountpath }} in pod {{ $labels.pod }}
+              A real write to {{ $labels.mountpath }} in pod
+              {{ $labels.exported_namespace }}/{{ $labels.exported_pod }}
               failed. The pod may still report Running and Ready — status does
               not reflect this failure. Most likely an iSCSI read-only remount.
               Runbook: AGENTS.md "Recovering read-only iSCSI volumes".
@@ -32,10 +41,10 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: 'Cannot determine writability of {{ $labels.namespace }}/{{ $labels.pvc }}'
+            summary: 'Cannot determine writability of {{ $labels.exported_namespace }}/{{ $labels.pvc }}'
             description: >-
               The probe could not classify a write to {{ $labels.mountpath }} in
-              pod {{ $labels.pod }} -- exec failed, or the error was not a
+              pod {{ $labels.exported_namespace }}/{{ $labels.exported_pod }} -- exec failed, or the error was not a
               recognised filesystem refusal. This volume is unmonitored, not
               known-bad. Check the pvc-writeprobe logs for the raw error.
 

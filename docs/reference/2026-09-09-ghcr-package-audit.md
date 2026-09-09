@@ -4,7 +4,8 @@ Point-in-time audit of all `ghcr.io/gjcourt/*` container packages: **visibility
 against repo visibility**, and **tag-naming compliance** with the date-sha
 convention in [AGENTS.md](../../AGENTS.md#conventions).
 
-**34 packages. 24 public, 10 private.**
+**34 packages. 24 public, 10 private.** Two visibility mismatches, one in each
+direction — see §1 and §1b.
 
 ## 1. Visibility — the headline
 
@@ -64,6 +65,52 @@ months cold.
 
 ⚠️ Both deletions are **irreversible** and need an explicit decision. `delete:packages`
 is in scope, so they can be actioned once approved.
+
+## 1b. The inverse direction — private repo, PUBLIC image
+
+⚠️ **The original audit only asked "which public repos have private images".
+Asking the question the other way found the more serious problem.**
+
+| Package | Repo | Repo vis | Pkg vis | Verdict |
+| :--- | :--- | :--- | :--- | :--- |
+| **`vibrato`** | `gjcourt/vibrato` | **PRIVATE** | **public** | ⚠️ **exposure — decide** |
+
+All other 23 public packages belong to public repos. `vibrato` is the only one.
+
+**Verified genuinely pullable by anyone**, not merely mislabelled:
+
+```text
+GET https://ghcr.io/token?scope=repository:gjcourt/vibrato:pull   -> HTTP 200
+GET https://ghcr.io/v2/gjcourt/vibrato/manifests/latest (anon)    -> HTTP 200
+66 versions, last updated 2026-08-27
+```
+
+So the compiled artifact of a private repo is world-downloadable.
+
+**No credentials found in the image config:**
+
+```text
+ENV: PATH, NODE_VERSION=22.23.2, YARN_VERSION=1.22.22, NODE_ENV=production
+suspicious names: 0
+```
+
+⚠️ **That check covers the image *config* only.** Secrets committed *inside* a
+layer — a `.env`, a config file with a token — would not appear there. Scanning
+layer contents across all 66 versions has **not** been done.
+
+**Assessment: source/IP exposure, not a credential leak.** Two ways to resolve,
+and it is a judgement call:
+
+- **Make the package private** to match the repo —
+  `https://github.com/users/gjcourt/packages/container/vibrato/settings`
+- **Make the repo public**, if openness was the intent (it is an espresso
+  controller, so plausibly yes).
+
+⚠️ **Making the package private now does not un-publish what has already been
+pulled or cached.** It only stops future anonymous pulls.
+
+**Lesson for future audits: check both directions.** Public-repo/private-image is
+an inconvenience; private-repo/public-image is a disclosure.
 
 ## 2. Tag-convention compliance
 

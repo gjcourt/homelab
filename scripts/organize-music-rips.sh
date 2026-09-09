@@ -28,6 +28,32 @@
 #      SSH afterwards (du + file-count + every-planned-file-present) — guards the
 #      low-bytes/high-speedup silent-skip trap.
 #
+# Completeness gate + audit trail (added 2026-09-02, after real data loss):
+#   Before any transfer, every album in the batch is checked against the disc
+#   and track totals PICARD ALREADY WROTE INTO THE TAGS (TOTALDISCS /
+#   TOTALTRACKS). If an album declares more discs or tracks than are present,
+#   the script REFUSES to run (exit 2) unless --allow-incomplete is passed.
+#   Albums with no totals tags are reported UNVERIFIED, never silently passed.
+#
+#   Why: on 2026-08-29 a 2xCD rip (The Clash - London Calling) transferred with
+#   only disc 2, the source rips were deleted on the strength of a check that
+#   reported "untagged/suspect files: 0", and disc 1 was lost permanently. That
+#   check validated that tags EXISTED, not that the album was WHOLE -- nine
+#   correctly-tagged files are nine correctly-tagged files. The surviving files
+#   carried TOTALDISCS=2 the entire time, so no network lookup was ever needed;
+#   the evidence was inside the files that were transferred.
+#
+#   Grouping is by MUSICBRAINZ_ALBUMID where present, because two discs of one
+#   release often carry different ALBUM strings and grouping on the string
+#   splits a complete release into two half-albums. A gate that cries wolf is a
+#   gate that gets ignored.
+#
+#   The audit trail (sha256 + size + tags + dest path, one row per file, plus a
+#   per-album verdict file) is written on EVERY run including dry-runs, kept
+#   locally under ~/.local/share/music-rip-audit/, and copied to
+#   hestia:/mnt/main/archive/_inventory/rips/ on commit. It is the evidence that
+#   a batch was what it claimed to be, and it must outlive the source rips.
+#
 # Safe by design:
 #   - the source is only ever READ (hardlink/rsync copies; nothing is moved)
 #   - DRY-RUN by default; nothing is written until you pass --commit
@@ -38,6 +64,12 @@
 # Usage:
 #   # dry-run the existing ~/Music backlog (prints layout + skip list, no writes):
 #   organize-music-rips.sh --src ~/Music
+#
+#   # transfer for real (refuses if any album is provably incomplete):
+#   organize-music-rips.sh --src ~/Music --commit
+#
+#   # deliberately ship a known-partial album (e.g. you only own one disc):
+#   organize-music-rips.sh --src ~/Music --commit --allow-incomplete
 #
 #   # actually write (stage over SSH + sudo rsync --chown into the library):
 #   organize-music-rips.sh --src ~/Music --commit
@@ -67,6 +99,8 @@ EXTS="flac alac m4a aac mp3 aiff aif wav ogg opus wv ape"
 
 usage() { grep '^#' "$0" | sed 's/^# \?//'; }
 
+ALLOW_INCOMPLETE=0
+
 # ---- args ---------------------------------------------------------------
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -74,6 +108,7 @@ while [ $# -gt 0 ]; do
     --host)   HESTIA="$2"; shift 2;;
     --dest)   DEST="$2"; shift 2;;
     --commit) COMMIT=1; shift;;
+    --allow-incomplete) ALLOW_INCOMPLETE=1; shift;;
     -h|--help) usage; exit 0;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
@@ -129,6 +164,15 @@ pad2() {
 # Build a newline-delimited plan: "<relative-dest>\t<source>" for placeable
 # files; collect unplaceable ones separately for the report.
 PLAN="$(mktemp)"; SKIPS="$(mktemp)"; STAGE=""
+# Audit trail: written for EVERY run (dry-run included) and deliberately NOT
+# deleted by cleanup — it is the evidence that a batch was what it claimed to be.
+RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+AUDIT_DIR="${AUDIT_DIR:-$HOME/.local/share/music-rip-audit}"
+mkdir -p "$AUDIT_DIR"
+AUDIT="$AUDIT_DIR/${RUN_ID}.files.tsv"
+AUDIT_SUM="$AUDIT_DIR/${RUN_ID}.albums.tsv"
+: > "$AUDIT"
+if command -v sha256sum >/dev/null 2>&1; then SHA256="sha256sum"; else SHA256="shasum -a 256"; fi
 cleanup() { rm -f "$PLAN" "$SKIPS"; [ -n "$STAGE" ] && rm -rf "$STAGE"; }
 trap cleanup EXIT
 
@@ -144,6 +188,9 @@ while IFS= read -r -d '' f; do
   track="$(read_tag "$f" track TRACK TRACKNUMBER)"
   disc="$(read_tag "$f" DISCNUMBER disc DISC)"
   disctotal="$(read_tag "$f" DISCTOTAL TOTALDISCS disctotal)"
+  tracktotal="$(read_tag "$f" TRACKTOTAL TOTALTRACKS tracktotal)"
+  mbid="$(read_tag "$f" MUSICBRAINZ_ALBUMID musicbrainz_albumid)"
+  barcode="$(read_tag "$f" BARCODE barcode)"
   artist="$(read_tag "$f" ARTIST artist)"
   albumartist="$(read_tag "$f" album_artist ALBUMARTIST ALBUM_ARTIST)"
   compilation="$(read_tag "$f" COMPILATION compilation)"
@@ -191,6 +238,12 @@ while IFS= read -r -d '' f; do
 
   rel="${a}/${al}/${discdir}${prefix}${ti}.${ext}"
   printf '%s\t%s\n' "$rel" "$f" >> "$PLAN"
+  # --- audit trail: one immutable row per file, BEFORE anything moves -------
+  sum="$($SHA256 "$f" 2>/dev/null | awk '{print $1}')"
+  bytes="$(wc -c < "$f" | tr -d ' ')"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$sum" "$bytes" "${folder_artist}" "${album}" "${disc:-1}" "${disctotal}" \
+    "${track}" "${tracktotal}" "${title}" "${mbid}" "${barcode}" "$f" "$rel" >> "$AUDIT"
 done < <(find "$SRC" -type f \( "${find_expr[@]}" \) -print0)
 
 placeable="$(wc -l < "$PLAN" | tr -d ' ')"
@@ -211,6 +264,92 @@ echo "=== PLANNED LAYOUT (first 40) ==="
 sort "$PLAN" | cut -f1 | sed 's#^#  #' | awk 'NR<=40'
 [ "$placeable" -gt 40 ] && echo "  ... and $((placeable-40)) more"
 echo
+
+# ---- completeness gate --------------------------------------------------
+# WHY THIS EXISTS: on 2026-08-29 a 2xCD rip (The Clash - London Calling) was
+# transferred with only disc 2 present, the source was deleted, and disc 1 was
+# lost permanently. The files themselves carried TOTALDISCS=2 the whole time.
+# The import check that ran only validated that tags EXISTED ("untagged/suspect
+# files: 0"), which is true and useless for this: 9 correctly-tagged files are
+# 9 correctly-tagged files. Nothing compared 9 against the declared 19.
+#
+# This gate is purely local -- no network, no MusicBrainz lookup -- because the
+# evidence needed is already embedded in the tags Picard writes.
+echo "=== COMPLETENESS ==="
+sort -t"$(printf '\t')" -k3,3 -k4,4 "$AUDIT" | awk -F'\t' '
+{
+  # Group by MusicBrainz release id when Picard supplied one: two discs of the
+  # same release routinely carry DIFFERENT album strings ("Mezzanine - Mad
+  # Professor" vs "Mezzanine - XX/2018 remaster"), and grouping on the string
+  # would split one complete release into two half-albums and cry wolf. A gate
+  # with false positives gets ignored, which is how the real one gets missed.
+  key=($10!="" ? $10 : $3 " :: " $4)
+  label[key]=$3 " :: " $4
+  disc=($5==""?1:$5+0); dtot=($6==""?0:$6+0); ttot=($8==""?0:$8+0)
+  albums[key]=1
+  seen[key SUBSEP disc]=1
+  if (dtot>maxdt[key]) maxdt[key]=dtot
+  n[key SUBSEP disc]++
+  if (ttot>tt[key SUBSEP disc]) tt[key SUBSEP disc]=ttot
+  if ($10!="") mbid[key]=$10
+}
+END{
+  bad=0; unver=0; ok=0
+  for (k in albums) {
+    ndisc=0; missing=""
+    for (c in seen) { split(c,parts,SUBSEP); if (parts[1]==k) ndisc++ }
+    verdict="OK"; detail=""
+    if (maxdt[k]>0 && ndisc<maxdt[k]) {
+      verdict="INCOMPLETE"
+      for (d=1; d<=maxdt[k]; d++) if (!((k SUBSEP d) in seen)) missing=missing (missing==""?"":",") d
+      detail="declared " maxdt[k] " discs, have " ndisc " (missing disc " missing ")"
+    }
+    if (verdict=="OK") {
+      for (c in seen) {
+        split(c,parts,SUBSEP)
+        if (parts[1]!=k) continue
+        d=parts[2]
+        if (tt[k SUBSEP d]>0 && n[k SUBSEP d]<tt[k SUBSEP d]) {
+          verdict="INCOMPLETE"
+          detail=detail (detail==""?"":"; ") "disc " d ": " n[k SUBSEP d] "/" tt[k SUBSEP d] " tracks"
+        }
+      }
+    }
+    if (verdict=="OK" && maxdt[k]==0) {
+      allz=1
+      for (c in seen) { split(c,parts,SUBSEP); if (parts[1]==k && tt[k SUBSEP parts[2]]>0) allz=0 }
+      if (allz) { verdict="UNVERIFIED"; detail="no TOTALDISCS/TOTALTRACKS tags - cannot prove completeness" }
+    }
+    if (verdict=="INCOMPLETE") bad++
+    else if (verdict=="UNVERIFIED") unver++
+    else ok++
+    printf "%s\t%s\t%s\t%s\n", verdict, label[k], detail, mbid[k]
+  }
+  printf "__TOTALS__\t%d\t%d\t%d\n", ok, bad, unver
+}' > "$AUDIT_SUM"
+
+grep -v '^__TOTALS__' "$AUDIT_SUM" | sort | while IFS=$'\t' read -r v k d m; do
+  case "$v" in
+    OK)         printf '  \033[32mOK\033[0m          %s\n' "$k" ;;
+    UNVERIFIED) printf '  \033[33mUNVERIFIED\033[0m  %s  (%s)\n' "$k" "$d" ;;
+    INCOMPLETE) printf '  \033[31mINCOMPLETE\033[0m  %s  (%s)\n' "$k" "$d" ;;
+  esac
+done
+TOT_OK="$(awk -F'\t' '/^__TOTALS__/{print $2}' "$AUDIT_SUM")"
+TOT_BAD="$(awk -F'\t' '/^__TOTALS__/{print $3}' "$AUDIT_SUM")"
+TOT_UNV="$(awk -F'\t' '/^__TOTALS__/{print $4}' "$AUDIT_SUM")"
+echo
+echo "  complete: ${TOT_OK}   incomplete: ${TOT_BAD}   unverified: ${TOT_UNV}"
+echo "  audit trail: $AUDIT"
+echo "               $AUDIT_SUM"
+echo
+
+if [ "${TOT_BAD:-0}" -gt 0 ] && [ "$ALLOW_INCOMPLETE" != 1 ]; then
+  echo "REFUSING TO PROCEED: ${TOT_BAD} album(s) are provably incomplete." >&2
+  echo "Re-rip the missing disc(s), or pass --allow-incomplete if this is deliberate." >&2
+  echo "DO NOT delete the source rips until this reports 0 incomplete." >&2
+  exit 2
+fi
 
 # ---- transfer -----------------------------------------------------------
 if [ "$COMMIT" != 1 ]; then
@@ -275,3 +414,23 @@ echo "  ssh $HESTIA 'rm -rf $SCRATCH'"
 echo
 echo "Next: trigger the Navidrome scan and confirm the albums appear"
 echo "(see docs/plans/2026-07-20-cd-rip-music-library-pipeline.md, step 6)."
+
+# ---- ship the audit trail -----------------------------------------------
+# The evidence has to outlive the source. Copy the manifests next to the other
+# archive inventories on hestia so "what was in this batch, and was it whole?"
+# is answerable months later, from a host that is backed up and snapshotted.
+REMOTE_AUDIT="/mnt/main/archive/_inventory/rips"
+if ssh -o BatchMode=yes "$HESTIA" "sudo mkdir -p '$REMOTE_AUDIT' && sudo chown truenas_admin:truenas_admin '$REMOTE_AUDIT'" 2>/dev/null; then
+  if scp -q "$AUDIT" "$AUDIT_SUM" "$HESTIA:$REMOTE_AUDIT/" 2>/dev/null; then
+    echo "Audit trail archived: $HESTIA:$REMOTE_AUDIT/$(basename "$AUDIT")"
+    echo "                      $HESTIA:$REMOTE_AUDIT/$(basename "$AUDIT_SUM")"
+  else
+    echo "WARNING: could not copy audit trail to $HESTIA — local copy retained at $AUDIT" >&2
+  fi
+else
+  echo "WARNING: could not create $REMOTE_AUDIT on $HESTIA — local copy retained at $AUDIT" >&2
+fi
+
+echo
+echo "DONE. Source left untouched at: $SRC"
+echo "Before deleting any source rip, confirm the line above reads 'incomplete: 0'."

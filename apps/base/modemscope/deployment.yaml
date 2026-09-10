@@ -38,7 +38,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: exporter
-          image: "ghcr.io/gjcourt/modemscope:2026-07-26-e2a59cd@sha256:758696f601ec5cd1e60590719ed4f5ff41bba4a179aad4bdfb0740d1d6da3c76"
+          image: "ghcr.io/gjcourt/modemscope:2026-07-26-e2a59cd@sha256:34d9df0b1497a4f6ce43ef24037302acdee8bbdbc42ea6bcb4e807f215f746ad"
           imagePullPolicy: IfNotPresent
           env:
             # The DOCSIS modem's management address. Reachable from the pod

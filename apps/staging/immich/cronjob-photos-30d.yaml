@@ -80,7 +80,7 @@ spec:
               # published 2026-07-04 build (public ghcr package — no pull secret needed).
               # We override the image's baked-in crond/backup entrypoint with our own
               # command; only its rsync + bash + find tooling is used here.
-              image: ghcr.io/gjcourt/immich-photos-backup:2026-07-04@sha256:a4811ef540b0b4b496a9e3970394ff856cceceb4537c80b4f4c75f9c9d7f2673
+              image: ghcr.io/gjcourt/immich-photos-backup:2026-08-27-d482f8d@sha256:f3352d9834f993e6d4a7ee4a46dbb5bdaac9eb9709504a77fe369d74f06db480
               command:
                 - bash
                 - -euo

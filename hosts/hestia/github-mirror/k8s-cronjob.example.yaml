@@ -29,7 +29,7 @@ spec:
             fsGroup: 100
           containers:
             - name: github-mirror
-              image: ghcr.io/gjcourt/github-mirror:latest
+              image: ghcr.io/gjcourt/github-mirror:2026-08-27-d482f8d
               # The image loops by default (INTERVAL_SECONDS); for a CronJob we
               # want a single pass then exit, so run the script directly.
               command: ["/usr/local/bin/github-mirror.sh"]

@@ -80,11 +80,10 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (20)
+### Planned (19)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-09-06-crashloop-severity-inversion.md](2026-09-06-crashloop-severity-inversion.md) | 2026-09-06 | immich prod was completely down for ~16 hours and the operator found it before the monitoring did — not because detection failed, but because a broken volume that crashloops its pod downgrades from a critical page to a filtered warning; the worse outcome gets the quieter alert |
 | [2026-09-01-readonly-pvc-recovery.md](2026-09-01-readonly-pvc-recovery.md) | 2026-09-01 | read-only iSCSI remounts have recurred six times and always need an operator; detection is now solved by pvc-writeprobe, so close the remaining gap with a recovery script that encodes the runbook's traps — and deliberately do NOT build a controller that suspends Flux or restarts Postgres |
 | [2026-08-18-hestia-sshd-refused-diagnosis.md](2026-08-18-hestia-sshd-refused-diagnosis.md) | 2026-08-18 | hestia's sshd intermittently refuses port 22 while every other service stays up; the MaxStartups theory carried across sessions is disproven, so collect wedged-state evidence before changing any setting — **blocked:** Evidence from the wedged state, which has been destroyed 4-5 times by restarting the service before capturing it. Next wedge: capture from the TrueNAS web Shell over 443 BEFORE restarting. |
 | [2026-08-18-hestia-deploy-monitoring-gap.md](2026-08-18-hestia-deploy-monitoring-gap.md) | 2026-08-18 | hestia has no per-container metrics and no signal when the GitHub runner dies, so deploys failed silently for days; close it with an off-cluster canary, post-apply verification, and a container probe on the heartbeat that already exists |
@@ -105,10 +104,11 @@ see `scripts/plans-index/`).
 | [2026-03-08-drawer-inserts.md](2026-03-08-drawer-inserts.md) | 2026-05-03 | Cardboard drawer insert design (75×32×12 cm) — physical project, no repo artifacts |
 | [2026-02-21-linkding-db-restore-plan.md](2026-02-21-linkding-db-restore-plan.md) | 2026-05-03 | Live DR drill: destroy and restore Linkding staging DB (never executed) |
 
-### Complete (19)
+### Complete (20)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-09-06-crashloop-severity-inversion.md](2026-09-06-crashloop-severity-inversion.md) | 2026-09-11 | immich prod was completely down for ~16 hours and the operator found it before the monitoring did — not because detection failed, but because a broken volume that crashloops its pod downgrades from a critical page to a filtered warning; the worse outcome gets the quieter alert |
 | [2026-06-24-control-plane-vip-stable-endpoint.md](2026-06-24-control-plane-vip-stable-endpoint.md) | 2026-06-24 | EXECUTED 2026-06-24 — Talos layer-2 control-plane VIP 10.42.2.26 live on all 3 CP nodes (etcd-elected); apiserver cert regenerated to include all node IPs + the VIP; kubeconfig and talosconfig cut over to the VIP. Nodes were DHCP (not static as drafted); applied per-node in try-mode with no reboots, etcd 3/3 throughout. |
 | [2026-06-19-promote-talos-25-to-controlplane.md](2026-06-19-promote-talos-25-to-controlplane.md) | 2026-06-19 | EXECUTED 2026-06-19 — promoted .23 (not .25) to control-plane and removed dead .22, restoring 3-member etcd; cluster now 4 nodes (3 CP + 1 worker) |
 | [2026-06-18-finance-dashboard-multipage.md](2026-06-18-finance-dashboard-multipage.md) | 2026-06-18 | finance.burntbytes.com expanded from one balance-sheet page to a 4-page static site (balance sheet, cash flow, STR model, retirement runway) with encrypted-YAML data + interactive client-side charts |

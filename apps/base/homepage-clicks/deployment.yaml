@@ -41,7 +41,7 @@ spec:
           # per the homelab image-discipline rule. Until then this Deployment
           # will not pull — the ServiceMonitor target stays down and the
           # /api/clicks route returns 5xx, which is expected pre-build.
-          image: "ghcr.io/gjcourt/homepage-clicks:latest"
+          image: "ghcr.io/gjcourt/homepage-clicks:2026-07-22-18aed22"
           imagePullPolicy: IfNotPresent
           env:
             - name: LISTEN_PORT

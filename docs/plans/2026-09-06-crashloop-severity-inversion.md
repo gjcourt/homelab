@@ -1,6 +1,6 @@
 ---
-status: planned
-last_modified: 2026-09-06
+status: complete
+last_modified: 2026-09-11
 summary: "immich prod was completely down for ~16 hours and the operator found it before the monitoring did — not because detection failed, but because a broken volume that crashloops its pod downgrades from a critical page to a filtered warning; the worse outcome gets the quieter alert"
 ---
 
@@ -80,61 +80,47 @@ fine.
 Add a **compound** rule: unknown writability **and** the pod is not ready. That is
 the case where the app is actually down, and it should page.
 
-⚠️ **The obvious expression does not work.** This is the version most people
-would write, and it was in the first draft of this plan:
+✅ **SHIPPED 2026-09-11** as `PvcWorkloadDownUnknownVolume` in
+`infra/configs/pvc-writeprobe/prometheus-rule.yaml`.
 
-```promql
-homelab_pvc_probe_unknown == 1
-  and on(namespace, pod)
-(kube_pod_status_ready{condition="true"} == 0)
-```
+⚠️ **The expression originally proposed here was WRONG, and the reason is worth
+keeping.** This plan (2026-09-06) claimed the obvious `on(namespace, pod)` join
+returns zero and prescribed a `label_replace` off `exported_namespace` instead.
+**That is backwards.** `honorLabels: true` had already landed in
+[#1389](https://github.com/gjcourt/homelab/pull/1389), so the probe's own
+`namespace`/`pod` labels win and there is no `exported_` prefix at all.
 
-**Measured 2026-09-06: it returns `0` results — always.** The probe exports the
-workload's identity as **`exported_namespace` / `exported_pod`**, because the
-ServiceMonitor scrape overwrites bare `namespace`/`pod` with the *probe's own*
-(`monitoring` / `pvc-writeprobe-…`). The join therefore matches nothing, and the
-rule **looks permanently healthy** — the same trap already documented in
-[AGENTS.md](../../AGENTS.md#recovering-read-only-iscsi-volumes-recurring).
+**The 2026-09-06 measurement was taken against retained series from before
+#1389**, which still carried the old label shape. Testing "against live
+Prometheus" is not the same as testing against *current* series — old series
+stay queryable until they age out, and a query written against them can look
+correct and then match nothing.
 
-**The working version**, validated against the live cluster:
+The shipped expression is the simple one:
 
 ```yaml
-- alert: PvcWorkloadDownUnknownVolume
-  expr: |
-    label_replace(
-      label_replace(
-        homelab_pvc_probe_unknown == 1,
-        "namespace", "$1", "exported_namespace", "(.*)"
-      ),
-      "pod", "$1", "exported_pod", "(.*)"
-    )
-      and on(namespace, pod)
-    (kube_pod_status_ready{condition="true"} == 0)
-  for: 10m
-  labels:
-    severity: critical
-  annotations:
-    summary: '{{ $labels.namespace }}/{{ $labels.pod }} is DOWN and its volume is unverifiable'
-    description: >-
-      The pod is not ready AND pvc-writeprobe cannot classify {{ $labels.pvc }}.
-      This is the crashloop-on-a-broken-volume case that PvcNotWritable cannot
-      see, because that alert needs a pod healthy enough to exec into.
-      Runbook: AGENTS.md "Recovering read-only iSCSI volumes".
+expr: |
+  homelab_pvc_probe_unknown == 1
+    and on(namespace, pod)
+  (kube_pod_status_ready{condition="true"} == 0)
+for: 10m
+labels:
+  severity: critical
 ```
 
-**Both directions were tested on 2026-09-06**, which is what distinguishes this
-from the draft that silently matched nothing:
+Verified 2026-09-11 against current series:
 
-| Test | Result | Meaning |
-| :--- | :--- | :--- |
-| join with `ready == 1` | **2 series** | the `label_replace` join **binds** |
-| join with `ready == 0` (the alert) | **0 series** | correctly **quiet** while everything is healthy |
+| Test | Result |
+| :--- | :--- |
+| control, `ready == 1` | **2 series** — the join binds |
+| alert, `ready == 0` | **0 series** — correctly quiet while healthy |
+| cross-check on `homelab_pvc_writable` | **75 of 75** join to `ready == 1` |
 
-⚠️ **A rule that returns zero is indistinguishable from a rule that is working.**
-Any change here must be proven to bind — flip the comparison to `== 1` and check
-it returns something — before it is trusted. All required series exist:
-`kube_pod_status_ready`, `kube_pod_container_status_waiting_reason`,
-`kube_pod_status_phase`.
+**The lesson the 09-06 version got right and then failed to apply to itself:** a
+rule returning zero is indistinguishable from a rule that works. Flip the
+comparison and confirm it returns something. That check was written into the plan
+and still missed the error, because the control direction *also* returned a
+plausible-looking non-zero — off stale series.
 
 ### Alternatives considered
 

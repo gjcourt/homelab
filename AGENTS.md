@@ -297,11 +297,19 @@ need a device-level error (dm-error, or an iSCSI target flap on a throwaway LUN)
 Tear down with `kubectl delete ns readonly-gameday`. The ephemeral StorageClass
 reclaims the volume.
 
-⚠️ **Query on `exported_namespace`, not `namespace`.** The ServiceMonitor scrape
-attaches the probe's own `namespace=monitoring` / `pod=pvc-writeprobe-...`,
-which collides with the labels the probe exports for the workload it tested, so
-Prometheus prefixes the target's with `exported_`. Filtering on bare `namespace`
-returns only `monitoring` and looks like the probe never saw your test volume.
+⚠️ **Query on bare `namespace`/`pod` — NOT `exported_namespace`.** This reversed
+in [#1389](https://github.com/gjcourt/homelab/pull/1389), which set
+`honorLabels: true` on the ServiceMonitor so the probe's own labels win.
+Before that, prometheus-operator stamped the *target's* identity
+(`monitoring` / `pvc-writeprobe-*`) over the metric and renamed the probe's to
+`exported_*`; that is no longer the case.
+
+⚠️ **Series from before #1389 still carry the old shape until they age out**, so a
+query written against retained data can look right and then match nothing on
+live series. Measured 2026-09-11: `exported_namespace` is absent from current
+series, and a `label_replace` off it silently returns zero — which is
+indistinguishable from a working rule. **Prove any join binds by flipping the
+comparison (`== 1`) and checking it returns something.**
 
 ### After recovery
 

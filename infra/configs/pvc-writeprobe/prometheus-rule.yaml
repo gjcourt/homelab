@@ -48,6 +48,43 @@ spec:
               recognised filesystem refusal. This volume is unmonitored, not
               known-bad. Check the pvc-writeprobe logs for the raw error.
 
+        # The case PvcNotWritable structurally CANNOT see: the volume is so
+        # broken the workload will not start, so there is no healthy pod to exec
+        # a write into and `homelab_pvc_writable` is never emitted at all. The
+        # probe reports `probe_unknown` instead -- which on its own is only a
+        # warning, because a benign unknown is normal (see PvcWriteProbeUnknown).
+        #
+        # Unknown AND the pod is not ready is a different thing: the app is DOWN.
+        # That is a page.
+        #
+        # Earned on 2026-09-05 (immich down ~16h) and again 2026-09-09 (~30h,
+        # both Prometheus instances read-only). Both times every alert that
+        # fired was `warning` and went to the filtered mailbox; the operator
+        # found the outage first, twice.
+        #
+        # The join is on bare namespace/pod, which works because the
+        # ServiceMonitor sets honorLabels: true (#1389) so the probe's own
+        # labels win. Do NOT reach for `exported_namespace` here -- that is the
+        # pre-#1389 shape and the join will silently match nothing forever.
+        # Verified 2026-09-11: flipping the comparison to `== 1` returns series,
+        # which is the only way to prove a join actually binds.
+        - alert: PvcWorkloadDownUnknownVolume
+          expr: |
+            homelab_pvc_probe_unknown == 1
+              and on(namespace, pod)
+            (kube_pod_status_ready{condition="true"} == 0)
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: '{{ $labels.namespace }}/{{ $labels.pod }} is down and its volume is unverifiable'
+            description: >-
+              The pod is not ready AND pvc-writeprobe cannot classify a write to
+              {{ $labels.pvc }} at {{ $labels.mountpath }} -- almost always
+              because the container will not start, so there is nothing to exec
+              into. PvcNotWritable cannot fire for this case by construction.
+              Runbook: AGENTS.md "Recovering read-only iSCSI volumes".
+
         # The probe going silent looks identical to everything being fine, so
         # the absence of data is itself an alert. Both halves are needed: the
         # first catches a wedged probe still serving stale metrics, the second

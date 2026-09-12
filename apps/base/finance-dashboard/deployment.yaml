@@ -39,7 +39,7 @@ spec:
           # deliberate exception to immutable-tag pinning so every code change is
           # just merge → build :latest → rollout (no per-change pin follow-up).
           # Data changes don't rebuild the image — see update-finance-data.sh.
-          image: ghcr.io/gjcourt/finance-dashboard:latest
+          image: ghcr.io/gjcourt/finance-dashboard:2026-06-18-3508b3f
           imagePullPolicy: Always
           ports:
             - containerPort: 8080

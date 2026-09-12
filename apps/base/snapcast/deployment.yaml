@@ -233,11 +233,11 @@ spec:
               memory: 512Mi
 
         - name: mopidy
-          # ghcr.io/gjcourt/mopidy:2026-06-11 — first-party image built by
+          # ghcr.io/gjcourt/mopidy:2026-08-27-d482f8d — first-party image built by
           # .github/workflows/build-mopidy.yml from images/mopidy/. Digest-pinned;
           # this build adds Mopidy-Iris (#901) on top of the Debian + system
           # GStreamer/gi base.
-          image: ghcr.io/gjcourt/mopidy:2026-06-11@sha256:bcbec138dc9c29a2ac56b5e265b825a82a93d57a7eece9349c8f2f5b18df6382
+          image: ghcr.io/gjcourt/mopidy:2026-08-27-d482f8d@sha256:01d74c18c659ce69070e565a78fd0777218aceb2692a7220a5577a3ac25a0acd
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

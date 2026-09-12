@@ -4,8 +4,12 @@ Point-in-time audit of all `ghcr.io/gjcourt/*` container packages: **visibility
 against repo visibility**, and **tag-naming compliance** with the date-sha
 convention in [AGENTS.md](../../AGENTS.md#conventions).
 
-**34 packages. 24 public, 10 private.** Two visibility mismatches, one in each
-direction — see §1 and §1b.
+**34 packages at audit time; 32 after the deletions below. 24 public, 8 private.**
+Two visibility mismatches, one in each direction — see §1 and §1b.
+
+**Actions taken 2026-09-09:** `biometrics` and `synology-csi` deleted; `vibrato`
+confirmed to stay public as a deliberate decision. **`pingo` remains the one open
+item** — it needs a manual visibility flip in the web UI.
 
 ## 1. Visibility — the headline
 
@@ -21,8 +25,8 @@ The question was "which public repos have private images". **Exactly one.**
 | `overture-bridge` | `gjcourt/tempo-interview` | PRIVATE | private | ✅ correct |
 | `tempo-interview/acmeusd` | unlinked | — | private | ✅ correct (take-home) |
 | `tempo-interview/bridge` | unlinked | — | private | ✅ correct (take-home) |
-| `biometrics` | → renamed to `vitals` | n/a | private | 🗑️ **stale — delete, do not publish** |
-| `synology-csi` | **no such repo** | n/a | private | 🗑️ **orphan — delete** |
+| `biometrics` | → renamed to `vitals` | n/a | — | ✅ **DELETED 2026-09-09** |
+| `synology-csi` | **no such repo** | n/a | — | ✅ **DELETED 2026-09-09** |
 
 ### `pingo` — the one real fix
 
@@ -63,8 +67,9 @@ vitals       30 versions, last updated 2026-09-09, newest tag "2026-09-09-e49908
 last touched **2025-06-28**, and no `gjcourt/synology-csi` repo exists. Fourteen
 months cold.
 
-⚠️ Both deletions are **irreversible** and need an explicit decision. `delete:packages`
-is in scope, so they can be actioned once approved.
+✅ **Both deleted 2026-09-09**, after confirming zero git references and zero
+in-cluster references to either image. Package count went **34 → 32**, private
+**10 → 8**.
 
 ## 1b. The inverse direction — private repo, PUBLIC image
 
@@ -73,7 +78,7 @@ Asking the question the other way found the more serious problem.**
 
 | Package | Repo | Repo vis | Pkg vis | Verdict |
 | :--- | :--- | :--- | :--- | :--- |
-| **`vibrato`** | `gjcourt/vibrato` | **PRIVATE** | **public** | ⚠️ **exposure — decide** |
+| **`vibrato`** | `gjcourt/vibrato` | **PRIVATE** | **public** | ✅ **decided 2026-09-09 — stays public** |
 
 All other 23 public packages belong to public repos. `vibrato` is the only one.
 
@@ -98,16 +103,28 @@ suspicious names: 0
 layer — a `.env`, a config file with a token — would not appear there. Scanning
 layer contents across all 66 versions has **not** been done.
 
-**Assessment: source/IP exposure, not a credential leak.** Two ways to resolve,
-and it is a judgement call:
+**Assessment: source/IP exposure, not a credential leak.**
 
-- **Make the package private** to match the repo —
-  `https://github.com/users/gjcourt/packages/container/vibrato/settings`
-- **Make the repo public**, if openness was the intent (it is an espresso
-  controller, so plausibly yes).
+✅ **DECIDED 2026-09-09: the package stays public.** The accepted position is that
+the compiled artifact of a private repo remains world-pullable. Recorded so it is
+a deliberate choice rather than an oversight found again by a future audit.
 
-⚠️ **Making the package private now does not un-publish what has already been
-pulled or cached.** It only stops future anonymous pulls.
+⚠️ **Two caveats attach to that decision.**
+
+**Only the image *config* was checked** — layer contents were never scanned, so a
+`.env` or a token committed *inside* a layer would still be exposed and would not
+have shown up here. If certainty is wanted rather than an assumption, scanning the
+layers across all 66 versions is a separate job.
+
+**Making it private later does not undo it.** It would only stop future anonymous
+pulls; anything already fetched or cached stays fetched.
+
+⚠️ **Do not "fix" this by flipping the package to private without preparation.**
+`vibrato-prod` and `vibrato-stage` have **no `ghcr-secret` and no
+`imagePullSecrets`** — they pull anonymously *because* the package is public.
+Making it private would leave the running pods alive on cached images and then
+fail at the next reschedule with `ImagePullBackOff`. Pull secrets must be wired
+first.
 
 **Lesson for future audits: check both directions.** Public-repo/private-image is
 an inconvenience; private-repo/public-image is a disclosure.

@@ -36,7 +36,7 @@ spec:
         - name: ladder
           # Private code-only image on GHCR, pulled via the ghcr-secret. Pinned by
           # digest (immutable) — bumps are explicit tag+digest PRs, never :latest.
-          image: ghcr.io/gjcourt/ladder:2026-07-03-20b7820@sha256:59696ef58170fa3e440714a95bda6e5e1e4d89a2ec30f5578321d5b22efc30ef
+          image: ghcr.io/gjcourt/ladder:2026-07-26-bb55a91@sha256:ea084e5cef2a44cc749502db31f102068c72cbe05b4ee1b17108ed4e6e9f987a
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080

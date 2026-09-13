@@ -42,7 +42,7 @@ spec:
           # THERMALSCOPE_NVME_HEALTH is set (it is not here), so behavior is
           # identical to the prior `096a780` digest. The collector is enabled
           # only on the separate privileged thermalscope-smart DaemonSet.
-          image: "ghcr.io/gjcourt/thermalscope:defd02f@sha256:e285862d816c6630e85cc0031179cbdd33b2c38a988938386bbc7bb569b141ad"
+          image: "ghcr.io/gjcourt/thermalscope:2026-07-26-eeaceb6@sha256:28c5e13703880e8595fa4a9c63d190fe7dde7a5c6be1681dc276a3477418f91e"
           imagePullPolicy: IfNotPresent
           env:
             # The default powercap root (/sys/devices/virtual/powercap) is

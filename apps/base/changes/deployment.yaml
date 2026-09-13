@@ -30,7 +30,7 @@ spec:
       containers:
         - name: changes
           # Private ghcr image; pulled via the shared ghcr-secret (above).
-          image: ghcr.io/gjcourt/changes:2026-06-25
+          image: ghcr.io/gjcourt/changes:2026-07-26-ab53285
           ports:
             - containerPort: 8080
           # No env: WEB_DIR=/web is baked into the image; the corpus is embedded

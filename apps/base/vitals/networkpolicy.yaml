@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: vitals
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Gateway ingress on 8080; egress DNS + CNPG PostgreSQL.
+  description: Gateway ingress on 8080; egress DNS only (storage is a local SQLite file).
   endpointSelector:
     matchLabels:
       app: vitals
@@ -31,11 +31,4 @@ spec:
             - port: "53"
               protocol: UDP
             - port: "53"
-              protocol: TCP
-    - toEndpoints:
-        - matchLabels:
-            cnpg.io/podRole: instance
-      toPorts:
-        - ports:
-            - port: "5432"
               protocol: TCP

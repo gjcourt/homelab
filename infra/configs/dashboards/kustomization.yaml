@@ -12,7 +12,6 @@ resources:
   - netscope-cm.yaml
   - networking-gateway-cm.yaml
   - node-details-cm.yaml
-  - overture-cm.yaml
   - storage-csi-cm.yaml
   - thermalscope-cm.yaml
   - vibrato-cm.yaml

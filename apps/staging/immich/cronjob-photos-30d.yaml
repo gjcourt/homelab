@@ -115,11 +115,17 @@ spec:
                     exit 1
                   fi
 
+                  # head MUST read from a FILE, not from a pipe. Piping
+                  # `sort -rn | head -n $KEEP` makes head close the pipe after
+                  # KEEP lines, sort takes SIGPIPE, and `set -o pipefail` turns
+                  # that into exit 141 and kills the job. It only shows up at
+                  # scale: with a few files sort finishes before head closes, so
+                  # small-tree tests pass and the real 162k-file run dies.
                   cd "$SRC"
                   find . -type f -print0 \
                     | xargs -0 stat -c '%Y %n' \
-                    | sort -rn \
-                    | head -n "$KEEP" \
+                    | sort -rn > /tmp/all.list
+                  head -n "$KEEP" /tmp/all.list \
                     | cut -d' ' -f2- \
                     | sed 's|^\./||' > /tmp/keep.list
                   echo "[30d-sync] keep list: $(wc -l < /tmp/keep.list) files"

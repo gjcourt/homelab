@@ -88,38 +88,67 @@ spec:
                 - -c
                 - |
                   SRC=/src   # full prod photo tree (read-only)
-                  DST=/dst   # photos-staging-30d slice (read-write)
-                  echo "[30d-sync] $(date -u) start"
-                  # 1. Select files modified in the last 30 days (filesystem date window —
-                  #    Immich has no date API) and hand the NUL-delimited list to a SINGLE
-                  #    rsync. -a recreates the tree + preserves mtime; --files-from restricts
-                  #    the transfer to exactly that list; rsync skips files already present
-                  #    and up to date, so re-runs only move the day's new photos. Reads from
-                  #    SRC, writes only to DST — originals are never modified. NUL delimiting
-                  #    ( -print0 / --from0 ) keeps filenames with spaces intact.
+                  DST=/dst   # staging slice (read-write)
+
+                  # KEEP is a COUNT, not a time window. The previous version took
+                  # "everything modified in the last 30 days", which is unbounded:
+                  # it grows with how many photos were taken, and on 2026-09-14 a
+                  # genuine 30-day window was 8,049 files / 20 GB against a 20 GB
+                  # quota. It could not fit, and no amount of pruning fixed that.
+                  #
+                  # 5000 was measured against the real tree: ~2.2 MB/file, so
+                  # ~11 GB, ~55% of the 20 GB quota. The count is the setting;
+                  # 50%-of-quota is only how it was chosen. Do not recompute it
+                  # from the quota later — raise or lower KEEP deliberately.
+                  KEEP=5000
+
+                  echo "[30d-sync] $(date -u) start (KEEP=$KEEP newest files)"
+
+                  # This image is Alpine/BusyBox: no GNU find -printf, no head -z,
+                  # no cut -z, no comm -z. Everything below is BusyBox-native.
+                  # Filenames may contain SPACES (they do), which is why the path
+                  # is taken as "everything after the first space". Filenames
+                  # containing NEWLINES would corrupt the list, so refuse rather
+                  # than silently sync the wrong set.
+                  if find "$SRC" -type f -print0 | tr -dc '\n' | grep -q .; then
+                    echo "[30d-sync] ABORT: a filename contains a newline" >&2
+                    exit 1
+                  fi
+
                   cd "$SRC"
-                  # rsync exit 24 = "some files vanished before we could transfer them" —
-                  # expected and BENIGN when copying a LIVE prod tree (phones add/remove
-                  # photos mid-run). Tolerate ONLY 24 so a normal concurrent-churn run still
-                  # completes, prunes, and records success (the whole point of this fix —
-                  # otherwise the job would trade DeadlineExceeded for a spurious rsync
-                  # failure and keep the homelabscope alert firing). Any other nonzero — a
-                  # real rsync error, or a failed `find` surfaced through pipefail — is fatal
-                  # so backoffLimit retries and the failure stays visible.
+                  find . -type f -print0 \
+                    | xargs -0 stat -c '%Y %n' \
+                    | sort -rn \
+                    | head -n "$KEEP" \
+                    | cut -d' ' -f2- \
+                    | sed 's|^\./||' > /tmp/keep.list
+                  echo "[30d-sync] keep list: $(wc -l < /tmp/keep.list) files"
+
+                  # PRUNE FIRST. The old script pruned AFTER rsync, so once the
+                  # dataset filled, rsync exited non-zero and the prune became
+                  # unreachable — a full slice stayed full forever. Pruning first
+                  # frees space before anything tries to write, so a fill is
+                  # self-correcting instead of permanent.
+                  cd "$DST"
+                  find . -type f | sed 's|^\./||' | sort > /tmp/have.list
+                  sort /tmp/keep.list > /tmp/keep.sorted
+                  comm -23 /tmp/have.list /tmp/keep.sorted > /tmp/delete.list
+                  echo "[30d-sync] pruning $(wc -l < /tmp/delete.list) file(s) no longer in the slice"
+                  while IFS= read -r f; do [ -n "$f" ] && rm -f "$DST/$f"; done < /tmp/delete.list
+                  find "$DST" -depth -type d -exec rmdir {} + 2>/dev/null || true
+
+                  # rsync exit 24 = "some files vanished before transfer" —
+                  # expected and BENIGN against a live prod tree (phones add and
+                  # remove photos mid-run). Anything else is fatal so backoffLimit
+                  # retries and the failure stays visible.
                   rc=0
-                  find . -type f -mtime -30 -print0 \
-                    | rsync -a --from0 --files-from=- "$SRC"/ "$DST"/ || rc=$?
+                  rsync -a --files-from=/tmp/keep.list "$SRC"/ "$DST"/ || rc=$?
                   if [ "$rc" -ne 0 ] && [ "$rc" -ne 24 ]; then
                     echo "[30d-sync] transfer failed rc=$rc" >&2
                     exit "$rc"
                   fi
-                  # 2. Prune slice entries older than 30 days (mtime preserved by rsync -a)
-                  #    so the slice stays bounded.
-                  find "$DST" -type f -mtime +30 -delete
-                  # 3. Remove now-empty directories (rmdir no-ops on non-empty / the mount root).
-                  find "$DST" -depth -type d -exec rmdir {} + 2>/dev/null || true
-                  echo "[30d-sync] $(date -u) done — slice size:"
-                  du -sh "$DST" 2>/dev/null || true
+
+                  echo "[30d-sync] $(date -u) done — slice: $(find "$DST" -type f | wc -l) files, $(du -sh "$DST" 2>/dev/null | cut -f1)"
               volumeMounts:
                 - name: photos-src
                   mountPath: /src

@@ -28,7 +28,6 @@
 - [navidrome](base/navidrome/)
 - [netscope](base/netscope/)
 - [openwebui](base/openwebui/)
-- [overture](base/overture/)
 - [snapcast](base/snapcast/)
 - [thermalscope-smart](base/thermalscope-smart/)
 - [thermalscope](base/thermalscope/)

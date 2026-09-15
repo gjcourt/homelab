@@ -8,5 +8,4 @@ metadata:
     env: staging
 data:
   ADDR: ":8080"
-  DB_HOST: vitals-db-staging-cnpg-v1-rw.vitals-stage.svc.cluster.local
   WEB_DIR: "/web"

@@ -4,9 +4,7 @@ namespace: vitals-stage
 resources:
   - ../../base/vitals/
   - configmap.yaml
-  - database.yaml
   - httproute.yaml
-  - secret-db-credentials.yaml
 
 labels:
   - pairs:

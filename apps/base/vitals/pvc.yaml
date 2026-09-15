@@ -1,0 +1,17 @@
+---
+# SQLite database file. Replaces the CNPG cluster — see
+# ../../../docs/plans (vitals repo: docs/plans/2026-09-13-sqlite-migration.md).
+#
+# 1Gi is generous: the PostgreSQL database this replaces held ZERO rows after
+# seven months, and a body-metrics row is a few dozen bytes.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vitals-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  storageClassName: truenas-iscsi

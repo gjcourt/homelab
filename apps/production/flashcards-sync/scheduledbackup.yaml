@@ -6,8 +6,8 @@ metadata:
 spec:
   cluster:
     name: flashcards-db-production-cnpg-v1
-  # Daily at 02:00 UTC; offset from overture's 02:00 by running a few
-  # minutes later if both clusters land on the same node.
+  # Daily at 02:00 UTC, offset a few minutes so concurrent CNPG backups
+  # do not collide if two clusters land on the same node.
   schedule: "0 5 2 * * *"
   backupOwnerReference: self
   method: plugin

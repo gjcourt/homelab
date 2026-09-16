@@ -29,7 +29,7 @@ spec:
     # Prometheus scrapes GET /metrics on 8080. The scrape arrives as a normal
     # pod-to-pod connection from the kube-prometheus-stack Prometheus pod, so it
     # is not covered by the host/remote-node/ingress rule above and must be
-    # allowed explicitly (same pattern as overture's networkpolicy).
+    # allowed explicitly.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: monitoring

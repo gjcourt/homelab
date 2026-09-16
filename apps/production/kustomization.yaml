@@ -27,7 +27,6 @@ resources:
   - mqttscope
   - navidrome
   - openwebui
-  - overture
   - snapcast
   - thermalscope
   - thermalscope-smart

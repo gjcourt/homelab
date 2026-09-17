@@ -6,10 +6,9 @@ metadata:
   labels:
     app: openwebui
 spec:
-  # Disabled 2026-05-10: GPUs removed from hestia for sale, vLLM at
-  # http://10.42.2.10:8000 is unavailable. Restore replicas to 1 once
-  # GPU inference is back online (or the upstream URL is repointed).
-  replicas: 0
+  # Re-enabled 2026-09-16: backend repointed from the (removed) llama.cpp on
+  # hestia to the Anthropic API via its OpenAI-compat layer.
+  replicas: 1
   revisionHistoryLimit: 5
   selector:
     matchLabels:
@@ -29,12 +28,24 @@ spec:
           type: RuntimeDefault
       containers:
         - name: openwebui
-          image: ghcr.io/open-webui/open-webui:v0.9.5@sha256:e045bde3b004cc7f8c319412345eb56c87ea6ac57031534a31ca37ad5424beb3
+          # NOTE: this MUST be the multi-arch index digest, not a platform-specific
+          # one. The cluster is amd64; resolving a digest via `podman inspect` on an
+          # arm64 Mac yields the arm64 manifest and the pod dies with
+          # `exec /usr/bin/bash: exec format error`. Get it with:
+          #   podman manifest inspect ghcr.io/open-webui/open-webui:<tag>
+          # or the registry's docker-content-digest header.
+          image: ghcr.io/open-webui/open-webui:v0.11.3@sha256:41daa0cf2561a5d4c8d1ff31ee2a98d93ab4d3ac2605cac69366ff6a3374a933
           ports:
             - containerPort: 8080
           envFrom:
             - configMapRef:
                 name: openwebui-env
+            # Operator-managed, NOT in git (see secret-anthropic.yaml.example).
+            # optional: production has the funded key; staging deliberately does not,
+            # so the preview environment starts without reaching a paid API.
+            - secretRef:
+                name: openwebui-anthropic
+                optional: true
           volumeMounts:
             - name: data
               mountPath: /app/backend/data

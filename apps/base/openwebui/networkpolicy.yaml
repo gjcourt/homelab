@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: openwebui
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: "Gateway ingress + kubelet probes; egress to DNS, llama.cpp, and internet HTTPS (model downloads)."
+  description: "Gateway ingress + kubelet probes; egress to DNS and the Anthropic API over HTTPS."
   endpointSelector:
     matchLabels:
       app: openwebui
@@ -37,16 +37,14 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # llama.cpp OpenAI-compat API on hestia (TrueNAS, 10.42.2.10:8000)
-    - toCIDR:
-        - 10.42.2.10/32
-      toPorts:
-        - ports:
-            - port: "8000"
-              protocol: TCP
-    # Internet HTTPS for Hugging Face sentence-transformer downloads on first boot
-    - toCIDR:
-        - 0.0.0.0/0
+    # Outbound HTTPS: the Anthropic API (api.anthropic.com), plus Hugging Face
+    # sentence-transformer downloads on first boot. `toEntities: world` is the
+    # convention every other app here uses (authelia, adguard, immich,
+    # homeassistant, jellyfin, mealie). The previous `toCIDR: 0.0.0.0/0` was
+    # the sole outlier and was never exercised — the only backend at the time
+    # was llama.cpp on the LAN.
+    - toEntities:
+        - world
       toPorts:
         - ports:
             - port: "443"

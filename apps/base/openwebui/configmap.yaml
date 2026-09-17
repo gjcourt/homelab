@@ -6,12 +6,14 @@ metadata:
   labels:
     app: openwebui
 data:
-  # llama.cpp OpenAI-compat endpoint on hestia (TrueNAS)
-  OPENAI_API_BASE_URL: "http://10.42.2.10:8000/v1"
-  # llama.cpp does not validate API keys; field is required by Open WebUI
-  OPENAI_API_KEY: "not-needed"
+  # Anthropic via its OpenAI-SDK compatibility layer.
+  # https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk
+  # Open WebUI appends /chat/completions itself, so no trailing slash here.
+  OPENAI_API_BASE_URL: "https://api.anthropic.com/v1"
   WEBUI_NAME: "Chat"
-  DEFAULT_MODELS: "Qwen3.6-35B-A3B"
+  # Claude model IDs are pinned snapshots; see
+  # https://platform.claude.com/docs/en/models/overview
+  DEFAULT_MODELS: "claude-sonnet-5"
   # Store all data under the mounted PVC
   DATA_DIR: "/app/backend/data"
 

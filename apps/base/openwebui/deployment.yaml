@@ -6,10 +6,9 @@ metadata:
   labels:
     app: openwebui
 spec:
-  # Disabled 2026-05-10: GPUs removed from hestia for sale, vLLM at
-  # http://10.42.2.10:8000 is unavailable. Restore replicas to 1 once
-  # GPU inference is back online (or the upstream URL is repointed).
-  replicas: 0
+  # Re-enabled 2026-09-16: backend repointed from the (removed) llama.cpp on
+  # hestia to the Anthropic API via its OpenAI-compat layer.
+  replicas: 1
   revisionHistoryLimit: 5
   selector:
     matchLabels:
@@ -35,6 +34,12 @@ spec:
           envFrom:
             - configMapRef:
                 name: openwebui-env
+            # Operator-managed, NOT in git (see secret-anthropic.yaml.example).
+            # optional: production has the funded key; staging deliberately does not,
+            # so the preview environment starts without reaching a paid API.
+            - secretRef:
+                name: openwebui-anthropic
+                optional: true
           volumeMounts:
             - name: data
               mountPath: /app/backend/data

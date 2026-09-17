@@ -27,7 +27,7 @@ All CNPG clusters use the **barman-cloud plugin** (not the legacy sidecar) for W
 | immich | `immich-stage` | `immich-prod` | `s3://gjcourt-homelab-backup/staging/immich/v3` |
 | linkding | `linkding-stage` | `linkding-prod` | `s3://gjcourt-homelab-backup/{env}/linkding` |
 | memos | `memos-stage` | `memos-prod` | `s3://gjcourt-homelab-backup/staging/memos/v2` |
-| vitals | `vitals-stage` | `vitals-prod` | `s3://gjcourt-homelab-backup/{env}/vitals` |
+| ~~vitals~~ | — | — | **retired 2026-09 ([#1430](https://github.com/gjcourt/homelab/pull/1430)) — now SQLite on a PVC; the S3 prefix is frozen and holds no user tables** |
 
 **Backup schedule:** Daily at 02:00 UTC (via `ScheduledBackup` CRD)  
 **Retention:** 14 days (staging), 30 days (production)  
@@ -255,8 +255,6 @@ Each time you perform a recovery, increment the serverName suffix. Document this
 | immich-prod | `immich-db-prod-cnpg-v3` (v1 of the current cluster) |
 | memos-stage | `memos-db-staging-cnpg-v1` |
 | memos-prod | `memos-db-production-cnpg-v1` |
-| vitals-stage | `vitals-db-staging-cnpg-v1` |
-| vitals-prod | `vitals-db-production-cnpg-v1` |
 | linkding-stage | `linkding-db-staging-cnpg-v1` |
 | linkding-prod | `linkding-db-production-cnpg-v1` |
 | golinks-stage | `golinks-db-staging-cnpg-v1` |

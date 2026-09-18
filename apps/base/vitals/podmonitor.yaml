@@ -1,0 +1,33 @@
+---
+# Scrapes the litestream sidecar's metrics (:9090) so replication can be
+# alerted on. Without this the backup is unobserved: litestream retries S3
+# errors rather than exiting, and its /metrics endpoint answers 200 either way,
+# so a revoked key leaves the pod Ready and green while nothing reaches S3.
+#
+# PodMonitor rather than ServiceMonitor: the vitals Service targets the app on
+# 8080 and has no metrics port. `release: kube-prometheus-stack` is what makes
+# Prometheus discover it (podMonitorSelectorNilUsesHelmValues: true), same as
+# infra/configs/flux-monitoring/podmonitor.yaml.
+#
+# namespaceSelector is omitted deliberately — prometheus-operator then scopes
+# the PodMonitor to its own namespace, which is what each overlay wants
+# (vitals-prod / vitals-stage) without an env-specific patch.
+#
+# ⚠️ The scrape only works alongside the ingress rule for :9090 in
+# networkpolicy.yaml. Without it the target sits at up=0 behind the CNP.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: vitals-litestream
+  namespace: vitals
+  labels:
+    app: vitals
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: vitals
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 60s

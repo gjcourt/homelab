@@ -237,6 +237,72 @@ spec:
     # HomelabscopeJobMetricAbsent alerts. See
     # docs/plans/2026-07-04-homelabscope.md.
     # -------------------------------------------------------------------------
+    # Litestream — SQLite replication to S3 (vitals)
+    #
+    # The vitals CNPG cluster was retired in #1430; #1449 replaced its WAL
+    # archiving with a litestream sidecar replicating /data/vitals.db to S3.
+    # THE POD BEING READY SAYS NOTHING ABOUT THE BACKUP: litestream retries S3
+    # errors instead of exiting, and /metrics answers 200 regardless, so a
+    # revoked key or a bucket 403 leaves everything green while nothing lands
+    # in S3. These rules are the only thing that would notice.
+    #
+    # ⚠️ Litestream exposes no "last successful sync" timestamp — verified
+    # against the live 0.5.17 endpoint 2026-09-18. Everything here is built
+    # from the counters it does export: litestream_sync_error_count,
+    # litestream_replica_operation_total{operation="PUT"}, and the
+    # litestream_txid gauge (the local database's transaction id).
+    # -------------------------------------------------------------------------
+    - name: litestream
+      rules:
+        - alert: LitestreamSyncErrors
+          expr: >
+            increase(litestream_sync_error_count[15m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "litestream is failing to sync {{ $labels.namespace }}/{{ $labels.pod }} to S3"
+            description: >
+              litestream reported {{ $value | printf "%.0f" }} sync errors in 15m for {{ $labels.db }} in {{ $labels.namespace }}. It retries rather than exiting, so the pod stays Ready and the app keeps serving while the backup falls behind. Check `kubectl logs -n {{ $labels.namespace }} {{ $labels.pod }} -c litestream` for 403/credential errors, and the runbook at docs/operations/apps/vitals.md.
+        # The discriminating signal: local writes are happening (txid advances)
+        # but nothing is being PUT to S3. An idle database produces neither, so
+        # this stays quiet rather than crying wolf overnight.
+        - alert: LitestreamReplicationStalled
+          expr: >
+            (delta(litestream_txid[30m]) > 0)
+            and on (namespace, pod)
+            (increase(litestream_replica_operation_total{operation="PUT"}[30m]) == 0)
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "litestream is not replicating {{ $labels.namespace }}/{{ $labels.pod }} despite local writes"
+            description: >
+              The local SQLite transaction id advanced in the last 30m but litestream made no PUT to S3 in the same window — the database is taking writes that are not reaching the replica. Restore would lose them.
+        # Silence is not health. If the sidecar dies, the scrape breaks, or the
+        # PodMonitor stops matching, every rule above goes quiet — which looks
+        # exactly like "no problems". Same reasoning as PvcWriteProbeAbsent.
+        - alert: LitestreamMetricsAbsent
+          expr: >
+            absent(litestream_sync_count{namespace="vitals-prod"})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "litestream metrics have disappeared for vitals-prod"
+            description: >
+              No litestream_sync_count series for vitals-prod for 15m. Either the sidecar is gone, the PodMonitor stopped matching, or the CNP is dropping the scrape (check `up` and the :9090 ingress rule in apps/base/vitals/networkpolicy.yaml). While this is firing, the other litestream alerts cannot fire at all.
+        - alert: LitestreamDiskFull
+          expr: >
+            litestream_disk_full > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "litestream reports the volume full for {{ $labels.namespace }}/{{ $labels.pod }}"
+            description: >
+              litestream cannot write its metadata or WAL because {{ $labels.db }}'s volume is full. SQLite writes will fail next. Expand the PVC (see docs/operations/ for iSCSI expansion) — the volume is 1Gi by default.
+    # -------------------------------------------------------------------------
     # Flux reconciliation health
     #
     # gotk_resource_info is an Info gauge (always 1) emitted by kube-state-metrics

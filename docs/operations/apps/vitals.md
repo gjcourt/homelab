@@ -66,7 +66,25 @@ To verify Vitals is working:
 
 ## 7. Monitoring & Alerting
 
-- **Metrics**: the litestream sidecar serves Prometheus metrics on port `9090` (`metrics`). ⚠️ **Nothing scrapes them** — there is no `PodMonitor`, and the CiliumNetworkPolicy would also need an ingress rule from the monitoring namespace before a scrape could reach it. The CNPG `PodMonitor` went with the database.
+- **Metrics**: the litestream sidecar serves Prometheus metrics on port `9090` (`metrics`), scraped
+  every 60s by the `vitals-litestream` PodMonitor. The CNPG `PodMonitor` went with the database.
+- **Backup alerts** (`infra/configs/alerts/prometheus-rules.yaml`, group `litestream`):
+
+  | Alert | Fires when | Severity |
+  | :--- | :--- | :--- |
+  | `LitestreamSyncErrors` | any sync error in 15m, sustained 5m | warning |
+  | `LitestreamReplicationStalled` | local transaction id advanced in 30m but **zero** PUTs to S3 | warning |
+  | `LitestreamMetricsAbsent` | no litestream series for `vitals-prod` for 15m | warning |
+  | `LitestreamDiskFull` | litestream reports the volume full | critical |
+
+  ⚠️ **Litestream exposes no "last successful sync" timestamp** — checked against the live 0.5.17
+  endpoint. Every rule above is built from counters (`litestream_sync_error_count`,
+  `litestream_replica_operation_total{operation="PUT"}`) and the `litestream_txid` gauge, which is
+  why the stalled-replication rule compares local writes against PUTs rather than reading a
+  freshness metric that does not exist.
+
+  ⚠️ **`LitestreamMetricsAbsent` is the one that guards the others.** While it fires, none of the
+  rest can fire at all — silence here is not health.
 - **Volume**: `pvc-writeprobe` discovers PVC-mounting pods automatically, so `vitals-data` is
   covered by `PvcNotWritable` with no configuration.
 - **Logs**: the pod has two containers, so name the one you want:
@@ -155,16 +173,16 @@ flux resume kustomization apps-production -n flux-system
 
 ### Not yet covered
 
-- **No alert on replication staleness.** Metrics *are* enabled (`addr: ":9090"`), but nothing
-  scrapes them and no rule watches them, so a silently broken replica would not page. Litestream
-  retries S3 errors rather than exiting, and `/metrics` answers 200 regardless — **so the
-  readinessProbe proves the process is alive, not that replication works.** Revoked credentials or
-  a 403 on the bucket would leave this pod green indefinitely. Follow-up: add a `PodMonitor`, the
-  matching netpol ingress rule, and an alert on the age of the newest transaction.
-- **The S3 permissions on the restored credentials are only partly proven.** Writes to the new
-  `{env}/vitals-sqlite` prefix are confirmed working. Retention enforcement also needs
-  `s3:DeleteObject`, which nothing has exercised yet — the first enforcement pass is 24h after
-  deploy, and a failure would appear only in the litestream container log.
+- **Restore is still unrehearsed.** The procedure above has not been executed end to end. Staging
+  replicates to its own prefix precisely so it can be, and until it has been this section is a
+  plan rather than a tested runbook.
+- **The readinessProbe still proves only that the process is alive**, not that replication works —
+  litestream retries S3 errors rather than exiting. That gap is now covered by the alerts above
+  rather than by the probe.
+- **Retention enforcement is only partly exercised.** `s3:DeleteObject` is confirmed working
+  (`litestream_replica_operation_total{operation="DELETE"}` incremented with zero sync errors), but
+  no snapshot has yet aged past the 30d/14d retention window, so the full enforcement path is
+  unproven.
 
 ## 9. Troubleshooting
 

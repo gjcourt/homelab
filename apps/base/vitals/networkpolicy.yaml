@@ -23,6 +23,17 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
+    # Prometheus scrapes the litestream sidecar's metrics (:9090). Without this
+    # rule the PodMonitor target sits at up=0 — the CNP drops the scrape, and
+    # the backup goes back to being unobserved.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
   egress:
     # DNS via CoreDNS. The L7 dns rule lets Cilium's DNS proxy learn the S3 IPs
     # so the toFQDNs rule below can match — required for FQDN policy to work.

@@ -6,6 +6,7 @@ resources:
   - namespace.yaml
   - networkpolicy.yaml
   - pdb.yaml
+  - podmonitor.yaml
   - secret-ghcr.yaml
   - service.yaml
   - serviceaccount.yaml

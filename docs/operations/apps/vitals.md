@@ -66,15 +66,37 @@ To verify Vitals is working:
 
 ## 7. Monitoring & Alerting
 
-- **Metrics**: the litestream sidecar serves Prometheus metrics on port `9090` (`metrics`). ⚠️ **Nothing scrapes them** — there is no `PodMonitor`, and the CiliumNetworkPolicy would also need an ingress rule from the monitoring namespace before a scrape could reach it. The CNPG `PodMonitor` went with the database.
-- **Volume**: `pvc-writeprobe` discovers PVC-mounting pods automatically, so `vitals-data` is
-  covered by `PvcNotWritable` with no configuration.
-- **Logs**: the pod has two containers, so name the one you want:
+- **Metrics**: the litestream sidecar serves Prometheus metrics on port `9090` (`metrics`), scraped
+  every 60s by the `vitals-litestream` PodMonitor. The CNPG `PodMonitor` went with the database.
+- **Backup alerts** (`infra/configs/alerts/prometheus-rules.yaml`, group `litestream`):
 
-  ```bash
-  kubectl logs -n vitals-prod deploy/vitals -c vitals
-  kubectl logs -n vitals-prod deploy/vitals -c litestream
-  ```
+  | Alert | Fires when | Severity |
+  | :--- | :--- | :--- |
+  | `LitestreamReplicationStalled` | local writes in 30m, **zero** uploads in 30m | critical |
+  | `LitestreamReplicationStalledDaily` | same comparison over 24h — covers a database written to only occasionally | critical |
+  | `LitestreamMetricsAbsent` | any metric the rules depend on missing for 15m | critical |
+  | `LitestreamDiskFull` | litestream reports a full volume | critical |
+  | `LitestreamSyncErrors` | sustained sync error rate for 15m | warning |
+  | `LitestreamReplicationStalledStaging` | the 24h rule, for staging | warning |
+
+  Metrics behind them: `litestream_txid`, `litestream_replica_operation_total{operation}`,
+  `litestream_sync_count`, `litestream_sync_error_count`, `litestream_disk_full`.
+
+  ⚠️ **Litestream exposes no "last successful sync" timestamp** — checked against the live 0.5.17
+  endpoint. Every rule is built from the above.
+
+  ⚠️ **The known gap: a broken replica on a completely idle database is not detected until the next
+  write.** An absolute "nothing uploaded in 26h" floor was written and then **rejected on
+  measurement** — an idle replica does not upload at all (staging's PUT counter sat flat for two
+  hours while perfectly healthy), so that rule pages for a working system. Both stalled rules
+  therefore key off local writes, which ties detection to data actually being at risk rather than to
+  elapsed time.
+
+  ⚠️ **Severity is routing, not drama.** `warning` goes to `gjcourt+alerts@`, which is filtered out
+  of the inbox; an off-site copy that stopped being written is data at risk, so those rules are
+  `critical` and reach `gjcourt+critical@`. **Staging warnings route to the null receiver** — the
+  staging rule is visible in Alertmanager and sends no mail, which is the right trade for a preview
+  environment but means a broken staging replica is only found by looking.
 
 ## 8. Disaster Recovery
 
@@ -155,16 +177,16 @@ flux resume kustomization apps-production -n flux-system
 
 ### Not yet covered
 
-- **No alert on replication staleness.** Metrics *are* enabled (`addr: ":9090"`), but nothing
-  scrapes them and no rule watches them, so a silently broken replica would not page. Litestream
-  retries S3 errors rather than exiting, and `/metrics` answers 200 regardless — **so the
-  readinessProbe proves the process is alive, not that replication works.** Revoked credentials or
-  a 403 on the bucket would leave this pod green indefinitely. Follow-up: add a `PodMonitor`, the
-  matching netpol ingress rule, and an alert on the age of the newest transaction.
-- **The S3 permissions on the restored credentials are only partly proven.** Writes to the new
-  `{env}/vitals-sqlite` prefix are confirmed working. Retention enforcement also needs
-  `s3:DeleteObject`, which nothing has exercised yet — the first enforcement pass is 24h after
-  deploy, and a failure would appear only in the litestream container log.
+- **Restore is still unrehearsed.** The procedure above has not been executed end to end. Staging
+  replicates to its own prefix precisely so it can be, and until it has been this section is a
+  plan rather than a tested runbook.
+- **The readinessProbe still proves only that the process is alive**, not that replication works —
+  litestream retries S3 errors rather than exiting. That gap is now covered by the alerts above
+  rather than by the probe.
+- **Retention enforcement is only partly exercised.** `s3:DeleteObject` is confirmed working
+  (read directly off the sidecar's metrics endpoint on 2026-09-18: `litestream_replica_operation_total{operation="DELETE"}` had incremented with `litestream_sync_error_count` at 0), but
+  no snapshot has yet aged past the 30d/14d retention window, so the full enforcement path is
+  unproven.
 
 ## 9. Troubleshooting
 

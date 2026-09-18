@@ -26,7 +26,7 @@ The monitoring stack is deployed in the `monitoring` namespace via Flux using of
   - `infra/controllers/vector/values.yaml`
 - **Loki Alerting Rules** (LogQL, evaluated by Loki ruler): `infra/controllers/loki/alerting-rules.yaml`
 - **Prometheus Alerting Rules** (PromQL), all in `infra/configs/alerts/`:
-  - `prometheus-rules.yaml` — CNPG, node filesystem, DaemonSet, Loki push errors, container health, Cilium BGP, Flux.
+  - `prometheus-rules.yaml` — CNPG, node filesystem, DaemonSet, Loki push errors, container health, Cilium BGP, Flux, litestream (SQLite replication).
   - `cert-manager-rules.yaml` — certificate renewal, expiry, and a `CertManagerDown` meta-alert.
   - `loki-rules.yaml` — log-pipeline alerts: Loki WAL/chunk-flush failures, loki-canary end-to-end missing/late entries, promtail send failures and dropped entries, plus `LokiDown` / `LokiCanaryDown` / `PromtailDown` meta-alerts.
 - **Grafana Dashboards**: Pre-configured dashboards are included in the `kube-prometheus-stack` chart. Additional custom dashboards can be added via ConfigMaps.

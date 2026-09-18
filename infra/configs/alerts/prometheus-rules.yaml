@@ -237,6 +237,155 @@ spec:
     # HomelabscopeJobMetricAbsent alerts. See
     # docs/plans/2026-07-04-homelabscope.md.
     # -------------------------------------------------------------------------
+    # Litestream — SQLite replication to S3 (vitals)
+    #
+    # The vitals CNPG cluster was retired in #1430; #1449 replaced its WAL
+    # archiving with a litestream sidecar replicating /data/vitals.db to S3.
+    # THE POD BEING READY SAYS NOTHING ABOUT THE BACKUP: litestream retries S3
+    # errors instead of exiting, and /metrics answers 200 regardless, so a
+    # revoked key or a bucket 403 leaves everything green while nothing lands
+    # in S3.
+    #
+    # ⚠️ Litestream exposes NO "last successful sync" timestamp — checked
+    # against the live 0.5.17 endpoint. The metrics available are
+    # litestream_sync_count, litestream_sync_error_count, litestream_txid,
+    # litestream_replica_operation_total{operation}, litestream_db_size and
+    # litestream_disk_full. Everything below is built from those.
+    #
+    # ⚠️ TWO TRAPS THIS GROUP HAD TO DESIGN AROUND, both found in review:
+    #
+    #   1. `increase(...{operation="PUT"}[...]) == 0` CANNOT MATCH A MISSING
+    #      SERIES. litestream creates the PUT child counter on first use, so if
+    #      credentials are revoked before the container's first successful PUT
+    #      the series never exists, `== 0` matches nothing, and the rule is
+    #      silent in exactly the scenario it was written for. Hence `unless`,
+    #      which fires when the healthy-evidence series is absent OR flat.
+    #
+    #   2. A COMPARISON AGAINST LOCAL WRITES CANNOT FIRE ON AN IDLE DATABASE,
+    #      and this one is nearly idle. The 30m rule is therefore paired with a
+    #      24h one so a database written to once a day is still covered.
+    #      ⚠️ An absolute "nothing uploaded in 26h" floor was tried and
+    #      REJECTED ON MEASUREMENT: an idle replica does not upload at all
+    #      (staging's PUT counter was flat at 9 for two hours while healthy),
+    #      so that rule pages for a working system. The residual gap — broken
+    #      replication on a completely idle database — is undetected until the
+    #      next write, at which point both rules apply.
+    #
+    # Severity: prod replication failures are `critical` and reach
+    # gjcourt+critical@. `warning` routes to gjcourt+alerts@, which is filtered
+    # out of the inbox — the pvc-writeprobe rules record that lesson twice ("the
+    # operator found the outage first, twice"). An off-site copy that stopped
+    # being written is data at risk, so it pages.
+    #
+    # ⚠️ STAGING IS DELIBERATELY QUIETER. Alertmanager routes
+    # namespace =~ ".+-stage" + severity = warning to the null receiver, so the
+    # staging rule below is visible in the Prometheus/Alertmanager UI and sends
+    # no mail. That is the right trade for a preview environment rebuilt from
+    # master + open PRs — but it means a broken staging replica is only ever
+    # found by looking, which matters because staging is where the restore is
+    # meant to be rehearsed.
+    # -------------------------------------------------------------------------
+    - name: litestream
+      rules:
+        # The slow-write path. The 30m rule below cannot fire if writes arrive
+        # less often than its window — and this database is nearly idle (the
+        # PostgreSQL cluster it replaced held zero rows for seven months). Same
+        # comparison over 24h: if ANY local write landed in a day and NOTHING
+        # was uploaded in that day, replication is broken and the only copy of
+        # those writes is the RWO volume.
+        #
+        # ⚠️ Deliberately NOT an absolute "no upload in 26h" floor. That was
+        # tried and measured false: an idle litestream replica does not upload
+        # at all — staging's PUT counter sat flat at 9 for two hours with the
+        # sidecar healthy — so a time-only floor pages for a working system.
+        # Both rules therefore key off local writes, which means a broken
+        # replica on a TRULY idle database is not detected until the next
+        # write. That is a real gap, and it is bounded by the thing that
+        # matters: detection is tied to data actually being at risk.
+        - alert: LitestreamReplicationStalledDaily
+          expr: >
+            (delta(litestream_txid{namespace="vitals-prod"}[24h]) > 0)
+            unless on (namespace, pod)
+            (increase(litestream_replica_operation_total{namespace="vitals-prod", operation="PUT"}[24h]) > 0)
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "litestream uploaded nothing in 24h despite local writes ({{ $labels.namespace }}/{{ $labels.pod }})"
+            description: >
+              The local SQLite database took at least one write in the last 24h and litestream has uploaded nothing to S3 in that time. Those writes exist only on the vitals-data PVC. Check `kubectl logs -n {{ $labels.namespace }} {{ $labels.pod }} -c litestream` for credential or bucket errors, then docs/operations/apps/vitals.md.
+        # Sustained sync failures. A rate threshold rather than `> 0`, for the
+        # reason LokiPushErrors documents: increase(...[15m]) stays above zero
+        # for a full 15m after ONE transient 5xx, so `> 0` with a short `for`
+        # pages on a blip and teaches the operator to ignore the alert.
+        - alert: LitestreamSyncErrors
+          expr: >
+            rate(litestream_sync_error_count[15m]) > 0.01
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "litestream is failing to sync {{ $labels.namespace }}/{{ $labels.pod }} to S3"
+            description: >
+              litestream has been erroring on sync for {{ $labels.db }} in {{ $labels.namespace }} at a sustained rate for 15m. It retries rather than exiting, so the pod stays Ready and the app keeps serving while the backup falls behind. Warning rather than critical because LitestreamNoRecentUpload is the rule that catches the consequence; this one is the early signal.
+        # Writes are landing locally but not reaching S3. `unless` (not `== 0`)
+        # so that a missing PUT counter — the never-succeeded case — fires too.
+        - alert: LitestreamReplicationStalled
+          expr: >
+            (delta(litestream_txid{namespace="vitals-prod"}[30m]) > 0)
+            unless on (namespace, pod)
+            (increase(litestream_replica_operation_total{namespace="vitals-prod", operation="PUT"}[30m]) > 0)
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "litestream is not replicating {{ $labels.namespace }}/{{ $labels.pod }} despite local writes"
+            description: >
+              The local SQLite transaction id advanced in the last 30m but litestream made no PUT to S3 in the same window — the database is taking writes that are not reaching the replica, so a restore would lose them. ⚠️ This rule cannot fire on an idle database; LitestreamNoRecentUpload is the backstop for that case.
+        # Silence is not health. Asserts on every metric the rules above key
+        # off, NOT just one: if a litestream upgrade renames one of them, the
+        # rule that depends on it goes permanently dead while a single-metric
+        # guard stays quiet. litestream_replica_operation_total is deliberately
+        # excluded — it legitimately does not exist until the first PUT.
+        - alert: LitestreamMetricsAbsent
+          expr: >
+            absent(litestream_sync_count{namespace="vitals-prod"})
+            or absent(litestream_txid{namespace="vitals-prod"})
+            or absent(litestream_sync_error_count{namespace="vitals-prod"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "litestream metrics have disappeared for vitals-prod"
+            description: >
+              A metric the litestream alerts depend on has been missing for 15m. Either the sidecar is gone, the PodMonitor stopped matching, the CNP is dropping the scrape (check `up` and the :9090 ingress rule in apps/base/vitals/networkpolicy.yaml), or a litestream upgrade renamed it. While this fires, the rules that use the missing metric cannot fire at all.
+        - alert: LitestreamDiskFull
+          expr: >
+            litestream_disk_full > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "litestream reports a full volume for {{ $labels.namespace }}/{{ $labels.pod }}"
+            description: >
+              litestream cannot write because a volume it uses is full, and SQLite writes will fail next. Check which one before acting — the database lives on the 1Gi vitals-data PVC, but the sidecar also writes to a 32Mi emptyDir at /tmp, and expanding the PVC does not help if /tmp is the full one.
+        # Staging: same 24h comparison, warning severity. Alertmanager routes
+        # staging warnings to the null receiver, so this never mails — it exists
+        # so "is the rehearsal environment's replica alive?" is answerable from
+        # Alertmanager instead of by exec'ing into a pod.
+        - alert: LitestreamReplicationStalledStaging
+          expr: >
+            (delta(litestream_txid{namespace="vitals-stage"}[24h]) > 0)
+            unless on (namespace, pod)
+            (increase(litestream_replica_operation_total{namespace="vitals-stage", operation="PUT"}[24h]) > 0)
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "staging litestream took writes but uploaded nothing in 24h"
+            description: >
+              The staging replica took local writes and uploaded nothing in 24h. Nothing important is lost — staging is disposable — but the restore rehearsal in docs/operations/apps/vitals.md would be rehearsing against a stale prefix.
+    # -------------------------------------------------------------------------
     # Flux reconciliation health
     #
     # gotk_resource_info is an Info gauge (always 1) emitted by kube-state-metrics

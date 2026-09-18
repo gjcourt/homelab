@@ -1,0 +1,25 @@
+---
+# Litestream replication config — vitals staging.
+#
+# Staging replicates too, deliberately: this is the environment where a restore
+# gets rehearsed, and a backup path that is never exercised is not a backup path.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vitals-litestream
+  namespace: vitals
+  labels:
+    app: vitals
+    env: staging
+data:
+  litestream.yml: |
+    # Prometheus metrics; also the readinessProbe target, since the repo
+    # requires a readinessProbe on every container (AGENTS.md gate 8).
+    addr: ":9090"
+
+    dbs:
+      - path: /data/vitals.db
+        replica:
+          url: s3://gjcourt-homelab-backup/staging/vitals-sqlite
+          region: us-east-2
+          sync-interval: 10s

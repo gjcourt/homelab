@@ -9,7 +9,7 @@ Vitals is a custom health and wellness tracking application for the homelab. It 
 Vitals is deployed as a Kubernetes `Deployment` with a single replica in the `vitals-prod` (and `vitals-stage`) namespace.
 
 - **Image**: Uses a custom image hosted on GitHub Container Registry (`ghcr.io/gjcourt/vitals`).
-- **Database**: **SQLite**, in a single file on a PersistentVolume. The CNPG PostgreSQL cluster
+- **Database**: **SQLite**, in a single file on a PersistentVolume, replicated to S3 by a Litestream sidecar (see §8). The CNPG PostgreSQL cluster
   (`vitals-db-production-cnpg-v1`) was retired in
   [#1430](https://github.com/gjcourt/homelab/pull/1430) — it had held zero user tables for seven
   months while occupying three replicas and three iSCSI PVCs.
@@ -19,7 +19,8 @@ Vitals is deployed as a Kubernetes `Deployment` with a single replica in the `vi
   starts the replacement pod before terminating the old one, and on an RWO volume the new pod cannot
   attach what the old one still holds — the same failure this repo documents in
   [`AGENTS.md`](../../../AGENTS.md) under *Deployments on RWO*.
-- **Networking**: Exposed via Cilium Gateway API (`HTTPRoute`). Egress is DNS-only.
+- **Networking**: Exposed via Cilium Gateway API (`HTTPRoute`). Egress is DNS plus HTTPS to the
+  S3 backup bucket (`*.s3.us-east-2.amazonaws.com`) for the Litestream sidecar — nothing else.
 
 ## 3. URLs
 
@@ -34,7 +35,10 @@ Vitals is deployed as a Kubernetes `Deployment` with a single replica in the `vi
 - **ConfigMaps/Secrets**:
   - `vitals-container-env` (ConfigMap): listen address and web asset directory.
   - `ghcr-secret` (Secret): used as an `imagePullSecret` to pull the custom image from GHCR.
-  - There are **no database credentials** — a local file needs none.
+  - `vitals-aws-creds-secret` (Secret, SOPS): S3 credentials for the Litestream sidecar, exposed to
+    it as `LITESTREAM_ACCESS_KEY_ID` / `LITESTREAM_SECRET_ACCESS_KEY`.
+  - `vitals-litestream` (ConfigMap): the replication config; the replica URL differs per overlay.
+  - There are **no database credentials** — a local SQLite file needs none.
 
 ## 5. Usage Instructions
 
@@ -65,34 +69,75 @@ To verify Vitals is working:
 - **Metrics**: none app-specific. The CNPG `PodMonitor` went with the database.
 - **Volume**: `pvc-writeprobe` discovers PVC-mounting pods automatically, so `vitals-data` is
   covered by `PvcNotWritable` with no configuration.
-- **Logs**: Check the pod logs for application errors:
+- **Logs**: the pod has two containers, so name the one you want:
 
   ```bash
-  kubectl logs -n vitals-prod deploy/vitals
+  kubectl logs -n vitals-prod deploy/vitals -c vitals
+  kubectl logs -n vitals-prod deploy/vitals -c litestream
   ```
 
 ## 8. Disaster Recovery
 
-⚠️ **There is no automated backup today. This is a known regression from the CNPG setup**, which had
-WAL archiving and daily base backups to S3. A SQLite file has neither. That is tolerable only while
-the database is empty or trivially reproducible — **it stops being tolerable after the first logged
-measurement.** Tracked as a follow-up: Litestream, or a `VACUUM INTO` cron to object storage.
+**Backup strategy: Litestream, as a sidecar in the vitals pod**, replicating `/data/vitals.db`
+continuously to S3.
 
-- **Manual copy** (do this before any risky change):
+| | |
+| :--- | :--- |
+| Production | `s3://gjcourt-homelab-backup/production/vitals-sqlite` |
+| Staging | `s3://gjcourt-homelab-backup/staging/vitals-sqlite` |
+| Region | `us-east-2` |
+| Sync interval | 10s |
+| Credentials | `vitals-aws-creds-secret` (SOPS), the same keys the retired Barman ObjectStore used |
+| Config | `vitals-litestream` ConfigMap, one per overlay |
 
-  ```bash
-  kubectl exec -n vitals-prod deploy/vitals -- \
-    sh -c 'sqlite3 /data/vitals.db ".backup /data/vitals-backup.db"' 2>/dev/null \
-    || kubectl cp vitals-prod/$(kubectl get pod -n vitals-prod -l app=vitals \
-         -o jsonpath='{.items[0].metadata.name}'):/data/vitals.db ./vitals.db
-  ```
+It runs in the app's pod on purpose: the volume is ReadWriteOnce, so a separate CronJob pod could
+not mount it while vitals holds it.
 
-  The image may not ship `sqlite3`; the `kubectl cp` fallback copies the file itself. Copying a live
-  SQLite file is only safe when the app is idle — for a clean copy, scale to 0 first.
+⚠️ **The sidecar shares the pod's fate, and the pod shares the sidecar's.** If Litestream
+crashloops — revoked credentials, bucket unreachable — the pod stops being Ready and the app goes
+down with it. That trade was made knowingly; see the comment in `apps/base/vitals/deployment.yaml`.
 
-- **Restore**: scale the Deployment to 0, copy a known-good file back to `/data/vitals.db`, scale
-  back to 1. The old PostgreSQL backups under `s3://gjcourt-homelab-backup/{production,staging}/vitals`
-  are **frozen at the retirement date** and contain no user tables; they are not a restore path.
+⚠️ **The old PostgreSQL backups under `s3://gjcourt-homelab-backup/{production,staging}/vitals`
+(no `-sqlite` suffix) are frozen at the retirement date and hold no user tables.** They are not a
+restore path. That is why the SQLite replica uses a separate prefix.
+
+### Verify replication is actually happening
+
+```bash
+kubectl logs -n vitals-prod deploy/vitals -c litestream --tail=20
+kubectl exec -n vitals-prod deploy/vitals -c litestream -- \
+  litestream ltx -level all /data/vitals.db
+```
+
+The second command lists the transaction files in S3 with their timestamps — an empty list, or a
+newest entry hours old on a database being written to, means replication is broken.
+
+### Restore
+
+Litestream restores to a file, so the app must not be running against the target path:
+
+```bash
+# 1. Stop the app (releases the RWO volume).
+kubectl scale -n vitals-prod deploy/vitals --replicas=0
+
+# 2. Restore into a scratch pod that mounts the same PVC, or restore locally and copy back.
+#    Point-in-time is supported: add -timestamp 2026-09-17T22:00:00Z
+litestream restore -o ./vitals.db s3://gjcourt-homelab-backup/production/vitals-sqlite
+
+# 3. Put the file back at /data/vitals.db, then scale up.
+kubectl scale -n vitals-prod deploy/vitals --replicas=1
+```
+
+`litestream restore -dry-run` prints the plan without writing anything, and `-timestamp` /
+`-txid` land on the boundaries of transaction files that still exist.
+
+**Rehearse this in staging**, which replicates to its own prefix for exactly that reason.
+
+### Not yet covered
+
+- **No alert on replication staleness.** Litestream can expose Prometheus metrics via `addr`, but
+  that is not enabled here and no rule watches it, so a silently broken replica would not page.
+  Follow-up: enable metrics, scrape them, and alert on the age of the newest transaction.
 
 ## 9. Troubleshooting
 

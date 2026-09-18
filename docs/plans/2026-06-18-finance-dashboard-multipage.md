@@ -16,7 +16,7 @@ The deployed dashboard (`finance.burntbytes.com`, the `finance-dashboard` app in
 
 Requirements from George: every data file is an **encrypted YAML**; pages are **statically served** (no backend — "interactive" = in-browser JS only); **shared stylesheet + easy nav** across all pages.
 
-All scripts live in two places kept in sync: the canonical `~/src/utility/portfolio/` (not a git repo) and the image build context `~/src/homelab/images/finance-dashboard/`.
+All scripts live in two places kept in sync: the canonical `~/src/private/portfolio/` (not a git repo) and the image build context `~/src/homelab/images/finance-dashboard/`.
 
 ---
 
@@ -56,8 +56,8 @@ Replace `secret-positions.yaml` with a single **`secret-finance-data.yaml`** (Se
 ---
 
 ## Files
-**New:** `images/finance-dashboard/{webcommon.py, realestate.py, runway.py, style.css}`; `apps/base/finance-dashboard/secret-finance-data.yaml.example` (+ encrypted `secret-finance-data.yaml`); `~/src/utility/portfolio/{cashflow.yaml, str.yaml, runway.yaml}.example` data templates.
-**Modify:** `images/finance-dashboard/{report_html.py, cashflow.py, Dockerfile, entrypoint.sh}`; `~/src/utility/portfolio/{report_html.py, cashflow.py, redfin_filter.py}` (canonical, add `--emit-yaml`); `apps/base/finance-dashboard/{deployment.yaml, kustomization.yaml}`; `docs/operations/apps/finance-dashboard.md`; `images/finance-dashboard/README.md`.
+**New:** `images/finance-dashboard/{webcommon.py, realestate.py, runway.py, style.css}`; `apps/base/finance-dashboard/secret-finance-data.yaml.example` (+ encrypted `secret-finance-data.yaml`); `~/src/private/portfolio/{cashflow.yaml, str.yaml, runway.yaml}.example` data templates.
+**Modify:** `images/finance-dashboard/{report_html.py, cashflow.py, Dockerfile, entrypoint.sh}`; `~/src/private/portfolio/{report_html.py, cashflow.py, redfin_filter.py}` (canonical, add `--emit-yaml`); `apps/base/finance-dashboard/{deployment.yaml, kustomization.yaml}`; `docs/operations/apps/finance-dashboard.md`; `images/finance-dashboard/README.md`.
 **Reuse:** `re_taxshield.py::proforma` (port to JS), `redfin_filter.py::{hav_miles, fit_score, col}`, `portfolio.py::value_position`.
 
 ## Verification

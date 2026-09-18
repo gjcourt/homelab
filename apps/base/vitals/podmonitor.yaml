@@ -5,9 +5,15 @@
 # so a revoked key leaves the pod Ready and green while nothing reaches S3.
 #
 # PodMonitor rather than ServiceMonitor: the vitals Service targets the app on
-# 8080 and has no metrics port. `release: kube-prometheus-stack` is what makes
-# Prometheus discover it (podMonitorSelectorNilUsesHelmValues: true), same as
-# infra/configs/flux-monitoring/podmonitor.yaml.
+# 8080 and has no metrics port.
+#
+# ⚠️ The `release: kube-prometheus-stack` label is NOT what makes this
+# discovered — this repo sets podMonitorSelectorNilUsesHelmValues: false with
+# podMonitorSelector: {} (infra/controllers/kube-prometheus-stack/values.yaml),
+# deliberately, because the default orphaned every CNPG-generated PodMonitor.
+# All PodMonitors are selected regardless of labels. The label is kept for
+# consistency with infra/configs/flux-monitoring/podmonitor.yaml, whose comment
+# makes the same incorrect claim.
 #
 # namespaceSelector is omitted deliberately — prometheus-operator then scopes
 # the PodMonitor to its own namespace, which is what each overlay wants

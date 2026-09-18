@@ -72,27 +72,31 @@ To verify Vitals is working:
 
   | Alert | Fires when | Severity |
   | :--- | :--- | :--- |
-  | `LitestreamSyncErrors` | any sync error in 15m, sustained 5m | warning |
-  | `LitestreamReplicationStalled` | local transaction id advanced in 30m but **zero** PUTs to S3 | warning |
-  | `LitestreamMetricsAbsent` | no litestream series for `vitals-prod` for 15m | warning |
-  | `LitestreamDiskFull` | litestream reports the volume full | critical |
+  | `LitestreamReplicationStalled` | local writes in 30m, **zero** uploads in 30m | critical |
+  | `LitestreamReplicationStalledDaily` | same comparison over 24h — covers a database written to only occasionally | critical |
+  | `LitestreamMetricsAbsent` | any metric the rules depend on missing for 15m | critical |
+  | `LitestreamDiskFull` | litestream reports a full volume | critical |
+  | `LitestreamSyncErrors` | sustained sync error rate for 15m | warning |
+  | `LitestreamReplicationStalledStaging` | the 24h rule, for staging | warning |
+
+  Metrics behind them: `litestream_txid`, `litestream_replica_operation_total{operation}`,
+  `litestream_sync_count`, `litestream_sync_error_count`, `litestream_disk_full`.
 
   ⚠️ **Litestream exposes no "last successful sync" timestamp** — checked against the live 0.5.17
-  endpoint. Every rule above is built from counters (`litestream_sync_error_count`,
-  `litestream_replica_operation_total{operation="PUT"}`) and the `litestream_txid` gauge, which is
-  why the stalled-replication rule compares local writes against PUTs rather than reading a
-  freshness metric that does not exist.
+  endpoint. Every rule is built from the above.
 
-  ⚠️ **`LitestreamMetricsAbsent` is the one that guards the others.** While it fires, none of the
-  rest can fire at all — silence here is not health.
-- **Volume**: `pvc-writeprobe` discovers PVC-mounting pods automatically, so `vitals-data` is
-  covered by `PvcNotWritable` with no configuration.
-- **Logs**: the pod has two containers, so name the one you want:
+  ⚠️ **The known gap: a broken replica on a completely idle database is not detected until the next
+  write.** An absolute "nothing uploaded in 26h" floor was written and then **rejected on
+  measurement** — an idle replica does not upload at all (staging's PUT counter sat flat for two
+  hours while perfectly healthy), so that rule pages for a working system. Both stalled rules
+  therefore key off local writes, which ties detection to data actually being at risk rather than to
+  elapsed time.
 
-  ```bash
-  kubectl logs -n vitals-prod deploy/vitals -c vitals
-  kubectl logs -n vitals-prod deploy/vitals -c litestream
-  ```
+  ⚠️ **Severity is routing, not drama.** `warning` goes to `gjcourt+alerts@`, which is filtered out
+  of the inbox; an off-site copy that stopped being written is data at risk, so those rules are
+  `critical` and reach `gjcourt+critical@`. **Staging warnings route to the null receiver** — the
+  staging rule is visible in Alertmanager and sends no mail, which is the right trade for a preview
+  environment but means a broken staging replica is only found by looking.
 
 ## 8. Disaster Recovery
 
@@ -180,7 +184,7 @@ flux resume kustomization apps-production -n flux-system
   litestream retries S3 errors rather than exiting. That gap is now covered by the alerts above
   rather than by the probe.
 - **Retention enforcement is only partly exercised.** `s3:DeleteObject` is confirmed working
-  (`litestream_replica_operation_total{operation="DELETE"}` incremented with zero sync errors), but
+  (read directly off the sidecar's metrics endpoint on 2026-09-18: `litestream_replica_operation_total{operation="DELETE"}` had incremented with `litestream_sync_error_count` at 0), but
   no snapshot has yet aged past the 30d/14d retention window, so the full enforcement path is
   unproven.
 

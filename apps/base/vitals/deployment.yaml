@@ -30,6 +30,11 @@ spec:
         - name: litestream-config
           configMap:
             name: vitals-litestream
+        # readOnlyRootFilesystem: true, and an in-container `litestream restore`
+        # or a large sqlite temp spills to /tmp.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 32Mi
       serviceAccountName: vitals
       automountServiceAccountToken: false
       imagePullSecrets:
@@ -98,6 +103,12 @@ spec:
           image: litestream/litestream:0.5.17@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
           args:
             - replicate
+            # If the PVC comes back empty — the most common failure in this
+            # cluster (AGENTS.md, "Recovering read-only iSCSI volumes") — pull
+            # the database back from S3 before replicating, instead of
+            # replicating a freshly created empty file over the good history.
+            # v0.5.6+.
+            - -restore-if-db-not-exists
             - -config
             - /etc/litestream/litestream.yml
           ports:
@@ -136,6 +147,8 @@ spec:
             - name: litestream-config
               mountPath: /etc/litestream
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

@@ -17,6 +17,14 @@ data:
     # requires a readinessProbe on every container (AGENTS.md gate 8).
     addr: ":9090"
 
+    # Retention. Litestream defaults to snapshot interval 24h AND retention
+    # 24h, which would silently be a regression from the CNPG scheme this
+    # replaces (14d staging). Retention enforcement deletes snapshots
+    # AND their LTX files, so a point-in-time older than this is gone.
+    snapshot:
+      interval: 24h
+      retention: 336h
+
     dbs:
       - path: /data/vitals.db
         replica:

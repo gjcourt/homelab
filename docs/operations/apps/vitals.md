@@ -66,7 +66,7 @@ To verify Vitals is working:
 
 ## 7. Monitoring & Alerting
 
-- **Metrics**: none app-specific. The CNPG `PodMonitor` went with the database.
+- **Metrics**: the litestream sidecar serves Prometheus metrics on port `9090` (`metrics`). ⚠️ **Nothing scrapes them** — there is no `PodMonitor`, and the CiliumNetworkPolicy would also need an ingress rule from the monitoring namespace before a scrape could reach it. The CNPG `PodMonitor` went with the database.
 - **Volume**: `pvc-writeprobe` discovers PVC-mounting pods automatically, so `vitals-data` is
   covered by `PvcNotWritable` with no configuration.
 - **Logs**: the pod has two containers, so name the one you want:
@@ -87,6 +87,8 @@ continuously to S3.
 | Staging | `s3://gjcourt-homelab-backup/staging/vitals-sqlite` |
 | Region | `us-east-2` |
 | Sync interval | 10s |
+| Snapshot / retention | every 24h, kept **30d production / 14d staging** — matching the CNPG scheme this replaced. Litestream's own defaults are 24h/24h, and retention deletes snapshots *and* their transaction files |
+| On empty volume | `-restore-if-db-not-exists`: if the PVC comes back blank, the database is pulled from S3 before replication starts |
 | Credentials | `vitals-aws-creds-secret` (SOPS), the same keys the retired Barman ObjectStore used |
 | Config | `vitals-litestream` ConfigMap, one per overlay |
 
@@ -120,15 +122,30 @@ newest entry hours old on a database being written to, means replication is brok
 Litestream restores to a file, so the app must not be running against the target path:
 
 ```bash
-# 1. Stop the app (releases the RWO volume).
+# 1. Stop Flux FIRST, or it scales the Deployment back to 1 within 10 minutes
+#    and restarts the pod on a half-restored database.
+flux suspend kustomization apps-production -n flux-system
+
+# 2. Stop the app (releases the RWO volume).
 kubectl scale -n vitals-prod deploy/vitals --replicas=0
 
-# 2. Restore into a scratch pod that mounts the same PVC, or restore locally and copy back.
-#    Point-in-time is supported: add -timestamp 2026-09-17T22:00:00Z
+# 3. Restore into a scratch pod that mounts the same PVC, or restore locally and
+#    copy back. Credentials come from the SOPS secret:
+#      sops -d apps/production/vitals/secret-aws-creds.yaml
+#    export LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY, and note the
+#    bucket is in us-east-2. Point-in-time: add -timestamp 2026-09-17T22:00:00Z
 litestream restore -o ./vitals.db s3://gjcourt-homelab-backup/production/vitals-sqlite
 
-# 3. Put the file back at /data/vitals.db, then scale up.
+# 4. Put the file back at /data/vitals.db AND clear what belongs to the old one:
+#    the stale WAL/SHM, and litestream's metadata directory. Otherwise SQLite can
+#    replay the old WAL over the restored file, or litestream resumes from a
+#    transaction id that no longer matches.
+#      rm -f /data/vitals.db-wal /data/vitals.db-shm
+#      rm -rf /data/.vitals.db-litestream
+
+# 5. Scale up, confirm, then resume Flux — ALWAYS, even if the restore failed.
 kubectl scale -n vitals-prod deploy/vitals --replicas=1
+flux resume kustomization apps-production -n flux-system
 ```
 
 `litestream restore -dry-run` prints the plan without writing anything, and `-timestamp` /
@@ -138,9 +155,16 @@ kubectl scale -n vitals-prod deploy/vitals --replicas=1
 
 ### Not yet covered
 
-- **No alert on replication staleness.** Litestream can expose Prometheus metrics via `addr`, but
-  that is not enabled here and no rule watches it, so a silently broken replica would not page.
-  Follow-up: enable metrics, scrape them, and alert on the age of the newest transaction.
+- **No alert on replication staleness.** Metrics *are* enabled (`addr: ":9090"`), but nothing
+  scrapes them and no rule watches them, so a silently broken replica would not page. Litestream
+  retries S3 errors rather than exiting, and `/metrics` answers 200 regardless — **so the
+  readinessProbe proves the process is alive, not that replication works.** Revoked credentials or
+  a 403 on the bucket would leave this pod green indefinitely. Follow-up: add a `PodMonitor`, the
+  matching netpol ingress rule, and an alert on the age of the newest transaction.
+- **The S3 permissions on the restored credentials are only partly proven.** Writes to the new
+  `{env}/vitals-sqlite` prefix are confirmed working. Retention enforcement also needs
+  `s3:DeleteObject`, which nothing has exercised yet — the first enforcement pass is 24h after
+  deploy, and a failure would appear only in the litestream container log.
 
 ## 9. Troubleshooting
 

@@ -8,7 +8,9 @@ metadata:
     app.kubernetes.io/name: vitals
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Gateway ingress on 8080; egress DNS only (storage is a local SQLite file).
+  description: >-
+    Gateway ingress on 8080; egress DNS plus HTTPS to the S3 backup bucket only.
+    Storage is a local SQLite file; the litestream sidecar replicates it to S3.
   endpointSelector:
     matchLabels:
       app: vitals
@@ -22,6 +24,8 @@ spec:
             - port: "8080"
               protocol: TCP
   egress:
+    # DNS via CoreDNS. The L7 dns rule lets Cilium's DNS proxy learn the S3 IPs
+    # so the toFQDNs rule below can match — required for FQDN policy to work.
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: kube-system
@@ -31,4 +35,19 @@ spec:
             - port: "53"
               protocol: UDP
             - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # S3 for the litestream sidecar — the backup bucket lives in us-east-2, and
+    # the AWS SDK addresses it virtual-hosted style
+    # (gjcourt-homelab-backup.s3.us-east-2.amazonaws.com). The bare regional and
+    # global endpoints cover the initial region lookup. No blanket world egress.
+    - toFQDNs:
+        - matchPattern: "*.s3.us-east-2.amazonaws.com"
+        - matchName: "s3.us-east-2.amazonaws.com"
+        - matchName: "s3.amazonaws.com"
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP

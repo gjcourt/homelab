@@ -5,6 +5,10 @@ metadata:
   namespace: vitals
 spec:
   maxUnavailable: 0
+  # The backup sidecar gives this pod a second way to be unready (S3 blip,
+  # image pull). With the default IfHealthyBudget, an unready single-replica
+  # pod cannot be evicted and a node drain hangs on it indefinitely.
+  unhealthyPodEvictionPolicy: AlwaysAllow
   selector:
     matchLabels:
       app: vitals

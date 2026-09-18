@@ -4,6 +4,8 @@ namespace: vitals-stage
 resources:
   - ../../base/vitals/
   - configmap.yaml
+  - litestream-configmap.yaml
+  - secret-aws-creds.yaml
   - httproute.yaml
 
 labels:

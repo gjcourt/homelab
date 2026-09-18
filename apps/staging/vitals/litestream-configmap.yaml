@@ -1,0 +1,33 @@
+---
+# Litestream replication config — vitals staging.
+#
+# Staging replicates too, deliberately: this is the environment where a restore
+# gets rehearsed, and a backup path that is never exercised is not a backup path.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vitals-litestream
+  namespace: vitals
+  labels:
+    app: vitals
+    env: staging
+data:
+  litestream.yml: |
+    # Prometheus metrics; also the readinessProbe target, since the repo
+    # requires a readinessProbe on every container (AGENTS.md gate 8).
+    addr: ":9090"
+
+    # Retention. Litestream defaults to snapshot interval 24h AND retention
+    # 24h, which would silently be a regression from the CNPG scheme this
+    # replaces (14d staging). Retention enforcement deletes snapshots
+    # AND their LTX files, so a point-in-time older than this is gone.
+    snapshot:
+      interval: 24h
+      retention: 336h
+
+    dbs:
+      - path: /data/vitals.db
+        replica:
+          url: s3://gjcourt-homelab-backup/staging/vitals-sqlite
+          region: us-east-2
+          sync-interval: 10s

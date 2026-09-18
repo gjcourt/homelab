@@ -27,7 +27,7 @@ All CNPG clusters use the **barman-cloud plugin** (not the legacy sidecar) for W
 | immich | `immich-stage` | `immich-prod` | `s3://gjcourt-homelab-backup/staging/immich/v3` |
 | linkding | `linkding-stage` | `linkding-prod` | `s3://gjcourt-homelab-backup/{env}/linkding` |
 | memos | `memos-stage` | `memos-prod` | `s3://gjcourt-homelab-backup/staging/memos/v2` |
-| ~~vitals~~ | — | — | **retired 2026-09 ([#1430](https://github.com/gjcourt/homelab/pull/1430)) — now SQLite on a PVC; the S3 prefix is frozen and holds no user tables** |
+| ~~vitals~~ | — | — | **retired 2026-09 ([#1430](https://github.com/gjcourt/homelab/pull/1430)) — now SQLite on a PVC, replicated by Litestream to `{env}/vitals-sqlite`; this prefix is frozen and holds no user tables. Restore procedure: [apps/vitals.md](apps/vitals.md#8-disaster-recovery)** |
 
 **Backup schedule:** Daily at 02:00 UTC (via `ScheduledBackup` CRD)  
 **Retention:** 14 days (staging), 30 days (production)  

@@ -26,6 +26,15 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: vitals-data
+        # Per-overlay: the replica URL differs between production and staging.
+        - name: litestream-config
+          configMap:
+            name: vitals-litestream
+        # readOnlyRootFilesystem: true, and an in-container `litestream restore`
+        # or a large sqlite temp spills to /tmp.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 32Mi
       serviceAccountName: vitals
       automountServiceAccountToken: false
       imagePullSecrets:
@@ -70,6 +79,76 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+        # Continuous replication of the SQLite file to S3. Replaces the WAL
+        # archiving the retired CNPG cluster had (#1430 removed it); without
+        # this the only copy of the data is one RWO iSCSI volume.
+        #
+        # A sidecar rather than a CronJob because the volume is ReadWriteOnce:
+        # a separate pod cannot mount it while this one holds it. Sharing the
+        # pod sidesteps that entirely.
+        #
+        # ⚠️ Coupling accepted deliberately: this container sits in the app's
+        # pod, so if it crashloops (bad credentials, bucket unreachable) the
+        # pod stops being Ready and the app goes down with the backup. The
+        # ContainerRestartingSlowly alert (#1369) catches the slow-burn case.
+        # Revisit as a native sidecar (initContainer + restartPolicy: Always)
+        # if that coupling ever bites.
+        - name: litestream
+          image: litestream/litestream:0.5.17@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
+          args:
+            - replicate
+            # If the PVC comes back empty — the most common failure in this
+            # cluster (AGENTS.md, "Recovering read-only iSCSI volumes") — pull
+            # the database back from S3 before replicating, instead of
+            # replicating a freshly created empty file over the good history.
+            # v0.5.6+.
+            - -restore-if-db-not-exists
+            - -config
+            - /etc/litestream/litestream.yml
+          ports:
+            - name: metrics
+              containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          env:
+            # Litestream reads these two names natively — no config reference.
+            # Keys are the ones the retired Barman ObjectStore secret already
+            # used, so the same credentials carry over unchanged.
+            - name: LITESTREAM_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vitals-aws-creds-secret
+                  key: ACCESS_KEY_ID
+            - name: LITESTREAM_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vitals-aws-creds-secret
+                  key: ACCESS_SECRET_KEY
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: litestream-config
+              mountPath: /etc/litestream
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

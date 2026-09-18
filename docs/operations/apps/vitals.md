@@ -106,8 +106,11 @@ restore path. That is why the SQLite replica uses a separate prefix.
 ```bash
 kubectl logs -n vitals-prod deploy/vitals -c litestream --tail=20
 kubectl exec -n vitals-prod deploy/vitals -c litestream -- \
-  litestream ltx -level all /data/vitals.db
+  litestream ltx -config /etc/litestream/litestream.yml -level all /data/vitals.db
 ```
+
+`-config` is required — the config lives at `/etc/litestream/litestream.yml`, not the default
+`/etc/litestream.yml`, and without it the command exits with `config file not found`.
 
 The second command lists the transaction files in S3 with their timestamps — an empty list, or a
 newest entry hours old on a database being written to, means replication is broken.

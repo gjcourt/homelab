@@ -49,7 +49,7 @@ kubectl -n finance-dashboard port-forward svc/finance-dashboard 8080:8080  # →
 
 ## Update the data (no image rebuild)
 
-Edit the source YAMLs in `~/src/utility/portfolio/` (`positions.yaml`,
+Edit the source YAMLs in `~/src/private/portfolio/` (`positions.yaml`,
 `cashflow.yaml`, `str.yaml`, `runway.yaml`; for candidates run
 `redfin_filter.py --emit-yaml candidates.yaml` from a Redfin export), then:
 ```bash

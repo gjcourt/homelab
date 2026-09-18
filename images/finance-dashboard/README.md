@@ -16,12 +16,12 @@ Carlo, Chart.js vendored at `static/chart.min.js`) — no backend.
 
 **Code-only image** — no financial data baked in. The numbers arrive at runtime
 via the mounted `finance-dashboard-data` Secret (5 YAML keys at `/data`), so the
-image is safe in ghcr. Scripts mirror `~/src/utility/portfolio/`.
+image is safe in ghcr. Scripts mirror `~/src/private/portfolio/`.
 
 ## Local test
 ```bash
 # render the pages from sample data
-cd ~/src/utility/portfolio
+cd ~/src/private/portfolio
 for r in report_html:positions cashflow:cashflow realestate runway; do :; done
 python report_html.py --file positions.yaml --out /tmp/site/index.html
 python cashflow.py --file cashflow.yaml --html --out /tmp/site/cashflow.html

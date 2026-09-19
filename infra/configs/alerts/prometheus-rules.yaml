@@ -264,12 +264,16 @@ spec:
     #   2. A COMPARISON AGAINST LOCAL WRITES CANNOT FIRE ON AN IDLE DATABASE,
     #      and this one is nearly idle. The 30m rule is therefore paired with a
     #      24h one so a database written to once a day is still covered.
-    #      ⚠️ An absolute "nothing uploaded in 26h" floor was tried and
-    #      REJECTED ON MEASUREMENT: an idle replica does not upload at all
-    #      (staging's PUT counter was flat at 9 for two hours while healthy),
-    #      so that rule pages for a working system. The residual gap — broken
-    #      replication on a completely idle database — is undetected until the
-    #      next write, at which point both rules apply.
+    #      ⚠️ CORRECTED 2026-09-19. #1450 removed an absolute "nothing
+    #      uploaded in 26h" floor on the grounds that an idle replica never
+    #      uploads. That was generalised from a TWO-HOUR observation and is
+    #      wrong: litestream takes its scheduled snapshot regardless of write
+    #      activity — observed in staging at 00:00:01Z with no writes since
+    #      21:48Z the previous evening. snapshot.interval is 24h, so a healthy
+    #      replica uploads at least daily no matter how idle the database is.
+    #      The floor is therefore back as LitestreamNoRecentUpload, and it is
+    #      the ONLY rule that catches a broken replica on an idle database —
+    #      the gap #1450 documented as unavoidable.
     #
     # Severity: prod replication failures are `critical` and reach
     # gjcourt+critical@. `warning` routes to gjcourt+alerts@, which is filtered
@@ -287,6 +291,22 @@ spec:
     # -------------------------------------------------------------------------
     - name: litestream
       rules:
+        # The absolute floor, and the only rule here that does not depend on
+        # local write activity: snapshot.interval is 24h, so a healthy replica
+        # uploads at least once a day even with nobody touching the database.
+        # 26h allows for jitter around the snapshot boundary.
+        - alert: LitestreamNoRecentUpload
+          expr: >
+            litestream_sync_count{namespace="vitals-prod"}
+            unless on (namespace, pod)
+            (increase(litestream_replica_operation_total{namespace="vitals-prod", operation="PUT"}[26h]) > 0)
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "litestream has uploaded nothing for {{ $labels.namespace }}/{{ $labels.pod }} in 26h"
+            description: >
+              The sidecar is running and scraped, but nothing has reached S3 in 26h — longer than the 24h snapshot interval, so even a completely idle database should have produced an upload. The RWO volume is currently the only copy. Check `kubectl logs -n {{ $labels.namespace }} {{ $labels.pod }} -c litestream` for credential or bucket errors. ⚠️ A pod younger than 26h has a counter that only covers its own lifetime; confirm the pod age before concluding.
         # The slow-write path. The 30m rule below cannot fire if writes arrive
         # less often than its window — and this database is nearly idle (the
         # PostgreSQL cluster it replaced held zero rows for seven months). Same
@@ -369,6 +389,18 @@ spec:
             summary: "litestream reports a full volume for {{ $labels.namespace }}/{{ $labels.pod }}"
             description: >
               litestream cannot write because a volume it uses is full, and SQLite writes will fail next. Check which one before acting — the database lives on the 1Gi vitals-data PVC, but the sidecar also writes to a 32Mi emptyDir at /tmp, and expanding the PVC does not help if /tmp is the full one.
+        - alert: LitestreamNoRecentUploadStaging
+          expr: >
+            litestream_sync_count{namespace="vitals-stage"}
+            unless on (namespace, pod)
+            (increase(litestream_replica_operation_total{namespace="vitals-stage", operation="PUT"}[26h]) > 0)
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "staging litestream has uploaded nothing in 26h"
+            description: >
+              The staging replica has uploaded nothing in 26h. Nothing important is lost — staging is disposable — but the restore rehearsal in docs/operations/apps/vitals.md would be rehearsing against a stale prefix.
         # Staging: same 24h comparison, warning severity. Alertmanager routes
         # staging warnings to the null receiver, so this never mails — it exists
         # so "is the rehearsal environment's replica alive?" is answerable from

@@ -35,6 +35,75 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 32Mi
+      # ⚠️ THIS IS WHAT ACTUALLY RECOVERS AN EMPTY VOLUME, not the sidecar's
+      # -restore-if-db-not-exists flag. Rehearsed 2026-09-19 on staging: the
+      # volume was wiped, the pod restarted, and litestream logged
+      #   "database exists, skipping restore"
+      # because the app container had already created an empty vitals.db. The
+      # containers start in parallel and the app wins the race, so the flag is
+      # unreachable in this arrangement. An initContainer cannot lose that race:
+      # nothing else in the pod is running yet.
+      #
+      # BOTH guards are required; they cover different conditions, and the
+      # flag help states them precisely:
+      #   -if-replica-exists  "exit code 0 if no backups found"        -> first
+      #                        deploy against an empty bucket
+      #   -if-db-not-exists   "exit code 0 if the database already
+      #                        exists"                                 -> every
+      #                        restart where the file is on the PVC
+      #
+      # -if-replica-exists ALONE is not enough, and staging proved it: with only
+      # that flag the initContainer crashlooped 58 times over 4h36m on
+      #   Error: cannot restore, output path already exists and is not empty:
+      #   /data/vitals.db. Use -force to overwrite
+      # Reproduced locally against litestream 0.5.17 with a seeded database:
+      # -if-replica-exists alone exits 1; adding -if-db-not-exists exits 0 with
+      # "database already exists, skipping".
+      #
+      # Do NOT reach for -force here. It would overwrite a live database with
+      # whatever is in the bucket, which is data loss, not recovery.
+      initContainers:
+        - name: litestream-restore
+          image: litestream/litestream:0.5.17@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
+          args:
+            - restore
+            - -config
+            - /etc/litestream/litestream.yml
+            - -if-replica-exists
+            - -if-db-not-exists
+            - /data/vitals.db
+          env:
+            - name: LITESTREAM_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: vitals-aws-creds-secret
+                  key: ACCESS_KEY_ID
+            - name: LITESTREAM_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: vitals-aws-creds-secret
+                  key: ACCESS_SECRET_KEY
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: litestream-config
+              mountPath: /etc/litestream
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
       serviceAccountName: vitals
       automountServiceAccountToken: false
       imagePullSecrets:
@@ -103,11 +172,11 @@ spec:
           image: litestream/litestream:0.5.17@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
           args:
             - replicate
-            # If the PVC comes back empty — the most common failure in this
-            # cluster (AGENTS.md, "Recovering read-only iSCSI volumes") — pull
-            # the database back from S3 before replicating, instead of
-            # replicating a freshly created empty file over the good history.
-            # v0.5.6+.
+            # Kept as a backstop only. ⚠️ It does NOT fire in this pod: the app
+            # container creates an empty vitals.db before this check runs, so
+            # litestream logs "database exists, skipping restore" — measured
+            # during the 2026-09-19 staging rehearsal. The initContainer above
+            # is the real recovery path.
             - -restore-if-db-not-exists
             - -config
             - /etc/litestream/litestream.yml

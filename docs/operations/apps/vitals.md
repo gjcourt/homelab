@@ -15,6 +15,9 @@ Vitals is deployed as a Kubernetes `Deployment` with a single replica in the `vi
   months while occupying three replicas and three iSCSI PVCs.
 - **Storage**: `vitals-data` PVC, 1Gi, `truenas-iscsi`, **ReadWriteOnce**, mounted at `/data`. The
   database file is `/data/vitals.db`.
+- **Recovery**: an **initContainer** runs `litestream restore -if-replica-exists` before the app
+  starts. ⚠️ This, not the sidecar's `-restore-if-db-not-exists` flag, is what recovers an empty
+  volume — see §8.
 - **Rollout strategy**: `strategy: Recreate`, and it is load-bearing. The default `RollingUpdate`
   starts the replacement pod before terminating the old one, and on an RWO volume the new pod cannot
   attach what the old one still holds — the same failure this repo documents in
@@ -72,6 +75,7 @@ To verify Vitals is working:
 
   | Alert | Fires when | Severity |
   | :--- | :--- | :--- |
+  | `LitestreamNoRecentUpload` | **nothing** uploaded in 26h (the 24h snapshot should have) | critical |
   | `LitestreamReplicationStalled` | local writes in 30m, **zero** uploads in 30m | critical |
   | `LitestreamReplicationStalledDaily` | same comparison over 24h — covers a database written to only occasionally | critical |
   | `LitestreamMetricsAbsent` | any metric the rules depend on missing for 15m | critical |
@@ -141,6 +145,23 @@ newest entry hours old on a database being written to, means replication is brok
 
 ### Restore
 
+⚠️ **Rehearsed end to end on staging, 2026-09-19.** The procedure below is what was actually run,
+not a plan. Seeded 1 user / 60 weights / 60 weight events / 120 water events, wiped the volume
+completely (database, `-wal`, `-shm` and `.vitals.db-litestream`), and restored. **Row counts and
+checksums came back identical.**
+
+🔴 **What the rehearsal found: the pod does not self-heal from an empty volume unless the
+initContainer does it.** On restart litestream logged:
+
+```
+level=INFO msg="database exists, skipping restore" path=/data/vitals.db
+```
+
+The app container had already created an empty `vitals.db`, so the sidecar's
+`-restore-if-db-not-exists` never fired — and the empty database then replicated *forward* into S3
+as new transactions. The older history survived, which is why the restore below worked, but
+**automatic recovery is the initContainer's job; the flag loses the race every time.**
+
 Litestream restores to a file, so the app must not be running against the target path:
 
 ```bash
@@ -150,28 +171,41 @@ flux suspend kustomization apps-production -n flux-system
 
 # 2. Stop the app (releases the RWO volume).
 kubectl scale -n vitals-prod deploy/vitals --replicas=0
+kubectl wait -n vitals-prod --for=delete pod -l app=vitals --timeout=120s
 
-# 3. Restore into a scratch pod that mounts the same PVC, or restore locally and
-#    copy back. Credentials come from the SOPS secret:
-#      sops -d apps/production/vitals/secret-aws-creds.yaml
-#    export LITESTREAM_ACCESS_KEY_ID / LITESTREAM_SECRET_ACCESS_KEY, and note the
-#    bucket is in us-east-2. Point-in-time: add -timestamp 2026-09-17T22:00:00Z
-litestream restore -o ./vitals.db s3://gjcourt-homelab-backup/production/vitals-sqlite
+# 3. Restore in a scratch pod that mounts the same PVC and the credentials
+#    secret, running the litestream image. It must:
+#      - delete /data/vitals.db, -wal, -shm AND /data/.vitals.db-litestream
+#        (stale WAL replays over the restored file; stale metadata resumes from
+#        a transaction id that no longer matches)
+#      - litestream restore -dry-run ... first, which prints the exact files it
+#        will fetch and their timestamps
+#      - then restore, choosing the target explicitly:
+#          -txid <last good txid>     e.g. -txid 000000000000000d
+#          -timestamp 2026-09-19T00:18:00Z
+#        Both land on the boundaries of files that still exist; the dry run
+#        lists them.
+#
+#    Find the last good txid with:
+#      kubectl exec -n vitals-prod deploy/vitals -c litestream -- \
+#        litestream ltx -config /etc/litestream/litestream.yml -level all /data/vitals.db
 
-# 4. Put the file back at /data/vitals.db AND clear what belongs to the old one:
-#    the stale WAL/SHM, and litestream's metadata directory. Otherwise SQLite can
-#    replay the old WAL over the restored file, or litestream resumes from a
-#    transaction id that no longer matches.
-#      rm -f /data/vitals.db-wal /data/vitals.db-shm
-#      rm -rf /data/.vitals.db-litestream
-
-# 5. Scale up, confirm, then resume Flux — ALWAYS, even if the restore failed.
+# 4. Scale up, verify, then resume Flux — ALWAYS, even if the restore failed.
 kubectl scale -n vitals-prod deploy/vitals --replicas=1
 flux resume kustomization apps-production -n flux-system
 ```
 
-`litestream restore -dry-run` prints the plan without writing anything, and `-timestamp` /
-`-txid` land on the boundaries of transaction files that still exist.
+**Verify against something countable**, not just "the pod is up":
+
+```bash
+kubectl exec -n vitals-prod deploy/vitals -c litestream -- sqlite3 /data/vitals.db \
+  "select 'users='||(select count(*) from users)||' weights='||(select count(*) from weights);"
+```
+
+**On the restart after a restore**, litestream logs `detected database behind replica` and fetches
+the newest replica file. In the rehearsal this did **not** clobber the restored data — it
+replicated the restored state forward as new transactions — but verify the counts after the pod
+comes back, not only before.
 
 **Rehearse this in staging**, which replicates to its own prefix for exactly that reason.
 

@@ -123,54 +123,28 @@ function SshRead([string]$cmd) {
   } finally { Remove-Item $ltmp -Force -ErrorAction SilentlyContinue }
 }
 # ---- durable movement ledger -------------------------------------------
-# An append-only record of what moved, written to hestia AS IT HAPPENS.
-#
-# ⚠️ Why not the per-run audit alone: the audit is copied off-box as the LAST
-# step of a fully successful run. On 2026-09-19 two runs aborted (completeness
-# gate, then a killed ssh session) and left NO off-box trace whatsoever - which
-# is exactly when you want one. A trace you only get on success is the trace
-# you do not have when something goes wrong.
-#
-# Granularity: album-level for phase transitions, file-level only where it
-# earns its row - each name restored, and each file that actually landed with
-# its hash. ~160 rows for a 10-album import.
-#
-# Appends are chunked: write a small TSV locally, scp it, append under flock on
-# hestia. flock matters because a second import (or a retry) must not interleave
-# half-written lines into the ledger.
+# Shared with transcode.ps1 - see ledger.ps1 for the schema and the reason it is
+# a shared file rather than a copy in each script.
+. (Join-Path $PSScriptRoot 'ledger.ps1')
 $LEDGER = '/mnt/main/archive/_inventory/rips/ledger.tsv'
-$script:LedgerSeq = 0
+Initialize-Ledger -RemoteHost $HST -RunId $RUN_ID -Path $LEDGER
+# Thin wrappers keep the call sites in this script unchanged, and keep the
+# music-shaped field names (Artist/Album) mapping onto the shared schema.
 function Ledger([string]$event, [object[]]$records) {
   if (-not $records -or $records.Count -eq 0) { return }
-  $script:LedgerSeq++
-  $lines = foreach ($r in $records) {
-    # ts, run_id, event, scope, artist, album, disc, track, sha256, bytes, src, dest, note
-    @(
-      (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
-      $RUN_ID; $event
-      $(if ($r.Scope)  { $r.Scope }  else { 'album' })
-      $(if ($r.Artist) { $r.Artist } else { '' })
-      $(if ($r.Album)  { $r.Album }  else { '' })
-      $(if ($null -ne $r.Disc)  { $r.Disc }  else { '' })
-      $(if ($null -ne $r.Track) { $r.Track } else { '' })
-      $(if ($r.Sha)   { $r.Sha }   else { '' })
-      $(if ($null -ne $r.Bytes) { $r.Bytes } else { '' })
-      $(if ($r.Src)   { $r.Src }   else { '' })
-      $(if ($r.Dest)  { $r.Dest }  else { '' })
-      $(if ($r.Note)  { $r.Note }  else { '' })
-    ) -join "`t"
+  $mapped = foreach ($r in $records) {
+    [pscustomobject]@{
+      Scope = $(if ($r.Scope) { $r.Scope } else { 'album' })
+      Title = $r.Artist; Item = $r.Album
+      Disc  = $r.Disc;   Track = $r.Track
+      Sha   = $r.Sha;    Bytes = $r.Bytes
+      Src   = $r.Src;    Dest  = $r.Dest;  Note = $r.Note
+    }
   }
-  $chunk = Join-Path $env:TEMP "$RUN_ID.ledger.$($script:LedgerSeq).tsv"
-  [IO.File]::WriteAllLines($chunk, $lines, [Text.UTF8Encoding]::new($false))
-  $remote = "/tmp/.ledger.$RUN_ID.$($script:LedgerSeq).tsv"
-  & cmd /c "scp -B -o BatchMode=yes `"$chunk`" $($HST):$remote >nul 2>nul" | Out-Null
-  if ($LASTEXITCODE -ne 0) { Log "  WARNING: ledger chunk '$event' did not reach hestia (import continues)"; return }
-  Remove-Item $chunk -Force -ErrorAction SilentlyContinue
-  # The ledger must never block or fail the import: a lost row is bad, a lost
-  # album is worse. Warn and carry on.
-  $null = SshRead "sudo -n mkdir -p '$(Split-Path -Parent $LEDGER)' && sudo -n touch '$LEDGER' && sudo -n flock '$LEDGER.lock' -c 'cat $remote >> $LEDGER' && rm -f $remote && echo LEDGERED"
+  Write-Ledger -Event $event -Records @($mapped)
   Log "  ledger: $event x$($records.Count)"
 }
+function LedgerRun([string]$event, [string]$note) { Write-LedgerRun -Event $event -Note $note; Log "  ledger: $event" }
 function CopyAudit([string]$local) {
   # $LASTEXITCODE after `& cmd /c "scp ..." | Out-Null` proved unreliable here -
   # it reported failure on a copy that demonstrably landed. Ask hestia instead:

@@ -95,33 +95,6 @@ $AUDIT     = Join-Path $AuditDir "$RUN_ID.files.tsv"
 $AUDIT_SUM = Join-Path $AuditDir "$RUN_ID.albums.tsv"
 
 function Log($m) { Write-Output ((Get-Date).ToString('yyyy-MM-dd HH:mm:ss') + ' ' + $m) }
-# Win32-OpenSSH stalls ssh.exe when stdout is a non-console handle and the
-# output grows past a buffer. Reproduced on a clean box: the 227-line library
-# listing dies at EXACTLY 12288 bytes (3 x 4096) with ssh.exe blocked forever,
-# while the same query piped through `head -3` returns in milliseconds. It is
-# below PowerShell - redirecting to a file does not help, because the stall is
-# inside ssh itself.
-#
-# So never stream a large remote read through ssh stdout. Have the remote write
-# to a file and fetch it with scp, which is a different code path and moved
-# 3.6 GB without trouble.
-function SshRead([string]$cmd) {
-  $rtmp = "/tmp/.sshread." + [Guid]::NewGuid().ToString('N').Substring(0,12)
-  $ltmp = [IO.Path]::GetTempFileName()
-  try {
-    & cmd /c "ssh -n -o BatchMode=yes $HST `"$cmd > $rtmp 2>/dev/null`" >nul 2>nul" | Out-Null
-    & cmd /c "scp -B -o BatchMode=yes $($HST):$rtmp `"$ltmp`" >nul 2>nul" | Out-Null
-    & cmd /c "ssh -n -o BatchMode=yes $HST `"rm -f $rtmp`" >nul 2>nul" | Out-Null
-    # MUST read as UTF-8. Get-Content's default is the ANSI codepage, which
-    # turned every library path containing a curly apostrophe into "Whoâ€™s".
-    # That is not merely cosmetic: Norm() runs FormKD, which decomposes the
-    # mojibake's "™" into the LETTERS "TM", so "whos" never matched "whotms"
-    # and two albums already in the library were reported NEW on every run
-    # (measured 2026-09-19: The Who / Who's Next, Lightnin' Hopkins / Mojo Hand).
-    if (Test-Path $ltmp) { return @([IO.File]::ReadAllLines($ltmp, [Text.UTF8Encoding]::new($false))) }
-    return @()
-  } finally { Remove-Item $ltmp -Force -ErrorAction SilentlyContinue }
-}
 # ---- durable movement ledger -------------------------------------------
 # Shared with transcode.ps1 - see ledger.ps1 for the schema and the reason it is
 # a shared file rather than a copy in each script.
@@ -130,6 +103,9 @@ $LEDGER = '/mnt/main/archive/_inventory/rips/ledger.tsv'
 Initialize-Ledger -RemoteHost $HST -RunId $RUN_ID -Path $LEDGER
 # Thin wrappers keep the call sites in this script unchanged, and keep the
 # music-shaped field names (Artist/Album) mapping onto the shared schema.
+# SshRead moved into ledger.ps1 when verify-before-delete.ps1 became the third
+# caller - see the note there on the 12288-byte ssh.exe stall.
+function SshRead([string]$cmd) { Invoke-SshRead -RemoteHost $HST -Cmd $cmd }
 function Ledger([string]$event, [object[]]$records) {
   if (-not $records -or $records.Count -eq 0) { return }
   $mapped = foreach ($r in $records) {
@@ -144,7 +120,9 @@ function Ledger([string]$event, [object[]]$records) {
   Write-Ledger -Event $event -Records @($mapped)
   Log "  ledger: $event x$($records.Count)"
 }
-function LedgerRun([string]$event, [string]$note) { Write-LedgerRun -Event $event -Note $note; Log "  ledger: $event" }
+function LedgerRun([string]$event, [string]$note) {
+  Ledger $event @([pscustomobject]@{ Scope='run'; Note=$note })
+}
 function CopyAudit([string]$local) {
   # $LASTEXITCODE after `& cmd /c "scp ..." | Out-Null` proved unreliable here -
   # it reported failure on a copy that demonstrably landed. Ask hestia instead:
@@ -155,9 +133,6 @@ function CopyAudit([string]$local) {
   $ok = SshRead "test -f '$AUDIT_REMOTE/$name' && echo PRESENT"
   if ($ok -contains 'PRESENT') { Log "  audit off-box: $name" }
   else { Log "  WARNING: $name did NOT reach hestia:$AUDIT_REMOTE (import continues)" }
-}
-function LedgerRun([string]$event, [string]$note) {
-  Ledger $event @([pscustomobject]@{ Scope='run'; Note=$note })
 }
 function Norm([string]$s) {
   $t = $s.Normalize([Text.NormalizationForm]::FormKD) -replace "[\u2010\u2011]","-" -replace "[\u2018\u2019]","'"

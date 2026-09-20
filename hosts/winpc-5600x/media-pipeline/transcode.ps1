@@ -61,6 +61,18 @@ $ErrorActionPreference = 'Continue'
 $FFDIR = 'C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin'
 $FF    = Join-Path $FFDIR 'ffmpeg.exe'
 $FP    = Join-Path $FFDIR 'ffprobe.exe'
+# ⚠️ Same root cause that mangled every non-ASCII music tag (see
+# import-music.ps1): PowerShell decodes native output - and Get-Content -
+# in the OEM codepage, not UTF-8. A queue line for "Amélie" or "Léon" would
+# push a mojibake filename to the library. Fail closed rather than silently
+# mis-name a film.
+try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+if ([Console]::OutputEncoding.CodePage -ne 65001) {
+  Write-Output "ABORT: console encoding is CP$([Console]::OutputEncoding.CodePage), not UTF-8 (65001)."
+  exit 5
+}
+
 $HST   = 'truenas_admin@10.42.2.10'
 $HBASE = '/mnt/main/family'
 $WORK  = 'C:\media-work'
@@ -74,13 +86,19 @@ function Probe($f, $entries, $stream) {
 function Dur($f) { $d = Probe $f 'format=duration' $null; if ($d) { [double]$d } else { 0 } }
 function OnHestia($rel) { (ssh -n -o BatchMode=yes $HST "sudo -n test -f '$HBASE/$rel' && echo yes") -match 'yes' }
 
+. (Join-Path $PSScriptRoot 'ledger.ps1')
+$RUN_ID = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
+Initialize-Ledger -RemoteHost $HST -RunId $RUN_ID
+function VLedger([string]$event, [object[]]$records) { Write-Ledger -Event $event -Records $records; if ($records) { Log "  ledger: $event x$($records.Count)" } }
+function VLedgerRun([string]$event, [string]$note) { Write-LedgerRun -Event $event -Note $note; Log "  ledger: $event" }
+
 foreach ($t in @($FF, $FP)) { if (-not (Test-Path $t)) { Log "ABORT: missing $t"; exit 1 } }
 if (-not (Test-Path $Queue)) { Log "ABORT: queue not found: $Queue"; exit 1 }
 New-Item -ItemType Directory -Path $WORK -Force | Out-Null
 
 # ---- parse queue -------------------------------------------------------
 $items = @()
-foreach ($line in Get-Content $Queue) {
+foreach ($line in [IO.File]::ReadAllLines($Queue, [Text.UTF8Encoding]::new($false))) {
   $l = $line.Trim()
   if (-not $l -or $l.StartsWith('#')) { continue }
   $parts = $l -split "`t+"
@@ -103,7 +121,10 @@ foreach ($i in $items) {
   $runnable += [pscustomobject]@{ Src = $i.Src; Name = $i.Name; Dur = $d; Subs = $nsub }
 }
 Log ("== PREFLIGHT DONE: $($runnable.Count) to encode ==")
-if ($DryRun) { Log 'DRY RUN - stopping here'; exit 0 }
+VLedgerRun 'RUN_START' "queue=$Queue titles=$($items.Count) runnable=$($runnable.Count) bitrate=$Bitrate dryrun=$DryRun"
+VLedger 'QUEUED' @($runnable | ForEach-Object {
+  [pscustomobject]@{ Scope='title'; Title=$_.Name; Src=$_.Src; Note='preflight passed' } })
+if ($DryRun) { VLedgerRun 'RUN_END' 'dry run'; Log 'DRY RUN - stopping here'; exit 0 }
 if (-not $runnable) { Log 'nothing to do'; exit 0 }
 
 if ($WaitForIdle) {
@@ -143,7 +164,14 @@ foreach ($it in $runnable) {
   $num,$den = ($fps -split '/')
   $fpsVal = if ($den) { [double]$num / [double]$den } else { [double]$num }
   $expected = [math]::Round($it.Dur * $fpsVal)
-  $actual = [int](Probe $va 'stream=nb_frames' 'v:0')
+  # nb_frames is 'N/A' for plenty of muxers - casting that to [int] throws, and
+  # with $ErrorActionPreference='Continue' the throw is printed as a scary
+  # stack trace in the middle of a run that then succeeds anyway. The packet
+  # count below is the real answer; treat an unparseable value as 0 and fall
+  # through to it quietly.
+  $nbRaw  = Probe $va 'stream=nb_frames' 'v:0'
+  $actual = 0
+  if ($nbRaw -match '^\d+$') { $actual = [int]$nbRaw }
   if ($actual -le 0) {
     $cnt = & $FP -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of default=nw=1:nk=1 $va 2>$null
     $actual = [int]$cnt
@@ -183,14 +211,44 @@ foreach ($it in $runnable) {
   if ($pngKB -lt $MinFrameKB) { Log "FAIL frame at ${mid}s only ${pngKB}KB (near-blank) : $name -- keeping local"; continue }
   Log ("VALIDATED $name  " + [math]::Round($outLen/1GB,2) + "GB  ${kbps}kbps  dur_delta=" + [math]::Round($durDelta,3) + "%  frame=${pngKB}KB")
 
-  # ---- push, verify byte count, only then delete local -----------------
+  # ---- push, verify the BYTES, only then delete local -------------------
+  # ⚠️ This used to compare `stat -c %s` and delete the local copy on a size
+  # match. A size match is not an integrity check: a transfer that lands the
+  # right NUMBER of wrong bytes passes it, and the only other copy is then
+  # deleted. Hours of encode are not recoverable from a truncated remote file.
+  # Hash it, exactly as the music path does before it trusts a landed file.
+  $localSha = (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash.ToLower()
+  VLedger 'ENCODED' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$localSha; Bytes=$outLen
+                                         Src=$i.Src; Dest=$rel; Note='validated: duration, bitrate, decoded frame' })
+
   $tmp = "/tmp/mediapush_$([guid]::NewGuid().ToString('N')).mkv"
   scp -o BatchMode=yes $local "$($HST):$tmp" | Out-Null
-  if ($LASTEXITCODE -ne 0) { Log "FAIL scp: $name -- keeping local"; ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null; continue }
+  if ($LASTEXITCODE -ne 0) {
+    VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Note='scp to hestia failed' })
+    Log "FAIL scp: $name -- keeping local"; ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null; continue
+  }
   ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$HBASE/$dest' && sudo -n mv '$tmp' '$HBASE/$rel' && sudo -n chown 1028:100 '$HBASE/$rel' && sudo -n chmod 644 '$HBASE/$rel'"
-  if ($LASTEXITCODE -ne 0) { Log "FAIL push: $name -- keeping local"; continue }
-  $remote = (ssh -n -o BatchMode=yes $HST "sudo -n stat -c %s '$HBASE/$rel'") -join ''
-  if ($remote.Trim() -eq "$outLen") { Remove-Item $local -Force; Log "DONE $name (hestia verified $remote bytes)" }
-  else { Log "FAIL size mismatch: local=$outLen remote=$remote : $name -- keeping local" }
+  if ($LASTEXITCODE -ne 0) {
+    VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note='move into library failed' })
+    Log "FAIL push: $name -- keeping local"; continue
+  }
+  $remoteSha = ((ssh -n -o BatchMode=yes $HST "sudo -n sha256sum '$HBASE/$rel'") -join '').Trim().Split(' ')[0].ToLower()
+  $remoteLen = ((ssh -n -o BatchMode=yes $HST "sudo -n stat -c %s '$HBASE/$rel'") -join '').Trim()
+  if ($remoteSha -eq $localSha -and $remoteLen -eq "$outLen") {
+    # LANDED is written only here, after the hash is proven in the library, so a
+    # row means "this film is there and it matched" - not "we pushed it".
+    VLedger 'LANDED' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$remoteSha; Bytes=$remoteLen
+                                          Src=$i.Src; Dest=$rel; Note='sha256 verified on hestia' })
+    Remove-Item $local -Force
+    VLedger 'LOCAL_DELETED' @([pscustomobject]@{ Scope='title'; Title=$name; Src=$local
+                                                 Note='local copy removed after verification' })
+    Log "DONE $name (hestia verified $remoteLen bytes, sha256 $($remoteSha.Substring(0,12)))"
+  }
+  else {
+    VLedger 'VERIFY_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$localSha; Bytes=$outLen; Dest=$rel
+                                               Note="remote sha=$remoteSha len=$remoteLen" })
+    Log "FAIL verification: $name -- local sha=$localSha len=$outLen / remote sha=$remoteSha len=$remoteLen -- keeping local"
+  }
 }
+VLedgerRun 'RUN_END' "encoded and pushed $($runnable.Count) title(s)"
 Log '== ALL DONE =='

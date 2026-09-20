@@ -164,7 +164,14 @@ foreach ($it in $runnable) {
   $num,$den = ($fps -split '/')
   $fpsVal = if ($den) { [double]$num / [double]$den } else { [double]$num }
   $expected = [math]::Round($it.Dur * $fpsVal)
-  $actual = [int](Probe $va 'stream=nb_frames' 'v:0')
+  # nb_frames is 'N/A' for plenty of muxers - casting that to [int] throws, and
+  # with $ErrorActionPreference='Continue' the throw is printed as a scary
+  # stack trace in the middle of a run that then succeeds anyway. The packet
+  # count below is the real answer; treat an unparseable value as 0 and fall
+  # through to it quietly.
+  $nbRaw  = Probe $va 'stream=nb_frames' 'v:0'
+  $actual = 0
+  if ($nbRaw -match '^\d+$') { $actual = [int]$nbRaw }
   if ($actual -le 0) {
     $cnt = & $FP -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of default=nw=1:nk=1 $va 2>$null
     $actual = [int]$cnt

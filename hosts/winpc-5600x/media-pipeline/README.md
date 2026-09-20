@@ -146,9 +146,29 @@ number.
 
 ## Encoder settings
 
-`libx265 -b:v 4700k -tag:v hvc1 -c:a aac -b:a 160k -ac 2 -c:s copy`, ~4.86 Mbps
-ABR. Encodes at roughly 1.1x realtime on the 5600X (6c/12t), so a 2-hour film is
-about 2 hours of wall time.
+`libx265 -b:v 4700k`, ~4.86 Mbps ABR for video. Encodes at roughly 1.1x realtime
+on the 5600X (6c/12t), so a 2-hour film is about 2 hours of wall time.
+
+**Audio: every track, at its own channel count.** `-map 0:a`, then `-c:a:N aac`
+with the bitrate scaled per stream — 96k mono, 160k stereo, 64k/channel above
+that (5.1 → 384k, 7.1 → 512k). No `-ac`, so the source layout survives.
+
+⚠️ **This was `-map 0:a:0 … -ac 2` until 2026-09-20** — the *first* audio stream
+only, downmixed to stereo. The Tale of the Princess Kaguya carries
+`eng/eng/jpn/jpn/fra` in DTS 5.1; the library copy came out as one 2-channel
+English AAC track. For a Ghibli film that silently discards the original
+Japanese audio, and it did the same to **every title this script has ever
+encoded**. Nothing complained: the file played, the duration matched, the
+bitrate passed.
+
+So there is now an **audio-track gate**, for the same reason the frame-count
+gate exists — ffmpeg exits 0 while dropping streams, and the exit code proves
+nothing. The output must carry the same number of audio tracks as the source
+*and* the same channel counts, or the encode is rejected and the local copy
+kept. A drop and a downmix are both failures.
+
+Re-encoding a title already in the library means removing the library file
+first: preflight skips anything that is already `OnHestia`.
 
 ---
 

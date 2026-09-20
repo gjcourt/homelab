@@ -84,6 +84,14 @@ function Probe($f, $entries, $stream) {
   (& $FP @a $f 2>$null)
 }
 function Dur($f) { $d = Probe $f 'format=duration' $null; if ($d) { [double]$d } else { 0 } }
+# AAC bitrate scaled to the channel count, because the whole point is to STOP
+# flattening everything to stereo. 64k/channel is the usual rule of thumb;
+# stereo keeps the 160k this script has always used.
+function AacBitrate([int]$ch) {
+  if ($ch -le 1) { return 96 }
+  if ($ch -le 2) { return 160 }
+  return 64 * $ch          # 5.1 -> 384k, 7.1 -> 512k
+}
 function OnHestia($rel) { (ssh -n -o BatchMode=yes $HST "sudo -n test -f '$HBASE/$rel' && echo yes") -match 'yes' }
 
 . (Join-Path $PSScriptRoot 'ledger.ps1')
@@ -117,8 +125,18 @@ foreach ($i in $items) {
   $rel = "media/video/movies/$($i.Name)/$($i.Name).mkv"
   if (OnHestia $rel) { Log ("  SKIP on hestia: " + $i.Name); continue }
   $nsub = @(Probe $i.Src 'stream=index' 's').Count
+  # Every audio stream, not just the first. Channels and language are read here
+  # so the encode can preserve both instead of discarding them.
+  $achan = @(Probe $i.Src 'stream=channels' 'a')
+  $alang = @(Probe $i.Src 'stream_tags=language' 'a')
+  $adesc = @(for ($k = 0; $k -lt $achan.Count; $k++) {
+    "$(if ($k -lt $alang.Count -and $alang[$k]) { $alang[$k] } else { 'und' })/$($achan[$k])ch"
+  }) -join ' '
   Log ("  QUEUED       : " + $i.Name + "  " + [math]::Round($d/60,1) + "min  subs=" + $nsub + " (muxed after encode, never mapped into it)")
-  $runnable += [pscustomobject]@{ Src = $i.Src; Name = $i.Name; Dur = $d; Subs = $nsub }
+  Log ("                 audio=" + $achan.Count + "  [" + $adesc + "]")
+  if ($achan.Count -eq 0) { Log ("  NO AUDIO     : " + $i.Name + " -- skipping"); continue }
+  $runnable += [pscustomobject]@{ Src = $i.Src; Name = $i.Name; Dur = $d; Subs = $nsub
+                                  AChan = $achan; ADesc = $adesc }
 }
 Log ("== PREFLIGHT DONE: $($runnable.Count) to encode ==")
 VLedgerRun 'RUN_START' "queue=$Queue titles=$($items.Count) runnable=$($runnable.Count) bitrate=$Bitrate dryrun=$DryRun"
@@ -150,10 +168,22 @@ foreach ($it in $runnable) {
   # precisely because ffmpeg's own frame=/time= line was suppressed.
   $va = Join-Path $WORK "$name.va.mkv"
   if (Test-Path $va) { Remove-Item $va -Force }
+  # ⚠️ EVERY audio stream, at its OWN channel count. This used to be
+  # `-map 0:a:0 -c:a aac -b:a 160k -ac 2`: the FIRST audio stream only,
+  # downmixed to stereo. Measured 2026-09-20 on The Tale of the Princess
+  # Kaguya - the disc carries eng/eng/jpn/jpn/fra in DTS 5.1 and the library
+  # copy came out as a single 2-channel English AAC track. For a Ghibli film
+  # that silently discards the original Japanese audio, and it did the same to
+  # every other title this script has ever encoded. No `-ac`, so the source
+  # layout survives; bitrate scales with channels.
+  $aArgs = @()
+  for ($k = 0; $k -lt $it.AChan.Count; $k++) {
+    $ch = 2; if ("$($it.AChan[$k])" -match '^\d+$') { $ch = [int]$it.AChan[$k] }
+    $aArgs += @("-c:a:$k", 'aac', "-b:a:$k", "$(AacBitrate $ch)k")
+  }
   $ffArgs = @('-nostdin','-y','-hide_banner','-v','warning','-stats','-i',$it.Src,
-              '-map','0:v:0','-map','0:a:0',
-              '-c:v','libx265','-b:v',"${Bitrate}k",
-              '-c:a','aac','-b:a','160k','-ac','2',$va)
+              '-map','0:v:0','-map','0:a',
+              '-c:v','libx265','-b:v',"${Bitrate}k") + $aArgs + @($va)
   & $FF @ffArgs
   if ($LASTEXITCODE -ne 0) { Log "FAIL encode (exit $LASTEXITCODE): $name"; continue }
 
@@ -186,7 +216,9 @@ foreach ($it in $runnable) {
   # STAGE 2 - mux the subtitle tracks back in a pure copy pass, where a sparse
   # stream cannot starve anything.
   if ($it.Subs -gt 0) {
-    & $FF -nostdin -y -hide_banner -v warning -i $va -i $it.Src -map '0:v:0' -map '0:a:0' -map '1:s' -c copy $local
+    # -map 0:a, not 0:a:0 - a copy pass that took only the first track would
+    # throw away exactly what stage 1 was just fixed to keep.
+    & $FF -nostdin -y -hide_banner -v warning -i $va -i $it.Src -map '0:v:0' -map '0:a' -map '1:s' -c copy $local
     if ($LASTEXITCODE -ne 0) { Log "FAIL subtitle mux: $name -- keeping $va"; continue }
     Remove-Item $va -Force
   } else { Move-Item $va $local -Force }
@@ -209,6 +241,28 @@ foreach ($it in $runnable) {
   $pngKB = [math]::Round((Get-Item $png).Length / 1KB)
   Remove-Item $png -Force
   if ($pngKB -lt $MinFrameKB) { Log "FAIL frame at ${mid}s only ${pngKB}KB (near-blank) : $name -- keeping local"; continue }
+  # ---- AUDIO-TRACK GATE ------------------------------------------------
+  # The same lesson as the frame-count gate: ffmpeg exits 0 while quietly
+  # dropping streams, so the exit code proves nothing. The old `-map 0:a:0`
+  # discarded four of Kaguya's five tracks and NOTHING complained - the file
+  # played, the duration matched, the bitrate was fine. Count them.
+  $outChan = @(Probe $local 'stream=channels' 'a')
+  if ($outChan.Count -ne $it.AChan.Count) {
+    Log ("FAIL audio tracks: $name has $($outChan.Count), source has $($it.AChan.Count) [$($it.ADesc)] -- keeping local")
+    VLedger 'VERIFY_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Bytes=$outLen
+                             Note="audio tracks $($outChan.Count) != source $($it.AChan.Count)" })
+    continue
+  }
+  # Channels must survive too: the bug was a downmix, not only a drop.
+  $chanOut = ($outChan -join ',')
+  $chanSrc = ($it.AChan -join ',')
+  if ($chanOut -ne $chanSrc) {
+    Log ("FAIL audio channels: $name is [$chanOut], source is [$chanSrc] -- keeping local")
+    VLedger 'VERIFY_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Bytes=$outLen
+                             Note="channels $chanOut != source $chanSrc" })
+    continue
+  }
+  Log ("  audio OK: $($outChan.Count) track(s), channels [$chanOut]")
   Log ("VALIDATED $name  " + [math]::Round($outLen/1GB,2) + "GB  ${kbps}kbps  dur_delta=" + [math]::Round($durDelta,3) + "%  frame=${pngKB}KB")
 
   # ---- push, verify the BYTES, only then delete local -------------------
@@ -219,7 +273,8 @@ foreach ($it in $runnable) {
   # Hash it, exactly as the music path does before it trusts a landed file.
   $localSha = (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash.ToLower()
   VLedger 'ENCODED' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$localSha; Bytes=$outLen
-                                         Src=$i.Src; Dest=$rel; Note='validated: duration, bitrate, decoded frame' })
+                                         Src=$i.Src; Dest=$rel
+                                         Note="validated: duration, bitrate, decoded frame, audio [$($it.ADesc)]" })
 
   $tmp = "/tmp/mediapush_$([guid]::NewGuid().ToString('N')).mkv"
   scp -o BatchMode=yes $local "$($HST):$tmp" | Out-Null

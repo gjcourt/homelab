@@ -115,6 +115,23 @@ function DiscAlbum([string]$album, [int]$disc, [int]$discTotal) {
   if ($discTotal -gt 1) { return "$album [Disc $disc]" }
   return $album
 }
+# scp.exe on Win32-OpenSSH transfers FILENAMES in the console codepage, not
+# UTF-8. Every non-ASCII character therefore arrives double-encoded: the curly
+# apostrophe in "Lightnin’ Hopkins" landed on hestia as the bytes for
+# "LightninΓÇΖ Hopkins" (measured 2026-09-19, three folders mangled in one
+# run). chcp is unreliable across the ssh->cmd hop, so the transfer is kept
+# PURELY ASCII and the true names are restored on the far side from a UTF-8
+# manifest file - bytes in a file are not codepage-converted.
+#
+# ~uXXXX~ is reversible, ASCII, and legal on both filesystems.
+function AsciiSafe([string]$s) {
+  $sb = [Text.StringBuilder]::new()
+  foreach ($ch in $s.ToCharArray()) {
+    if ([int]$ch -lt 128) { [void]$sb.Append($ch) }
+    else { [void]$sb.AppendFormat('~u{0:x4}~', [int]$ch) }
+  }
+  $sb.ToString()
+}
 function TruncName([string]$fileName) {
   $ext  = [IO.Path]::GetExtension($fileName)
   $stem = [IO.Path]::GetFileNameWithoutExtension($fileName)
@@ -249,8 +266,30 @@ $albums = $items | Group-Object Artist,Album
 $toImport = @()
 foreach ($g in $albums) {
   $art = $g.Group[0].Artist; $alb = $g.Group[0].Album
-  $key = (Norm $art) + '|' + (Norm $alb)
-  if ($have.ContainsKey($key)) { Log ("  SKIP already in library: $art / $alb  -> " + $have[$key]) ; continue }
+  # Dedup must compare the folder names this run would CREATE, not the bare
+  # album title. A multi-disc set lands as "Album [Disc 1]" / "[Disc 2]", so a
+  # bare-title lookup never matched and every multi-disc album was reported NEW
+  # on every run - re-transferring gigabytes and making the NEW list untrue.
+  # (rsync --ignore-existing meant it was wasteful rather than destructive.)
+  # Checking per disc also handles the half-imported case: if disc 1 landed and
+  # disc 2 did not, this imports disc 2 instead of skipping the whole album.
+  $wantDiscs = @{}
+  foreach ($it in $g.Group) {
+    $wantDiscs[(LinuxName (DiscAlbum $alb $it.Disc $it.DiscTotal))] = $true
+  }
+  $missing = @($wantDiscs.Keys | Where-Object { -not $have.ContainsKey((Norm $art) + '|' + (Norm $_)) })
+  if ($missing.Count -eq 0) {
+    $shown = ($wantDiscs.Keys | Sort-Object) -join ', '
+    Log "  SKIP already in library: $art / $shown"
+    continue
+  }
+  if ($missing.Count -lt $wantDiscs.Count) {
+    Log "  PARTIAL $art / $alb - already have $($wantDiscs.Count - $missing.Count) of $($wantDiscs.Count) disc(s); importing: $(($missing | Sort-Object) -join ', ')"
+    $want = @{}; foreach ($m in $missing) { $want[$m] = $true }
+    $keep = @($g.Group | Where-Object { $want.ContainsKey((LinuxName (DiscAlbum $alb $_.Disc $_.DiscTotal))) })
+    $toImport += ,([pscustomobject]@{ Name = $g.Name; Count = $keep.Count; Group = $keep })
+    continue
+  }
   Log "  NEW  $($g.Count.ToString().PadLeft(3))  $art / $alb"
   $toImport += $g
 }
@@ -266,16 +305,20 @@ foreach ($g in $toImport) {
   $art = $g.Group[0].Artist; $alb = $g.Group[0].Album
   $artL = LinuxName $art; $albL = LinuxName $alb
   $artW = WinName $artL;  $albW = WinName $albL
-  if ($artW -ne $artL) { $renames += [pscustomobject]@{ From=$artW; To=$artL; Depth=1 } }
-  if ($albW -ne $albL) { $renames += [pscustomobject]@{ From="$artW/$albW"; To="$artW/$albL"; Depth=2 } }
+  $artS = AsciiSafe $artW
+  if ($artS -ne $artL) { $renames += [pscustomobject]@{ From=$artS; To=$artL; Depth=1 } }
   foreach ($it in $g.Group) {
     $albDL = LinuxName (DiscAlbum $alb $it.Disc $it.DiscTotal)
     $albDW = WinName $albDL
-    if ($albDW -ne $albDL) { $renames += [pscustomobject]@{ From="$artW/$albDW"; To="$artW/$albDL"; Depth=2 } }
-    $dir = Join-Path $Staging (Join-Path $artW $albDW)
+    $albDS = AsciiSafe $albDW
+    if ($albDS -ne $albDL) { $renames += [pscustomobject]@{ From="$artS/$albDS"; To="$artS/$albDL"; Depth=2 } }
+    $dir = Join-Path $Staging (Join-Path $artS $albDS)
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
-    $n = TruncName $it.File.Name
-    if ($n -ne $it.File.Name) { $truncated++; Log "  truncated (>${MaxNameBytes}B): $($it.File.Name.Substring(0,[Math]::Min(50,$it.File.Name.Length)))..." }
+    $n = AsciiSafe (TruncName $it.File.Name)
+    if ($n -ne (TruncName $it.File.Name)) {
+      $renames += [pscustomobject]@{ From="$artS/$albDS/$n"; To="$artS/$albDS/$(TruncName $it.File.Name)"; Depth=3 }
+    }
+    if ((TruncName $it.File.Name) -ne $it.File.Name) { $truncated++; Log "  truncated (>${MaxNameBytes}B): $($it.File.Name.Substring(0,[Math]::Min(50,$it.File.Name.Length)))..." }
     $target = Join-Path $dir $n
     # -LiteralPath is mandatory: Copy-Item/Test-Path glob by default, and a
     # filename containing [ ] is read as a character-class wildcard that matches
@@ -309,10 +352,67 @@ $remBytes = [long](ssh -n -o BatchMode=yes $HST "du -sb '$SCRATCH/$leaf' | cut -
 if ($remCount -ne $srcCount) { Log "FAIL transfer: $remCount of $srcCount files arrived - NOT importing"; exit 1 }
 Log "verified $remCount files on hestia (bytes local=$srcBytes remote=$remBytes)"
 
-# ---- 5. restore names Windows could not represent ------------------------
-foreach ($r in ($renames | Sort-Object Depth)) {
-  ssh -n -o BatchMode=yes $HST "cd '$SCRATCH/$leaf' && [ -e '$($r.From)' ] && mv '$($r.From)' '$($r.To)'" | Out-Null
-  Log "  restored name: $($r.From)  ->  $($r.To)"
+# ---- 5. restore the true names on hestia --------------------------------
+# Covers BOTH cases: names Windows cannot represent (trailing dot) and names
+# scp cannot carry (anything non-ASCII, staged as ~uXXXX~ above).
+#
+# The manifest travels as a FILE, never as ssh arguments. A non-ASCII path on
+# an ssh.exe command line is codepage-converted exactly like an scp filename is,
+# so doing the mv with the real name inline would reintroduce the mojibake it
+# is here to fix. File bytes are not converted.
+#
+# Renames run DEEPEST FIRST: renaming an artist directory before the album
+# inside it invalidates the album's path.
+if ($renames) {
+  $manifest = @($renames | Sort-Object -Property @{Expression='Depth';Descending=$true} |
+                ForEach-Object { "$($_.From)`t$($_.To)" }) -join "`n"
+  $mtmp = [IO.Path]::GetTempFileName()
+  # UTF8 without BOM: a BOM would become part of the first staged name.
+  [IO.File]::WriteAllText($mtmp, $manifest + "`n", [Text.UTF8Encoding]::new($false))
+
+  # The applier is sent as a FILE too, so nothing non-ASCII and nothing
+  # quote-sensitive ever appears on a command line.
+  $applier = @'
+import os, sys
+root, man = sys.argv[1], sys.argv[2]
+os.chdir(root)
+n = 0
+with open(man, encoding="utf-8") as fh:
+    for line in fh:
+        line = line.rstrip("\n")
+        if not line:
+            continue
+        src, dst = line.split("\t", 1)
+        if src == dst or not os.path.lexists(src):
+            continue
+        os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
+        os.rename(src, dst)
+        n += 1
+        print("restored: %s -> %s" % (src, dst))
+print("RESTORED %d" % n)
+'@
+  $atmp = [IO.Path]::GetTempFileName()
+  [IO.File]::WriteAllText($atmp, $applier, [Text.UTF8Encoding]::new($false))
+
+  & cmd /c "scp -B -o BatchMode=yes `"$mtmp`" $($HST):$SCRATCH/rename-manifest.tsv >nul 2>nul" | Out-Null
+  if ($LASTEXITCODE -ne 0) { Log 'FAIL scp of rename manifest - scratch left in place'; exit 1 }
+  & cmd /c "scp -B -o BatchMode=yes `"$atmp`" $($HST):$SCRATCH/apply-renames.py >nul 2>nul" | Out-Null
+  if ($LASTEXITCODE -ne 0) { Log 'FAIL scp of rename applier - scratch left in place'; exit 1 }
+  Remove-Item $mtmp,$atmp -Force -ErrorAction SilentlyContinue
+
+  $restored = SshRead "python3 '$SCRATCH/apply-renames.py' '$SCRATCH/$leaf' '$SCRATCH/rename-manifest.tsv'"
+  $restored | ForEach-Object { Log "  $_" }
+  if (-not ($restored | Where-Object { $_ -match '^RESTORED \d+$' })) {
+    Log 'FAIL rename manifest did not apply - scratch left in place, library untouched'
+    exit 1
+  }
+  # Nothing may reach the library still wearing a placeholder.
+  $left = ssh -n -o BatchMode=yes $HST "find '$SCRATCH/$leaf' -name '*~u????~*' | head -3"
+  if ($left) {
+    Log 'FAIL placeholder names survived the restore - NOT importing:'
+    $left | ForEach-Object { Log "    $_" }
+    exit 1
+  }
 }
 
 # ---- 6. Unicode-duplicate guard, then import -----------------------------

@@ -56,6 +56,33 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+
+# ⚠️ THE ROOT CAUSE OF TWO SEPARATE BUGS, both fixed by these two lines.
+# PowerShell decodes a native command's stdout using [Console]::OutputEncoding,
+# which defaults to the OEM codepage (437/850) - NOT UTF-8. ffprobe emits UTF-8,
+# so every tag containing a non-ASCII character was mangled at the very first
+# step, and everything downstream inherited it:
+#   * staged folder names were built from the mangled tags, so "Lightnin’
+#     Hopkins" reached hestia as "LightninΓÇÖ Hopkins" (3 folders in one run);
+#   * dedup compared a mangled tag against a correct library path and missed,
+#     so albums already in the library were re-imported as NEW - and Norm()
+#     runs FormKD, which decomposes the mojibake "™" into the letters "TM",
+#     turning "whos" into "whotms" and guaranteeing the mismatch.
+# Measured 2026-09-19. Set this before ANY native command runs.
+try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+# ⚠️ FAIL CLOSED. The setter calls SetConsoleOutputCP and CAN throw in a process
+# with no attached console - which is exactly how this script is now meant to be
+# launched (detached via Win32_Process Create). With $ErrorActionPreference at
+# 'Continue' a throw here would terminate only the statement and let the run
+# continue on the OEM codepage: straight back into the bug this fixes, silently,
+# while the placeholder machinery faithfully encodes and restores the MOJIBAKE
+# names into the library. Assert instead of hoping.
+if ([Console]::OutputEncoding.CodePage -ne 65001) {
+  Write-Output "ABORT: console encoding is CP$([Console]::OutputEncoding.CodePage), not UTF-8 (65001)."
+  Write-Output "Tags would be mis-decoded and mojibake would reach the library. Refusing to run."
+  exit 5
+}
 $FFDIR   = 'C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin'
 $FP      = Join-Path $FFDIR 'ffprobe.exe'
 $HST     = 'truenas_admin@10.42.2.10'
@@ -85,7 +112,13 @@ function SshRead([string]$cmd) {
     & cmd /c "ssh -n -o BatchMode=yes $HST `"$cmd > $rtmp 2>/dev/null`" >nul 2>nul" | Out-Null
     & cmd /c "scp -B -o BatchMode=yes $($HST):$rtmp `"$ltmp`" >nul 2>nul" | Out-Null
     & cmd /c "ssh -n -o BatchMode=yes $HST `"rm -f $rtmp`" >nul 2>nul" | Out-Null
-    if (Test-Path $ltmp) { return @(Get-Content -LiteralPath $ltmp) }
+    # MUST read as UTF-8. Get-Content's default is the ANSI codepage, which
+    # turned every library path containing a curly apostrophe into "Whoâ€™s".
+    # That is not merely cosmetic: Norm() runs FormKD, which decomposes the
+    # mojibake's "™" into the LETTERS "TM", so "whos" never matched "whotms"
+    # and two albums already in the library were reported NEW on every run
+    # (measured 2026-09-19: The Who / Who's Next, Lightnin' Hopkins / Mojo Hand).
+    if (Test-Path $ltmp) { return @([IO.File]::ReadAllLines($ltmp, [Text.UTF8Encoding]::new($false))) }
     return @()
   } finally { Remove-Item $ltmp -Force -ErrorAction SilentlyContinue }
 }
@@ -115,11 +148,35 @@ function DiscAlbum([string]$album, [int]$disc, [int]$discTotal) {
   if ($discTotal -gt 1) { return "$album [Disc $disc]" }
   return $album
 }
+# scp.exe on Win32-OpenSSH transfers FILENAMES in the console codepage, not
+# UTF-8. Every non-ASCII character therefore arrives double-encoded: the curly
+# apostrophe in "Lightnin’ Hopkins" landed on hestia as the bytes for
+# "LightninΓÇΖ Hopkins" (measured 2026-09-19, three folders mangled in one
+# run). chcp is unreliable across the ssh->cmd hop, so the transfer is kept
+# PURELY ASCII and the true names are restored on the far side from a UTF-8
+# manifest file - bytes in a file are not codepage-converted.
+#
+# ~uXXXX~ is reversible, ASCII, and legal on both filesystems.
+function AsciiSafe([string]$s) {
+  $sb = [Text.StringBuilder]::new()
+  foreach ($ch in $s.ToCharArray()) {
+    if ([int]$ch -lt 128) { [void]$sb.Append($ch) }
+    else { [void]$sb.AppendFormat('~u{0:x4}~', [int]$ch) }
+  }
+  $sb.ToString()
+}
+# ⚠️ Measure the name AS STAGED, not as it will finally appear. AsciiSafe
+# expands one non-ASCII char (2-3 UTF-8 bytes) into 7 ASCII bytes, and a
+# surrogate pair into 14 - so a title with a dozen curly apostrophes that
+# truncates to a legal 200 bytes here would stage at 260 and hit exactly the
+# failure this cap exists to prevent (scp `Bad message`, or Copy-Item failing
+# against the NTFS 255-character component limit). Budget in the staged form.
+function StagedByteCount([string]$name) { [Text.Encoding]::UTF8.GetByteCount((AsciiSafe $name)) }
 function TruncName([string]$fileName) {
   $ext  = [IO.Path]::GetExtension($fileName)
   $stem = [IO.Path]::GetFileNameWithoutExtension($fileName)
-  if ([Text.Encoding]::UTF8.GetByteCount($fileName) -le $MaxNameBytes) { return $fileName }
-  while ([Text.Encoding]::UTF8.GetByteCount($stem + $ext) -gt ($MaxNameBytes - 10)) {
+  if ((StagedByteCount $fileName) -le $MaxNameBytes) { return $fileName }
+  while ($stem.Length -gt 1 -and (StagedByteCount ($stem + $ext)) -gt ($MaxNameBytes - 10)) {
     $stem = $stem.Substring(0, $stem.Length - 1)
   }
   return ($stem.TrimEnd() + $ext)
@@ -249,8 +306,40 @@ $albums = $items | Group-Object Artist,Album
 $toImport = @()
 foreach ($g in $albums) {
   $art = $g.Group[0].Artist; $alb = $g.Group[0].Album
-  $key = (Norm $art) + '|' + (Norm $alb)
-  if ($have.ContainsKey($key)) { Log ("  SKIP already in library: $art / $alb  -> " + $have[$key]) ; continue }
+  # Dedup must compare the folder names this run would CREATE, not the bare
+  # album title. A multi-disc set lands as "Album [Disc 1]" / "[Disc 2]", so a
+  # bare-title lookup never matched and every multi-disc album was reported NEW
+  # on every run - re-transferring gigabytes and making the NEW list untrue.
+  # (rsync --ignore-existing meant it was wasteful rather than destructive.)
+  # Checking per disc also handles the half-imported case: if disc 1 landed and
+  # disc 2 did not, this imports disc 2 instead of skipping the whole album.
+  $wantDiscs = @{}
+  foreach ($it in $g.Group) {
+    $wantDiscs[(LinuxName (DiscAlbum $alb $it.Disc $it.DiscTotal))] = $true
+  }
+  $missing = @($wantDiscs.Keys | Where-Object { -not $have.ContainsKey((Norm $art) + '|' + (Norm $_)) })
+  # ⚠️ Legacy layout: albums imported before the [Disc N] convention sit in the
+  # library as ONE flat folder. Per-disc keys cannot match those, and importing
+  # would create "Album [Disc 1]"/"[Disc 2]" ALONGSIDE the existing "Album" - a
+  # visible duplicate in Navidrome that --ignore-existing cannot prevent,
+  # because the directory name differs. Skip and say so; merging the layouts is
+  # an operator decision, not something an import should do silently.
+  if ($missing.Count -gt 0 -and $have.ContainsKey((Norm $art) + '|' + (Norm (LinuxName $alb)))) {
+    Log "  SKIP legacy flat layout: $art / $alb is in the library WITHOUT [Disc N] folders - importing would duplicate it. Re-foldering is a manual decision."
+    continue
+  }
+  if ($missing.Count -eq 0) {
+    $shown = ($wantDiscs.Keys | Sort-Object) -join ', '
+    Log "  SKIP already in library: $art / $shown"
+    continue
+  }
+  if ($missing.Count -lt $wantDiscs.Count) {
+    Log "  PARTIAL $art / $alb - already have $($wantDiscs.Count - $missing.Count) of $($wantDiscs.Count) disc(s); importing: $(($missing | Sort-Object) -join ', ')"
+    $want = @{}; foreach ($m in $missing) { $want[$m] = $true }
+    $keep = @($g.Group | Where-Object { $want.ContainsKey((LinuxName (DiscAlbum $alb $_.Disc $_.DiscTotal))) })
+    $toImport += ,([pscustomobject]@{ Name = $g.Name; Count = $keep.Count; Group = $keep })
+    continue
+  }
   Log "  NEW  $($g.Count.ToString().PadLeft(3))  $art / $alb"
   $toImport += $g
 }
@@ -266,16 +355,20 @@ foreach ($g in $toImport) {
   $art = $g.Group[0].Artist; $alb = $g.Group[0].Album
   $artL = LinuxName $art; $albL = LinuxName $alb
   $artW = WinName $artL;  $albW = WinName $albL
-  if ($artW -ne $artL) { $renames += [pscustomobject]@{ From=$artW; To=$artL; Depth=1 } }
-  if ($albW -ne $albL) { $renames += [pscustomobject]@{ From="$artW/$albW"; To="$artW/$albL"; Depth=2 } }
+  $artS = AsciiSafe $artW
+  if ($artS -ne $artL) { $renames += [pscustomobject]@{ From=$artS; To=$artL; Depth=1 } }
   foreach ($it in $g.Group) {
     $albDL = LinuxName (DiscAlbum $alb $it.Disc $it.DiscTotal)
     $albDW = WinName $albDL
-    if ($albDW -ne $albDL) { $renames += [pscustomobject]@{ From="$artW/$albDW"; To="$artW/$albDL"; Depth=2 } }
-    $dir = Join-Path $Staging (Join-Path $artW $albDW)
+    $albDS = AsciiSafe $albDW
+    if ($albDS -ne $albDL) { $renames += [pscustomobject]@{ From="$artS/$albDS"; To="$artS/$albDL"; Depth=2 } }
+    $dir = Join-Path $Staging (Join-Path $artS $albDS)
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
-    $n = TruncName $it.File.Name
-    if ($n -ne $it.File.Name) { $truncated++; Log "  truncated (>${MaxNameBytes}B): $($it.File.Name.Substring(0,[Math]::Min(50,$it.File.Name.Length)))..." }
+    $n = AsciiSafe (TruncName $it.File.Name)
+    if ($n -ne (TruncName $it.File.Name)) {
+      $renames += [pscustomobject]@{ From="$artS/$albDS/$n"; To="$artS/$albDS/$(TruncName $it.File.Name)"; Depth=3 }
+    }
+    if ((TruncName $it.File.Name) -ne $it.File.Name) { $truncated++; Log "  truncated (>${MaxNameBytes}B): $($it.File.Name.Substring(0,[Math]::Min(50,$it.File.Name.Length)))..." }
     $target = Join-Path $dir $n
     # -LiteralPath is mandatory: Copy-Item/Test-Path glob by default, and a
     # filename containing [ ] is read as a character-class wildcard that matches
@@ -309,15 +402,93 @@ $remBytes = [long](ssh -n -o BatchMode=yes $HST "du -sb '$SCRATCH/$leaf' | cut -
 if ($remCount -ne $srcCount) { Log "FAIL transfer: $remCount of $srcCount files arrived - NOT importing"; exit 1 }
 Log "verified $remCount files on hestia (bytes local=$srcBytes remote=$remBytes)"
 
-# ---- 5. restore names Windows could not represent ------------------------
-foreach ($r in ($renames | Sort-Object Depth)) {
-  ssh -n -o BatchMode=yes $HST "cd '$SCRATCH/$leaf' && [ -e '$($r.From)' ] && mv '$($r.From)' '$($r.To)'" | Out-Null
-  Log "  restored name: $($r.From)  ->  $($r.To)"
+# ---- 5. restore the true names on hestia --------------------------------
+# Covers BOTH cases: names Windows cannot represent (trailing dot) and names
+# scp cannot carry (anything non-ASCII, staged as ~uXXXX~ above).
+#
+# The manifest travels as a FILE, never as ssh arguments. A non-ASCII path on
+# an ssh.exe command line is codepage-converted exactly like an scp filename is,
+# so doing the mv with the real name inline would reintroduce the mojibake it
+# is here to fix. File bytes are not converted.
+#
+# Renames run DEEPEST FIRST: renaming an artist directory before the album
+# inside it invalidates the album's path.
+if ($renames) {
+  $manifest = @($renames | Sort-Object -Property @{Expression='Depth';Descending=$true} |
+                ForEach-Object { "$($_.From)`t$($_.To)" }) -join "`n"
+  $mtmp = [IO.Path]::GetTempFileName()
+  # UTF8 without BOM: a BOM would become part of the first staged name.
+  [IO.File]::WriteAllText($mtmp, $manifest + "`n", [Text.UTF8Encoding]::new($false))
+
+  # The applier is sent as a FILE too, so nothing non-ASCII and nothing
+  # quote-sensitive ever appears on a command line.
+  $applier = @'
+import os, sys
+root, man = sys.argv[1], sys.argv[2]
+os.chdir(root)
+n = 0
+missing = 0
+with open(man, encoding="utf-8") as fh:
+    for line in fh:
+        line = line.rstrip("\n")
+        if not line:
+            continue
+        src, dst = line.split("\t", 1)
+        if src == dst:
+            continue
+        if not os.path.lexists(src):
+            # Already applied (a duplicate manifest line) is fine; anything else
+            # is a rename that did NOT happen and must not pass as success.
+            if os.path.lexists(dst):
+                continue
+            print("MISSING %s" % src)
+            missing += 1
+            continue
+        os.makedirs(os.path.dirname(dst) or ".", exist_ok=True)
+        os.rename(src, dst)
+        n += 1
+        print("restored: %s -> %s" % (src, dst))
+print("RESTORED %d" % n)
+if missing:
+    print("MISSING_TOTAL %d" % missing)
+    sys.exit(1)
+'@
+  $atmp = [IO.Path]::GetTempFileName()
+  [IO.File]::WriteAllText($atmp, $applier, [Text.UTF8Encoding]::new($false))
+
+  & cmd /c "scp -B -o BatchMode=yes `"$mtmp`" $($HST):$SCRATCH/rename-manifest.tsv >nul 2>nul" | Out-Null
+  if ($LASTEXITCODE -ne 0) { Log 'FAIL scp of rename manifest - scratch left in place'; exit 1 }
+  & cmd /c "scp -B -o BatchMode=yes `"$atmp`" $($HST):$SCRATCH/apply-renames.py >nul 2>nul" | Out-Null
+  if ($LASTEXITCODE -ne 0) { Log 'FAIL scp of rename applier - scratch left in place'; exit 1 }
+  Remove-Item $mtmp,$atmp -Force -ErrorAction SilentlyContinue
+
+  # PYTHONIOENCODING is ASCII on the command line and removes the applier's
+  # dependence on the remote locale: without it, print() of a non-ASCII name can
+  # raise AFTER os.rename has run, and SshRead discards stderr - so the run would
+  # report "did not apply" over a scratch dir that was in fact half-renamed.
+  $restored = SshRead "PYTHONIOENCODING=utf-8 python3 '$SCRATCH/apply-renames.py' '$SCRATCH/$leaf' '$SCRATCH/rename-manifest.tsv'"
+  $restored | ForEach-Object { Log "  $_" }
+  if ($restored | Where-Object { $_ -match '^MISSING_TOTAL ' }) {
+    Log 'FAIL a rename in the manifest could not be applied - scratch left in place, library untouched'
+    $restored | Where-Object { $_ -match '^MISSING ' } | Select-Object -First 5 | ForEach-Object { Log "    $_" }
+    exit 1
+  }
+  if (-not ($restored | Where-Object { $_ -match '^RESTORED \d+$' })) {
+    Log 'FAIL rename manifest did not apply - scratch left in place, library untouched'
+    exit 1
+  }
+  # Nothing may reach the library still wearing a placeholder.
+  $left = ssh -n -o BatchMode=yes $HST "find '$SCRATCH/$leaf' -name '*~u????~*' | head -3"
+  if ($left) {
+    Log 'FAIL placeholder names survived the restore - NOT importing:'
+    $left | ForEach-Object { Log "    $_" }
+    exit 1
+  }
 }
 
 # ---- 6. Unicode-duplicate guard, then import -----------------------------
 Log '== rsync dry-run (checking for duplicate artist folders) =='
-$dry = SshRead "sudo -n rsync -a --ignore-existing --chown=george:users --chmod=D755,F644 --itemize-changes --dry-run '$SCRATCH/$leaf/' '$LIB/'"
+$dry = SshRead "sudo -n rsync -a -8 --ignore-existing --chown=george:users --chmod=D755,F644 --itemize-changes --dry-run '$SCRATCH/$leaf/' '$LIB/'"
 $created = @($dry | Where-Object { $_ -match '^cd\+{9}\s+[^/]+/$' })
 foreach ($c in $created) {
   $name = ($c -split '\s+',2)[1].TrimEnd('/')
@@ -330,7 +501,7 @@ foreach ($c in $created) {
 Log "  $(@($dry | Where-Object { $_ -match '^>f' }).Count) files to write, $($created.Count) new artist folder(s), no duplicates"
 
 Log '== rsync into the library =='
-$out = SshRead "sudo -n rsync -a --ignore-existing --chown=george:users --chmod=D755,F644 --stats '$SCRATCH/$leaf/' '$LIB/'"
+$out = SshRead "sudo -n rsync -a -8 --ignore-existing --chown=george:users --chmod=D755,F644 --stats '$SCRATCH/$leaf/' '$LIB/'"
 if (-not $out) { Log 'FAIL rsync - scratch left in place'; exit 1 }
 $out | Where-Object { $_ -match 'Number of regular files transferred|Total transferred file size' } | ForEach-Object { Log "  $_" }
 
@@ -397,4 +568,9 @@ Log 'names are sanitised while the list carries real punctuation, so'
 Log 'regenerating from the filesystem silently drops entries.'
 Log ''
 Log 'Imported albums:'
-foreach ($g in $toImport) { Log ("  " + (LinuxName $g.Group[0].Artist) + "/" + (LinuxName $g.Group[0].Album)) }
+foreach ($g in $toImport) {
+  $a = LinuxName $g.Group[0].Artist
+  foreach ($d in ($g.Group | ForEach-Object { LinuxName (DiscAlbum $g.Group[0].Album $_.Disc $_.DiscTotal) } | Sort-Object -Unique)) {
+    Log "  $a/$d"
+  }
+}

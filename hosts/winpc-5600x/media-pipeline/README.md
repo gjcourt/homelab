@@ -3,6 +3,38 @@
 Transcodes MakeMKV disc rips to x265 and pushes them into the hestia media
 library that Jellyfin serves.
 
+## Importing CD rips (`import-music.ps1`)
+
+**Run it from the checkout, detached.** A foreground SSH run dies with the session:
+on 2026-09-19 that killed a run right after `scp`, leaving 147 files staged and nothing
+in the library.
+
+```powershell
+cd C:\Users\George\src\homelab
+git pull --ff-only
+# dry run: reports what would import, transfers nothing
+powershell -ExecutionPolicy Bypass -File hosts\winpc-5600x\media-pipeline\import-music.ps1 -DryRun
+```
+
+```powershell
+# real run - DETACHED, survives the SSH session
+Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
+  CommandLine = 'cmd.exe /c "cd /d C:\Users\George\src\homelab && powershell -NoProfile -ExecutionPolicy Bypass -File hosts\winpc-5600x\media-pipeline\import-music.ps1 > C:\media-work\import.log 2>&1"'
+}
+```
+
+What the script guarantees, and why each guard exists:
+
+| Guard | Exists because |
+| :--- | :--- |
+| **UTF-8 console encoding, asserted** | PowerShell decodes native output in the OEM codepage. ffprobe emits UTF-8, so every non-ASCII tag was mangled at step 1 — mangled folder names *and* broken dedup. The assert refuses to run rather than fail open. |
+| **ASCII placeholders in transit** | `scp` on Win32-OpenSSH carries filenames in the console codepage. Names stage as `~uXXXX~` and are restored on hestia from a UTF-8 **manifest file**; if a placeholder survives, the run aborts before the library is touched. |
+| **Per-disc dedup** | A multi-disc album lands as `Album [Disc 1]`/`[Disc 2]`; comparing the bare title never matched and re-sent gigabytes every run. A half-imported album now imports only its missing discs. |
+| **Completeness gate** | London Calling disc 1 was deleted on the strength of a check that proved tags existed, not that the album was whole. |
+| **Filename budget in the staged form** | The 255-byte limit applies to the name that actually travels, which placeholders make longer. |
+
+**Do not clear `C:\Rips` until a run reports 0 incomplete.**
+
 ## Usage
 
 ```powershell

@@ -85,7 +85,13 @@ function SshRead([string]$cmd) {
     & cmd /c "ssh -n -o BatchMode=yes $HST `"$cmd > $rtmp 2>/dev/null`" >nul 2>nul" | Out-Null
     & cmd /c "scp -B -o BatchMode=yes $($HST):$rtmp `"$ltmp`" >nul 2>nul" | Out-Null
     & cmd /c "ssh -n -o BatchMode=yes $HST `"rm -f $rtmp`" >nul 2>nul" | Out-Null
-    if (Test-Path $ltmp) { return @(Get-Content -LiteralPath $ltmp) }
+    # MUST read as UTF-8. Get-Content's default is the ANSI codepage, which
+    # turned every library path containing a curly apostrophe into "Whoâ€™s".
+    # That is not merely cosmetic: Norm() runs FormKD, which decomposes the
+    # mojibake's "™" into the LETTERS "TM", so "whos" never matched "whotms"
+    # and two albums already in the library were reported NEW on every run
+    # (measured 2026-09-19: The Who / Who's Next, Lightnin' Hopkins / Mojo Hand).
+    if (Test-Path $ltmp) { return @([IO.File]::ReadAllLines($ltmp, [Text.UTF8Encoding]::new($false))) }
     return @()
   } finally { Remove-Item $ltmp -Force -ErrorAction SilentlyContinue }
 }

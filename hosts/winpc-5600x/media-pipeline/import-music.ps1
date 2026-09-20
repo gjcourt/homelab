@@ -159,6 +159,17 @@ function Ledger([string]$event, [object[]]$records) {
   $null = SshRead "sudo -n mkdir -p '$(Split-Path -Parent $LEDGER)' && sudo -n touch '$LEDGER' && sudo -n flock '$LEDGER.lock' -c 'cat $remote >> $LEDGER' && rm -f $remote && echo LEDGERED"
   Log "  ledger: $event x$($records.Count)"
 }
+function CopyAudit([string]$local) {
+  # $LASTEXITCODE after `& cmd /c "scp ..." | Out-Null` proved unreliable here -
+  # it reported failure on a copy that demonstrably landed. Ask hestia instead:
+  # the file being there is the only claim worth making.
+  if (-not (Test-Path -LiteralPath $local)) { return }
+  $name = Split-Path -Leaf $local
+  & cmd /c "scp -B -o BatchMode=yes `"$local`" $($HST):$AUDIT_REMOTE/ >nul 2>nul" | Out-Null
+  $ok = SshRead "test -f '$AUDIT_REMOTE/$name' && echo PRESENT"
+  if ($ok -contains 'PRESENT') { Log "  audit off-box: $name" }
+  else { Log "  WARNING: $name did NOT reach hestia:$AUDIT_REMOTE (import continues)" }
+}
 function LedgerRun([string]$event, [string]$note) {
   Ledger $event @([pscustomobject]@{ Scope='run'; Note=$note })
 }
@@ -287,9 +298,7 @@ Log "  $($rows.Count) file rows -> $AUDIT"
 # fails the whole scp on the missing file and leaves nothing off-box - which is
 # precisely the hole this is meant to close.
 ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$AUDIT_REMOTE' && sudo -n chown truenas_admin '$AUDIT_REMOTE'" | Out-Null
-& cmd /c "scp -B -o BatchMode=yes `"$AUDIT`" $($HST):$AUDIT_REMOTE/ >nul 2>nul" | Out-Null
-if ($LASTEXITCODE -eq 0) { Log "  file audit copied off-box early: hestia:$AUDIT_REMOTE/" }
-else { Log '  WARNING: early audit copy to hestia failed (import continues)' }
+CopyAudit $AUDIT
 
 LedgerRun 'RUN_START' "rips=$RipsDir host=$env:COMPUTERNAME files=$($items.Count) dryrun=$DryRun"
 Ledger 'READ' @($items | Group-Object Artist,Album | ForEach-Object {
@@ -335,7 +344,7 @@ foreach ($grp in $groups) {
 [IO.File]::WriteAllLines($AUDIT_SUM, $verdicts, [Text.UTF8Encoding]::new($false))
 # Off-box immediately too: the completeness gate can exit two lines below, and
 # the verdict is the most useful thing to still have when it does.
-& cmd /c "scp -B -o BatchMode=yes `"$AUDIT_SUM`" $($HST):$AUDIT_REMOTE/ >nul 2>nul" | Out-Null
+CopyAudit $AUDIT_SUM
 Log ''
 Log "  complete: $nOk   incomplete: $nBad   unverified: $nUnv"
 Log "  audit trail: $AUDIT"
@@ -597,8 +606,8 @@ Ledger 'LANDED' $landed.ToArray()
 
 # Audit must outlive the source rips: keep a copy off this box.
 ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$AUDIT_REMOTE' && sudo -n chown truenas_admin '$AUDIT_REMOTE'" | Out-Null
-& cmd /c "scp -B -o BatchMode=yes `"$AUDIT`" `"$AUDIT_SUM`" $($HST):$AUDIT_REMOTE/ >nul 2>nul" | Out-Null
-Log "  audit copied to hestia:$AUDIT_REMOTE/"
+CopyAudit $AUDIT
+CopyAudit $AUDIT_SUM
 LedgerRun 'RUN_END' "imported $($toImport.Count) album(s)"
 ssh -n -o BatchMode=yes $HST "rm -f '$SCRATCH.sha256'" | Out-Null
 

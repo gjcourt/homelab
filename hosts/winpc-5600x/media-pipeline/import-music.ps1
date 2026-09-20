@@ -282,9 +282,13 @@ Log "  $($rows.Count) file rows -> $AUDIT"
 # no off-box trace at all because the only copy step was the last line of a
 # fully successful run. The audit is the evidence that a disc was ever ripped;
 # it must survive the run that failed.
+# NOTE the ordering: $AUDIT_SUM (the completeness verdicts) does not exist yet
+# at this point in the run, so copy ONLY the per-file audit here. Copying both
+# fails the whole scp on the missing file and leaves nothing off-box - which is
+# precisely the hole this is meant to close.
 ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$AUDIT_REMOTE' && sudo -n chown truenas_admin '$AUDIT_REMOTE'" | Out-Null
-& cmd /c "scp -B -o BatchMode=yes `"$AUDIT`" `"$AUDIT_SUM`" $($HST):$AUDIT_REMOTE/ >nul 2>nul" | Out-Null
-if ($LASTEXITCODE -eq 0) { Log "  audit copied off-box early: hestia:$AUDIT_REMOTE/" }
+& cmd /c "scp -B -o BatchMode=yes `"$AUDIT`" $($HST):$AUDIT_REMOTE/ >nul 2>nul" | Out-Null
+if ($LASTEXITCODE -eq 0) { Log "  file audit copied off-box early: hestia:$AUDIT_REMOTE/" }
 else { Log '  WARNING: early audit copy to hestia failed (import continues)' }
 
 LedgerRun 'RUN_START' "rips=$RipsDir host=$env:COMPUTERNAME files=$($items.Count) dryrun=$DryRun"
@@ -329,6 +333,9 @@ foreach ($grp in $groups) {
   }
 }
 [IO.File]::WriteAllLines($AUDIT_SUM, $verdicts, [Text.UTF8Encoding]::new($false))
+# Off-box immediately too: the completeness gate can exit two lines below, and
+# the verdict is the most useful thing to still have when it does.
+& cmd /c "scp -B -o BatchMode=yes `"$AUDIT_SUM`" $($HST):$AUDIT_REMOTE/ >nul 2>nul" | Out-Null
 Log ''
 Log "  complete: $nOk   incomplete: $nBad   unverified: $nUnv"
 Log "  audit trail: $AUDIT"

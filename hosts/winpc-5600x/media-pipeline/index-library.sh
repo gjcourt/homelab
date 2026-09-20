@@ -2,10 +2,21 @@
 #
 # Hash index of a media library, run ON HESTIA by verify-before-delete.ps1.
 #
-# Emits one row per file:  sha256 <TAB> bytes <TAB> path-relative-to-root
+# Emits one row per file:
+#   sha256 <TAB> bytes <TAB> path-relative-to-root <TAB> audio_md5
+#
 # A file that could not be read emits  MISSING <TAB> 0 <TAB> path  rather than
 # vanishing from the output - a verifier must be able to tell "not there" from
 # "not asked about".
+#
+# audio_md5 is FLAC's STREAMINFO checksum: the MD5 of the UNENCODED audio, written
+# by the encoder and stored at a fixed offset. It is invariant under tag edits,
+# which the file's own sha256 is not - measured 2026-09-20, where eleven library
+# tracks were byte-for-byte 52 bytes larger than the rips they came from (one
+# extra metadata block) while the audio was identical. Without this the verifier
+# refuses to bless anything that has been retagged since import, and that set only
+# grows. '-' for any file that is not FLAC; there is no equivalent invariant for
+# mp3 or m4a, so those stay on sha256 alone.
 #
 # This is the "ledger proof for what is already in the library". The ledger
 # itself stays a movement log - it records things happening, not an inventory -
@@ -75,7 +86,16 @@ produce | xargs -0 -P "$JOBS" -I{} sh -c '
       h=$(sha256sum < "$f" 2>/dev/null | cut -c1-64)
       s=$(stat -c %s "$f" 2>/dev/null)
       if [ -z "$h" ]; then h=MISSING; s=0; fi
-      printf "%s\t%s\t%s\n" "$h" "$s" "${f#'"$ROOT"'/}"
+      # FLAC layout: "fLaC" (4) + block header (4) + STREAMINFO (34), whose last
+      # 16 bytes are the audio MD5. So bytes 26..41 = hex chars 53..84 of the
+      # first 42. The magic is checked first: anything else gets "-".
+      m=-
+      hdr=$(dd if="$f" bs=42 count=1 2>/dev/null | od -An -v -tx1 | tr -d " \n")
+      case "$hdr" in
+        664c6143*) m=$(printf "%s" "$hdr" | cut -c53-84) ;;
+      esac
+      [ ${#m} -eq 32 ] || m=-
+      printf "%s\t%s\t%s\t%s\n" "$h" "$s" "${f#'"$ROOT"'/}" "$m"
     ' _ {} >> "$TMP"
 
 LC_ALL=C sort -t "$(printf '\t')" -k3,3 "$TMP" > "$OUT" && rm -f "$TMP"

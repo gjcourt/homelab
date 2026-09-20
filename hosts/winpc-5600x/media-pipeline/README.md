@@ -212,8 +212,27 @@ evidence behind it. This is the evidence.
 .\verify-before-delete.ps1 -Mode Video -SourceDir D:\Rips
 ```
 
-One question per local file: **is there a file in the library whose sha256
-equals this one's?**
+One question per local file: **is there a file in the library holding this
+file's content?**
+
+## sha256 of a FLAC is not a checksum of its audio
+
+Editing a tag rewrites the file. On 2026-09-20 eleven Daft Punk remixes were
+reported unproven although the library held the same eleven tracks under the
+same names — the library copies were **exactly 52 bytes larger**, one extra
+metadata block, and the audio was bit-identical. On the file hash alone the
+verifier refuses to bless anything retagged since import, and that set only
+grows.
+
+So FLAC gets a second, weaker-looking but actually stronger proof: the
+**STREAMINFO audio checksum**, an MD5 of the *unencoded* audio written by the
+encoder at a fixed offset. Reading it costs 42 bytes and decodes nothing, and
+tag edits cannot change it. There is no equivalent for mp3 or m4a, so those stay
+on sha256 alone.
+
+The two are recorded as **different verdicts** — `VERIFIED` and
+`VERIFIED_AUDIO` — so the ledger never claims a byte-identical copy it does not
+have. `-RequireExactBytes` turns the fallback off.
 
 ## Matching is by content, never by path
 
@@ -230,7 +249,7 @@ of what either side calls the file.
 | :--- | :--- | :--- |
 | Library holds | a byte-identical **copy** | a **transcode** — a different file by design |
 | Therefore | hash identity is the proof | no source hash can ever match |
-| Proof used | sha256 of the rip found in a full library index | the ledger's own `LANDED` row, **re-checked**: is that file still there, and does it still hash to the recorded value? |
+| Proof used | sha256 of the rip found in a full library index, or the FLAC audio checksum | the ledger's own `LANDED` row, **re-checked**: is that file still there, and does it still hash to the recorded value? |
 | Cost | index the whole music library (~76 GB, a few minutes) | hash only the landed files — indexing 1.6 TB to check a few films would be absurd |
 
 Video also reports local rips with **no `LANDED` row at all**. Nothing ever

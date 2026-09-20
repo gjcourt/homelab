@@ -10,7 +10,7 @@
 
   This closes that. It answers one question per local file:
 
-      is there a file in the library whose sha256 equals this one's?
+      is there a file in the library holding this file's content?
 
   ⚠️ Matching is by CONTENT, not by path. The obvious implementation re-derives
   the library path from the tags (artist/album/disc/track, TruncName, AsciiSafe)
@@ -21,8 +21,16 @@
 
   Two modes, because the two paths have different proof standards:
 
-    Music  the library holds a byte-identical COPY of the rip, so identity of
-           content is the proof. Needs a hash index of the whole library.
+    Music  the library holds a COPY of the rip, so identity of content is the
+           proof. Needs a hash index of the whole library. sha256 of the file
+           first; failing that, for FLAC, the STREAMINFO audio checksum - the
+           MD5 of the UNENCODED audio, which tag edits do not change. Eleven
+           tracks on 2026-09-20 were 52 bytes smaller than their library copies
+           (one metadata block) with identical audio; on the file hash alone the
+           verifier would refuse to bless anything retagged since import, and
+           that set only grows. The two are recorded as DIFFERENT verdicts, so
+           the ledger never claims a byte-identical copy it does not have.
+           -RequireExactBytes disables the fallback.
 
     Video  the library holds a TRANSCODE of the rip - a different file, by
            design, so no hash of the source can ever match. The proof is the
@@ -56,6 +64,7 @@ param(
   [string]$SourceDir,
   [switch]$Delete,
   [switch]$Reindex,
+  [switch]$RequireExactBytes,
   [int]$IndexMaxAgeHours = 24,
   [int]$Jobs = 16,
   [string]$AuditDir = (Join-Path $env:LOCALAPPDATA 'music-rip-audit')
@@ -121,6 +130,22 @@ function Fetch([string]$remote, [string]$local) {
 function Sha([string]$path) { (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() }
 # First number only: Picard may write track as "3/12" or disc as "1/2".
 function Num([string]$v) { if ($v -match '(\d+)') { [int]$Matches[1] } else { 0 } }
+# FLAC's STREAMINFO audio checksum - the MD5 of the UNENCODED audio, at a fixed
+# offset: "fLaC" (4) + block header (4) + STREAMINFO (34), last 16 bytes of which
+# are the MD5. Reading 42 bytes decodes nothing. Unlike the file's sha256 it does
+# not change when tags are edited, which is the only reason retagged library
+# copies can be recognised at all. '' for anything that is not FLAC.
+function AudioMd5([string]$path) {
+  try {
+    $fs = [IO.File]::OpenRead($path)
+    try {
+      $buf = New-Object byte[] 42
+      if ($fs.Read($buf, 0, 42) -lt 42) { return '' }
+      if ([Text.Encoding]::ASCII.GetString($buf, 0, 4) -ne 'fLaC') { return '' }
+      return (($buf[26..41] | ForEach-Object { $_.ToString('x2') }) -join '')
+    } finally { $fs.Dispose() }
+  } catch { return '' }
+}
 function KV([string[]]$lines, [string]$key) {
   foreach ($l in $lines) { if ($l -like "$key=*") { return $l.Substring($key.Length + 1) } }
   return ''
@@ -176,12 +201,14 @@ if ($Mode -eq 'Music') {
   }
 
   $byHash = @{}
+  $byAudio = @{}
   $idxBytes = [long]0
   foreach ($l in $lines) {
-    $p = $l -split "`t", 3
+    $p = $l -split "`t", 4
     if ($p.Count -lt 3) { continue }
     $idxBytes += [long]$p[1]
     if (-not $byHash.ContainsKey($p[0])) { $byHash[$p[0]] = $p[2] }
+    if ($p.Count -ge 4 -and $p[3] -and $p[3] -ne '-' -and -not $byAudio.ContainsKey($p[3])) { $byAudio[$p[3]] = $p[2] }
   }
   Log "library index: $($lines.Count) files, $($byHash.Count) distinct hashes, sha256 $($idxSha.Substring(0,12))"
 
@@ -215,7 +242,7 @@ if ($Mode -eq 'Music') {
   #
   # Only the grouping needs tags. Matching stays on content, and none of the
   # library-naming stack (LinuxName/TruncName/AsciiSafe) is involved.
-  $untagged = 0
+  $untagged = 0; $audioOnly = 0
   foreach ($f in $local) {
     $tl = & $FP -v quiet -show_entries 'format_tags=album_artist,artist,album,disc,TOTALDISCS,DISCTOTAL' -of default=noprint_wrappers=1 $f.FullName 2>$null
     $t = @{}
@@ -240,14 +267,28 @@ if ($Mode -eq 'Music') {
 
     $h = Sha $f.FullName
     $hit = $byHash[$h]
+    $verdict = 'UNVERIFIED'; $note = 'no library file matches this content'
+    if ($hit) { $verdict = 'VERIFIED'; $note = '' }
+    elseif (-not $RequireExactBytes) {
+      # Same audio, different container - the library copy was retagged after it
+      # landed. Recorded as a DIFFERENT verdict so the ledger never claims a
+      # byte-identical copy it does not have.
+      $am = AudioMd5 $f.FullName
+      if ($am -and $byAudio.ContainsKey($am)) {
+        $hit = $byAudio[$am]
+        $verdict = 'VERIFIED_AUDIO'
+        $note = "audio identical (flac md5 $am); container differs - library copy retagged"
+        $audioOnly++
+      }
+    }
     $rows += [pscustomobject]@{
-      Verdict = $(if ($hit) { 'VERIFIED' } else { 'UNVERIFIED' })
+      Verdict = $verdict
       Sha = $h; Bytes = [long]$f.Length; Local = $f.FullName
       Library = $(if ($hit) { $hit } else { '' })
-      Group = $grp; Title = $ttl; Item = $f.Name
-      Note = $(if ($hit) { '' } else { 'no library file matches this content' })
+      Group = $grp; Title = $ttl; Item = $f.Name; Note = $note
     }
   }
+  if ($audioOnly -gt 0) { Log "$audioOnly file(s) proven by FLAC audio checksum, not by container bytes" }
   if ($untagged -gt 0) { Log "$untagged file(s) carry no usable album tags - each judged alone" }
 }
 else {
@@ -290,7 +331,7 @@ else {
     })
     $vtmp = [IO.Path]::GetTempFileName()
     foreach ($l in (Fetch $out $vtmp)) {
-      $p = $l -split "`t", 3
+      $p = $l -split "`t", 4
       if ($p.Count -ge 3) { $remoteSha[$p[2]] = $p[0] }
     }
     Remove-Item $vtmp -Force -ErrorAction SilentlyContinue
@@ -337,13 +378,20 @@ $groups = $rows | Group-Object Group | Sort-Object Name
 $safeGroups = @(); $blockedGroups = @()
 
 foreach ($g in $groups) {
-  $bad  = @($g.Group | Where-Object { $_.Verdict -ne 'VERIFIED' })
-  $good = @($g.Group | Where-Object { $_.Verdict -eq 'VERIFIED' })
+  $bad   = @($g.Group | Where-Object { $_.Verdict -eq 'UNVERIFIED' })
+  $exact = @($g.Group | Where-Object { $_.Verdict -eq 'VERIFIED' })
+  $audio = @($g.Group | Where-Object { $_.Verdict -eq 'VERIFIED_AUDIO' })
 
-  if ($good.Count -gt 0) {
-    VLedger 'VERIFIED' @($good | ForEach-Object {
+  if ($exact.Count -gt 0) {
+    VLedger 'VERIFIED' @($exact | ForEach-Object {
       [pscustomobject]@{ Scope='file'; Title=$_.Title; Item=$_.Item; Sha=$_.Sha; Bytes=$_.Bytes
                          Src=$_.Local; Dest=$_.Library; Note='byte-identical copy present in the library' }
+    })
+  }
+  if ($audio.Count -gt 0) {
+    VLedger 'VERIFIED_AUDIO' @($audio | ForEach-Object {
+      [pscustomobject]@{ Scope='file'; Title=$_.Title; Item=$_.Item; Sha=$_.Sha; Bytes=$_.Bytes
+                         Src=$_.Local; Dest=$_.Library; Note=$_.Note }
     })
   }
   if ($bad.Count -gt 0) {
@@ -358,9 +406,9 @@ foreach ($g in $groups) {
     $safeGroups += $g
     VLedger 'DELETE_SAFE' @([pscustomobject]@{
       Scope=$scope; Title=$g.Group[0].Title; Item=$g.Name; Bytes=(($g.Group | Measure-Object Bytes -Sum).Sum)
-      Note="all $($g.Count) file(s) proven in the library"
+      Note="all $($g.Count) file(s) proven in the library$(if ($audio.Count) { " ($($audio.Count) by audio checksum)" })"
     })
-    Log "SAFE    $($g.Name)  ($($g.Count) file(s))"
+    Log "SAFE    $($g.Name)  ($($g.Count) file(s)$(if ($audio.Count) { ", $($audio.Count) by audio checksum" }))"
   } else {
     $blockedGroups += $g
     Log "BLOCKED $($g.Name)  ($($bad.Count) of $($g.Count) unproven)"

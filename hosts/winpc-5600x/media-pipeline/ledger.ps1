@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  Append-only movement ledger, shared by the music and video import paths.
+  Shared media-pipeline module: the append-only movement ledger, plus the
+  remote-read primitive every script that talks to hestia needs.
 
 .DESCRIPTION
   One record of what moved, where, and whether it was verified - written to
@@ -71,4 +72,38 @@ function Write-Ledger {
 function Write-LedgerRun {
   param([Parameter(Mandatory)][string]$Event, [string]$Note)
   Write-Ledger -Event $Event -Records @([pscustomobject]@{ Scope = 'run'; Note = $Note })
+}
+
+# ---- remote reads -------------------------------------------------------
+# Win32-OpenSSH stalls ssh.exe when stdout is a non-console handle and the
+# output grows past a buffer. Reproduced on a clean box: a 227-line library
+# listing dies at EXACTLY 12288 bytes (3 x 4096) with ssh.exe blocked forever,
+# while the same query piped through `head -3` returns in milliseconds. It is
+# below PowerShell - redirecting to a file does not help, because the stall is
+# inside ssh itself.
+#
+# So never stream a large remote read through ssh stdout. Have the remote write
+# to a file and fetch it with scp, which is a different code path and moved
+# 3.6 GB without trouble.
+#
+# Lives here, not in one script, for the reason in this file's header: the
+# ledger, the import and the verifier all need it, and a third copy is how the
+# five transcode scripts drifted apart in the first place.
+function Invoke-SshRead {
+  param([Parameter(Mandatory)][string]$RemoteHost, [Parameter(Mandatory)][string]$Cmd)
+  $rtmp = "/tmp/.sshread." + [Guid]::NewGuid().ToString('N').Substring(0,12)
+  $ltmp = [IO.Path]::GetTempFileName()
+  try {
+    & cmd /c "ssh -n -o BatchMode=yes $RemoteHost `"$Cmd > $rtmp 2>/dev/null`" >nul 2>nul" | Out-Null
+    & cmd /c "scp -B -o BatchMode=yes $($RemoteHost):$rtmp `"$ltmp`" >nul 2>nul" | Out-Null
+    & cmd /c "ssh -n -o BatchMode=yes $RemoteHost `"rm -f $rtmp`" >nul 2>nul" | Out-Null
+    # MUST read as UTF-8. Get-Content's default is the ANSI codepage, which
+    # turned every library path containing a curly apostrophe into "Whoâ€™s".
+    # That is not merely cosmetic: Norm() runs FormKD, which decomposes the
+    # mojibake's "™" into the LETTERS "TM", so "whos" never matched "whotms"
+    # and two albums already in the library were reported NEW on every run
+    # (measured 2026-09-19: The Who / Who's Next, Lightnin' Hopkins / Mojo Hand).
+    if (Test-Path $ltmp) { return @([IO.File]::ReadAllLines($ltmp, [Text.UTF8Encoding]::new($false))) }
+    return @()
+  } finally { Remove-Item $ltmp -Force -ErrorAction SilentlyContinue }
 }

@@ -318,7 +318,7 @@ else {
   if ($present.Count -gt 0) {
     # Hash only the landed files, via the indexer's list: mode.
     $listLocal = Join-Path $env:TEMP "$RUN_ID.destlist.txt"
-    [IO.File]::WriteAllLines($listLocal, @($present | ForEach-Object { $_.Dest }), [Text.UTF8Encoding]::new($false))
+    Write-LfLines -Path $listLocal -Lines @($present | ForEach-Object { $_.Dest })
     Push $listLocal "/tmp/$RUN_ID.destlist.txt"
     Remove-Item $listLocal -Force -ErrorAction SilentlyContinue
     $out = "$INV/library-index.video.$RUN_ID.tsv"
@@ -393,7 +393,7 @@ else {
       if ($cands.Count -gt 0) {
         Log "hashing $($cands.Count) size-matched library candidate(s)"
         $cl = Join-Path $env:TEMP "$RUN_ID.candlist.txt"
-        [IO.File]::WriteAllLines($cl, $cands, [Text.UTF8Encoding]::new($false))
+        Write-LfLines -Path $cl -Lines $cands
         Push $cl "/tmp/$RUN_ID.candlist.txt"
         Remove-Item $cl -Force -ErrorAction SilentlyContinue
         $co = "$INV/library-index.video.cand.$RUN_ID.tsv"
@@ -478,7 +478,7 @@ foreach ($g in $groups) {
 # ---- audit trail ---------------------------------------------------------
 $hdr = @("verdict`tsha256`tbytes`tlocal`tlibrary`tnote")
 $body = $rows | ForEach-Object { "$($_.Verdict)`t$($_.Sha)`t$($_.Bytes)`t$($_.Local)`t$($_.Library)`t$($_.Note)" }
-[IO.File]::WriteAllLines($AUDIT, ($hdr + $body), [Text.UTF8Encoding]::new($false))
+Write-LfLines -Path $AUDIT -Lines ($hdr + $body)
 Push $AUDIT "/tmp/$RUN_ID.verify.tsv"
 $ok = SshRead "sudo -n mv '/tmp/$RUN_ID.verify.tsv' '$INV/' && test -f '$INV/$RUN_ID.verify.tsv' && echo PRESENT"
 if ($ok -contains 'PRESENT') { Log "audit off-box: $INV/$RUN_ID.verify.tsv" }

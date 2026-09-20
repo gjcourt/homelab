@@ -24,6 +24,23 @@
   and item=album; for video, title=the library name and item is the file.
 #>
 
+# ⚠️ [IO.File]::WriteAllLines terminates every line with Environment.NewLine,
+# which on Windows is CRLF. EVERY file these scripts write is then read by a
+# Linux tool - the ledger by awk, path manifests by a shell `read` loop,
+# checksum manifests by sha256sum -c - and a trailing CR rides along inside the
+# last field. Measured 2026-09-20: a one-line candidate list produced
+# "media/video/.../The Tale of the Princess Kaguya (2013).mkv\r", hestia could
+# not open it, the indexer reported MISSING, and the verifier refused to clear a
+# film whose hash was in fact identical on both sides. Every ledger row written
+# before that fix carries the same trailing CR.
+#
+# Write LF explicitly. There is no case here where CRLF is wanted.
+function Write-LfLines {
+  param([Parameter(Mandatory)][string]$Path, [string[]]$Lines)
+  $text = $(if ($Lines -and $Lines.Count -gt 0) { ($Lines -join "`n") + "`n" } else { '' })
+  [IO.File]::WriteAllText($Path, $text, [Text.UTF8Encoding]::new($false))
+}
+
 $script:LedgerHost = $null
 $script:LedgerRunId = $null
 $script:LedgerPath = '/mnt/main/archive/_inventory/rips/ledger.tsv'
@@ -60,7 +77,7 @@ function Write-Ledger {
     ) -join "`t"
   }
   $chunk  = Join-Path $env:TEMP "$($script:LedgerRunId).ledger.$($script:LedgerSeq).tsv"
-  [IO.File]::WriteAllLines($chunk, $lines, [Text.UTF8Encoding]::new($false))
+  Write-LfLines -Path $chunk -Lines $lines
   $remote = "/tmp/.ledger.$($script:LedgerRunId).$($script:LedgerSeq).tsv"
   & cmd /c "scp -B -o BatchMode=yes `"$chunk`" $($script:LedgerHost):$remote >nul 2>nul" | Out-Null
   Remove-Item $chunk -Force -ErrorAction SilentlyContinue

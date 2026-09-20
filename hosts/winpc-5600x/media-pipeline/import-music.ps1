@@ -56,6 +56,21 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
+
+# ⚠️ THE ROOT CAUSE OF TWO SEPARATE BUGS, both fixed by these two lines.
+# PowerShell decodes a native command's stdout using [Console]::OutputEncoding,
+# which defaults to the OEM codepage (437/850) - NOT UTF-8. ffprobe emits UTF-8,
+# so every tag containing a non-ASCII character was mangled at the very first
+# step, and everything downstream inherited it:
+#   * staged folder names were built from the mangled tags, so "Lightnin’
+#     Hopkins" reached hestia as "LightninΓÇÖ Hopkins" (3 folders in one run);
+#   * dedup compared a mangled tag against a correct library path and missed,
+#     so albums already in the library were re-imported as NEW - and Norm()
+#     runs FormKD, which decomposes the mojibake "™" into the letters "TM",
+#     turning "whos" into "whotms" and guaranteeing the mismatch.
+# Measured 2026-09-19. Set this before ANY native command runs.
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+$OutputEncoding           = [Text.UTF8Encoding]::new($false)
 $FFDIR   = 'C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin'
 $FP      = Join-Path $FFDIR 'ffprobe.exe'
 $HST     = 'truenas_admin@10.42.2.10'

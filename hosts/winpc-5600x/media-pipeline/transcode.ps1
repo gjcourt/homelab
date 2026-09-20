@@ -244,4 +244,4 @@ foreach ($it in $runnable) {
   }
 }
 VLedgerRun 'RUN_END' "encoded and pushed $($runnable.Count) title(s)"
-Log '== ALL DONE =''
+Log '== ALL DONE =='

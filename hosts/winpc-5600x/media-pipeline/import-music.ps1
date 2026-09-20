@@ -250,7 +250,7 @@ foreach ($it in $items) {
              $it.Track, $it.TrackTotal, $it.Title, $it.Mbid, $it.Barcode,
              $it.File.FullName, $dest) -join "`t")
 }
-[IO.File]::WriteAllLines($AUDIT, $rows, [Text.UTF8Encoding]::new($false))
+Write-LfLines -Path $AUDIT -Lines $rows
 Log "  $($rows.Count) file rows -> $AUDIT"
 
 # Group by MUSICBRAINZ_ALBUMID where present: two discs of one release routinely
@@ -309,7 +309,7 @@ foreach ($grp in $groups) {
     'INCOMPLETE' { Log "  INCOMPLETE  $label  ($detail)" }
   }
 }
-[IO.File]::WriteAllLines($AUDIT_SUM, $verdicts, [Text.UTF8Encoding]::new($false))
+Write-LfLines -Path $AUDIT_SUM -Lines $verdicts
 # Off-box immediately too: the completeness gate can exit two lines below, and
 # the verdict is the most useful thing to still have when it does.
 CopyAudit $AUDIT_SUM
@@ -577,7 +577,7 @@ foreach ($r in [IO.File]::ReadAllLines($AUDIT)) {
 if ($man.Count -eq 0) { Log '  nothing transferred this run - skipping checksum verification' }
 else {
 $manLocal = Join-Path $env:TEMP "$RUN_ID.sha256"
-[IO.File]::WriteAllLines($manLocal, $man, [Text.UTF8Encoding]::new($false))
+Write-LfLines -Path $manLocal -Lines $man
 & cmd /c "scp -B -o BatchMode=yes `"$manLocal`" $($HST):$SCRATCH.sha256 >nul 2>nul" | Out-Null
 $chk = SshRead "cd '$LIB' && sudo -n sha256sum -c --quiet '$SCRATCH.sha256' 2>&1"
 $failed = @($chk | Where-Object { $_ -match ': (FAILED|No such file)' })

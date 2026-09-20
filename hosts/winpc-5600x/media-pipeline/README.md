@@ -252,8 +252,16 @@ of what either side calls the file.
 | Proof used | sha256 of the rip found in a full library index, or the FLAC audio checksum | the ledger's own `LANDED` row, **re-checked**: is that file still there, and does it still hash to the recorded value? |
 | Cost | index the whole music library (~76 GB, a few minutes) | hash only the landed files — indexing 1.6 TB to check a few films would be absurd |
 
-Video also reports local rips with **no `LANDED` row at all**. Nothing ever
-proved those reached the library, so nothing may delete them.
+Video also handles local files with **no `LANDED` row** — anything that landed
+before the ledger existed. Refusing those forever is not an answer, so it falls
+back to content, exactly as the music path does: an encoded output that was
+pushed is byte-identical to the library copy.
+
+**Size is the prefilter that makes that affordable.** A stat-only pass over the
+library is instant (`hash=0`), and only candidates of exactly the right size are
+then hashed — usually one file, never 1.6 TB. Nothing is ever judged *on* size:
+a match of the right number of wrong bytes is precisely the failure
+`transcode.ps1` stopped accepting when it replaced its size check with a hash.
 
 ## The library index, and why it is not in the ledger
 

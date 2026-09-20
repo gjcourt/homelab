@@ -54,7 +54,8 @@ param(
   [int]$MinFreeGB  = 60,     # refuse to start without this much headroom
   [int]$MinFrameKB = 100,    # a decoded frame smaller than this is near-blank
   [switch]$DryRun,           # validate the queue and exit, encode nothing
-  [switch]$WaitForIdle       # wait for any other ffmpeg to finish first
+  [switch]$WaitForIdle,      # wait for any other ffmpeg to finish first
+  [switch]$Replace           # re-encode titles already in the library
 )
 
 $ErrorActionPreference = 'Continue'
@@ -123,7 +124,9 @@ foreach ($i in $items) {
   $d = Dur $i.Src
   if ($d -le 0) { Log ("  UNREADABLE   : " + $i.Name); continue }
   $rel = "media/video/movies/$($i.Name)/$($i.Name).mkv"
-  if (OnHestia $rel) { Log ("  SKIP on hestia: " + $i.Name); continue }
+  $onHestia = OnHestia $rel
+  if ($onHestia -and -not $Replace) { Log ("  SKIP on hestia: " + $i.Name); continue }
+  if ($onHestia) { Log ("  REPLACING     : " + $i.Name + " (already in the library)") }
   $nsub = @(Probe $i.Src 'stream=index' 's').Count
   # Every audio stream, not just the first. Channels and language are read here
   # so the encode can preserve both instead of discarding them.
@@ -282,14 +285,26 @@ foreach ($it in $runnable) {
     VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Note='scp to hestia failed' })
     Log "FAIL scp: $name -- keeping local"; ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null; continue
   }
-  ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$HBASE/$dest' && sudo -n mv '$tmp' '$HBASE/$rel' && sudo -n chown 1028:100 '$HBASE/$rel' && sudo -n chmod 644 '$HBASE/$rel'"
+  # ⚠️ Land at a staging name INSIDE the destination and verify THERE, then swap.
+  # This used to mv straight onto the final path and hash afterwards, which is
+  # fine for a new title and destructive for a re-encode: a corrupt transfer had
+  # already replaced a good library file by the time the hash disagreed. The
+  # swap is a rename within one dataset, so it is atomic, and a failed verify
+  # leaves the existing file untouched.
+  $inc = "$rel.incoming"
+  ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$HBASE/$dest' && sudo -n mv '$tmp' '$HBASE/$inc' && sudo -n chown 1028:100 '$HBASE/$inc' && sudo -n chmod 644 '$HBASE/$inc'"
   if ($LASTEXITCODE -ne 0) {
     VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note='move into library failed' })
     Log "FAIL push: $name -- keeping local"; continue
   }
-  $remoteSha = ((ssh -n -o BatchMode=yes $HST "sudo -n sha256sum '$HBASE/$rel'") -join '').Trim().Split(' ')[0].ToLower()
-  $remoteLen = ((ssh -n -o BatchMode=yes $HST "sudo -n stat -c %s '$HBASE/$rel'") -join '').Trim()
+  $remoteSha = ((ssh -n -o BatchMode=yes $HST "sudo -n sha256sum '$HBASE/$inc'") -join '').Trim().Split(' ')[0].ToLower()
+  $remoteLen = ((ssh -n -o BatchMode=yes $HST "sudo -n stat -c %s '$HBASE/$inc'") -join '').Trim()
   if ($remoteSha -eq $localSha -and $remoteLen -eq "$outLen") {
+    ssh -n -o BatchMode=yes $HST "sudo -n mv '$HBASE/$inc' '$HBASE/$rel'"
+    if ($LASTEXITCODE -ne 0) {
+      VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note='verified but final swap failed' })
+      Log "FAIL swap: $name -- keeping local"; continue
+    }
     # LANDED is written only here, after the hash is proven in the library, so a
     # row means "this film is there and it matched" - not "we pushed it".
     VLedger 'LANDED' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$remoteSha; Bytes=$remoteLen
@@ -300,8 +315,11 @@ foreach ($it in $runnable) {
     Log "DONE $name (hestia verified $remoteLen bytes, sha256 $($remoteSha.Substring(0,12)))"
   }
   else {
+    # Never leave an unverified file where a reader could mistake it for the real
+    # one, and never let it displace what is already there.
+    ssh -n -o BatchMode=yes $HST "sudo -n rm -f '$HBASE/$inc'" | Out-Null
     VLedger 'VERIFY_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$localSha; Bytes=$outLen; Dest=$rel
-                                               Note="remote sha=$remoteSha len=$remoteLen" })
+                                               Note="remote sha=$remoteSha len=$remoteLen (discarded .incoming, library untouched)" })
     Log "FAIL verification: $name -- local sha=$localSha len=$outLen / remote sha=$remoteSha len=$remoteLen -- keeping local"
   }
 }

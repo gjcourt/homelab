@@ -167,8 +167,16 @@ nothing. The output must carry the same number of audio tracks as the source
 *and* the same channel counts, or the encode is rejected and the local copy
 kept. A drop and a downmix are both failures.
 
-Re-encoding a title already in the library means removing the library file
-first: preflight skips anything that is already `OnHestia`.
+Re-encoding a title already in the library needs `-Replace`; without it
+preflight skips anything already `OnHestia`.
+
+A push lands at `<name>.mkv.incoming` inside the destination, is hashed **there**,
+and only swapped onto the final name once it matches — a rename within one
+dataset, so atomic. This used to `mv` straight onto the final path and hash
+afterwards: harmless for a new title, destructive for a re-encode, because a
+corrupt transfer had already replaced a good library file by the time the hash
+disagreed. A failed verify now deletes the `.incoming` and leaves the library
+untouched.
 
 ---
 

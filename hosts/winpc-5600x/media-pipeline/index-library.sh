@@ -34,15 +34,20 @@
 #   index-library.sh <root> <out.tsv> music            # every audio file under root
 #   index-library.sh <root> <out.tsv> video            # every video file under root
 #   index-library.sh <root> <out.tsv> list:<file>      # only these relative paths
+#   index-library.sh <root> <out.tsv> video '' 0       # sizes only, hash nothing
 #
 # The list: form exists so the video path does not have to hash 1.6 TB to check
-# the handful of files a run actually cares about.
+# the handful of files a run actually cares about. hash=0 goes with it: a
+# stat-only pass is instant and gives the verifier a size prefilter, so it can
+# then ask for hashes of just the few candidates that could possibly match.
 set -uo pipefail
 
-ROOT=${1:?usage: index-library.sh <root> <out.tsv> <music|video|list:FILE> [jobs]}
-OUT=${2:?usage: index-library.sh <root> <out.tsv> <music|video|list:FILE> [jobs]}
+ROOT=${1:?usage: index-library.sh <root> <out.tsv> <music|video|list:FILE> [jobs] [hash]}
+OUT=${2:?usage: index-library.sh <root> <out.tsv> <music|video|list:FILE> [jobs] [hash]}
 MODE=${3:-music}
 JOBS=${4:-8}
+HASH=${5:-1}
+[ -n "$JOBS" ] || JOBS=8
 
 ROOT=${ROOT%/}
 [ -d "$ROOT" ] || { echo "index-library: no such root: $ROOT" >&2; exit 2; }
@@ -83,8 +88,15 @@ TMP="$OUT.partial.$$"
 # halves of a row. Anything larger would need a lock.
 produce | xargs -0 -P "$JOBS" -I{} sh -c '
       f="$1"
-      h=$(sha256sum < "$f" 2>/dev/null | cut -c1-64)
       s=$(stat -c %s "$f" 2>/dev/null)
+      if [ "'"$HASH"'" = "0" ]; then
+        # Sizes only: a prefilter, not a proof. Nothing here may authorise a
+        # delete on its own - the caller hashes the candidates it narrows to.
+        [ -n "$s" ] || s=0
+        printf "%s\t%s\t%s\t%s\n" "-" "$s" "${f#'"$ROOT"'/}" "-"
+        exit 0
+      fi
+      h=$(sha256sum < "$f" 2>/dev/null | cut -c1-64)
       if [ -z "$h" ]; then h=MISSING; s=0; fi
       # FLAC layout: "fLaC" (4) + block header (4) + STREAMINFO (34), whose last
       # 16 bytes are the audio MD5. So bytes 26..41 = hex chars 53..84 of the

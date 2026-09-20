@@ -153,11 +153,11 @@ function KV([string[]]$lines, [string]$key) {
 
 # ---- run the indexer on hestia -----------------------------------------
 # Returns the key=value block index-library.sh prints.
-function Invoke-Indexer([string]$root, [string]$out, [string]$mode) {
+function Invoke-Indexer([string]$root, [string]$out, [string]$mode, [int]$hash = 1) {
   $sh = Join-Path $PSScriptRoot 'index-library.sh'
   if (-not (Test-Path $sh)) { Log "ABORT: index-library.sh not found next to this script"; exit 2 }
   Push $sh '/tmp/index-library.sh'
-  return SshRead "sudo -n mkdir -p '$INV' && sudo -n bash /tmp/index-library.sh '$root' '$out' '$mode' $Jobs"
+  return SshRead "sudo -n mkdir -p '$INV' && sudo -n bash /tmp/index-library.sh '$root' '$out' '$mode' $Jobs $hash"
 }
 
 Log "== verify-before-delete ($Mode) run $RUN_ID =="
@@ -359,14 +359,73 @@ else {
     foreach ($k in $landed.Keys) { $known[$k.ToLower()] = $true }
     $orphans = Get-ChildItem $SourceDir -File -Recurse -ErrorAction SilentlyContinue |
                Where-Object { $EXTS -contains $_.Extension.ToLower() -and -not $known[$_.FullName.ToLower()] }
-    foreach ($o in $orphans) {
-      $rows += [pscustomobject]@{
-        Verdict = 'UNVERIFIED'; Sha = ''; Bytes = [long]$o.Length; Local = $o.FullName; Library = ''
-        Group = $o.FullName; Title = $o.Directory.Name; Item = $o.Name
-        Note = 'no LANDED row - never proven to reach the library'
+    if ($orphans) {
+      Log "$($orphans.Count) local video file(s) have no LANDED row"
+
+      # Same gap music had: anything that landed BEFORE the ledger existed has no
+      # row to replay, and refusing all of it forever is not an answer. So fall
+      # back to content, exactly as the music path does - an encoded output that
+      # was pushed is byte-identical to the library copy.
+      #
+      # Size is the prefilter that makes this affordable: a stat-only pass over
+      # the library is instant, and only the candidates of exactly the right size
+      # are then hashed. Nothing is judged on size - a match of the right NUMBER
+      # of wrong bytes is precisely the failure transcode.ps1 stopped accepting.
+      $sizeOut = "$INV/library-sizes.video.$RUN_ID.tsv"
+      $null = Invoke-Indexer $LIBROOT $sizeOut 'video' 0
+      $stmp = [IO.Path]::GetTempFileName()
+      $bySize = @{}
+      foreach ($l in (Fetch $sizeOut $stmp)) {
+        $p = $l -split "`t", 4
+        if ($p.Count -lt 3) { continue }
+        if (-not $bySize.ContainsKey($p[1])) { $bySize[$p[1]] = @() }
+        $bySize[$p[1]] += $p[2]
+      }
+      Remove-Item $stmp -Force -ErrorAction SilentlyContinue
+      SshRead "sudo -n rm -f '$sizeOut'" | Out-Null
+      Log "library size index: $($bySize.Count) distinct size(s)"
+
+      $cands = @()
+      foreach ($o in $orphans) { if ($bySize.ContainsKey("$($o.Length)")) { $cands += $bySize["$($o.Length)"] } }
+      $cands = @($cands | Sort-Object -Unique)
+
+      $candSha = @{}
+      if ($cands.Count -gt 0) {
+        Log "hashing $($cands.Count) size-matched library candidate(s)"
+        $cl = Join-Path $env:TEMP "$RUN_ID.candlist.txt"
+        [IO.File]::WriteAllLines($cl, $cands, [Text.UTF8Encoding]::new($false))
+        Push $cl "/tmp/$RUN_ID.candlist.txt"
+        Remove-Item $cl -Force -ErrorAction SilentlyContinue
+        $co = "$INV/library-index.video.cand.$RUN_ID.tsv"
+        $cmeta = Invoke-Indexer $LIBROOT $co "list:/tmp/$RUN_ID.candlist.txt"
+        $csha = KV $cmeta 'index_sha256'
+        if ($csha) {
+          VLedger 'LIBRARY_INDEXED' @([pscustomobject]@{
+            Scope = 'run'; Sha = $csha; Bytes = (KV $cmeta 'bytes'); Dest = $co
+            Note  = "root=$LIBROOT files=$(KV $cmeta 'files') - size-matched candidates for pre-ledger video"
+          })
+        }
+        $ctmp = [IO.Path]::GetTempFileName()
+        foreach ($l in (Fetch $co $ctmp)) {
+          $p = $l -split "`t", 4
+          if ($p.Count -ge 3 -and $p[0] -ne 'MISSING') { $candSha[$p[0]] = $p[2] }
+        }
+        Remove-Item $ctmp -Force -ErrorAction SilentlyContinue
+      }
+
+      foreach ($o in $orphans) {
+        $lh = Sha $o.FullName
+        $hit = $candSha[$lh]
+        $rows += [pscustomobject]@{
+          Verdict = $(if ($hit) { 'VERIFIED' } else { 'UNVERIFIED' })
+          Sha = $lh; Bytes = [long]$o.Length; Local = $o.FullName
+          Library = $(if ($hit) { $hit } else { '' })
+          Group = $o.FullName; Title = $o.Directory.Name; Item = $o.Name
+          Note = $(if ($hit) { 'no LANDED row - matched the library by content (landed before the ledger existed)' }
+                   else { 'no LANDED row, and no library file holds these bytes' })
+        }
       }
     }
-    if ($orphans) { Log "$($orphans.Count) local video file(s) have no LANDED row" }
   }
 }
 

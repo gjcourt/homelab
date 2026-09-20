@@ -197,3 +197,89 @@ re-borrowing what you now own — **union it, never overwrite**. Folder names ar
 sanitised while that list carries real punctuation (`Amazing Grace: The Complete
 Recordings` vs `Amazing Grace- …`), and regenerating from the filesystem silently
 drops entries. That list is not in git; it lives with the SFPL tooling.
+
+---
+
+# verify-before-delete.ps1 — proving a rip is redundant
+
+`import-music.ps1` never deletes from `C:\Rips`, and `transcode.ps1` never
+deletes a disc rip. Clearing them was an operator judgement call with no
+evidence behind it. This is the evidence.
+
+```powershell
+.\verify-before-delete.ps1 -Mode Music              # report only
+.\verify-before-delete.ps1 -Mode Music -Delete      # reclaim what is proven
+.\verify-before-delete.ps1 -Mode Video -SourceDir D:\Rips
+```
+
+One question per local file: **is there a file in the library whose sha256
+equals this one's?**
+
+## Matching is by content, never by path
+
+The obvious implementation re-derives the library path from the tags
+(`DiscAlbum` → `LinuxName` → `TruncName` → `AsciiSafe`) and looks for it. That
+puts a *delete* decision downstream of the same name-mangling that produced
+three mojibake folders in a single run on 2026-09-19. A hash match needs none
+of it: if the bytes are in the library, the local copy is redundant regardless
+of what either side calls the file.
+
+## The two modes prove different things
+
+| | Music | Video |
+| :--- | :--- | :--- |
+| Library holds | a byte-identical **copy** | a **transcode** — a different file by design |
+| Therefore | hash identity is the proof | no source hash can ever match |
+| Proof used | sha256 of the rip found in a full library index | the ledger's own `LANDED` row, **re-checked**: is that file still there, and does it still hash to the recorded value? |
+| Cost | index the whole music library (~76 GB, a few minutes) | hash only the landed files — indexing 1.6 TB to check a few films would be absurd |
+
+Video also reports local rips with **no `LANDED` row at all**. Nothing ever
+proved those reached the library, so nothing may delete them.
+
+## The library index, and why it is not in the ledger
+
+`index-library.sh` runs on hestia and emits `sha256 <TAB> bytes <TAB> relpath`.
+
+The ledger stays a **movement log** — it records things happening, not an
+inventory. So the inventory is a separate snapshot file, and a `LIBRARY_INDEXED`
+row carries **its sha256**. Index plus anchor is a claim you can re-check later,
+and editing the index breaks the anchor.
+
+That anchor is computed from the copy that was actually **used to judge**, not
+from the summary hestia reported. A fetch that truncates therefore aborts the
+run instead of silently deleting rips against a short index.
+
+Two more deliberate choices:
+
+- **Files are hashed from stdin** (`sha256sum < "$f"`). Passing the path lets
+  `sha256sum` escape backslashes and newlines by rewriting the output line —
+  corrupting exactly the rows you would least want wrong.
+- **A file that cannot be read emits `MISSING`**, it does not vanish from the
+  output. A verifier must be able to tell "not there" from "not asked about".
+
+## Deletion is album-granular, and the album comes from tags
+
+`-Delete` removes an album only when **every** file in it is proven; one
+unverified track keeps the whole album.
+
+⚠️ **A folder is not an album.** `C:\Rips` is flat — Picard writes several
+albums interleaved into it — so grouping by directory puts every rip in one
+group, and a single unproven track blocks the entire box. The first run showed
+exactly that: 11 unproven Daft Punk remixes held back 301 files that were
+provably in the library. Grouping therefore reads `album_artist`/`album`/`disc`
+with ffprobe, the same way the import does. Only the *grouping* uses tags —
+matching stays on content, and none of the library-naming stack is involved.
+
+The gate itself is not negotiable. On 2026-08-29 a 2xCD rip moved with only disc
+2 present and the source was deleted anyway; disc 1 is still gone. Per file,
+"the bytes are in the library" was true of everything that landed — which is
+precisely how deleting only the proven files destroys an album. Files with no
+usable tags are judged alone, never folded into a group they cannot be
+attributed to. Each deletion is preceded by a
+`DELETE_SAFE` row and followed by `LOCAL_DELETED`, so the ledger records the
+authorisation before the act — and the run re-checks that the files are actually
+gone before claiming the space back.
+
+Without `-Delete` the script is read-only: it writes ledger rows and an audit
+TSV (`<RUN_ID>.verify.tsv`, kept both locally and on hestia) and touches nothing
+else.

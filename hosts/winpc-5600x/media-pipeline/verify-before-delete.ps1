@@ -31,8 +31,16 @@
            to the recorded value. Only those files are hashed; indexing 1.6 TB
            to check a handful of films would be absurd.
 
-  Read-only by default. -Delete removes nothing that is not proven, and works at
-  folder granularity: one unproven track keeps its whole album.
+  Read-only by default. -Delete removes nothing that is not proven, and the unit
+  of deletion is the ALBUM: one unproven track keeps the whole album.
+
+  ⚠️ The album comes from the TAGS, not the folder. C:\Rips is flat - Picard
+  writes several albums interleaved into it - so a folder is not an album, and
+  grouping by directory blocks every rip on the box the moment one is unproven.
+  The album gate itself is not negotiable: on 2026-08-29 a 2xCD rip moved with
+  only disc 2 present and the source was deleted anyway. Disc 1 is still gone.
+  Per file, "the bytes are in the library" was true of everything that landed -
+  which is exactly how deleting only the proven files destroys an album.
 
 .EXAMPLE
   # report only - transfers nothing, deletes nothing
@@ -67,6 +75,8 @@ if ([Console]::OutputEncoding.CodePage -ne 65001) {
   exit 5
 }
 
+$FFDIR  = 'C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin'
+$FP     = Join-Path $FFDIR 'ffprobe.exe'
 $HST    = 'truenas_admin@10.42.2.10'
 $HBASE  = '/mnt/main/family'
 $INV    = '/mnt/main/archive/_inventory/rips'
@@ -109,6 +119,8 @@ function Fetch([string]$remote, [string]$local) {
   return @()
 }
 function Sha([string]$path) { (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLower() }
+# First number only: Picard may write track as "3/12" or disc as "1/2".
+function Num([string]$v) { if ($v -match '(\d+)') { [int]$Matches[1] } else { 0 } }
 function KV([string[]]$lines, [string]$key) {
   foreach ($l in $lines) { if ($l -like "$key=*") { return $l.Substring($key.Length + 1) } }
   return ''
@@ -182,23 +194,61 @@ if ($Mode -eq 'Music') {
   })
 
   # ---- 3. judge the local rips -----------------------------------------
+  if (-not (Test-Path $FP)) { Log "ABORT: ffprobe not found at $FP - album grouping needs it"; VLedgerRun 'RUN_END' 'ffprobe missing'; exit 2 }
   if (-not (Test-Path $SourceDir)) { Log "nothing to verify: $SourceDir does not exist"; VLedgerRun 'RUN_END' 'no source dir'; exit 0 }
   $local = Get-ChildItem $SourceDir -File -Recurse -ErrorAction SilentlyContinue |
            Where-Object { $EXTS -contains $_.Extension.ToLower() -and $_.FullName -notmatch '\\_GV\\' }
   if (-not $local) { Log "nothing to verify in $SourceDir"; VLedgerRun 'RUN_END' 'source dir empty'; exit 0 }
   Log "hashing $($local.Count) local file(s) in $SourceDir"
 
+  # ⚠️ Group by TAGS, never by directory. C:\Rips is FLAT - EAC and Picard write
+  # several albums interleaved into one folder - so grouping by the containing
+  # directory puts every rip in a single group, and one unproven track then
+  # blocks every other album on the box. Measured on the first run: 11 unproven
+  # Daft Punk remixes held back 301 files that were provably in the library.
+  #
+  # The album gate itself is not optional. On 2026-08-29 a 2xCD rip moved with
+  # only disc 2 present and the source was deleted anyway; disc 1 is gone. Per
+  # file, "the bytes are in the library" is true of every track that made it -
+  # deleting exactly those leaves an album that can never be re-imported whole.
+  # So the unit of deletion is the album, and the album comes from the tags.
+  #
+  # Only the grouping needs tags. Matching stays on content, and none of the
+  # library-naming stack (LinuxName/TruncName/AsciiSafe) is involved.
+  $untagged = 0
   foreach ($f in $local) {
+    $tl = & $FP -v quiet -show_entries 'format_tags=album_artist,artist,album,disc,TOTALDISCS,DISCTOTAL' -of default=noprint_wrappers=1 $f.FullName 2>$null
+    $t = @{}
+    foreach ($l in $tl) {
+      $i = $l.IndexOf('=')
+      if ($i -gt 0) { $t[$l.Substring(0,$i).Replace('TAG:','').ToLower()] = $l.Substring($i+1) }
+    }
+    $artist = $(if ($t['album_artist']) { $t['album_artist'] } else { $t['artist'] })
+    $album  = $t['album']
+    if ($artist -and $album -and $artist -notlike '*Unknown Artist*') {
+      $disc = Num $t['disc']; if ($disc -lt 1) { $disc = 1 }
+      $dtot = [Math]::Max((Num $t['totaldiscs']), (Num $t['disctotal']))
+      $grp  = "$($artist.Trim()) / $($album.Trim())" + $(if ($dtot -gt 1) { " [Disc $disc]" } else { '' })
+      $ttl  = $artist.Trim()
+    } else {
+      # No album context. Judge it strictly alone rather than letting it join,
+      # or silently vouch for, a group it cannot be attributed to.
+      $untagged++
+      $grp = "(untagged) $($f.FullName)"
+      $ttl = '(untagged)'
+    }
+
     $h = Sha $f.FullName
     $hit = $byHash[$h]
     $rows += [pscustomobject]@{
       Verdict = $(if ($hit) { 'VERIFIED' } else { 'UNVERIFIED' })
       Sha = $h; Bytes = [long]$f.Length; Local = $f.FullName
       Library = $(if ($hit) { $hit } else { '' })
-      Group = $f.Directory.FullName
-      Title = $f.Directory.Name; Item = $f.Name; Note = ''
+      Group = $grp; Title = $ttl; Item = $f.Name
+      Note = $(if ($hit) { '' } else { 'no library file matches this content' })
     }
   }
+  if ($untagged -gt 0) { Log "$untagged file(s) carry no usable album tags - each judged alone" }
 }
 else {
   # ---- video: replay the ledger, then re-check the landed files ---------
@@ -307,7 +357,7 @@ foreach ($g in $groups) {
   if ($bad.Count -eq 0) {
     $safeGroups += $g
     VLedger 'DELETE_SAFE' @([pscustomobject]@{
-      Scope=$scope; Title=$g.Group[0].Title; Src=$g.Name; Bytes=(($g.Group | Measure-Object Bytes -Sum).Sum)
+      Scope=$scope; Title=$g.Group[0].Title; Item=$g.Name; Bytes=(($g.Group | Measure-Object Bytes -Sum).Sum)
       Note="all $($g.Count) file(s) proven in the library"
     })
     Log "SAFE    $($g.Name)  ($($g.Count) file(s))"
@@ -333,20 +383,21 @@ if ($Delete) {
   if ($safeGroups.Count -eq 0) { Log "-Delete given, but nothing is proven safe" }
   foreach ($g in $safeGroups) {
     $bytes = ($g.Group | Measure-Object Bytes -Sum).Sum
-    if ($Mode -eq 'Music') {
-      # The group IS a folder here; remove the files, then the folder if empty.
-      foreach ($r in $g.Group) { Remove-Item -LiteralPath $r.Local -Force -ErrorAction SilentlyContinue }
-      if ((Get-ChildItem -LiteralPath $g.Name -Force -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0) {
-        Remove-Item -LiteralPath $g.Name -Force -Recurse -ErrorAction SilentlyContinue
+    # The group is an ALBUM, not a directory - C:\Rips is flat and interleaved,
+    # so only the files themselves may be removed. Empty directories are tidied
+    # afterwards, and $SourceDir itself is never one of them.
+    foreach ($r in $g.Group) { Remove-Item -LiteralPath $r.Local -Force -ErrorAction SilentlyContinue }
+    foreach ($d in @($g.Group | ForEach-Object { Split-Path -Parent $_.Local } | Sort-Object -Unique)) {
+      if ($d -and $d -ne $SourceDir -and (Test-Path -LiteralPath $d) -and
+          (Get-ChildItem -LiteralPath $d -Force -ErrorAction SilentlyContinue | Measure-Object).Count -eq 0) {
+        Remove-Item -LiteralPath $d -Force -ErrorAction SilentlyContinue
       }
-    } else {
-      foreach ($r in $g.Group) { Remove-Item -LiteralPath $r.Local -Force -ErrorAction SilentlyContinue }
     }
     $still = @($g.Group | Where-Object { Test-Path -LiteralPath $_.Local })
     if ($still.Count -eq 0) {
       $freed += $bytes
       VLedger 'LOCAL_DELETED' @([pscustomobject]@{
-        Scope=$scope; Title=$g.Group[0].Title; Src=$g.Name; Bytes=$bytes
+        Scope=$scope; Title=$g.Group[0].Title; Item=$g.Name; Bytes=$bytes
         Note='removed after the library copy was proven'
       })
       Log "deleted $($g.Name)"

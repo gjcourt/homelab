@@ -291,22 +291,6 @@ spec:
     # -------------------------------------------------------------------------
     - name: litestream
       rules:
-        # The absolute floor, and the only rule here that does not depend on
-        # local write activity: snapshot.interval is 24h, so a healthy replica
-        # uploads at least once a day even with nobody touching the database.
-        # 26h allows for jitter around the snapshot boundary.
-        - alert: LitestreamNoRecentUpload
-          expr: >
-            litestream_sync_count{namespace="vitals-prod"}
-            unless on (namespace, pod)
-            (increase(litestream_replica_operation_total{namespace="vitals-prod", operation="PUT"}[26h]) > 0)
-          for: 1h
-          labels:
-            severity: critical
-          annotations:
-            summary: "litestream has uploaded nothing for {{ $labels.namespace }}/{{ $labels.pod }} in 26h"
-            description: >
-              The sidecar is running and scraped, but nothing has reached S3 in 26h — longer than the 24h snapshot interval, so even a completely idle database should have produced an upload. The RWO volume is currently the only copy. Check `kubectl logs -n {{ $labels.namespace }} {{ $labels.pod }} -c litestream` for credential or bucket errors. ⚠️ A pod younger than 26h has a counter that only covers its own lifetime; confirm the pod age before concluding.
         # The slow-write path. The 30m rule below cannot fire if writes arrive
         # less often than its window — and this database is nearly idle (the
         # PostgreSQL cluster it replaced held zero rows for seven months). Same
@@ -315,9 +299,27 @@ spec:
         # those writes is the RWO volume.
         #
         # ⚠️ Deliberately NOT an absolute "no upload in 26h" floor. That was
-        # tried and measured false: an idle litestream replica does not upload
-        # at all — staging's PUT counter sat flat at 9 for two hours with the
-        # sidecar healthy — so a time-only floor pages for a working system.
+        # tried TWICE and measured false both times.
+        #
+        # The second attempt shipped as LitestreamNoRecentUpload and was removed
+        # on 2026-09-22 after paging for three days on a healthy replica. Its
+        # premise — "snapshot.interval is 24h, so a healthy replica uploads at
+        # least once a day even with nobody touching the database" — is not how
+        # litestream 0.5.x behaves. Measured on 2026-09-22 with v0.5.17:
+        #
+        #   delta(litestream_txid[24h])             prod 0    stage 0
+        #   increase(...operation="PUT"[24h])        stage 0
+        #   litestream_replica_operation_total      prod: series absent entirely
+        #
+        # 66h of uptime, sidecar Ready, zero errors in the log, snapshot.interval
+        # set to 24h, and no upload. An idle database produces no LTX frames, so
+        # there is nothing to snapshot and no PUT ever increments. On prod the
+        # counter never existed, so `unless` could not suppress anything and the
+        # rule fired permanently.
+        #
+        # If an absolute floor is ever wanted again, it needs a synthetic write
+        # (a daily heartbeat row) to make idle indistinguishable from broken —
+        # not a time-only comparison against a counter that idle never moves.
         # Both rules therefore key off local writes, which means a broken
         # replica on a TRULY idle database is not detected until the next
         # write. That is a real gap, and it is bounded by the thing that
@@ -347,7 +349,7 @@ spec:
           annotations:
             summary: "litestream is failing to sync {{ $labels.namespace }}/{{ $labels.pod }} to S3"
             description: >
-              litestream has been erroring on sync for {{ $labels.db }} in {{ $labels.namespace }} at a sustained rate for 15m. It retries rather than exiting, so the pod stays Ready and the app keeps serving while the backup falls behind. Warning rather than critical because LitestreamNoRecentUpload is the rule that catches the consequence; this one is the early signal.
+              litestream has been erroring on sync for {{ $labels.db }} in {{ $labels.namespace }} at a sustained rate for 15m. It retries rather than exiting, so the pod stays Ready and the app keeps serving while the backup falls behind. Warning rather than critical because LitestreamReplicationStalled and LitestreamReplicationStalledDaily catch the consequence; this one is the early signal.
         # Writes are landing locally but not reaching S3. `unless` (not `== 0`)
         # so that a missing PUT counter — the never-succeeded case — fires too.
         - alert: LitestreamReplicationStalled
@@ -389,18 +391,6 @@ spec:
             summary: "litestream reports a full volume for {{ $labels.namespace }}/{{ $labels.pod }}"
             description: >
               litestream cannot write because a volume it uses is full, and SQLite writes will fail next. Check which one before acting — the database lives on the 1Gi vitals-data PVC, but the sidecar also writes to a 32Mi emptyDir at /tmp, and expanding the PVC does not help if /tmp is the full one.
-        - alert: LitestreamNoRecentUploadStaging
-          expr: >
-            litestream_sync_count{namespace="vitals-stage"}
-            unless on (namespace, pod)
-            (increase(litestream_replica_operation_total{namespace="vitals-stage", operation="PUT"}[26h]) > 0)
-          for: 1h
-          labels:
-            severity: warning
-          annotations:
-            summary: "staging litestream has uploaded nothing in 26h"
-            description: >
-              The staging replica has uploaded nothing in 26h. Nothing important is lost — staging is disposable — but the restore rehearsal in docs/operations/apps/vitals.md would be rehearsing against a stale prefix.
         # Staging: same 24h comparison, warning severity. Alertmanager routes
         # staging warnings to the null receiver, so this never mails — it exists
         # so "is the rehearsal environment's replica alive?" is answerable from

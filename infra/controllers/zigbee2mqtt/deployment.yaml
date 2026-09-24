@@ -24,7 +24,7 @@ spec:
       terminationGracePeriodSeconds: 60
       initContainers:
         - name: init-config
-          image: busybox@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
+          image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
           # Guard against a stale/read-only iSCSI data mount (issue #1080): a hestia
           # iSCSI target flap remounts the ext4 volume read-only, and z2m otherwise
           # starts and burns hundreds of restarts on a confusing `ENOENT mkdir` deep

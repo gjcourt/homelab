@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llmux-env
+  namespace: llmux
+  labels:
+    app: llmux
+data:
+  # Configuration reference: llmux AGENTS.md ("Cross-service dependencies").
+  # LLMUX_ANTHROPIC_API_KEY comes from the llmux-anthropic Secret, not from
+  # here.
+  LLMUX_ADDR: ":8080"
+  # Prometheus /metrics — tokens, outcomes, latency per provider/model
+  # (llmux docs/design/2026-09-25-telemetry.md). Separate port; see the
+  # CiliumNetworkPolicy.
+  LLMUX_METRICS_ADDR: ":9090"
+  # Model ids exposed on /v1/models and routed to Anthropic's Messages API.
+  LLMUX_ANTHROPIC_MODELS: "claude-sonnet-5,claude-opus-5-5,claude-opus-5,claude-haiku-4-5"
+  # Web searches Anthropic may run per request (0 turns search off) — the
+  # main cost lever. Measured 2026-09-25: a search-backed answer costs
+  # ~11-30k input tokens, and merely offering the tool adds ~2.2k (Haiku) to
+  # 2.8k (Sonnet) input tokens to a request (see STREAM_ONLY below). No per-day cap exists yet.
+  LLMUX_WEB_SEARCH_MAX_USES: "3"
+  # Offer web search only to streamed requests (llmux#33; also the default,
+  # set here to be explicit). Open WebUI's chat replies stream; its
+  # background title/tag/follow-up calls don't, and stop paying the tool's
+  # ~2.5k tokens. Any non-streaming client loses search — "false" restores
+  # it for every request.
+  LLMUX_WEB_SEARCH_STREAM_ONLY: "true"
+  # The vLLM / Ollama backends left with the GPUs (hestia has none since
+  # 2026-05). llmux treats an explicitly empty value as "disabled" (and
+  # defaults to off since llmux#29); set here too so an older image can't
+  # fall back to 10.42.2.10. The egress policy would block it anyway.
+  LLMUX_VLLM_URL: ""
+  LLMUX_OLLAMA_URL: ""

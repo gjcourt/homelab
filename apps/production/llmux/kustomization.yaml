@@ -3,11 +3,9 @@ kind: Kustomization
 namespace: llmux-prod
 resources:
   - ../../base/llmux/
-  # SOPS-encrypted; operator-created from secret-anthropic.yaml.example.
-  # NOT in this commit on purpose — agents do not run sops in this repo, so
-  # `kustomize build apps/production` fails until the operator encrypts it.
-  # Production ONLY: staging gets no key (the deployment's secretRef is
-  # optional).
+  # SOPS-encrypted by the operator from secret-anthropic.yaml.example
+  # (agents never run sops in this repo). Production ONLY: staging gets no
+  # key — the deployment's secretRef is optional and llmux starts without it.
   - secret-anthropic.yaml
 
 labels:

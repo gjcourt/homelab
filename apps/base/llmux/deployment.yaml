@@ -49,9 +49,7 @@ spec:
             - secretRef:
                 name: llmux-anthropic
                 optional: true
-          # Readiness only. /healthz is the one health signal llmux exposes;
-          # a livenessProbe on the same endpoint would carry no distinct
-          # signal (docs/operations/2026-05-02-adding-an-app.md#health-probes).
+          # Readiness: HTTP /healthz, tight — gates traffic.
           readinessProbe:
             httpGet:
               path: /healthz
@@ -60,6 +58,17 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 3
             failureThreshold: 3
+          # Liveness: a distinct signal (TCP accept, not the HTTP handler) with
+          # the repo's loose locked timings, so only a process that stops
+          # accepting connections for ~2 minutes is restarted
+          # (docs/operations/2026-05-02-adding-an-app.md#health-probes).
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
           resources:
             requests:
               cpu: 10m

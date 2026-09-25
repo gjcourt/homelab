@@ -1,0 +1,11 @@
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: llmux
+  namespace: llmux
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: llmux

@@ -16,6 +16,7 @@ resources:
   - ingress
   - jellyfin
   - linkding
+  - llmux
   - mealie
   - memos
   - navidrome

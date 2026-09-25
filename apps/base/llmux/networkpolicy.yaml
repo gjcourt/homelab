@@ -1,0 +1,55 @@
+---
+# llmux: OpenAI-compatible proxy in front of Anthropic's Messages API.
+#
+#   - Ingress on 8080 ONLY from Open WebUI pods in the paired namespace. The
+#     base names the plain `openwebui` namespace; each overlay patches it to
+#     openwebui-prod / openwebui-stage so prod and stage never cross.
+#     Kubelet probes are auto-exempted by Cilium.
+#   - Egress to kube-dns (53 UDP/TCP) and to `world` on 443 for
+#     api.anthropic.com. `toEntities: world` is the repo convention for
+#     internet egress — not `toCIDR: 0.0.0.0/0` (see
+#     apps/base/openwebui/networkpolicy.yaml).
+#
+# No Gateway ingress: llmux has no HTTPRoute and is not reachable from the LAN.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: llmux
+  namespace: llmux
+  labels:
+    app: llmux
+    app.kubernetes.io/name: llmux
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "Ingress from Open WebUI only; egress to DNS and HTTPS (Anthropic API)."
+  endpointSelector:
+    matchLabels:
+      app: llmux
+  ingress:
+    # Overlays patch /spec/ingress/0/fromEndpoints/0/matchLabels — keep this
+    # rule first.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: openwebui
+            app: openwebui
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llmux
+  labels:
+    app: llmux
+    # No `http-ingress` label: llmux is not exposed through the Gateway. Its
+    # only client is Open WebUI, in-cluster (see networkpolicy.yaml).
+    #
+    # Opt into the default-deny CCNP in infra/configs/network-policies/;
+    # networkpolicy.yaml ships the allow rules.
+    network-policies: enforced
+    # llmux is a stateless, non-root, read-only-rootfs Go proxy, so the
+    # restricted Pod Security level is fully satisfiable — enforce it rather
+    # than only warning (openwebui trips the restricted warning today).
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

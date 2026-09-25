@@ -141,7 +141,7 @@ data:
           "targets": [
             {
               "refId": "A",
-              "expr": "sum(increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", outcome=\"ok\"}[$__range])) / sum(increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", outcome!~\"canceled|invalid_request|no_provider\"}[$__range]))",
+              "expr": "(sum(increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", outcome=\"ok\"}[$__range])) or vector(0)) / (sum(increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", outcome!~\"canceled|invalid_request|no_provider\"}[$__range])) > 0)",
               "instant": true
             }
           ],

@@ -6,6 +6,7 @@ resources:
   - cnpg-cm.yaml
   - control-plane-cm.yaml
   - homepage-clicks-cm.yaml
+  - llmux-cm.yaml
   - homelabscope-cm.yaml
   - modemscope-cm.yaml
   - mqttscope-cm.yaml

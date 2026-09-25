@@ -7,10 +7,11 @@ spec:
   # Renovate itself runs @daily at 00:00 and takes ~5m. Start at 01:00 so the
   # day's PRs exist and their CI has settled before they are reviewed.
   schedule: "0 1 * * *"
-  # Suspended until secret-renovate-review-env exists. Without it every pod
-  # fails on the missing secretRef. Flip to false in the same change that
-  # lands the SOPS secret -- see secret.yaml.example for the required scopes.
-  suspend: true
+  # Enabled 2026-09-24 alongside secret-renovate-review-env. The agent runs in
+  # REVIEW_MODE=shadow (configmap.yaml): it calls the API and posts nothing, so
+  # landing this changes no merge behaviour until the mode is advanced to live.
+  # Required PAT scopes are documented in secret.yaml.example.
+  suspend: false
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 1

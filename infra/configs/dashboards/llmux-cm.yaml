@@ -1,0 +1,1355 @@
+# Grafana dashboard for llmux (gjcourt/llmux): token usage, outcomes and
+# latency per provider and model. Metrics: llmux docs/design/2026-09-25-telemetry.md.
+# Scraped via apps/base/llmux/servicemonitor.yaml (job="llmux"); the Environment
+# variable picks llmux-prod or llmux-stage by namespace.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: llmux-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  llmux.json: |
+    {
+      "title": "llmux — LLM usage",
+      "uid": "llmux-usage",
+      "tags": [
+        "homelab",
+        "llmux",
+        "llm",
+        "usage"
+      ],
+      "description": "Token usage, outcomes and latency for llmux, per provider and model.",
+      "schemaVersion": 38,
+      "refresh": "1m",
+      "time": {
+        "from": "now-7d",
+        "to": "now"
+      },
+      "timepicker": {},
+      "graphTooltip": 1,
+      "templating": {
+        "list": [
+          {
+            "name": "namespace",
+            "label": "Environment",
+            "type": "query",
+            "query": {
+              "query": "label_values(up{job=\"llmux\"}, namespace)",
+              "refId": "ns"
+            },
+            "definition": "label_values(up{job=\"llmux\"}, namespace)",
+            "current": {
+              "text": "llmux-prod",
+              "value": "llmux-prod"
+            },
+            "refresh": 2,
+            "sort": 1,
+            "includeAll": false,
+            "multi": false
+          },
+          {
+            "name": "model",
+            "label": "Model",
+            "type": "query",
+            "query": {
+              "query": "label_values(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\"}, model)",
+              "refId": "model"
+            },
+            "definition": "label_values(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\"}, model)",
+            "current": {
+              "text": "All",
+              "value": "$__all"
+            },
+            "refresh": 2,
+            "sort": 1,
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "type": "text",
+          "title": "",
+          "transparent": true,
+          "gridPos": {
+            "x": 0,
+            "y": 0,
+            "w": 24,
+            "h": 2
+          },
+          "options": {
+            "mode": "markdown",
+            "content": "**llmux** — Open WebUI's gateway to Claude. Totals below cover the selected time range. *Input* counts every prompt token, cache reads and writes included; offering web search alone adds ~2.2–2.8k input tokens to **every** request (measured 2026-09-25). Token counts come from the provider's own usage report. Design: `llmux/docs/design/2026-09-25-telemetry.md`."
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Requests",
+          "description": "Chat requests in the range, all outcomes.",
+          "gridPos": {
+            "x": 0,
+            "y": 2,
+            "w": 4,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__range]))",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Success rate",
+          "description": "Share of requests that finished OK, excluding ones the client cancelled or llmux refused (invalid request, unknown model).",
+          "gridPos": {
+            "x": 4,
+            "y": 2,
+            "w": 4,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "(sum(increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", outcome=\"ok\"}[$__range])) or vector(0)) / (sum(increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", outcome!~\"canceled|invalid_request|no_provider\"}[$__range])) > 0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "decimals": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "red"
+                  },
+                  {
+                    "value": 0.9,
+                    "color": "orange"
+                  },
+                  {
+                    "value": 0.98,
+                    "color": "green"
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Input tokens",
+          "description": "Prompt tokens in the range: uncached input plus cache reads and writes.",
+          "gridPos": {
+            "x": 8,
+            "y": 2,
+            "w": 4,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(llmux_tokens_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", type=~\"input|cache_read|cache_write\"}[$__range]))",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 1,
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Output tokens",
+          "description": "Completion tokens in the range (thinking included, for models that think).",
+          "gridPos": {
+            "x": 12,
+            "y": 2,
+            "w": 4,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(llmux_tokens_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", type=\"output\"}[$__range]))",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 1,
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 6,
+          "type": "stat",
+          "title": "Web searches",
+          "description": "Server-side searches Anthropic ran in the range.",
+          "gridPos": {
+            "x": 16,
+            "y": 2,
+            "w": 4,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(llmux_web_searches_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__range]))",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "blue"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 7,
+          "type": "stat",
+          "title": "Time to first token (p95)",
+          "description": "95th percentile delay until the first token over the range. Web searches happen before the first token, so searched answers dominate this.",
+          "gridPos": {
+            "x": 20,
+            "y": 2,
+            "w": 4,
+            "h": 4
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(llmux_chat_time_to_first_token_seconds_bucket{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__range])))",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "decimals": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 5,
+                    "color": "orange"
+                  },
+                  {
+                    "value": 15,
+                    "color": "red"
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 8,
+          "type": "row",
+          "title": "Tokens",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 6,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Token throughput by model",
+          "description": "Tokens per hour, stacked by model and type. input = uncached prompt; cache_read / cache_write = prompt served from / written to Anthropic's prompt cache; output = completion.",
+          "gridPos": {
+            "x": 0,
+            "y": 7,
+            "w": 16,
+            "h": 9
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (model, type) (rate(llmux_tokens_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__rate_interval])) * 3600",
+              "legendFormat": "{{model}} · {{type}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 10,
+          "type": "bargauge",
+          "title": "Tokens by model (range)",
+          "description": "Total input and output tokens per model over the selected range.",
+          "gridPos": {
+            "x": 16,
+            "y": 7,
+            "w": 8,
+            "h": 9
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (model) (increase(llmux_tokens_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", type=~\"input|cache_read|cache_write\"}[$__range]))",
+              "legendFormat": "{{model}} input",
+              "instant": true
+            },
+            {
+              "refId": "B",
+              "expr": "sum by (model) (increase(llmux_tokens_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", type=\"output\"}[$__range]))",
+              "legendFormat": "{{model}} output",
+              "instant": true
+            }
+          ],
+          "options": {
+            "orientation": "horizontal",
+            "displayMode": "basic",
+            "showUnfilled": true,
+            "valueMode": "color",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "minVizHeight": 10
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 1,
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "Input tokens per request",
+          "description": "Average prompt tokens per request that reached a provider (cancelled and failed ones included — they consume tokens too), by model. The web search tool's ~2.2–2.8k fixed overhead sits under every request; searched answers run 11–30k.",
+          "gridPos": {
+            "x": 0,
+            "y": 16,
+            "w": 8,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (model) (increase(llmux_tokens_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", type=~\"input|cache_read|cache_write\"}[$__rate_interval])) / (sum by (model) (increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", outcome!~\"no_provider|invalid_request\"}[$__rate_interval])) > 0)",
+              "legendFormat": "{{model}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "min": 0
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 12,
+          "type": "timeseries",
+          "title": "Output tokens per request",
+          "description": "Average completion tokens per request that reached a provider, by model.",
+          "gridPos": {
+            "x": 8,
+            "y": 16,
+            "w": 8,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (model) (increase(llmux_tokens_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", type=\"output\"}[$__rate_interval])) / (sum by (model) (increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", outcome!~\"no_provider|invalid_request\"}[$__rate_interval])) > 0)",
+              "legendFormat": "{{model}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "min": 0
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 13,
+          "type": "timeseries",
+          "title": "Prompt cache hit share",
+          "description": "Share of prompt tokens served from the prompt cache, by model. llmux doesn't set cache breakpoints, so this stays near zero unless Anthropic caches automatically.",
+          "gridPos": {
+            "x": 16,
+            "y": 16,
+            "w": 8,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (model) (rate(llmux_tokens_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", type=\"cache_read\"}[$__rate_interval])) / (sum by (model) (rate(llmux_tokens_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", type=~\"input|cache_read|cache_write\"}[$__rate_interval])) > 0)",
+              "legendFormat": "{{model}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "min": 0,
+              "max": 1
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 14,
+          "type": "row",
+          "title": "Traffic & errors",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 24,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 15,
+          "type": "timeseries",
+          "title": "Requests by model",
+          "description": "Chat requests per minute, by model.",
+          "gridPos": {
+            "x": 0,
+            "y": 25,
+            "w": 10,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (model) (rate(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__rate_interval])) * 60",
+              "legendFormat": "{{model}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "reqpm",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 16,
+          "type": "timeseries",
+          "title": "Failures by outcome",
+          "description": "Non-OK requests per 5-minute bucket (or wider, on long ranges). Bars can undercount slightly at bucket edges; the Requests / Success rate stats are exact. upstream_4xx/5xx = Anthropic said no (rate limit, overloaded, …); unavailable = unreachable; canceled = the client left; error = truncated or stalled stream; no_provider = unknown model; invalid_request = refused by llmux (tools, images).",
+          "interval": "5m",
+          "gridPos": {
+            "x": 10,
+            "y": 25,
+            "w": 9,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (outcome) (increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", outcome!=\"ok\"}[$__interval]))",
+              "legendFormat": "{{outcome}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "sum"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 17,
+          "type": "timeseries",
+          "title": "In flight",
+          "description": "Requests being served right now.",
+          "gridPos": {
+            "x": 19,
+            "y": 25,
+            "w": 5,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (model) (llmux_chat_in_flight{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"})",
+              "legendFormat": "{{model}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "min": 0
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 18,
+          "type": "row",
+          "title": "Latency",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 33,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 19,
+          "type": "timeseries",
+          "title": "Time to first token",
+          "description": "p50 and p95 delay until the first token, by model. Includes any web search, which runs before the answer starts.",
+          "gridPos": {
+            "x": 0,
+            "y": 34,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.5, sum by (le, model) (rate(llmux_chat_time_to_first_token_seconds_bucket{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__rate_interval])))",
+              "legendFormat": "{{model}} p50"
+            },
+            {
+              "refId": "B",
+              "expr": "histogram_quantile(0.95, sum by (le, model) (rate(llmux_chat_time_to_first_token_seconds_bucket{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__rate_interval])))",
+              "legendFormat": "{{model}} p95"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "min": 0
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*p95"
+                },
+                "properties": [
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "fill": "dash",
+                      "dash": [
+                        10,
+                        10
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 20,
+          "type": "timeseries",
+          "title": "Answer duration",
+          "description": "p50 and p95 time from request to the answer finishing, by model and streaming mode.",
+          "gridPos": {
+            "x": 12,
+            "y": 34,
+            "w": 12,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "histogram_quantile(0.5, sum by (le, model, stream) (rate(llmux_chat_duration_seconds_bucket{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__rate_interval])))",
+              "legendFormat": "{{model}} stream={{stream}} p50"
+            },
+            {
+              "refId": "B",
+              "expr": "histogram_quantile(0.95, sum by (le, model, stream) (rate(llmux_chat_duration_seconds_bucket{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__rate_interval])))",
+              "legendFormat": "{{model}} stream={{stream}} p95"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "mean",
+                "max"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "s",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "min": 0
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".*p95"
+                },
+                "properties": [
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "fill": "dash",
+                      "dash": [
+                        10,
+                        10
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": 21,
+          "type": "row",
+          "title": "Web search & answers",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 42,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 22,
+          "type": "timeseries",
+          "title": "Web searches",
+          "description": "Searches Anthropic ran per 5-minute bucket (or wider, on long ranges), by model. Bars can undercount slightly at bucket edges; the Web searches stat is exact (capped per request by LLMUX_WEB_SEARCH_MAX_USES).",
+          "interval": "5m",
+          "gridPos": {
+            "x": 0,
+            "y": 43,
+            "w": 8,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (model) (increase(llmux_web_searches_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__interval]))",
+              "legendFormat": "{{model}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "sum"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "normal",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 23,
+          "type": "timeseries",
+          "title": "Searches and sources per answer",
+          "description": "Average web searches and cited sources per request that reached a provider.",
+          "gridPos": {
+            "x": 8,
+            "y": 43,
+            "w": 8,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(llmux_web_searches_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__rate_interval])) / (sum(increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", outcome!~\"no_provider|invalid_request\"}[$__rate_interval])) > 0)",
+              "legendFormat": "searches / answer"
+            },
+            {
+              "refId": "B",
+              "expr": "sum(increase(llmux_citations_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__rate_interval])) / (sum(increase(llmux_chat_requests_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\", outcome!~\"no_provider|invalid_request\"}[$__rate_interval])) > 0)",
+              "legendFormat": "sources / answer"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "bottom",
+              "calcs": [
+                "mean"
+              ]
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "min": 0
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 24,
+          "type": "piechart",
+          "title": "How answers ended (range)",
+          "description": "finish_reason over the range. A growing 'length' slice means answers are being cut off by max_tokens (thinking counts against it) or a paused search that couldn't resume.",
+          "gridPos": {
+            "x": 16,
+            "y": 43,
+            "w": 8,
+            "h": 8
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum by (reason) (increase(llmux_chat_finish_reasons_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__range]))",
+              "legendFormat": "{{reason}}",
+              "instant": true
+            }
+          ],
+          "options": {
+            "pieType": "donut",
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "values": [
+                "value",
+                "percent"
+              ]
+            },
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "tooltip": {
+              "mode": "single"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": {
+                "mode": "palette-classic"
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 25,
+          "type": "row",
+          "title": "Process",
+          "collapsed": false,
+          "gridPos": {
+            "x": 0,
+            "y": 51,
+            "w": 24,
+            "h": 1
+          },
+          "panels": []
+        },
+        {
+          "id": 26,
+          "type": "stat",
+          "title": "Scrape up",
+          "description": "Whether Prometheus can scrape llmux's metrics port.",
+          "gridPos": {
+            "x": 0,
+            "y": 52,
+            "w": 4,
+            "h": 6
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "min(up{job=\"llmux\", namespace=\"$namespace\"})",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bool_on_off",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "red"
+                  },
+                  {
+                    "value": 1,
+                    "color": "green"
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 27,
+          "type": "stat",
+          "title": "Usage missing",
+          "description": "Successful answers in the range whose provider reported no token usage — token totals undercount by this many answers. Expected 0 for Anthropic.",
+          "gridPos": {
+            "x": 4,
+            "y": 52,
+            "w": 4,
+            "h": 6
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "sum(increase(llmux_chat_usage_missing_total{job=\"llmux\", namespace=\"$namespace\", model=~\"$model\"}[$__range])) or vector(0)",
+              "instant": true
+            }
+          ],
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "textMode": "value"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "value": null,
+                    "color": "green"
+                  },
+                  {
+                    "value": 1,
+                    "color": "orange"
+                  }
+                ]
+              }
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 28,
+          "type": "timeseries",
+          "title": "Memory (RSS)",
+          "description": "Resident memory of the llmux process.",
+          "gridPos": {
+            "x": 8,
+            "y": 52,
+            "w": 8,
+            "h": 6
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "process_resident_memory_bytes{job=\"llmux\", namespace=\"$namespace\"}",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "min": 0
+            },
+            "overrides": []
+          }
+        },
+        {
+          "id": 29,
+          "type": "timeseries",
+          "title": "Goroutines",
+          "description": "A steady climb with flat traffic would point at a leak (e.g. a stuck stream).",
+          "gridPos": {
+            "x": 16,
+            "y": 52,
+            "w": 8,
+            "h": 6
+          },
+          "targets": [
+            {
+              "refId": "A",
+              "expr": "go_goroutines{job=\"llmux\", namespace=\"$namespace\"}",
+              "legendFormat": "{{pod}}"
+            }
+          ],
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom",
+              "calcs": []
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": {
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 2,
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "mode": "none",
+                  "group": "A"
+                }
+              },
+              "color": {
+                "mode": "palette-classic"
+              },
+              "min": 0
+            },
+            "overrides": []
+          }
+        }
+      ]
+    }

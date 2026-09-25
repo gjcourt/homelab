@@ -17,6 +17,13 @@ data:
   # Claude model IDs are pinned snapshots; see
   # https://platform.claude.com/docs/en/models/overview
   DEFAULT_MODELS: "claude-sonnet-5"
+  # Background tasks (chat titles, tags, follow-up suggestions, …) run on
+  # Haiku rather than on whatever model the chat uses — they're short and
+  # formulaic, and on Sonnet/Opus they cost several times as much. Applies
+  # to external (OpenAI-API) models; if this id isn't in the model list,
+  # Open WebUI falls back to the chat's own model (utils/task.py
+  # get_task_model_id, v0.11.4). llmux lists claude-haiku-4-5.
+  TASK_MODEL_EXTERNAL: "claude-haiku-4-5"
   # Store all data under the mounted PVC
   DATA_DIR: "/app/backend/data"
 

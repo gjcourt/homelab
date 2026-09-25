@@ -29,9 +29,9 @@ spec:
           type: RuntimeDefault
       containers:
         - name: llmux
-          # Date-sha tag from llmux's image workflow (master e7e7303: phases
-          # 1-3 — Anthropic provider, web search, citations).
-          image: ghcr.io/gjcourt/llmux:2026-09-25-e7e7303
+          # Date-sha tag from llmux's image workflow (master 828f263: Anthropic
+          # provider, web search, citations, Prometheus metrics on :9090).
+          image: ghcr.io/gjcourt/llmux:2026-09-25-828f263
           ports:
             - name: http
               containerPort: 8080

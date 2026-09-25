@@ -8,6 +8,7 @@ resources:
   - pdb.yaml
   - service.yaml
   - serviceaccount.yaml
+  - servicemonitor.yaml
 labels:
   - includeSelectors: false
     pairs:

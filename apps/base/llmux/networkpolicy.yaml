@@ -1,6 +1,7 @@
 ---
 # llmux: OpenAI-compatible proxy in front of Anthropic's Messages API.
 #
+#   - Ingress on 9090 (/metrics) ONLY from Prometheus in `monitoring`.
 #   - Ingress on 8080 ONLY from Open WebUI pods in the paired namespace. The
 #     base names the plain `openwebui` namespace; each overlay patches it to
 #     openwebui-prod / openwebui-stage so prod and stage never cross.
@@ -21,7 +22,7 @@ metadata:
     app.kubernetes.io/name: llmux
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: "Ingress from Open WebUI only; egress to DNS and HTTPS (Anthropic API)."
+  description: "Ingress from Open WebUI (chat) and Prometheus (metrics); egress to DNS and HTTPS (Anthropic API)."
   endpointSelector:
     matchLabels:
       app: llmux
@@ -35,6 +36,15 @@ spec:
       toPorts:
         - ports:
             - port: "8080"
+              protocol: TCP
+    # Prometheus scrape, metrics port only (not the chat port).
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: prometheus
+      toPorts:
+        - ports:
+            - port: "9090"
               protocol: TCP
   egress:
     - toEndpoints:

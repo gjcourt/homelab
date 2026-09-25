@@ -23,24 +23,3 @@ patches:
       - op: replace
         path: /metadata/name
         value: openwebui-prod
-  # Chat backend: this environment's llmux only.
-  - target:
-      kind: ConfigMap
-      name: openwebui-env
-    patch: |
-      - op: test
-        path: /data/OPENAI_API_BASE_URL
-        value: http://llmux.llmux.svc.cluster.local:8080/v1
-      - op: replace
-        path: /data/OPENAI_API_BASE_URL
-        value: http://llmux.llmux-prod.svc.cluster.local:8080/v1
-  - target:
-      kind: CiliumNetworkPolicy
-      name: openwebui
-    patch: |
-      - op: test
-        path: /spec/egress/0/toEndpoints/0/matchLabels/k8s:io.kubernetes.pod.namespace
-        value: llmux
-      - op: replace
-        path: /spec/egress/0/toEndpoints/0/matchLabels/k8s:io.kubernetes.pod.namespace
-        value: llmux-prod

@@ -6,19 +6,19 @@ metadata:
   labels:
     app: llmux
 data:
-  # Values from llmux docs/plans/2026-09-25-hexagonal-anthropic-port.md
-  # ("Configuration"). LLMUX_ANTHROPIC_API_KEY comes from the llmux-anthropic
-  # Secret, not from here.
+  # Configuration reference: llmux AGENTS.md ("Cross-service dependencies").
+  # LLMUX_ANTHROPIC_API_KEY comes from the llmux-anthropic Secret, not from
+  # here.
   LLMUX_ADDR: ":8080"
   # Model ids exposed on /v1/models and routed to Anthropic's Messages API.
   LLMUX_ANTHROPIC_MODELS: "claude-sonnet-5,claude-opus-5,claude-haiku-4-5"
-  # Web searches per turn — the main cost lever (~29k input tokens for one
-  # search-backed answer, measured 2026-09-25). No per-day cap exists yet.
+  # Web searches Anthropic may run per request (0 turns search off) — the
+  # main cost lever: a search-backed answer measured ~11-30k input tokens on
+  # 2026-09-25, against tens for a plain one. No per-day cap exists yet.
   LLMUX_WEB_SEARCH_MAX_USES: "3"
-  LLMUX_WEB_FETCH: "false"
   # The vLLM / Ollama backends left with the GPUs (hestia has none since
-  # 2026-05). Empty disables the openaicompat adapter. Relies on the rewrite
-  # treating an explicitly-empty value as "disabled" rather than falling back
-  # to a built-in default; the egress policy would block a LAN backend anyway.
+  # 2026-05). llmux treats an explicitly empty value as "disabled" (and
+  # defaults to off since llmux#29); set here too so an older image can't
+  # fall back to 10.42.2.10. The egress policy would block it anyway.
   LLMUX_VLLM_URL: ""
   LLMUX_OLLAMA_URL: ""

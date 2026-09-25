@@ -31,8 +31,8 @@ spec:
         - name: llmux
           # Date-sha tag from llmux's image workflow (master e3af6a3: Anthropic
           # provider, web search (streamed requests only), citations,
-          # Prometheus metrics on :9090, per-client keys).
-          image: ghcr.io/gjcourt/llmux:2026-09-25-e3af6a3
+          # Prometheus metrics on :9090, per-client keys, client tools dropped).
+          image: ghcr.io/gjcourt/llmux:2026-09-25-a4d66a3
           ports:
             - name: http
               containerPort: 8080

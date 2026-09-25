@@ -33,3 +33,13 @@ patches:
       - op: replace
         path: /spec/ingress/0/fromEndpoints/0/matchLabels/k8s:io.kubernetes.pod.namespace
         value: openwebui-prod
+  # Production requires llmux client keys (LLMUX_CLIENT_KEYS, in
+  # secret-anthropic.yaml): llmux refuses to start without them rather than
+  # serve unauthenticated. Staging has no keys and stays open (anonymous).
+  - target:
+      kind: ConfigMap
+      name: llmux-env
+    patch: |
+      - op: add
+        path: /data/LLMUX_REQUIRE_CLIENT_KEYS
+        value: "true"

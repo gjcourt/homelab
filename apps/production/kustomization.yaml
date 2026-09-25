@@ -21,6 +21,7 @@ resources:
   - jellyfin
   - ladder
   - linkding
+  - llmux
   - mealie
   - memos
   - modemscope

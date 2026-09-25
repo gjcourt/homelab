@@ -15,7 +15,7 @@ data:
   # CiliumNetworkPolicy.
   LLMUX_METRICS_ADDR: ":9090"
   # Model ids exposed on /v1/models and routed to Anthropic's Messages API.
-  LLMUX_ANTHROPIC_MODELS: "claude-sonnet-5,claude-opus-5,claude-haiku-4-5"
+  LLMUX_ANTHROPIC_MODELS: "claude-sonnet-5,claude-opus-5-5,claude-opus-5,claude-haiku-4-5"
   # Web searches Anthropic may run per request (0 turns search off) — the
   # main cost lever. Measured 2026-09-25: a search-backed answer costs
   # ~11-30k input tokens, and merely offering the tool adds ~2.2k (Haiku) to

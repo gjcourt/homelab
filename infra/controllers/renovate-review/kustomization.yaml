@@ -3,5 +3,9 @@ kind: Kustomization
 namespace: renovate
 resources:
   - configmap.yaml
+  # SOPS-encrypted; operator-created from secret.yaml.example. The GITHUB_TOKEN
+  # in it is deliberately a fine-grained PAT WITHOUT Contents: write — that is
+  # what makes "can only hold, never merge" a property of the credential.
+  - secret.yaml
   - script-configmap.yaml
   - cronjob.yaml

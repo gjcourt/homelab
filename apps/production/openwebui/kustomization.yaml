@@ -3,6 +3,10 @@ kind: Kustomization
 namespace: openwebui-prod
 resources:
   - ../../base/openwebui/
+  # SOPS-encrypted; operator-created from secret-anthropic.yaml.example.
+  # Production ONLY — staging builds from the same base and must not hold a
+  # funded API key (the deployment marks this secretRef optional).
+  - secret-anthropic.yaml
   - httproute.yaml
 
 labels:

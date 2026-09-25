@@ -6,14 +6,24 @@ metadata:
   labels:
     app: openwebui
 data:
-  # Anthropic via its OpenAI-SDK compatibility layer.
-  # https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk
-  # Open WebUI appends /chat/completions itself, so no trailing slash here.
-  OPENAI_API_BASE_URL: "https://api.anthropic.com/v1"
+  # Chat goes through llmux (gjcourt/llmux), an OpenAI-compatible proxy on
+  # Anthropic's native Messages API — which, unlike Anthropic's OpenAI compat
+  # layer, can run server-side web search and return cited sources. Each
+  # overlay points this at its own namespace's llmux; the value here is only
+  # the base default. Open WebUI appends /chat/completions itself, so no
+  # trailing slash.
+  OPENAI_API_BASE_URL: "http://llmux.llmux.svc.cluster.local:8080/v1"
   WEBUI_NAME: "Chat"
   # Claude model IDs are pinned snapshots; see
   # https://platform.claude.com/docs/en/models/overview
   DEFAULT_MODELS: "claude-sonnet-5"
+  # Background tasks (chat titles, tags, follow-up suggestions, …) run on
+  # Haiku rather than on whatever model the chat uses — they're short and
+  # formulaic, and on Sonnet/Opus they cost several times as much. Applies
+  # to external (OpenAI-API) models; if this id isn't in the model list,
+  # Open WebUI falls back to the chat's own model (utils/task.py
+  # get_task_model_id, v0.11.4). llmux lists claude-haiku-4-5.
+  TASK_MODEL_EXTERNAL: "claude-haiku-4-5"
   # Store all data under the mounted PVC
   DATA_DIR: "/app/backend/data"
 

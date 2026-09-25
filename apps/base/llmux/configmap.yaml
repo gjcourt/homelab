@@ -19,9 +19,14 @@ data:
   # Web searches Anthropic may run per request (0 turns search off) — the
   # main cost lever. Measured 2026-09-25: a search-backed answer costs
   # ~11-30k input tokens, and merely offering the tool adds ~2.2k (Haiku) to
-  # 2.8k (Sonnet) input tokens to EVERY request, including Open WebUI's
-  # background title/tag/follow-up calls. No per-day cap exists yet.
+  # 2.8k (Sonnet) input tokens to a request (see STREAM_ONLY below). No per-day cap exists yet.
   LLMUX_WEB_SEARCH_MAX_USES: "3"
+  # Offer web search only to streamed requests (llmux#33; also the default,
+  # set here to be explicit). Open WebUI's chat replies stream; its
+  # background title/tag/follow-up calls don't, and stop paying the tool's
+  # ~2.5k tokens. Any non-streaming client loses search — "false" restores
+  # it for every request.
+  LLMUX_WEB_SEARCH_STREAM_ONLY: "true"
   # The vLLM / Ollama backends left with the GPUs (hestia has none since
   # 2026-05). llmux treats an explicitly empty value as "disabled" (and
   # defaults to off since llmux#29); set here too so an older image can't

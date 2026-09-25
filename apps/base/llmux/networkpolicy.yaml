@@ -1,4 +1,3 @@
----
 # llmux: OpenAI-compatible proxy in front of Anthropic's Messages API.
 #
 #   - Ingress on 9090 (/metrics) ONLY from Prometheus in `monitoring`.

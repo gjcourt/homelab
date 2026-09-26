@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Production-only app: plain `bench-cloud` namespace (see AGENTS.md
+# namespace convention for apps without a staging variant).
+resources:
+  - ../../base/bench-cloud/
+  # Both SOPS-encrypted by the operator from their .example templates (agents
+  # never run sops in this repo). Until they exist, `kustomize build` — and
+  # CI — fails. That failure is the intended gate.
+  - secret-github-app.yaml
+  - secret-hestia-ssh.yaml
+
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false
+
+# Pinned date-sha tag from build-bench-cloud.yml (Flux does not auto-track).
+images:
+  - name: ghcr.io/gjcourt/bench-cloud
+    newTag: TAG-FROM-PR-1482

@@ -1,0 +1,11 @@
+# Marks task-Job pods so the ResourceQuota can count them apart from the
+# console. Low value + preemptionPolicy Never: an agent task never evicts a
+# real workload to get scheduled.
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: bench-cloud-task
+value: 100
+preemptionPolicy: Never
+globalDefault: false
+description: "bench-cloud agent task pods (counted by the bench-cloud-tasks quota)."

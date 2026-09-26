@@ -1,0 +1,28 @@
+# Two host aliases, two keys — because rrsync confines a key to ONE directory:
+#
+#   rsync -a out/ hestia-inbox:runs/2026-09-26-foo/   # /mnt/main/agent-inbox, read-write
+#   rsync -a hestia-media:music/SomeArtist/ ./in/     # /mnt/main/family/media, read-only
+#
+# Paths are relative to each key's rrsync root. On hestia each key's
+# authorized_keys line forces `rrsync [-ro] <root>`; see
+# docs/operations/apps/bench-cloud.md. Host key pinned, no agent forwarding,
+# never any other key.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bench-cloud-ssh-config
+  namespace: bench-cloud
+data:
+  hestia.conf: |
+    Host hestia-inbox hestia-media
+      HostName 10.42.2.10
+      User bench-agent
+      HostKeyAlias hestia
+      IdentitiesOnly yes
+      UserKnownHostsFile /var/run/bench-ssh/known_hosts
+      StrictHostKeyChecking yes
+      ForwardAgent no
+    Host hestia-inbox
+      IdentityFile /var/run/bench-ssh/id_inbox
+    Host hestia-media
+      IdentityFile /var/run/bench-ssh/id_media

@@ -9,7 +9,11 @@ mkdir -p "$WORKSPACE"
 # preserves everything else Claude Code stored there.
 node -e '
   const fs = require("fs"), p = process.env.HOME + "/.claude.json", w = process.env.WORKSPACE;
-  let c = {}; try { c = JSON.parse(fs.readFileSync(p)); } catch (e) {}
+  let c = {};
+  try { c = JSON.parse(fs.readFileSync(p)); } catch (e) {
+    // Unparseable (not missing): keep a copy rather than silently wiping it.
+    if (e.code !== "ENOENT") { fs.copyFileSync(p, p + ".corrupt"); console.error(`bench-entrypoint: ${p} unparseable, saved to ${p}.corrupt`); }
+  }
   c.projects = c.projects || {};
   c.projects[w] = Object.assign(c.projects[w] || {}, { hasTrustDialogAccepted: true });
   fs.writeFileSync(p, JSON.stringify(c, null, 2), { mode: 0o600 });

@@ -11,7 +11,8 @@ metadata:
 spec:
   # A failed agent run is a result to read, not something to retry blindly.
   backoffLimit: 0
-  # Hard wall-clock cap; bench-cloud run --deadline overrides.
+  # Hard wall-clock cap; bench-cloud run --deadline overrides. It counts from
+  # Job creation, so time spent queued behind the quota counts too.
   activeDeadlineSeconds: 7200
   ttlSecondsAfterFinished: 86400
   template:
@@ -20,6 +21,9 @@ spec:
         app: bench-task
     spec:
       restartPolicy: Never
+      # On deadline or `bench-cloud rm`, bench-task forwards SIGTERM to claude
+      # and then uploads the record; this is its window before SIGKILL.
+      terminationGracePeriodSeconds: 90
       # Counted by the bench-cloud-tasks ResourceQuota (5 at once); below every
       # real workload in scheduling and eviction.
       priorityClassName: bench-cloud-task

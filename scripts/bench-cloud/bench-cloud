@@ -9,7 +9,11 @@
 # Each run is one Job from job.yaml (next to this script): a fresh clone, one
 # `claude -p`, results as a PR from bench-cloud[bot], and the full record in
 # hestia:/mnt/main/agent-inbox/runs/<id>/. At most 5 run at once (namespace
-# ResourceQuota); extras wait in the Job controller until a slot frees.
+# ResourceQuota); extras wait in the Job controller until a slot frees — and
+# the deadline counts from submission, so a queued task spends it waiting.
+# `logs` shows the one-line summary once the task ends (claude's output goes
+# to the record, not stdout); before the container starts it shows the pod
+# state instead.
 #
 # Runs on George's Mac with his kubeconfig. Plan:
 # docs/plans/2026-09-25-bench-cloud-agent.md; runbook:
@@ -21,13 +25,14 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 usage() { sed -n '3,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 duration_seconds() {  # 90m, 2h, 3600 → seconds
-  local v=$1
-  case "$v" in
-    *h) echo $(( ${v%h} * 3600 )) ;;
-    *m) echo $(( ${v%m} * 60 )) ;;
-    *s) echo "${v%s}" ;;
-    *[!0-9]*|"") echo "bad duration: $v" >&2; exit 2 ;;
-    *) echo "$v" ;;
+  local v=$1 n
+  [[ "$v" =~ ^([0-9]+)([hms]?)$ ]] || { echo "bad duration: $v" >&2; exit 2; }
+  n=$((10#${BASH_REMATCH[1]}))
+  (( n > 0 )) || { echo "bad duration: $v" >&2; exit 2; }
+  case "${BASH_REMATCH[2]}" in
+    h) echo $(( n * 3600 )) ;;
+    m) echo $(( n * 60 )) ;;
+    *) echo "$n" ;;
   esac
 }
 
@@ -87,7 +92,15 @@ cmd_ls() {
 
 cmd_logs() {
   local id=${1:?id}; shift
-  kubectl -n "$NS" logs "job/$id" -c task "$@"
+  # Fails while the pod is queued (quota), pulling, or in its init container:
+  # show where it is instead of a bare kubectl error.
+  kubectl -n "$NS" logs "job/$id" -c task "$@" || {
+    echo "-- no task logs yet; pod and job state:" >&2
+    kubectl -n "$NS" get pods -l "job-name=$id" -o wide >&2 || true
+    kubectl -n "$NS" get job "$id" \
+      -o jsonpath='{range .status.conditions[*]}{.type}={.status} {.reason}: {.message}{"\n"}{end}' >&2 || true
+    exit 1
+  }
 }
 
 cmd_rm() {

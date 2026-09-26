@@ -32,6 +32,9 @@ spec:
         runAsUser: 1000
         runAsGroup: 1000
         fsGroup: 1000
+        # Default (Always) re-chowns the whole home volume — Go/npm caches,
+        # checkouts — on every start, and ORs group rw into 0600 files.
+        fsGroupChangePolicy: OnRootMismatch
         seccompProfile:
           type: RuntimeDefault
       initContainers:
@@ -104,6 +107,7 @@ spec:
             - {name: tmp, mountPath: /tmp}
             - {name: github-app, mountPath: /var/run/secrets/github-app, readOnly: true}
             - {name: ssh, mountPath: /var/run/bench-ssh, readOnly: true}
+            # subPath: ConfigMap edits reach the pod only on restart.
             - {name: ssh-config, mountPath: /etc/ssh/ssh_config.d/hestia.conf, subPath: hestia.conf, readOnly: true}
       volumes:
         - name: home

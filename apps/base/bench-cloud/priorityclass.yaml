@@ -1,11 +1,14 @@
 # Marks task-Job pods so the ResourceQuota can count them apart from the
-# console. Low value + preemptionPolicy Never: an agent task never evicts a
-# real workload to get scheduled.
+# console. Every other workload in this cluster runs at priority 0 (no
+# globalDefault class exists), so the value must be NEGATIVE to rank below them:
+# a positive value would put tasks ahead in the scheduling queue and make the
+# kubelet evict real workloads before tasks under node pressure.
+# preemptionPolicy Never: a task never evicts anything to get scheduled.
 apiVersion: scheduling.k8s.io/v1
 kind: PriorityClass
 metadata:
   name: bench-cloud-task
-value: 100
+value: -100
 preemptionPolicy: Never
 globalDefault: false
 description: "bench-cloud agent task pods (counted by the bench-cloud-tasks quota)."

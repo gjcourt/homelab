@@ -7,6 +7,8 @@
 #     LAN (hestia's TrueNAS UI, Home Assistant, the switch, every LB IP) is also
 #     `world`, and an agent must not reach those. So: 0.0.0.0/0 minus the
 #     private, CGNAT and link-local ranges.
+#     IPv6 is not allowed anywhere (the cluster is IPv4-only; default-deny
+#     covers it).
 #   - hestia (10.42.2.10) on 22 only — the `bench-agent` user, whose key is
 #     restricted to rrsync on agent-inbox (rw) and media (ro) on the hestia side.
 #

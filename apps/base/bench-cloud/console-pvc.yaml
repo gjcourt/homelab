@@ -1,6 +1,7 @@
 # The console's $HOME: Claude Code login (~/.claude, ~/.claude.json), tmux
 # sessions' working trees, Go/npm caches. Retain: losing it means redoing the
-# `claude auth login` and the Remote Control consent.
+# `claude auth login` and the Remote Control consent. xfs: caches grow, and
+# only the xfs classes expand online here (infra/controllers/democratic-csi).
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -8,7 +9,7 @@ metadata:
   namespace: bench-cloud
 spec:
   accessModes: ["ReadWriteOnce"]
-  storageClassName: truenas-iscsi
+  storageClassName: truenas-iscsi-xfs
   resources:
     requests:
       storage: 30Gi

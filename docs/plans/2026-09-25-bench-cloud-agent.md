@@ -67,7 +67,7 @@ through llmux (llmux gateway plan, phase 2).
 | Claude | Task Jobs: `claude setup-token` token as `CLAUDE_CODE_OAUTH_TOKEN` from a SOPS secret (verified 2026-09-26). Console: an interactive `claude auth login` kept on its PVC | Jobs get an inference-only token: no refresh races, and no Remote Control. The full-scope login lives in one pod only |
 | Code | A **GitHub App** (`bench-cloud`) installed on all of George's repos: **Contents RW, Pull requests RW, Issues RW, Actions R, Commit statuses R**; no Administration, **no Workflows**. Installation tokens (1 h) minted in-pod from the app key | Acts as `bench-cloud[bot]`, not as George. A **default-branch ruleset with George as the only bypass actor** means it can push branches and open PRs but **can't merge or push the default branch**. **Can't change CI**, so it can't widen its own permissions. |
 | Tests | Toolchains in the image (Go, Node, Python, make, gcc) | No container builds in v1 (needs privileges); images still build in CI |
-| Internet | Egress 80/443 to `world` | No inbound; no Gateway route |
+| Internet | Egress 80/443 to `0.0.0.0/0` **minus RFC1918/CGNAT/link-local** — not `world`, which includes the home LAN | No inbound; no Gateway route; no LAN host except hestia:22 |
 | hestia | SSH as a new **`bench-agent`** user with **two keys**, each forced to `rrsync` (one directory per key): `rrsync /mnt/main/agent-inbox` (RW) and `rrsync -ro /mnt/main/family/media` (RO) | Not `truenas_admin`; no sudo; no interactive shell (`restrict`); no other datasets |
 | Cluster | ServiceAccount bound to the built-in **`view`** ClusterRole | Read-only; `view` excludes Secrets |
 
@@ -75,7 +75,7 @@ through llmux (llmux gateway plan, phase 2).
 
 - Runs as non-root with a read-only root filesystem apart from the workspace;
   CPU and memory limits per pod.
-- Network policy: DNS, `world` 80/443, hestia 22, the API server — nothing else on
+- Network policy: DNS, public internet (0.0.0.0/0 minus private ranges) 80/443, hestia 22, the API server — nothing else on
   the LAN.
 - The agent's `CLAUDE.md` carries George's rules: branch + PR only, never push the
   default branch, never bypass branch protection, SOPS is operator-only. Claude

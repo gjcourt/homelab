@@ -1,0 +1,111 @@
+# Template for ONE bench-cloud task. Not applied by Flux — `bench-cloud run`
+# fills in the name, labels and TASK_* env and creates it. Everything else
+# (identity, limits, network) comes from here and the namespace.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: PLACEHOLDER
+  namespace: bench-cloud
+  labels:
+    app: bench-task
+spec:
+  # A failed agent run is a result to read, not something to retry blindly.
+  backoffLimit: 0
+  # Hard wall-clock cap; bench-cloud run --deadline overrides.
+  activeDeadlineSeconds: 7200
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app: bench-task
+    spec:
+      restartPolicy: Never
+      # Counted by the bench-cloud-tasks ResourceQuota (5 at once); below every
+      # real workload in scheduling and eviction.
+      priorityClassName: bench-cloud-task
+      serviceAccountName: bench-agent
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # ssh rejects group-readable keys; see apps/base/bench-cloud/console-deployment.yaml.
+        - name: ssh-key
+          image: ghcr.io/gjcourt/bench-cloud:IMAGE_TAG
+          command: ["sh", "-c", "install -m 0600 /var/run/secrets/hestia/id_inbox /ssh/id_inbox && install -m 0600 /var/run/secrets/hestia/id_media /ssh/id_media && install -m 0644 /var/run/secrets/hestia/known_hosts /ssh/known_hosts"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          volumeMounts:
+            - {name: hestia-ssh, mountPath: /var/run/secrets/hestia, readOnly: true}
+            - {name: ssh, mountPath: /ssh}
+      containers:
+        - name: task
+          image: ghcr.io/gjcourt/bench-cloud:IMAGE_TAG
+          command: ["/usr/local/bin/bench-entrypoint", "/usr/local/bin/bench-task"]
+          env:
+            - {name: HOME, value: /home/node}
+            - {name: WORKSPACE, value: /home/node/work}
+            # Inference-only subscription token. Tasks never need Remote Control.
+            - name: CLAUDE_CODE_OAUTH_TOKEN
+              valueFrom:
+                secretKeyRef: {name: bench-cloud-claude-token, key: CLAUDE_CODE_OAUTH_TOKEN}
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef: {name: bench-cloud-github-app, key: app-id}
+            - name: GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef: {name: bench-cloud-github-app, key: installation-id}
+            - {name: GITHUB_APP_PRIVATE_KEY_FILE, value: /var/run/secrets/github-app/private-key.pem}
+            - {name: GIT_AUTHOR_NAME, value: "bench-cloud[bot]"}
+            - {name: GIT_COMMITTER_NAME, value: "bench-cloud[bot]"}
+            - name: GIT_AUTHOR_EMAIL
+              valueFrom:
+                secretKeyRef: {name: bench-cloud-github-app, key: bot-email}
+            - name: GIT_COMMITTER_EMAIL
+              valueFrom:
+                secretKeyRef: {name: bench-cloud-github-app, key: bot-email}
+            # TASK_ID / TASK_REPO / TASK_PROMPT / TASK_MODEL appended by bench-cloud run.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 500m, memory: 1Gi, ephemeral-storage: 1Gi}
+            limits: {cpu: "2", memory: 4Gi, ephemeral-storage: 20Gi}
+          volumeMounts:
+            - {name: home, mountPath: /home/node}
+            - {name: tmp, mountPath: /tmp}
+            - {name: github-app, mountPath: /var/run/secrets/github-app, readOnly: true}
+            - {name: ssh, mountPath: /var/run/bench-ssh, readOnly: true}
+            - {name: ssh-config, mountPath: /etc/ssh/ssh_config.d/hestia.conf, subPath: hestia.conf, readOnly: true}
+      volumes:
+        # Fresh, throwaway $HOME per task: clone, caches and transcript. The
+        # record that matters is rsynced to hestia before the pod exits.
+        - name: home
+          emptyDir: {sizeLimit: 16Gi}
+        - name: tmp
+          emptyDir: {sizeLimit: 4Gi}
+        - name: ssh
+          emptyDir: {medium: Memory, sizeLimit: 1Mi}
+        - name: github-app
+          secret:
+            secretName: bench-cloud-github-app
+            defaultMode: 0440
+            items:
+              - {key: private-key.pem, path: private-key.pem}
+        - name: hestia-ssh
+          secret:
+            secretName: bench-cloud-hestia-ssh
+            defaultMode: 0440
+        - name: ssh-config
+          configMap:
+            name: bench-cloud-ssh-config

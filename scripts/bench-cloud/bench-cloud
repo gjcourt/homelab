@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+# bench-cloud — submit and follow Claude Code tasks in the cluster.
+#
+#   bench-cloud run --repo gjcourt/llmux [--model M] [--deadline 2h] "task…"
+#   bench-cloud ls
+#   bench-cloud logs <id> [-f]
+#   bench-cloud rm <id>
+#
+# Each run is one Job from job.yaml (next to this script): a fresh clone, one
+# `claude -p`, results as a PR from bench-cloud[bot], and the full record in
+# hestia:/mnt/main/agent-inbox/runs/<id>/. At most 5 run at once (namespace
+# ResourceQuota); extras wait in the Job controller until a slot frees.
+#
+# Runs on George's Mac with his kubeconfig. Plan:
+# docs/plans/2026-09-25-bench-cloud-agent.md; runbook:
+# docs/operations/apps/bench-cloud.md.
+set -euo pipefail
+NS=bench-cloud
+HERE=$(cd "$(dirname "$0")" && pwd)
+
+usage() { sed -n '3,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+
+duration_seconds() {  # 90m, 2h, 3600 → seconds
+  local v=$1
+  case "$v" in
+    *h) echo $(( ${v%h} * 3600 )) ;;
+    *m) echo $(( ${v%m} * 60 )) ;;
+    *s) echo "${v%s}" ;;
+    *[!0-9]*|"") echo "bad duration: $v" >&2; exit 2 ;;
+    *) echo "$v" ;;
+  esac
+}
+
+cmd_run() {
+  local repo="" model="" deadline=7200 image=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --repo) repo=${2:?}; shift 2 ;;
+      --model) model=${2:?}; shift 2 ;;
+      --deadline) deadline=$(duration_seconds "${2:?}"); shift 2 ;;
+      --image) image=${2:?}; shift 2 ;;
+      --) shift; break ;;
+      -*) usage ;;
+      *) break ;;
+    esac
+  done
+  [[ -n "$repo" && $# -ge 1 ]] || usage
+  [[ "$repo" == */* ]] || repo="gjcourt/$repo"
+  local prompt="$*"
+
+  # Same image as the deployed console unless overridden — one pin, not two.
+  if [[ -z "$image" ]]; then
+    image=$(kubectl -n "$NS" get deploy bench-console \
+      -o jsonpath='{.spec.template.spec.containers[?(@.name=="console")].image}') || {
+      echo "can't read the console image; is bench-cloud deployed? (or pass --image)" >&2; exit 1; }
+  fi
+
+  local id
+  id="bt-$(date -u +%Y%m%d)-$(openssl rand -hex 3)"
+
+  # Build the Job as JSON with jq --arg, so the prompt needs no escaping.
+  kubectl create --dry-run=client -o json -f "$HERE/job.yaml" |
+    jq --arg id "$id" --arg repo "$repo" --arg prompt "$prompt" --arg model "$model" \
+       --arg image "$image" --argjson deadline "$deadline" '
+      .metadata.name = $id
+      | .metadata.labels["bench-cloud/task"] = $id
+      | .metadata.annotations["bench-cloud/repo"] = $repo
+      | .spec.activeDeadlineSeconds = $deadline
+      | .spec.template.metadata.labels["bench-cloud/task"] = $id
+      | .spec.template.spec.initContainers[].image = $image
+      | .spec.template.spec.containers[0].image = $image
+      | .spec.template.spec.containers[0].env += [
+          {name: "TASK_ID", value: $id},
+          {name: "TASK_REPO", value: $repo},
+          {name: "TASK_PROMPT", value: $prompt}]
+      | if $model != "" then .spec.template.spec.containers[0].env += [{name: "TASK_MODEL", value: $model}] else . end
+    ' | kubectl create -f - >/dev/null
+  echo "$id  $repo  (deadline ${deadline}s)"
+  echo "  follow:  $0 logs $id -f"
+  echo "  record:  hestia:/mnt/main/agent-inbox/runs/$id/"
+}
+
+cmd_ls() {
+  kubectl -n "$NS" get jobs -l app=bench-task --sort-by=.metadata.creationTimestamp \
+    -o custom-columns='ID:.metadata.name,REPO:.metadata.annotations.bench-cloud/repo,ACTIVE:.status.active,DONE:.status.succeeded,FAILED:.status.failed,AGE:.metadata.creationTimestamp'
+}
+
+cmd_logs() {
+  local id=${1:?id}; shift
+  kubectl -n "$NS" logs "job/$id" -c task "$@"
+}
+
+cmd_rm() {
+  local id=${1:?id}
+  kubectl -n "$NS" delete job "$id" --wait=false
+}
+
+case "${1:-}" in
+  run) shift; cmd_run "$@" ;;
+  ls) shift; cmd_ls ;;
+  logs) shift; cmd_logs "$@" ;;
+  rm) shift; cmd_rm "$@" ;;
+  *) usage ;;
+esac

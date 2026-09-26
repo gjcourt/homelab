@@ -30,11 +30,15 @@ NAME=default-branch-guard
 MODE=dry-run
 ONLY=
 usage() { echo "usage: $0 [--apply|--check] [--repo NAME]" >&2; exit 2; }
+# --apply and --check are mutually exclusive; last-wins would silently turn a
+# `--check --apply` typo into a write. --repo must be followed by a name, so
+# `--repo --apply` is a usage error rather than a lookup of a repo "--apply".
+setmode() { [[ $MODE == dry-run || $MODE == "$1" ]] || usage; MODE=$1; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --apply) MODE=apply ;;
-    --check) MODE=check ;;
-    --repo) [[ -n "${2:-}" ]] || usage; ONLY=$2; shift ;;
+    --apply) setmode apply ;;
+    --check) setmode check ;;
+    --repo) [[ -n "${2:-}" && "$2" != -* ]] || usage; ONLY=$2; shift ;;
     *) usage ;;
   esac
   shift
@@ -75,7 +79,7 @@ if [[ -n "$ONLY" ]]; then
   # Trial on one repo: it must exist and not be archived (rulesets can't be
   # written to an archived repo).
   archived=$(gh repo view "$OWNER/$ONLY" --json isArchived --jq .isArchived) || {
-    echo "FATAL: $OWNER/$ONLY not found" >&2; exit 1; }
+    echo "FATAL: could not look up $OWNER/$ONLY (missing, or no access)" >&2; exit 1; }
   [[ "$archived" == false ]] || { echo "FATAL: $OWNER/$ONLY is archived" >&2; exit 1; }
   repos=$ONLY
 else

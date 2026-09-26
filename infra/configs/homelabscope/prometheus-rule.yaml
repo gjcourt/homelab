@@ -92,7 +92,9 @@ spec:
           labels:
             job: immich-photos-30d-sync
         # Suspended until first trialled; no series (and so no alert) until
-        # its first successful run. See infra/controllers/github-rulesets/.
+        # its first successful run. Re-suspending it AFTER a success will fire
+        # this within 30h — intended: an unguarded new repo is the risk it
+        # exists for. See infra/controllers/github-rulesets/.
         - record: homelabscope_job_last_success_seconds
           expr: max(kube_cronjob_status_last_successful_time{namespace="renovate", cronjob="github-rulesets"})
           labels:

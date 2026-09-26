@@ -1,0 +1,114 @@
+# Keeps the `default-branch-guard` ruleset on every gjcourt repo — including
+# repos created after the first --apply, which the bench-cloud GitHub App
+# ("All repositories") can reach immediately. Without this, a new repo is one
+# the App could merge on until someone remembers to rerun the script.
+#
+# Runs scripts/github-rulesets.sh: --apply, then --check, which re-reads every
+# ruleset and fails unless GitHub says George can still bypass it. --check runs
+# even when --apply failed (see the command below); the Job exits non-zero if
+# either did.
+#
+# Alerting when it fails:
+#   - KubeJobFailed (chart default, severity=warning) fires 15m after a failed
+#     Job and routes to the +alerts@ label — a daily nag, not a page.
+#     ttlSecondsAfterFinished keeps the failed Job (and so the alert) for ~a day.
+#   - HomelabscopeJobStale (severity=critical, +critical@) fires once the
+#     CronJob has gone 30h without a success — see infra/configs/homelabscope/.
+#     It has no series until the first successful run, so it stays silent while
+#     this is suspended.
+#   - activeDeadlineSeconds turns a pod that never finishes (image pull stuck,
+#     GitHub hanging) into a failed Job; otherwise concurrencyPolicy: Forbid
+#     would skip every later run without anything failing.
+#
+# Why the script is fetched from master at run time rather than baked into a
+# ConfigMap: there is one copy of the logic, and kustomize can't load a file
+# from outside this directory. The trade-off is that a change to the script on
+# master takes effect at the next run with George's admin token, with no
+# separate deploy step. That is the same trust boundary Flux already has
+# (master is what the cluster runs), master only moves through reviewed PRs,
+# and master is itself guarded by the ruleset this job maintains, so the
+# bench-cloud App cannot change what runs here. The log line prints the commit.
+#
+# SUSPENDED until George has trialled the ruleset on one repo
+# (`scripts/github-rulesets.sh --apply --repo <scratch>`, runbook step 2) and
+# run the first full --apply by hand. Unsuspend in a follow-up PR.
+#
+# Token: George's RENOVATE_TOKEN (the same one renovate-automerge merges with).
+# Writing rulesets needs admin on each repo — classic `repo` scope, or
+# fine-grained Administration: write. If the token lacks it, the first run
+# fails with 403s and says so.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: github-rulesets
+  namespace: renovate
+spec:
+  suspend: true
+  schedule: "17 5 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # --check over all 76 repos took ~30s on 2026-09-26; 30m is headroom.
+      activeDeadlineSeconds: 1800
+      # Keep a failed Job around until the next run so KubeJobFailed stays
+      # visible for the day, rather than self-clearing after an hour.
+      ttlSecondsAfterFinished: 82800
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: rulesets
+              # Reuses the bench-cloud image for gh/jq/git; no App config here,
+              # so its gh wrapper falls through to GH_TOKEN. `command:` replaces
+              # the image's ENTRYPOINT (bench-entrypoint), so nothing writes
+              # $WORKSPACE or ~/.claude.json and the read-only root FS is fine.
+              image: ghcr.io/gjcourt/bench-cloud:2026-09-26-129c30d
+              # A failed clone aborts (set -e). A failed --apply does not skip
+              # --check: the check is read-only, and it is the only step that
+              # verifies George can still bypass the rulesets --apply just wrote
+              # — one repo failing (e.g. a private-repo plan 403) must not hide
+              # that for the other 75. Either failing fails the Job.
+              command:
+                - bash
+                - -euo
+                - pipefail
+                - -c
+                - |
+                  git clone -q --depth 1 https://github.com/gjcourt/homelab /tmp/homelab
+                  git -C /tmp/homelab log -1 --format='script @ %h %s'
+                  rc=0
+                  /tmp/homelab/scripts/github-rulesets.sh --apply || rc=1
+                  /tmp/homelab/scripts/github-rulesets.sh --check || rc=1
+                  exit "$rc"
+              env:
+                # gh and git write state under $HOME; / is read-only.
+                - name: HOME
+                  value: /tmp
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: secret-renovate-container-env
+                      key: RENOVATE_TOKEN
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 500m, memory: 256Mi}
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi

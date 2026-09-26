@@ -91,6 +91,14 @@ spec:
           expr: max(kube_cronjob_status_last_successful_time{namespace="immich-stage", cronjob="immich-photos-30d-sync"})
           labels:
             job: immich-photos-30d-sync
+        # Suspended until first trialled; no series (and so no alert) until
+        # its first successful run. Re-suspending it AFTER a success will fire
+        # this within 30h — intended: an unguarded new repo is the risk it
+        # exists for. See infra/controllers/github-rulesets/.
+        - record: homelabscope_job_last_success_seconds
+          expr: max(kube_cronjob_status_last_successful_time{namespace="renovate", cronjob="github-rulesets"})
+          labels:
+            job: github-rulesets
 
         # Per-CronJob staleness budgets. vector(N) yields a single unlabeled
         # sample; `labels:` stamps the job. Kept alongside the last-success
@@ -100,7 +108,8 @@ spec:
         #   6-hour jobs (adguard ×2,       → 14h  = 50400
         #     renovate-automerge)
         #   daily jobs (renovate,          → 30h  = 108000
-        #     immich-photos-30d-sync)
+        #     immich-photos-30d-sync,
+        #     github-rulesets)
         - record: homelabscope_job_max_age_seconds
           expr: vector(1200)
           labels:
@@ -125,6 +134,10 @@ spec:
           expr: vector(108000)
           labels:
             job: immich-photos-30d-sync
+        - record: homelabscope_job_max_age_seconds
+          expr: vector(108000)
+          labels:
+            job: github-rulesets
 
     # -----------------------------------------------------------------------
     # Alerts: one templated pair over the whole family.

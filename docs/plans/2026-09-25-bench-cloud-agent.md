@@ -129,10 +129,25 @@ A restricted-PSA, non-root pod (`node:22-bookworm`, Claude Code 2.1.283) with th
   or CLAUDE_CODE_OAUTH_TOKEN) are limited to inference-only for security reasons.
   Run `claude auth login` to use Remote Control."* Hence the split above: the
   inference-only token for Jobs, a full-scope login for the console only.
+- **Remote Control works with a full-scope login.** `claude auth login` via
+  `kubectl exec -it` completed (URL opened on the Mac); credentials land in
+  `~/.claude/.credentials.json` (0600). `claude remote-control` then connected
+  and George drove the pod from claude.ai/code. Three requirements for the
+  console, all found in the test:
+  1. **No `CLAUDE_CODE_OAUTH_TOKEN` in the console's env.** It takes precedence
+     over the stored login (`auth status` reports `oauth_token`) and Remote
+     Control refuses it. Jobs get the variable; the console must not.
+  2. **Workspace trust.** Remote Control exits with "Workspace not trusted" until
+     the directory is trusted — the image or an init step sets
+     `projects["<workspace>"].hasTrustDialogAccepted` in `~/.claude.json`.
+  3. **A one-time "Enable Remote Control? (y/n)" consent**, answered by George
+     interactively — not scripted. Run it under tmux so it outlives the
+     `kubectl exec`.
 
 ## Open questions (resolved in phase 1)
 
-- Whether `claude auth login` completes from a pod without a browser on the pod,
-  and whether that login survives restarts when kept on a PVC.
+- Whether the full-scope login and the Remote Control consent survive pod
+  restarts when `~/.claude` and `~/.claude.json` are kept on the console's PVC,
+  and how often the login needs redoing.
 - Storage for workspaces: ephemeral `emptyDir` per Job is the default; the
   console needs a persistent volume.

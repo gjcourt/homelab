@@ -27,7 +27,7 @@ Full picture: [AGENTS.md](../AGENTS.md) · architecture in [docs/architecture/](
 |---|---|---|
 | 4× Talos nodes | Kubernetes cluster | `.20`/`.21`/`.23` (control-plane) + `.25` (worker) on the Lab VLAN, `10.42.2.x`. `.22` (bad DIMM) + `.24` physically out. |
 | hestia (`10.42.2.10`) | TrueNAS storage + compute | No GPUs since 2026-05-16. Runs the GHA deploy runner, Immich photo-backup rsync, qBittorrent, thermalscope telemetry, IPMI exporter. See [hosts/hestia/](../hosts/hestia/README.md). |
-| Synology / alcatraz (`10.42.2.11`) | Block + photo storage | ~~iSCSI backing for CNPG PVCs~~ — **no longer serving any bound cluster volume as of 2026-08-09**: the `synology-iscsi` StorageClass is gone and the 48 remaining `csi.san.synology.com` PVs are all `Released` leftovers. Phone-photo upload target. Role narrowing — see the photos-SOT plan. GitOps deploy runner + `immich-photos-pull` compose workload built (operator bootstrap pending — see the alcatraz GitOps plan). |
+| Synology / alcatraz (`10.42.2.11`) | Block + photo storage + music off-box copy | ~~iSCSI backing for CNPG PVCs~~ — **no longer serving any bound cluster volume as of 2026-08-09**: the `synology-iscsi` StorageClass is gone and the 48 remaining `csi.san.synology.com` PVs are all `Released` leftovers. Phone-photo upload target. Role narrowing — see the photos-SOT plan. GitOps deploy runner + `immich-photos-pull` compose workload built (operator bootstrap pending — see the alcatraz GitOps plan). **Off-box music copy since 2026-09-25:** daily pull of hestia's music library into `/volume1/music/library` ([hosts/alcatraz/music-pull/](../hosts/alcatraz/music-pull/README.md)). |
 
 ## In flight
 

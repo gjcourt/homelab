@@ -21,4 +21,4 @@ labels:
 # Pinned date-sha tag from build-bench-cloud.yml (Flux does not auto-track).
 images:
   - name: ghcr.io/gjcourt/bench-cloud
-    newTag: 2026-09-26-129c30d
+    newTag: 2026-09-26-6ced067

@@ -93,8 +93,9 @@ On TrueNAS (UI, as it's the source of truth for users/datasets):
    rsync server confined to that directory. `-munge` (rsync `--munge-links`)
    stops an uploaded symlink (`x -> /mnt/main/family`) from being followed back
    out of the inbox; the read-only key can't upload one. (`/usr/bin/rrsync` on
-   hestia is the rsync 3.4.1 Python version, which has `-ro` and `-munge`.) Media is already world-readable
-   (755/644), so no group membership is needed — and must not be granted.
+   hestia is the rsync 3.4.1 Python version, which has `-ro` and `-munge`.)
+   Media is already world-readable (755/644), so no group membership is
+   needed — and must not be granted.
 4. Fill `apps/production/bench-cloud/secret-hestia-ssh.yaml` from its `.example`
    and `sops -e -i` it.
 

@@ -10,12 +10,14 @@
 # his token, e.g. renovate-automerge). The App is not an admin, so it can push
 # branches and open PRs but cannot merge or push the default branch.
 #
-# Plan: docs/plans/2026-09-25-bench-cloud-agent.md. Runbook (forthcoming):
-# docs/operations/apps/bench-cloud.md.
+# Plan: docs/plans/2026-09-25-bench-cloud-agent.md. Runbook:
+# docs/operations/apps/bench-cloud.md (lands with homelab#1483). Scheduled by
+# infra/controllers/github-rulesets/ (daily --apply, then --check).
 #
 #   scripts/github-rulesets.sh            # dry run: report what would change
 #   scripts/github-rulesets.sh --apply    # create/update the ruleset everywhere
 #   scripts/github-rulesets.sh --check    # exit 1 if any repo lacks it (drift)
+#   scripts/github-rulesets.sh --apply --repo scratch   # one repo only (trial)
 #
 # Run --check after --apply: only the check reads back each ruleset and asks
 # GitHub whether the caller can bypass it (current_user_can_bypass).
@@ -26,12 +28,21 @@ set -euo pipefail
 OWNER=gjcourt
 NAME=default-branch-guard
 MODE=dry-run
-case "${1:-}" in
-  "") ;;
-  --apply) MODE=apply ;;
-  --check) MODE=check ;;
-  *) echo "usage: $0 [--apply|--check]" >&2; exit 2 ;;
-esac
+ONLY=
+usage() { echo "usage: $0 [--apply|--check] [--repo NAME]" >&2; exit 2; }
+# --apply and --check are mutually exclusive; last-wins would silently turn a
+# `--check --apply` typo into a write. --repo must be followed by a name, so
+# `--repo --apply` is a usage error rather than a lookup of a repo "--apply".
+setmode() { [[ $MODE == dry-run || $MODE == "$1" ]] || usage; MODE=$1; }
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --apply) setmode apply ;;
+    --check) setmode check ;;
+    --repo) [[ -n "${2:-}" && "$2" != -* ]] || usage; ONLY=$2; shift ;;
+    *) usage ;;
+  esac
+  shift
+done
 
 # actor_id 5 = the built-in repository Admin role.
 BODY=$(cat <<'JSON'
@@ -64,8 +75,17 @@ want=$(jq -cS "$NORM" <<<"$BODY")
 
 # Fetch the repo list up front: a failure inside `done < <(...)` would be
 # invisible and yield zero repos, i.e. a false-green --check.
-repos=$(gh repo list "$OWNER" --limit 500 --no-archived --json name --jq '.[].name' | sort) || {
-  echo "FATAL: could not list $OWNER repos" >&2; exit 1; }
+if [[ -n "$ONLY" ]]; then
+  # Trial on one repo: it must exist and not be archived (rulesets can't be
+  # written to an archived repo).
+  archived=$(gh repo view "$OWNER/$ONLY" --json isArchived --jq .isArchived) || {
+    echo "FATAL: could not look up $OWNER/$ONLY (missing, or no access)" >&2; exit 1; }
+  [[ "$archived" == false ]] || { echo "FATAL: $OWNER/$ONLY is archived" >&2; exit 1; }
+  repos=$ONLY
+else
+  repos=$(gh repo list "$OWNER" --limit 500 --no-archived --json name --jq '.[].name' | sort) || {
+    echo "FATAL: could not list $OWNER repos" >&2; exit 1; }
+fi
 nrepos=$(grep -c . <<<"$repos" || true)
 if [[ $nrepos -eq 0 ]]; then echo "FATAL: $OWNER has no repos listed" >&2; exit 1; fi
 if [[ $nrepos -ge 500 ]]; then echo "FATAL: hit the 500-repo list limit; raise --limit" >&2; exit 1; fi

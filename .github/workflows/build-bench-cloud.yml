@@ -57,4 +57,4 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Image:** \`ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Pin this tag in \`apps/base/bench-cloud/\` (console StatefulSet + Job template) in a follow-up PR (Flux does not auto-track tags)." >> $GITHUB_STEP_SUMMARY
+          echo "Pin this tag in `apps/production/bench-cloud/kustomization.yaml` (`images:` newTag) in a follow-up PR (Flux does not auto-track tags)." >> $GITHUB_STEP_SUMMARY

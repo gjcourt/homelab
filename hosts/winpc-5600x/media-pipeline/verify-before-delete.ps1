@@ -46,7 +46,8 @@
   writes several albums interleaved into it - so a folder is not an album, and
   grouping by directory blocks every rip on the box the moment one is unproven.
   The album gate itself is not negotiable: on 2026-08-29 a 2xCD rip moved with
-  only disc 2 present and the source was deleted anyway. Disc 1 is still gone.
+  only disc 2 present and the source was deleted anyway. Disc 1 was missing from
+  the library until it was restored from C:\Rips on 2026-09-25.
   Per file, "the bytes are in the library" was true of everything that landed -
   which is exactly how deleting only the proven files destroys an album.
 

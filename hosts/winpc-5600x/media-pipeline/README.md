@@ -146,9 +146,37 @@ number.
 
 ## Encoder settings
 
-`libx265 -b:v 4700k -tag:v hvc1 -c:a aac -b:a 160k -ac 2 -c:s copy`, ~4.86 Mbps
-ABR. Encodes at roughly 1.1x realtime on the 5600X (6c/12t), so a 2-hour film is
-about 2 hours of wall time.
+`libx265 -b:v 4700k`, ~4.86 Mbps ABR for video. Encodes at roughly 1.1x realtime
+on the 5600X (6c/12t), so a 2-hour film is about 2 hours of wall time.
+
+**Audio: every track, at its own channel count.** `-map 0:a`, then `-c:a:N aac`
+with the bitrate scaled per stream — 96k mono, 160k stereo, 64k/channel above
+that (5.1 → 384k, 7.1 → 512k). No `-ac`, so the source layout survives.
+
+⚠️ **This was `-map 0:a:0 … -ac 2` until 2026-09-20** — the *first* audio stream
+only, downmixed to stereo. The Tale of the Princess Kaguya carries
+`eng/eng/jpn/jpn/fra` in DTS 5.1; the library copy came out as one 2-channel
+English AAC track. For a Ghibli film that silently discards the original
+Japanese audio, and it did the same to **every title this script has ever
+encoded**. Nothing complained: the file played, the duration matched, the
+bitrate passed.
+
+So there is now an **audio-track gate**, for the same reason the frame-count
+gate exists — ffmpeg exits 0 while dropping streams, and the exit code proves
+nothing. The output must carry the same number of audio tracks as the source
+*and* the same channel counts, or the encode is rejected and the local copy
+kept. A drop and a downmix are both failures.
+
+Re-encoding a title already in the library needs `-Replace`; without it
+preflight skips anything already `OnHestia`.
+
+A push lands at `<name>.mkv.incoming` inside the destination, is hashed **there**,
+and only swapped onto the final name once it matches — a rename within one
+dataset, so atomic. This used to `mv` straight onto the final path and hash
+afterwards: harmless for a new title, destructive for a re-encode, because a
+corrupt transfer had already replaced a good library file by the time the hash
+disagreed. A failed verify now deletes the `.incoming` and leaves the library
+untouched.
 
 ---
 
@@ -197,3 +225,116 @@ re-borrowing what you now own — **union it, never overwrite**. Folder names ar
 sanitised while that list carries real punctuation (`Amazing Grace: The Complete
 Recordings` vs `Amazing Grace- …`), and regenerating from the filesystem silently
 drops entries. That list is not in git; it lives with the SFPL tooling.
+
+---
+
+# verify-before-delete.ps1 — proving a rip is redundant
+
+`import-music.ps1` never deletes from `C:\Rips`, and `transcode.ps1` never
+deletes a disc rip. Clearing them was an operator judgement call with no
+evidence behind it. This is the evidence.
+
+```powershell
+.\verify-before-delete.ps1 -Mode Music              # report only
+.\verify-before-delete.ps1 -Mode Music -Delete      # reclaim what is proven
+.\verify-before-delete.ps1 -Mode Video -SourceDir D:\Rips
+```
+
+One question per local file: **is there a file in the library holding this
+file's content?**
+
+## sha256 of a FLAC is not a checksum of its audio
+
+Editing a tag rewrites the file. On 2026-09-20 eleven Daft Punk remixes were
+reported unproven although the library held the same eleven tracks under the
+same names — the library copies were **exactly 52 bytes larger**, one extra
+metadata block, and the audio was bit-identical. On the file hash alone the
+verifier refuses to bless anything retagged since import, and that set only
+grows.
+
+So FLAC gets a second, weaker-looking but actually stronger proof: the
+**STREAMINFO audio checksum**, an MD5 of the *unencoded* audio written by the
+encoder at a fixed offset. Reading it costs 42 bytes and decodes nothing, and
+tag edits cannot change it. There is no equivalent for mp3 or m4a, so those stay
+on sha256 alone.
+
+The two are recorded as **different verdicts** — `VERIFIED` and
+`VERIFIED_AUDIO` — so the ledger never claims a byte-identical copy it does not
+have. `-RequireExactBytes` turns the fallback off.
+
+## Matching is by content, never by path
+
+The obvious implementation re-derives the library path from the tags
+(`DiscAlbum` → `LinuxName` → `TruncName` → `AsciiSafe`) and looks for it. That
+puts a *delete* decision downstream of the same name-mangling that produced
+three mojibake folders in a single run on 2026-09-19. A hash match needs none
+of it: if the bytes are in the library, the local copy is redundant regardless
+of what either side calls the file.
+
+## The two modes prove different things
+
+| | Music | Video |
+| :--- | :--- | :--- |
+| Library holds | a byte-identical **copy** | a **transcode** — a different file by design |
+| Therefore | hash identity is the proof | no source hash can ever match |
+| Proof used | sha256 of the rip found in a full library index, or the FLAC audio checksum | the ledger's own `LANDED` row, **re-checked**: is that file still there, and does it still hash to the recorded value? |
+| Cost | index the whole music library (~76 GB, a few minutes) | hash only the landed files — indexing 1.6 TB to check a few films would be absurd |
+
+Video also handles local files with **no `LANDED` row** — anything that landed
+before the ledger existed. Refusing those forever is not an answer, so it falls
+back to content, exactly as the music path does: an encoded output that was
+pushed is byte-identical to the library copy.
+
+**Size is the prefilter that makes that affordable.** A stat-only pass over the
+library is instant (`hash=0`), and only candidates of exactly the right size are
+then hashed — usually one file, never 1.6 TB. Nothing is ever judged *on* size:
+a match of the right number of wrong bytes is precisely the failure
+`transcode.ps1` stopped accepting when it replaced its size check with a hash.
+
+## The library index, and why it is not in the ledger
+
+`index-library.sh` runs on hestia and emits `sha256 <TAB> bytes <TAB> relpath`.
+
+The ledger stays a **movement log** — it records things happening, not an
+inventory. So the inventory is a separate snapshot file, and a `LIBRARY_INDEXED`
+row carries **its sha256**. Index plus anchor is a claim you can re-check later,
+and editing the index breaks the anchor.
+
+That anchor is computed from the copy that was actually **used to judge**, not
+from the summary hestia reported. A fetch that truncates therefore aborts the
+run instead of silently deleting rips against a short index.
+
+Two more deliberate choices:
+
+- **Files are hashed from stdin** (`sha256sum < "$f"`). Passing the path lets
+  `sha256sum` escape backslashes and newlines by rewriting the output line —
+  corrupting exactly the rows you would least want wrong.
+- **A file that cannot be read emits `MISSING`**, it does not vanish from the
+  output. A verifier must be able to tell "not there" from "not asked about".
+
+## Deletion is album-granular, and the album comes from tags
+
+`-Delete` removes an album only when **every** file in it is proven; one
+unverified track keeps the whole album.
+
+⚠️ **A folder is not an album.** `C:\Rips` is flat — Picard writes several
+albums interleaved into it — so grouping by directory puts every rip in one
+group, and a single unproven track blocks the entire box. The first run showed
+exactly that: 11 unproven Daft Punk remixes held back 301 files that were
+provably in the library. Grouping therefore reads `album_artist`/`album`/`disc`
+with ffprobe, the same way the import does. Only the *grouping* uses tags —
+matching stays on content, and none of the library-naming stack is involved.
+
+The gate itself is not negotiable. On 2026-08-29 a 2xCD rip moved with only disc
+2 present and the source was deleted anyway; disc 1 is still gone. Per file,
+"the bytes are in the library" was true of everything that landed — which is
+precisely how deleting only the proven files destroys an album. Files with no
+usable tags are judged alone, never folded into a group they cannot be
+attributed to. Each deletion is preceded by a
+`DELETE_SAFE` row and followed by `LOCAL_DELETED`, so the ledger records the
+authorisation before the act — and the run re-checks that the files are actually
+gone before claiming the space back.
+
+Without `-Delete` the script is read-only: it writes ledger rows and an audit
+TSV (`<RUN_ID>.verify.tsv`, kept both locally and on hestia) and touches nothing
+else.

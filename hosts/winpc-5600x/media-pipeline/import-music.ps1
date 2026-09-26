@@ -95,32 +95,44 @@ $AUDIT     = Join-Path $AuditDir "$RUN_ID.files.tsv"
 $AUDIT_SUM = Join-Path $AuditDir "$RUN_ID.albums.tsv"
 
 function Log($m) { Write-Output ((Get-Date).ToString('yyyy-MM-dd HH:mm:ss') + ' ' + $m) }
-# Win32-OpenSSH stalls ssh.exe when stdout is a non-console handle and the
-# output grows past a buffer. Reproduced on a clean box: the 227-line library
-# listing dies at EXACTLY 12288 bytes (3 x 4096) with ssh.exe blocked forever,
-# while the same query piped through `head -3` returns in milliseconds. It is
-# below PowerShell - redirecting to a file does not help, because the stall is
-# inside ssh itself.
-#
-# So never stream a large remote read through ssh stdout. Have the remote write
-# to a file and fetch it with scp, which is a different code path and moved
-# 3.6 GB without trouble.
-function SshRead([string]$cmd) {
-  $rtmp = "/tmp/.sshread." + [Guid]::NewGuid().ToString('N').Substring(0,12)
-  $ltmp = [IO.Path]::GetTempFileName()
-  try {
-    & cmd /c "ssh -n -o BatchMode=yes $HST `"$cmd > $rtmp 2>/dev/null`" >nul 2>nul" | Out-Null
-    & cmd /c "scp -B -o BatchMode=yes $($HST):$rtmp `"$ltmp`" >nul 2>nul" | Out-Null
-    & cmd /c "ssh -n -o BatchMode=yes $HST `"rm -f $rtmp`" >nul 2>nul" | Out-Null
-    # MUST read as UTF-8. Get-Content's default is the ANSI codepage, which
-    # turned every library path containing a curly apostrophe into "Whoâ€™s".
-    # That is not merely cosmetic: Norm() runs FormKD, which decomposes the
-    # mojibake's "™" into the LETTERS "TM", so "whos" never matched "whotms"
-    # and two albums already in the library were reported NEW on every run
-    # (measured 2026-09-19: The Who / Who's Next, Lightnin' Hopkins / Mojo Hand).
-    if (Test-Path $ltmp) { return @([IO.File]::ReadAllLines($ltmp, [Text.UTF8Encoding]::new($false))) }
-    return @()
-  } finally { Remove-Item $ltmp -Force -ErrorAction SilentlyContinue }
+# ---- durable movement ledger -------------------------------------------
+# Shared with transcode.ps1 - see ledger.ps1 for the schema and the reason it is
+# a shared file rather than a copy in each script.
+. (Join-Path $PSScriptRoot 'ledger.ps1')
+$LEDGER = '/mnt/main/archive/_inventory/rips/ledger.tsv'
+Initialize-Ledger -RemoteHost $HST -RunId $RUN_ID -Path $LEDGER
+# Thin wrappers keep the call sites in this script unchanged, and keep the
+# music-shaped field names (Artist/Album) mapping onto the shared schema.
+# SshRead moved into ledger.ps1 when verify-before-delete.ps1 became the third
+# caller - see the note there on the 12288-byte ssh.exe stall.
+function SshRead([string]$cmd) { Invoke-SshRead -RemoteHost $HST -Cmd $cmd }
+function Ledger([string]$event, [object[]]$records) {
+  if (-not $records -or $records.Count -eq 0) { return }
+  $mapped = foreach ($r in $records) {
+    [pscustomobject]@{
+      Scope = $(if ($r.Scope) { $r.Scope } else { 'album' })
+      Title = $r.Artist; Item = $r.Album
+      Disc  = $r.Disc;   Track = $r.Track
+      Sha   = $r.Sha;    Bytes = $r.Bytes
+      Src   = $r.Src;    Dest  = $r.Dest;  Note = $r.Note
+    }
+  }
+  Write-Ledger -Event $event -Records @($mapped)
+  Log "  ledger: $event x$($records.Count)"
+}
+function LedgerRun([string]$event, [string]$note) {
+  Ledger $event @([pscustomobject]@{ Scope='run'; Note=$note })
+}
+function CopyAudit([string]$local) {
+  # $LASTEXITCODE after `& cmd /c "scp ..." | Out-Null` proved unreliable here -
+  # it reported failure on a copy that demonstrably landed. Ask hestia instead:
+  # the file being there is the only claim worth making.
+  if (-not (Test-Path -LiteralPath $local)) { return }
+  $name = Split-Path -Leaf $local
+  & cmd /c "scp -B -o BatchMode=yes `"$local`" $($HST):$AUDIT_REMOTE/ >nul 2>nul" | Out-Null
+  $ok = SshRead "test -f '$AUDIT_REMOTE/$name' && echo PRESENT"
+  if ($ok -contains 'PRESENT') { Log "  audit off-box: $name" }
+  else { Log "  WARNING: $name did NOT reach hestia:$AUDIT_REMOTE (import continues)" }
 }
 function Norm([string]$s) {
   $t = $s.Normalize([Text.NormalizationForm]::FormKD) -replace "[\u2010\u2011]","-" -replace "[\u2018\u2019]","'"
@@ -238,13 +250,31 @@ foreach ($it in $items) {
              $it.Track, $it.TrackTotal, $it.Title, $it.Mbid, $it.Barcode,
              $it.File.FullName, $dest) -join "`t")
 }
-[IO.File]::WriteAllLines($AUDIT, $rows, [Text.UTF8Encoding]::new($false))
+Write-LfLines -Path $AUDIT -Lines $rows
 Log "  $($rows.Count) file rows -> $AUDIT"
 
 # Group by MUSICBRAINZ_ALBUMID where present: two discs of one release routinely
 # carry DIFFERENT album strings, and grouping on the string splits a complete
 # release into two half-albums - a gate that cries wolf is a gate that gets
 # ignored.
+# Copy the audit off-box NOW, not at the end. Tonight's two aborted runs left
+# no off-box trace at all because the only copy step was the last line of a
+# fully successful run. The audit is the evidence that a disc was ever ripped;
+# it must survive the run that failed.
+# NOTE the ordering: $AUDIT_SUM (the completeness verdicts) does not exist yet
+# at this point in the run, so copy ONLY the per-file audit here. Copying both
+# fails the whole scp on the missing file and leaves nothing off-box - which is
+# precisely the hole this is meant to close.
+ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$AUDIT_REMOTE' && sudo -n chown truenas_admin '$AUDIT_REMOTE'" | Out-Null
+CopyAudit $AUDIT
+
+LedgerRun 'RUN_START' "rips=$RipsDir host=$env:COMPUTERNAME files=$($items.Count) dryrun=$DryRun"
+Ledger 'READ' @($items | Group-Object Artist,Album | ForEach-Object {
+  [pscustomobject]@{ Artist=$_.Group[0].Artist; Album=$_.Group[0].Album
+                     Disc=(($_.Group | Select-Object -ExpandProperty Disc -Unique | Sort-Object) -join '+')
+                     Track=$_.Count; Note='read from rips dir' }
+})
+
 Log '== COMPLETENESS =='
 $groups = $items | Group-Object { if ($_.Mbid) { $_.Mbid } else { (Norm $_.Artist) + '|' + (Norm $_.Album) } }
 $verdicts = @(); $nOk=0; $nBad=0; $nUnv=0
@@ -279,13 +309,19 @@ foreach ($grp in $groups) {
     'INCOMPLETE' { Log "  INCOMPLETE  $label  ($detail)" }
   }
 }
-[IO.File]::WriteAllLines($AUDIT_SUM, $verdicts, [Text.UTF8Encoding]::new($false))
+Write-LfLines -Path $AUDIT_SUM -Lines $verdicts
+# Off-box immediately too: the completeness gate can exit two lines below, and
+# the verdict is the most useful thing to still have when it does.
+CopyAudit $AUDIT_SUM
 Log ''
 Log "  complete: $nOk   incomplete: $nBad   unverified: $nUnv"
 Log "  audit trail: $AUDIT"
 Log "               $AUDIT_SUM"
 Log ''
 if ($nBad -gt 0 -and -not $AllowIncomplete) {
+  Ledger 'INCOMPLETE' @($verdicts | Where-Object { $_ -match 'INCOMPLETE' } | ForEach-Object {
+    [pscustomobject]@{ Note=$_ } })
+  LedgerRun 'RUN_ABORT' "completeness gate: $nBad album(s) incomplete"
   Log "REFUSING TO PROCEED: $nBad album(s) are provably incomplete."
   Log 'Re-rip the missing disc(s), or pass -AllowIncomplete if this is deliberate.'
   Log "DO NOT delete the source rips in $RipsDir until this reports 0 incomplete."
@@ -343,9 +379,11 @@ foreach ($g in $albums) {
   Log "  NEW  $($g.Count.ToString().PadLeft(3))  $art / $alb"
   $toImport += $g
 }
-if (-not $toImport) { Log '== nothing new to import =='; exit 0 }
+Ledger 'SKIP' @($albums | Where-Object { $_ -notin $toImport } | ForEach-Object {
+  [pscustomobject]@{ Artist=$_.Group[0].Artist; Album=$_.Group[0].Album; Note='already in library' } })
+if (-not $toImport) { LedgerRun 'RUN_END' 'nothing new to import'; Log '== nothing new to import =='; exit 0 }
 Log "== $($toImport.Count) new album(s), $(($toImport | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum) tracks =="
-if ($DryRun) { Log 'DRY RUN - stopping here'; exit 0 }
+if ($DryRun) { LedgerRun 'RUN_END' 'dry run'; Log 'DRY RUN - stopping here'; exit 0 }
 
 # ---- 3. stage on Windows, recording any name that must be fixed on Linux --
 if (Test-Path -LiteralPath $Staging) { Remove-Item -LiteralPath $Staging -Recurse -Force }
@@ -387,6 +425,10 @@ if ($srcCount -ne $plannedCount) {
 }
 $srcBytes = (Get-ChildItem $Staging -Recurse -File | Measure-Object Length -Sum).Sum
 Log "staged $srcCount files, $srcBytes bytes$(if ($truncated) { " ($truncated filename(s) truncated)" })"
+Ledger 'STAGED' @($toImport | ForEach-Object {
+  [pscustomobject]@{ Artist=$_.Group[0].Artist; Album=$_.Group[0].Album; Track=$_.Count
+                     Bytes=(($_.Group | ForEach-Object { $_.File.Length } | Measure-Object -Sum).Sum)
+                     Note='staged for transfer' } })
 
 # ---- 4. transfer + verify ------------------------------------------------
 ssh -n -o BatchMode=yes $HST "rm -rf '$SCRATCH' && mkdir -p '$SCRATCH'" | Out-Null
@@ -395,12 +437,13 @@ Log '== scp -> hestia scratch =='
 # non-console handle it can finish the transfer and never return. Route it
 # through cmd with output discarded, exactly as SshRead does.
 & cmd /c "scp -B -r -o BatchMode=yes `"$Staging`" $($HST):$SCRATCH/ >nul 2>nul" | Out-Null
-if ($LASTEXITCODE -ne 0) { Log 'FAIL scp - staging left in place for inspection'; exit 1 }
+if ($LASTEXITCODE -ne 0) { LedgerRun 'RUN_ABORT' 'scp to hestia scratch failed'; Log 'FAIL scp - staging left in place for inspection'; exit 1 }
 $leaf = Split-Path $Staging -Leaf
 $remCount = [int](ssh -n -o BatchMode=yes $HST "find '$SCRATCH/$leaf' -type f -name '*.flac' | wc -l")
 $remBytes = [long](ssh -n -o BatchMode=yes $HST "du -sb '$SCRATCH/$leaf' | cut -f1")
-if ($remCount -ne $srcCount) { Log "FAIL transfer: $remCount of $srcCount files arrived - NOT importing"; exit 1 }
+if ($remCount -ne $srcCount) { LedgerRun 'RUN_ABORT' "transfer incomplete: $remCount of $srcCount arrived"; Log "FAIL transfer: $remCount of $srcCount files arrived - NOT importing"; exit 1 }
 Log "verified $remCount files on hestia (bytes local=$srcBytes remote=$remBytes)"
+LedgerRun 'TRANSFERRED' "$remCount files, $remBytes bytes on hestia scratch"
 
 # ---- 5. restore the true names on hestia --------------------------------
 # Covers BOTH cases: names Windows cannot represent (trailing dot) and names
@@ -469,17 +512,24 @@ if missing:
   $restored = SshRead "PYTHONIOENCODING=utf-8 python3 '$SCRATCH/apply-renames.py' '$SCRATCH/$leaf' '$SCRATCH/rename-manifest.tsv'"
   $restored | ForEach-Object { Log "  $_" }
   if ($restored | Where-Object { $_ -match '^MISSING_TOTAL ' }) {
+    Ledger 'RESTORE_FAIL' @($restored | Where-Object { $_ -match '^MISSING ' } | ForEach-Object {
+      [pscustomobject]@{ Scope='name'; Note=$_ } })
+    LedgerRun 'RUN_ABORT' 'a rename in the manifest could not be applied'
     Log 'FAIL a rename in the manifest could not be applied - scratch left in place, library untouched'
     $restored | Where-Object { $_ -match '^MISSING ' } | Select-Object -First 5 | ForEach-Object { Log "    $_" }
     exit 1
   }
+  Ledger 'RESTORED' @($renames | ForEach-Object {
+    [pscustomobject]@{ Scope='name'; Src=$_.From; Dest=$_.To; Note='placeholder/illegal name restored' } })
   if (-not ($restored | Where-Object { $_ -match '^RESTORED \d+$' })) {
+    LedgerRun 'RUN_ABORT' 'rename manifest did not apply'
     Log 'FAIL rename manifest did not apply - scratch left in place, library untouched'
     exit 1
   }
   # Nothing may reach the library still wearing a placeholder.
   $left = ssh -n -o BatchMode=yes $HST "find '$SCRATCH/$leaf' -name '*~u????~*' | head -3"
   if ($left) {
+    LedgerRun 'RUN_ABORT' 'placeholder names survived the restore'
     Log 'FAIL placeholder names survived the restore - NOT importing:'
     $left | ForEach-Object { Log "    $_" }
     exit 1
@@ -502,7 +552,7 @@ Log "  $(@($dry | Where-Object { $_ -match '^>f' }).Count) files to write, $($cr
 
 Log '== rsync into the library =='
 $out = SshRead "sudo -n rsync -a -8 --ignore-existing --chown=george:users --chmod=D755,F644 --stats '$SCRATCH/$leaf/' '$LIB/'"
-if (-not $out) { Log 'FAIL rsync - scratch left in place'; exit 1 }
+if (-not $out) { LedgerRun 'RUN_ABORT' 'rsync into library failed'; Log 'FAIL rsync - scratch left in place'; exit 1 }
 $out | Where-Object { $_ -match 'Number of regular files transferred|Total transferred file size' } | ForEach-Object { Log "  $_" }
 
 $bad = ssh -n -o BatchMode=yes $HST "sudo -n find '$LIB' \( ! -user george -o ! -group users \) | head -3"
@@ -527,25 +577,40 @@ foreach ($r in [IO.File]::ReadAllLines($AUDIT)) {
 if ($man.Count -eq 0) { Log '  nothing transferred this run - skipping checksum verification' }
 else {
 $manLocal = Join-Path $env:TEMP "$RUN_ID.sha256"
-[IO.File]::WriteAllLines($manLocal, $man, [Text.UTF8Encoding]::new($false))
+Write-LfLines -Path $manLocal -Lines $man
 & cmd /c "scp -B -o BatchMode=yes `"$manLocal`" $($HST):$SCRATCH.sha256 >nul 2>nul" | Out-Null
 $chk = SshRead "cd '$LIB' && sudo -n sha256sum -c --quiet '$SCRATCH.sha256' 2>&1"
 $failed = @($chk | Where-Object { $_ -match ': (FAILED|No such file)' })
 if ($failed.Count -gt 0) {
   Log "VERIFY FAILED: $($failed.Count) file(s) do not match the audit trail:"
   $failed | Select-Object -First 10 | ForEach-Object { Log "    $_" }
+  Ledger 'VERIFY_FAIL' @($failed | ForEach-Object { [pscustomobject]@{ Scope='file'; Note=$_ } })
+  LedgerRun 'RUN_ABORT' "checksum verification failed for $($failed.Count) file(s)"
   Log 'The library may contain a truncated or stale copy. Scratch left in place.'
   Log "DO NOT delete the source rips in $RipsDir."
   ssh -n -o BatchMode=yes $HST "rm -f '$SCRATCH.sha256'" | Out-Null
   exit 3
 }
 Log "  all $($man.Count) file(s) match their source hash on hestia"
+# LANDED is written only here, AFTER the bytes are proven in place. A row in
+# the ledger therefore means "this file is in the library and its hash matched"
+# - not merely "we tried". That is the claim worth keeping.
+$landed = New-Object System.Collections.Generic.List[object]
+foreach ($r in [IO.File]::ReadAllLines($AUDIT)) {
+  $c = $r -split "`t"
+  if ($c.Count -ge 13 -and $importedSrc.ContainsKey($c[11])) {
+    $landed.Add([pscustomobject]@{ Scope='file'; Artist=$c[2]; Album=$c[3]; Disc=$c[4]; Track=$c[6]
+                                   Sha=$c[0]; Bytes=$c[1]; Src=$c[11]; Dest=$c[12]; Note='verified in library' })
+  }
+}
+Ledger 'LANDED' $landed.ToArray()
 }
 
 # Audit must outlive the source rips: keep a copy off this box.
 ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$AUDIT_REMOTE' && sudo -n chown truenas_admin '$AUDIT_REMOTE'" | Out-Null
-& cmd /c "scp -B -o BatchMode=yes `"$AUDIT`" `"$AUDIT_SUM`" $($HST):$AUDIT_REMOTE/ >nul 2>nul" | Out-Null
-Log "  audit copied to hestia:$AUDIT_REMOTE/"
+CopyAudit $AUDIT
+CopyAudit $AUDIT_SUM
+LedgerRun 'RUN_END' "imported $($toImport.Count) album(s)"
 ssh -n -o BatchMode=yes $HST "rm -f '$SCRATCH.sha256'" | Out-Null
 
 ssh -n -o BatchMode=yes $HST "rm -rf '$SCRATCH'" | Out-Null

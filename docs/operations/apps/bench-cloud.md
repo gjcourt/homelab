@@ -101,11 +101,11 @@ On TrueNAS (UI, as it's the source of truth for users/datasets):
 
 ### 3a. Image visibility
 
-The pod has no `imagePullSecrets`. After the first `build-bench-cloud.yml` run,
-check `ghcr.io/gjcourt/bench-cloud` is **public** (github.com → Packages →
-bench-cloud → Package settings); it holds no secrets. Confirm with an anonymous
-pull. If it must stay private, add `ghcr-secret` to the namespace and the pod
-spec instead (see `apps/base/golinks/`).
+Done — `ghcr.io/gjcourt/bench-cloud` published **public** on its first build
+(2026-09-26, `2026-09-26-129c30d`), like the other in-repo images. The pod has no
+`imagePullSecrets` and needs none; the image holds no secrets. If it is ever
+made private, add `ghcr-secret` to the namespace and pod spec (see
+`apps/base/golinks/`).
 
 ### 4. First console login
 

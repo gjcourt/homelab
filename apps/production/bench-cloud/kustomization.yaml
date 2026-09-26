@@ -9,6 +9,8 @@ resources:
   # CI — fails. That failure is the intended gate.
   - secret-github-app.yaml
   - secret-hestia-ssh.yaml
+  # Task Jobs only (never the console) — see the template.
+  - secret-claude-token.yaml
 
 labels:
   - pairs:

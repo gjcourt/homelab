@@ -99,6 +99,12 @@ On TrueNAS (UI, as it's the source of truth for users/datasets):
 4. Fill `apps/production/bench-cloud/secret-hestia-ssh.yaml` from its `.example`
    and `sops -e -i` it.
 
+### 3b. Task token (for phase 2 task Jobs)
+
+Fill `apps/production/bench-cloud/secret-claude-token.yaml` from its `.example`
+(the `claude setup-token` token) and `sops -e -i` it. Task Jobs only — the
+console must never see it.
+
 ### 3a. Image visibility
 
 Done — `ghcr.io/gjcourt/bench-cloud` published **public** on its first build

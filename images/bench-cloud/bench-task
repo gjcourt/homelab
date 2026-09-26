@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# bench-task — run ONE Claude Code task against ONE repo, unattended.
+# Started by a bench-cloud task Job (scripts/bench-cloud/job.yaml).
+#
+# Env (set by the Job):
+#   TASK_ID      unique id, also the Job name        e.g. bt-20260926-1a2b3c
+#   TASK_REPO    owner/name to clone                 e.g. gjcourt/llmux
+#   TASK_PROMPT  the task, verbatim
+#   TASK_MODEL   optional model override (default: Claude Code's default)
+#   CLAUDE_CODE_OAUTH_TOKEN  inference-only subscription token (setup-token)
+#
+# Output: the record — prompt, Claude's JSON result (incl. usage), stderr, and
+# the session transcript — is rsynced to hestia-inbox:runs/$TASK_ID/ on EXIT,
+# so it survives failures and the pod. A one-line summary also goes to stdout
+# for `kubectl logs`.
+set -euo pipefail
+: "${TASK_ID:?}" "${TASK_REPO:?}" "${TASK_PROMPT:?}"
+
+# SIGTERM (activeDeadlineSeconds, `bench-cloud rm`) reaches only this script,
+# PID 1. Untrapped, bash runs the EXIT trap at once with $? = 0 — recording a
+# killed task as exit 0 — while claude, never signalled, is still writing.
+# Exit 143 here; the claude phase below replaces this with a trap that
+# forwards the signal and waits for claude to finish first.
+trap 'exit 143' TERM INT
+
+stage=$(mktemp -d)
+out="$stage/runs/$TASK_ID"
+mkdir -p "$out"
+printf '%s\n' "$TASK_PROMPT" > "$out/prompt.txt"
+jq -n --arg id "$TASK_ID" --arg repo "$TASK_REPO" --arg started "$(date -u +%FT%TZ)" \
+  '{id: $id, repo: $repo, started: $started}' > "$out/meta.json"
+
+# shellcheck disable=SC2329  # invoked via `trap finish EXIT`
+finish() {
+  rc=$?
+  # (`end` is a jq keyword, hence $fin.)
+  jq --arg rc "$rc" --arg fin "$(date -u +%FT%TZ)" '. + {exit: ($rc|tonumber), finished: $fin}' \
+    "$out/meta.json" > "$out/meta.json.tmp" && mv "$out/meta.json.tmp" "$out/meta.json" || true
+  # Session transcripts live under ~/.claude/projects/<encoded cwd>/.
+  [[ -d "$HOME/.claude/projects" ]] && cp -r "$HOME/.claude/projects" "$out/transcripts" 2>/dev/null || true
+  # `rsync <stage>/runs hestia-inbox:` creates runs/ and runs/$TASK_ID/ under
+  # the rrsync root without needing --mkpath (which rrsync may not allow).
+  if rsync -a "$stage/runs" hestia-inbox: ; then
+    echo "record: hestia:/mnt/main/agent-inbox/runs/$TASK_ID/"
+  else
+    # A task whose record is lost shouldn't look like a clean success: fail the
+    # Job (exit 3) so it shows up in `bench-cloud ls` and KubeJobFailed.
+    echo "ERROR: upload to hestia failed; the record is lost with this pod" >&2
+    [[ $rc -eq 0 ]] && rc=3
+  fi
+  exit "$rc"
+}
+trap finish EXIT
+
+cd "$WORKSPACE"
+git clone -q "https://github.com/$TASK_REPO" repo
+cd repo
+
+# The prompt goes in on stdin, not argv: a prompt that starts with "-" would
+# otherwise be parsed as an option.
+args=(-p
+  --output-format json
+  # Unattended: edits and the listed tools run without prompting. The managed
+  # deny list (/etc/claude-code/managed-settings.json) still applies, and the
+  # GitHub ruleset is the real stop on merging. bypassPermissions is disabled.
+  --permission-mode acceptEdits
+  # Anything that would still prompt is denied (it would be anyway with no
+  # host), and Claude is told nobody can approve it, so it doesn't retry.
+  --permission-prompts none
+  --allowedTools "Bash" "Read" "Edit" "Write" "Glob" "Grep" "WebFetch" "WebSearch" "TodoWrite"
+  --append-system-prompt "You are running unattended as bench-cloud task $TASK_ID in a fresh clone of $TASK_REPO. Nobody can answer questions mid-task. Deliver your work as a pull request from a new branch, and end with a short summary that includes the PR URL, or says plainly why there is no PR."
+  --name "$TASK_ID")
+[[ -n "${TASK_MODEL:-}" ]] && args+=(--model "$TASK_MODEL")
+
+# In the background so a SIGTERM can be forwarded: claude then ends the run
+# (exit 143) and the EXIT trap still uploads whatever record exists.
+set +e
+claude "${args[@]}" < "$out/prompt.txt" > "$out/result.json" 2> "$out/stderr.log" &
+cpid=$!
+trap 'kill -TERM "$cpid" 2>/dev/null' TERM INT
+wait "$cpid"; crc=$?
+# A trapped signal interrupts `wait` early; keep waiting for claude to exit.
+while kill -0 "$cpid" 2>/dev/null; do wait "$cpid"; crc=$?; done
+set -e
+
+# `[[ -s ]]`: jq exits 0 on an empty file, which would skip the fallback.
+if [[ -s "$out/result.json" ]] && jq -e -r --arg id "$TASK_ID" \
+    '"\($id): is_error=\(.is_error) turns=\(.num_turns) duration=\((.duration_ms // 0) / 1000 | floor)s\n\(.result // "")"' \
+    "$out/result.json" 2>/dev/null; then :; else
+  echo "$TASK_ID: no JSON result (claude exit $crc)"
+  tail -20 "$out/stderr.log" >&2 || true
+fi
+exit "$crc"

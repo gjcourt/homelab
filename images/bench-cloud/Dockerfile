@@ -47,12 +47,13 @@ RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" && npm cac
 COPY github-app-token /usr/local/bin/github-app-token
 COPY gh-wrapper /usr/local/bin/gh
 COPY entrypoint.sh /usr/local/bin/bench-entrypoint
+COPY bench-task /usr/local/bin/bench-task
 # Managed (system-level) Claude Code policy: the house rules and the deny list.
 # Users cannot override managed settings, including the agent itself.
 COPY managed-settings.json /etc/claude-code/managed-settings.json
 COPY CLAUDE.md /etc/claude-code/CLAUDE.md
 # The trailing version checks fail the BUILD, not the first task, if a tool is missing.
-RUN chmod 0755 /usr/local/bin/github-app-token /usr/local/bin/gh /usr/local/bin/bench-entrypoint \
+RUN chmod 0755 /usr/local/bin/github-app-token /usr/local/bin/gh /usr/local/bin/bench-entrypoint /usr/local/bin/bench-task \
  && git config --system credential.https://github.com.helper '!/usr/local/bin/github-app-token --git-credential' \
  && git config --system init.defaultBranch main \
  && go version && kubectl version --client=true && /usr/local/lib/gh/gh --version \

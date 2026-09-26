@@ -9,6 +9,7 @@
 - [audiobookshelf](base/audiobookshelf/)
 - [authelia](base/authelia/)
 - [burntbytes](base/burntbytes/)
+- [cadence](base/cadence/)
 - [changes](base/changes/)
 - [excalidraw](base/excalidraw/)
 - [finance-dashboard](base/finance-dashboard/)

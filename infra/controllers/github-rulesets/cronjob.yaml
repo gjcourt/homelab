@@ -1,0 +1,86 @@
+# Keeps the `default-branch-guard` ruleset on every gjcourt repo — including
+# repos created after the first --apply, which the bench-cloud GitHub App
+# ("All repositories") can reach immediately. Without this, a new repo is one
+# the App could merge on until someone remembers to rerun the script.
+#
+# Runs scripts/github-rulesets.sh from master (fetched at run time, so there is
+# one copy of the logic): --apply, then --check, which re-reads every ruleset and
+# fails unless GitHub says George can still bypass it. Any FAIL exits non-zero,
+# the Job fails, and KubeJobFailed pages.
+#
+# SUSPENDED until George has trialled the ruleset on one repo
+# (`scripts/github-rulesets.sh --apply --repo <scratch>`, runbook step 2) and
+# run the first full --apply by hand. Unsuspend in a follow-up PR.
+#
+# Token: George's RENOVATE_TOKEN (the same one renovate-automerge merges with).
+# Writing rulesets needs admin on each repo — classic `repo` scope, or
+# fine-grained Administration: write. If the token lacks it, the first run
+# fails with 403s and says so.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: github-rulesets
+  namespace: renovate
+spec:
+  suspend: true
+  schedule: "17 5 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # Keep a failed Job around until the next run so KubeJobFailed stays
+      # visible for the day, rather than self-clearing after an hour.
+      ttlSecondsAfterFinished: 82800
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: rulesets
+              # Reuses the bench-cloud image for gh/jq/git; no App config here,
+              # so its gh wrapper falls through to GH_TOKEN.
+              image: ghcr.io/gjcourt/bench-cloud:2026-09-26-129c30d
+              command:
+                - bash
+                - -euo
+                - pipefail
+                - -c
+                - |
+                  git clone -q --depth 1 https://github.com/gjcourt/homelab /tmp/homelab
+                  git -C /tmp/homelab log -1 --format='script @ %h %s'
+                  /tmp/homelab/scripts/github-rulesets.sh --apply
+                  /tmp/homelab/scripts/github-rulesets.sh --check
+              env:
+                - name: HOME
+                  value: /tmp
+                # The image's entrypoint mkdirs $WORKSPACE (default
+                # /home/node/work), which fails on a read-only root FS and kills
+                # the Job before the script runs. Point it at the emptyDir.
+                - name: WORKSPACE
+                  value: /tmp/work
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: secret-renovate-container-env
+                      key: RENOVATE_TOKEN
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 500m, memory: 256Mi}
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi

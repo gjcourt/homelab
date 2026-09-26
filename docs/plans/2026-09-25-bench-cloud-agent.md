@@ -64,7 +64,7 @@ through llmux (llmux gateway plan, phase 2).
 | Capability | Mechanism | Boundary |
 |---|---|---|
 | Claude | Task Jobs: `claude setup-token` token as `CLAUDE_CODE_OAUTH_TOKEN` from a SOPS secret (verified 2026-09-26). Console: an interactive `claude auth login` kept on its PVC | Jobs get an inference-only token: no refresh races, and no Remote Control. The full-scope login lives in one pod only |
-| Code | GitHub fine-grained PAT, all repos: **Contents RW, Pull requests RW, Issues RW**; no Administration, **no Workflows** | Can push branches and open PRs. **Can't merge** — branch protection. **Can't change CI**, so it can't widen its own permissions. |
+| Code | A **GitHub App** (`bench-cloud`) installed on all of George's repos: **Contents RW, Pull requests RW, Issues RW, Actions R, Commit statuses R**; no Administration, **no Workflows**. Installation tokens (1 h) minted in-pod from the app key | Acts as `bench-cloud[bot]`, not as George. A **default-branch ruleset with George as the only bypass actor** means it can push branches and open PRs but **can't merge or push the default branch**. **Can't change CI**, so it can't widen its own permissions. |
 | Tests | Toolchains in the image (Go, Node, Python, make, gcc) | No container builds in v1 (needs privileges); images still build in CI |
 | Internet | Egress 80/443 to `world` | No inbound; no Gateway route |
 | hestia | SSH as a new **`bench-agent`** user, key restricted with `rrsync`: RW under `agent-inbox`, RO media | Not `truenas_admin`; no sudo; no shell; no other datasets |
@@ -96,9 +96,11 @@ Code's version is pinned and bumped by Renovate.
   assuming ordinary, individual use. The cap is a single number to lower; phase 2
   records per-task usage from Claude Code's JSON output so the actual burn is
   visible.
-- **An agent with push rights.** Branch protection and the no-Workflows token are
-  what make "push anything to a branch" safe. If a repo lacks branch protection,
-  the agent can push to its default branch — phase 1 audits every repo.
+- **An agent with push rights.** A personal token would act *as George*, and
+  George merges his own PRs without review — so branch protection could not stop
+  the agent merging its own work. Hence a separate App identity plus a ruleset it
+  can't bypass. A repo missing the ruleset is a repo the agent can push `master`
+  on — phase 1 applies it everywhere by script and CI-checks for drift.
 - **hestia exposure.** The `bench-agent` user is new attack surface on the NAS.
   `rrsync` plus a dataset of its own keep a mistake inside `agent-inbox`.
 
@@ -107,7 +109,7 @@ Code's version is pinned and bumped by Renovate.
 1. **Foundations.** Image and its workflow (new repo); `bench-cloud` namespace,
    netpol, quota, `view` binding; the console pod; secrets (operator); hestia
    `bench-agent` user and `agent-inbox` dataset (TrueNAS, operator-assisted);
-   branch-protection audit across all repos. Verify: `claude auth login` inside
+   the GitHub App and the default-branch ruleset on every repo. Verify: `claude auth login` inside
    the console pod and Remote Control from it. **Exit:** from the console, Claude
    Code clones a repo, runs its tests, opens a PR, and rsyncs a file to
    `agent-inbox`.

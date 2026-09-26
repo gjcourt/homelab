@@ -10,7 +10,7 @@
 # his token, e.g. renovate-automerge). The App is not an admin, so it can push
 # branches and open PRs but cannot merge or push the default branch.
 #
-# Plan: docs/plans/2026-09-25-bench-cloud-agent.md. Runbook:
+# Plan: docs/plans/2026-09-25-bench-cloud-agent.md. Runbook (forthcoming):
 # docs/operations/apps/bench-cloud.md.
 #
 #   scripts/github-rulesets.sh            # dry run: report what would change
@@ -49,15 +49,41 @@ BODY=$(cat <<'JSON'
 JSON
 )
 
+errf=$(mktemp); trap 'rm -f "$errf"' EXIT
+
+# Compare what matters: target, enforcement, conditions, every rule *with* its
+# parameters, and the bypass list. jq -S below sorts object keys, so field order
+# in the API response doesn't matter.
+NORM='{t: .target, e: .enforcement, c: .conditions,
+       r: ([.rules[] | {type, parameters: (.parameters // null)}] | sort_by(.type)),
+       b: ([.bypass_actors[]? | {actor_id, actor_type, bypass_mode}] | sort_by(.actor_type, .actor_id))}'
+want=$(jq -cS "$NORM" <<<"$BODY")
+
+# Fetch the repo list up front: a failure inside `done < <(...)` would be
+# invisible and yield zero repos, i.e. a false-green --check.
+repos=$(gh repo list "$OWNER" --limit 500 --no-archived --json name --jq '.[].name' | sort) || {
+  echo "FATAL: could not list $OWNER repos" >&2; exit 1; }
+nrepos=$(grep -c . <<<"$repos" || true)
+if [[ $nrepos -eq 0 ]]; then echo "FATAL: $OWNER has no repos listed" >&2; exit 1; fi
+if [[ $nrepos -ge 500 ]]; then echo "FATAL: hit the 500-repo list limit; raise --limit" >&2; exit 1; fi
+
 ok=0 changed=0 missing=0 failed=0
 while IFS= read -r repo; do
-  existing=$(gh api "repos/$OWNER/$repo/rulesets" --jq ".[] | select(.name == \"$NAME\") | .id" 2>&1) || {
-    echo "FAIL    $repo  (list rulesets: ${existing//$'\n'/ })"; failed=$((failed + 1)); continue; }
+  existing=$(gh api "repos/$OWNER/$repo/rulesets?per_page=100" \
+      --jq ".[] | select(.name == \"$NAME\") | .id" 2>"$errf") || {
+    echo "FAIL    $repo  (list rulesets: $(tr '\n' ' ' <"$errf"))"; failed=$((failed + 1)); continue; }
   if [[ -n "$existing" ]]; then
-    current=$(gh api "repos/$OWNER/$repo/rulesets/$existing" \
-      --jq '{e: .enforcement, c: .conditions, r: ([.rules[] | .type] | sort), b: .bypass_actors}')
-    want=$(jq -c '{e: .enforcement, c: .conditions, r: ([.rules[] | .type] | sort), b: .bypass_actors}' <<<"$BODY")
-    if [[ "$(jq -cS . <<<"$current")" == "$(jq -cS . <<<"$want")" ]]; then
+    live=$(gh api "repos/$OWNER/$repo/rulesets/$existing" 2>"$errf") || {
+      echo "FAIL    $repo  (get ruleset $existing: $(tr '\n' ' ' <"$errf"))"; failed=$((failed + 1)); continue; }
+    if [[ "$(jq -cS "$NORM" <<<"$live")" == "$want" ]]; then
+      # The Admin-role bypass (actor_id 5) is undocumented; this is GitHub's own
+      # answer to "can the caller (George) bypass it?". If not, his merges and
+      # renovate-automerge (his PAT) would be blocked too.
+      can=$(jq -r '.current_user_can_bypass // "unknown"' <<<"$live")
+      if [[ "$can" != always ]]; then
+        echo "FAIL    $repo  (ruleset matches, but current_user_can_bypass=$can, want always)"
+        failed=$((failed + 1)); continue
+      fi
       echo "ok      $repo"; ok=$((ok + 1)); continue
     fi
     verb=update; method=PUT; path="repos/$OWNER/$repo/rulesets/$existing"
@@ -71,10 +97,16 @@ while IFS= read -r repo; do
       if out=$(gh api -X "$method" "$path" --input - <<<"$BODY" 2>&1); then
         echo "${verb}d $repo"; changed=$((changed + 1))
       else
-        echo "FAIL    $repo  ($verb: ${out//$'\n'/ })"; failed=$((failed + 1))
+        hint=""
+        # Personal-account rulesets on private repos need GitHub Pro; on a plan
+        # without it GitHub's 403 asks to upgrade or make the repo public.
+        if grep -qi "upgrade to github pro\|make this repository public" <<<"$out"; then
+          hint="PLAN: private-repo rulesets need GitHub Pro — remove this repo from the App installation; "
+        fi
+        echo "FAIL    $repo  ($verb: $hint${out//$'\n'/ })"; failed=$((failed + 1))
       fi ;;
   esac
-done < <(gh repo list "$OWNER" --limit 500 --no-archived --json name --jq '.[].name' | sort)
+done <<<"$repos"
 
 echo "---"
 echo "mode=$MODE ok=$ok needs-change=$missing changed=$changed failed=$failed"

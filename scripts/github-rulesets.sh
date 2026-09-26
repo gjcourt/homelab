@@ -17,6 +17,9 @@
 #   scripts/github-rulesets.sh --apply    # create/update the ruleset everywhere
 #   scripts/github-rulesets.sh --check    # exit 1 if any repo lacks it (drift)
 #
+# Run --check after --apply: only the check reads back each ruleset and asks
+# GitHub whether the caller can bypass it (current_user_can_bypass).
+#
 # Needs `gh` authenticated as George (admin on every repo). Idempotent.
 set -euo pipefail
 

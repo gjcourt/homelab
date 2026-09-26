@@ -1,7 +1,7 @@
 ---
 status: planned
 last_modified: 2026-09-26
-summary: "bench-cloud: up to 5 parallel Claude Code agents in the cluster on George's subscription — write/push code, run tests, reach the internet, move bits to hestia"
+summary: "bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia"
 ---
 
 # bench-cloud — a private cloud coding agent
@@ -47,7 +47,8 @@ through llmux (llmux gateway plan, phase 2).
 - **Tasks are Kubernetes Jobs.** One task, one pod, one fresh `git clone`, running
   `claude -p "<task>"`. Fresh checkouts mean parallel agents never share a working tree.
 - **The cap is enforced by the platform**, not by convention: a `ResourceQuota`
-  of 5 task pods (plus one console pod). A 6th task waits in the Job queue. Raising
+  scoped to the task pods' PriorityClass caps them at 5; the console pod sits
+  outside that scope. A 6th task waits in the Job queue. Raising
   it is a one-line change, up to the agreed ceiling of 10.
 - **One console pod** (`tmux` + Claude Code) for hands-on sessions: attach from the
   Mac, detach, come back later. Remote Control (phone / claude.ai) needs a
@@ -79,7 +80,7 @@ through llmux (llmux gateway plan, phase 2).
 - The agent's `CLAUDE.md` carries George's rules: branch + PR only, never push the
   default branch, never bypass branch protection, SOPS is operator-only. Claude
   Code's permission settings also deny `gh pr merge` and pushes to `main`/`master`
-  — belt and braces behind branch protection.
+  — belt and braces behind the ruleset.
 - Every secret is operator-created and SOPS-encrypted. Each is revocable on its own.
 - Transcripts on hestia are the audit trail.
 
@@ -109,8 +110,8 @@ Code's version is pinned and bumped by Renovate.
 1. **Foundations.** Image and its workflow (new repo); `bench-cloud` namespace,
    netpol, quota, `view` binding; the console pod; secrets (operator); hestia
    `bench-agent` user and `agent-inbox` dataset (TrueNAS, operator-assisted);
-   the GitHub App and the default-branch ruleset on every repo. Verify: `claude auth login` inside
-   the console pod and Remote Control from it. **Exit:** from the console, Claude
+   the GitHub App and the default-branch ruleset on every repo. Verify:
+   `claude auth login` inside the console pod and Remote Control from it. **Exit:** from the console, Claude
    Code clones a repo, runs its tests, opens a PR, and rsyncs a file to
    `agent-inbox`.
 2. **Task runner.** The Job template, `bench-cloud run`, the transcript upload,

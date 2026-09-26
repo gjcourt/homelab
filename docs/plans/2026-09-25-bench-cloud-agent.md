@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-09-25
+last_modified: 2026-09-26
 summary: "bench-cloud: up to 5 parallel Claude Code agents in the cluster on George's subscription — write/push code, run tests, reach the internet, move bits to hestia"
 ---
 
@@ -50,8 +50,9 @@ through llmux (llmux gateway plan, phase 2).
   of 5 task pods (plus one console pod). A 6th task waits in the Job queue. Raising
   it is a one-line change, up to the agreed ceiling of 10.
 - **One console pod** (`tmux` + Claude Code) for hands-on sessions: attach from the
-  Mac, detach, come back later. Remote Control from the phone if it works headless
-  (verify in phase 1).
+  Mac, detach, come back later. Remote Control (phone / claude.ai) needs a
+  full-scope `claude auth login` session, so only the console gets one — see
+  *Test results*.
 - **Submitting a task** from the Mac: a small `bench-cloud run --repo <repo> "<task>"`
   wrapper that creates a Job from a template. Later: a GitHub label trigger.
 - **Results** come back as PRs. Each Job's transcript and summary are rsynced to
@@ -62,7 +63,7 @@ through llmux (llmux gateway plan, phase 2).
 
 | Capability | Mechanism | Boundary |
 |---|---|---|
-| Claude | Claude Code, George's subscription via a long-lived token (`claude setup-token` — verify the headless flow in phase 1) in a SOPS secret | One shared credential; no interactive refresh races across pods |
+| Claude | Task Jobs: `claude setup-token` token as `CLAUDE_CODE_OAUTH_TOKEN` from a SOPS secret (verified 2026-09-26). Console: an interactive `claude auth login` kept on its PVC | Jobs get an inference-only token: no refresh races, and no Remote Control. The full-scope login lives in one pod only |
 | Code | GitHub fine-grained PAT, all repos: **Contents RW, Pull requests RW, Issues RW**; no Administration, **no Workflows** | Can push branches and open PRs. **Can't merge** — branch protection. **Can't change CI**, so it can't widen its own permissions. |
 | Tests | Toolchains in the image (Go, Node, Python, make, gcc) | No container builds in v1 (needs privileges); images still build in CI |
 | Internet | Egress 80/443 to `world` | No inbound; no Gateway route |
@@ -106,8 +107,8 @@ Code's version is pinned and bumped by Renovate.
 1. **Foundations.** Image and its workflow (new repo); `bench-cloud` namespace,
    netpol, quota, `view` binding; the console pod; secrets (operator); hestia
    `bench-agent` user and `agent-inbox` dataset (TrueNAS, operator-assisted);
-   branch-protection audit across all repos. Verify: the headless auth flow and
-   whether Remote Control works from the pod. **Exit:** from the console, Claude
+   branch-protection audit across all repos. Verify: `claude auth login` inside
+   the console pod and Remote Control from it. **Exit:** from the console, Claude
    Code clones a repo, runs its tests, opens a PR, and rsyncs a file to
    `agent-inbox`.
 2. **Task runner.** The Job template, `bench-cloud run`, the transcript upload,
@@ -116,10 +117,22 @@ Code's version is pinned and bumped by Renovate.
 3. **Triggers and visibility.** A GitHub label trigger (issue labelled `bench` →
    Job); a Grafana panel for running tasks, outcomes and usage.
 
+## Test results (2026-09-26, throwaway `bench-cloud-test` namespace)
+
+A restricted-PSA, non-root pod (`node:22-bookworm`, Claude Code 2.1.283) with the
+`setup-token` token in `CLAUDE_CODE_OAUTH_TOKEN`:
+
+- **Headless works.** `claude -p` answered in 1.3 s (default model
+  `claude-sonnet-5`); npm install and the API both reached over plain egress.
+- **Remote Control does not work with that token.** Verbatim: *"Remote Control
+  requires a full-scope login token. Long-lived tokens (from `claude setup-token`
+  or CLAUDE_CODE_OAUTH_TOKEN) are limited to inference-only for security reasons.
+  Run `claude auth login` to use Remote Control."* Hence the split above: the
+  inference-only token for Jobs, a full-scope login for the console only.
+
 ## Open questions (resolved in phase 1)
 
-- The exact headless auth: `claude setup-token` output and the environment
-  variable Claude Code reads it from.
-- Remote Control from a headless pod.
+- Whether `claude auth login` completes from a pod without a browser on the pod,
+  and whether that login survives restarts when kept on a PVC.
 - Storage for workspaces: ephemeral `emptyDir` per Job is the default; the
   console needs a persistent volume.

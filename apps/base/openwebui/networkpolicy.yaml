@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: openwebui
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: "Gateway ingress + kubelet probes; egress to DNS and the Anthropic API over HTTPS."
+  description: "Gateway ingress + kubelet probes; egress to DNS, llmux, and HTTPS."
   endpointSelector:
     matchLabels:
       app: openwebui
@@ -26,6 +26,18 @@ spec:
             - port: "8080"
               protocol: TCP
   egress:
+    # Chat backend: llmux in the paired namespace (llmux-prod / llmux-stage).
+    # The base names the plain `llmux` namespace; each overlay patches it so
+    # prod and stage never cross. Overlays patch /spec/egress/0 — keep this
+    # rule first.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: llmux
+            app: llmux
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
     # DNS resolution via CoreDNS
     - toEndpoints:
         - matchLabels:
@@ -37,8 +49,8 @@ spec:
               protocol: UDP
             - port: "53"
               protocol: TCP
-    # Outbound HTTPS: the Anthropic API (api.anthropic.com), plus Hugging Face
-    # sentence-transformer downloads on first boot. `toEntities: world` is the
+    # Outbound HTTPS: Hugging Face sentence-transformer downloads on first
+    # boot (chat goes through llmux since 2026-09). `toEntities: world` is the
     # convention every other app here uses (authelia, adguard, immich,
     # homeassistant, jellyfin, mealie). The previous `toCIDR: 0.0.0.0/0` was
     # the sole outlier and was never exercised — the only backend at the time

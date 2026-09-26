@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: llmux-prod
+resources:
+  - ../../base/llmux/
+  # SOPS-encrypted by the operator from secret-anthropic.yaml.example
+  # (agents never run sops in this repo). Production ONLY: staging gets no
+  # key — the deployment's secretRef is optional and llmux starts without it.
+  - secret-anthropic.yaml
+
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Namespace
+      name: llmux
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: llmux-prod
+  # Pair llmux-prod with openwebui-prod only; never cross environments.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: llmux
+    patch: |
+      - op: test
+        path: /spec/ingress/0/fromEndpoints/0/matchLabels/k8s:io.kubernetes.pod.namespace
+        value: openwebui
+      - op: replace
+        path: /spec/ingress/0/fromEndpoints/0/matchLabels/k8s:io.kubernetes.pod.namespace
+        value: openwebui-prod
+  # Production requires llmux client keys (LLMUX_CLIENT_KEYS, in
+  # secret-anthropic.yaml): llmux refuses to start without them rather than
+  # serve unauthenticated. Staging has no keys and stays open (anonymous).
+  - target:
+      kind: ConfigMap
+      name: llmux-env
+    patch: |
+      - op: add
+        path: /data/LLMUX_REQUIRE_CLIENT_KEYS
+        value: "true"

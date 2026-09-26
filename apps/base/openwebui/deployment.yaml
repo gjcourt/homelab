@@ -20,6 +20,12 @@ spec:
     metadata:
       labels:
         app: openwebui
+      annotations:
+        # Nothing restarts this pod when openwebui-env changes (no Reloader, no
+        # hashed ConfigMap), and env vars are only read at startup — so a
+        # ConfigMap edit alone never takes effect. BUMP THIS VALUE in the same
+        # PR as any configmap.yaml or secret change to roll the pod.
+        homelab.burntbytes.com/config-revision: "2026-09-25-llmux-client-key"
     spec:
       serviceAccountName: openwebui
       automountServiceAccountToken: false
@@ -34,7 +40,7 @@ spec:
           # `exec /usr/bin/bash: exec format error`. Get it with:
           #   podman manifest inspect ghcr.io/open-webui/open-webui:<tag>
           # or the registry's docker-content-digest header.
-          image: ghcr.io/open-webui/open-webui:v0.11.3@sha256:41daa0cf2561a5d4c8d1ff31ee2a98d93ab4d3ac2605cac69366ff6a3374a933
+          image: ghcr.io/open-webui/open-webui:v0.11.4@sha256:9591b13f13843c7721c2b8eaf7382846c81b3ffe126526d1888d1fed50c6a33f
           ports:
             - containerPort: 8080
           envFrom:

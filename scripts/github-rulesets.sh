@@ -79,19 +79,31 @@ JSON
 
 errf=$(mktemp); trap 'rm -f "$errf"' EXIT
 
-# GitHub omits rule parameters that are at their default (measured 2026-09-26:
-# `update` came back with no parameters although it was created with
-# update_allows_fetch_and_merge:false), so false/null parameters are dropped on
-# BOTH sides before comparing — otherwise every --check reports false drift.
+# GitHub does not echo rule parameters back verbatim (measured 2026-09-26/27):
+#   - it OMITS parameters at their default (`update` came back with none,
+#     though created with update_allows_fetch_and_merge:false);
+#   - it ADDS server defaults we never sent (`pull_request` came back with
+#     allowed_merge_methods, required_reviewers and
+#     require_extra_approval_for_unattributed_changes).
+# So compare only the parameters this script MANAGES — the keys in BODY — and
+# treat false/null as absent on both sides. A managed key flipped to a non-
+# default value (e.g. dismiss_stale_reviews_on_push:true) is still drift.
 #
-# Compare what matters: target, enforcement, conditions, every rule *with* its
-# parameters, and the bypass list. jq -S below sorts object keys, so field order
-# in the API response doesn't matter.
+# Compare what matters: target, enforcement, conditions, every rule with its
+# managed parameters, and the bypass list. jq -S sorts object keys, so field
+# order in the API response doesn't matter. $managed maps rule type -> the
+# parameter keys BODY sets for it.
+# shellcheck disable=SC2016  # $managed/$k/$ty are jq variables, not shell
 NORM='{t: .target, e: .enforcement, c: .conditions,
-       r: ([.rules[] | {type, parameters: ((.parameters // {}) | with_entries(select(.value != false and .value != null))
-                                           | if . == {} then null else . end)}] | sort_by(.type)),
+       r: ([.rules[] | .type as $ty
+              | {type, parameters: ((.parameters // {})
+                  | with_entries(select((.key as $k | ($managed[$ty] // []) | index($k)) != null))
+                  | with_entries(select(.value != false and .value != null))
+                  | if . == {} then null else . end)}] | sort_by(.type)),
        b: ([.bypass_actors[]? | {actor_id, actor_type, bypass_mode}] | sort_by(.actor_type, .actor_id))}'
-want=$(jq -cS "$NORM" <<<"$BODY")
+managed=$(jq -c '[.rules[] | {key: .type, value: ((.parameters // {}) | keys)}] | from_entries' <<<"$BODY")
+norm() { jq -cS --argjson managed "$managed" "$NORM"; }
+want=$(norm <<<"$BODY")
 
 # Fetch the repo list up front: a failure inside `done < <(...)` would be
 # invisible and yield zero repos, i.e. a false-green --check.
@@ -118,7 +130,7 @@ while IFS= read -r repo; do
   if [[ -n "$existing" ]]; then
     live=$(gh api "repos/$OWNER/$repo/rulesets/$existing" 2>"$errf") || {
       echo "FAIL    $repo  (get ruleset $existing: $(tr '\n' ' ' <"$errf"))"; failed=$((failed + 1)); continue; }
-    if [[ "$(jq -cS "$NORM" <<<"$live")" == "$want" ]]; then
+    if [[ "$(norm <<<"$live")" == "$want" ]]; then
       # The Admin-role bypass (actor_id 5) is undocumented; this is GitHub's own
       # answer to "can the caller (George) bypass it?". If not, his merges and
       # renovate-automerge (his PAT) would be blocked too.

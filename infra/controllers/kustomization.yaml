@@ -12,6 +12,7 @@ resources:
   - pingo
   - promtail
   - renovate
+  - bench-merge-audit
   - github-rulesets
   - renovate-automerge
   - renovate-review

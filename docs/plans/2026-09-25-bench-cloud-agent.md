@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-09-26
+last_modified: 2026-09-27
 summary: "bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia"
 ---
 
@@ -65,7 +65,7 @@ through llmux (llmux gateway plan, phase 2).
 | Capability | Mechanism | Boundary |
 |---|---|---|
 | Claude | Task Jobs: `claude setup-token` token as `CLAUDE_CODE_OAUTH_TOKEN` from a SOPS secret (verified 2026-09-26). Console: an interactive `claude auth login` kept on its PVC | Jobs get an inference-only token: no refresh races, and no Remote Control. The full-scope login lives in one pod only |
-| Code | A **GitHub App** (`bench-cloud`) installed on all of George's repos: **Contents RW, Pull requests RW, Issues RW, Actions R, Commit statuses R**; no Administration, **no Workflows**. Installation tokens (1 h) minted in-pod from the app key | Acts as `bench-cloud[bot]`, not as George. A **default-branch ruleset with George as the only bypass actor** means it can push branches and open PRs but **can't merge or push the default branch**. **Can't change CI**, so it can't widen its own permissions. |
+| Code | A **GitHub App** (`bench-cloud`) installed on all of George's repos: **Contents RW, Pull requests RW, Issues RW, Actions R, Commit statuses R**; no Administration, **no Workflows**. Installation tokens (1 h) minted in-pod from the app key | Acts as `bench-cloud[bot]`, not as George. A **default-branch ruleset with George as the only bypass actor** means it can push branches and open PRs but **can't push the default branch**. It **can** merge its own PR (option 2, 2026-09-27: a merge block would also block George's merges); policy says it never does, and the hourly `bench-merge-audit` CronJob pages (`BenchCloudAppMerged`) within ~70 min if it does. **Can't change CI**, so it can't widen its own permissions. |
 | Tests | Toolchains in the image (Go, Node, Python, make, gcc) | No container builds in v1 (needs privileges); images still build in CI |
 | Internet | Egress 80/443 to `world` | No inbound; no Gateway route |
 | hestia | SSH as a new **`bench-agent`** user, key restricted with `rrsync`: RW under `agent-inbox`, RO media | Not `truenas_admin`; no sudo; no shell; no other datasets |
@@ -102,6 +102,12 @@ Code's version is pinned and bumped by Renovate.
   the agent merging its own work. Hence a separate App identity plus a ruleset it
   can't bypass. A repo missing the ruleset is a repo the agent can push `master`
   on — phase 1 applies it everywhere by script and CI-checks for drift.
+- **The merge audit runs from homelab `master`.** `bench-merge-audit` clones its
+  script from `master` at run time, and Flux deploys its CronJob from `master`.
+  Under option 2 the App can merge its own homelab PR, so one merge that edits the
+  audit disables it before the next run can report that merge. The audit catches
+  a mistake, not an agent working around it; closing that needs a control outside
+  homelab `master`.
 - **hestia exposure.** The `bench-agent` user is new attack surface on the NAS.
   `rrsync` plus a dataset of its own keep a mistake inside `agent-inbox`.
 

@@ -99,6 +99,13 @@ spec:
           expr: max(kube_cronjob_status_last_successful_time{namespace="renovate", cronjob="github-rulesets"})
           labels:
             job: github-rulesets
+        # Hourly. BenchCloudAppMerged covers runs that FAIL; this covers the
+        # CronJob not running at all (suspended, never scheduled), which that
+        # alert cannot see — its series just stops moving.
+        - record: homelabscope_job_last_success_seconds
+          expr: max(kube_cronjob_status_last_successful_time{namespace="renovate", cronjob="bench-merge-audit"})
+          labels:
+            job: bench-merge-audit
 
         # Per-CronJob staleness budgets. vector(N) yields a single unlabeled
         # sample; `labels:` stamps the job. Kept alongside the last-success
@@ -110,6 +117,9 @@ spec:
         #   daily jobs (renovate,          → 30h  = 108000
         #     immich-photos-30d-sync,
         #     github-rulesets)
+        #   bench-merge-audit (hourly)     → 30h  = 108000 — a real merge
+        #     fails every run for its 25h lookback; the budget must outlast
+        #     that or a merge pages twice.
         - record: homelabscope_job_max_age_seconds
           expr: vector(1200)
           labels:
@@ -138,6 +148,10 @@ spec:
           expr: vector(108000)
           labels:
             job: github-rulesets
+        - record: homelabscope_job_max_age_seconds
+          expr: vector(108000)
+          labels:
+            job: bench-merge-audit
 
     # -----------------------------------------------------------------------
     # Alerts: one templated pair over the whole family.

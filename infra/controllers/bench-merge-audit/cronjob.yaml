@@ -1,0 +1,95 @@
+# Detects PRs merged by the bench-cloud GitHub App (scripts/bench-cloud/merge-audit.sh).
+#
+# Why this exists: the default-branch-guard ruleset (option 2, George
+# 2026-09-27) stops the App pushing to a default branch but NOT merging its own
+# PR — a merge block would also block George's own merges. The agent's policy
+# says never merge; this makes a violation visible within the hour. On homelab a
+# merge deploys via Flux, so the response is: revert the PR, then find out why.
+#
+# Hourly, 25h lookback: a merge keeps every run failing — and BenchCloudAppMerged
+# (critical) firing continuously — for ~a day, then it ages out and the next
+# clean run clears the alert. Staleness (the CronJob silently not running) is
+# HomelabscopeJobStale's job — see infra/configs/homelabscope/.
+#
+# Runs the script from master at run time, like infra/controllers/github-rulesets
+# — but that job's argument ("master is guarded, so the App cannot change what
+# runs here") does NOT carry over. Under option 2 the App can merge its own
+# homelab PR, and one merge that edits this script or this CronJob disables the
+# audit before the next run could report that merge. This detects a policy
+# slip, not an agent working around it. See the Risks section of
+# docs/plans/2026-09-25-bench-cloud-agent.md.
+#
+# Token: George's RENOVATE_TOKEN (search/read across private repos). It carries
+# more than this read-only job needs (github-rulesets writes rulesets with it);
+# a dedicated read-only token would be tighter.
+#
+# Expect a second, lower-grade signal: the chart's KubeJobFailed (warning,
+# +alerts@) fires per failed Job, and each hourly run is a new Job name, so a
+# merge also produces roughly one warning email an hour for its 25h window.
+# The gh wrapper in the image only mints an App token when GITHUB_APP_ID is set;
+# it isn't here, so gh uses GH_TOKEN.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bench-merge-audit
+  namespace: renovate
+spec:
+  schedule: "7 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 900
+      # BenchCloudAppMerged reads the CronJob's last-schedule vs last-success
+      # times, not the Job objects, so this TTL does not drive the alert. It is
+      # longer than the schedule so a failed Job's log is always readable while
+      # the alert fires (failedJobsHistoryLimit: 1 drops the older failed Job
+      # when the next one fails), and short enough that the chart's
+      # KubeJobFailed (warning) clears ~90m after the first clean run.
+      ttlSecondsAfterFinished: 5400
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: audit
+              image: ghcr.io/gjcourt/bench-cloud:2026-09-26-6ced067
+              command:
+                - bash
+                - -euo
+                - pipefail
+                - -c
+                - |
+                  git clone -q --depth 1 https://github.com/gjcourt/homelab /tmp/homelab
+                  git -C /tmp/homelab log -1 --format='script @ %h %s'
+                  /tmp/homelab/scripts/bench-cloud/merge-audit.sh --since 25h
+              env:
+                # gh writes state under $HOME; root FS is read-only.
+                - name: HOME
+                  value: /tmp
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: secret-renovate-container-env
+                      key: RENOVATE_TOKEN
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 500m, memory: 256Mi}
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi

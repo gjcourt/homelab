@@ -65,11 +65,17 @@ JSON
 
 errf=$(mktemp); trap 'rm -f "$errf"' EXIT
 
+# GitHub omits rule parameters that are at their default (measured 2026-09-26:
+# `update` came back with no parameters although it was created with
+# update_allows_fetch_and_merge:false), so false/null parameters are dropped on
+# BOTH sides before comparing — otherwise every --check reports false drift.
+#
 # Compare what matters: target, enforcement, conditions, every rule *with* its
 # parameters, and the bypass list. jq -S below sorts object keys, so field order
 # in the API response doesn't matter.
 NORM='{t: .target, e: .enforcement, c: .conditions,
-       r: ([.rules[] | {type, parameters: (.parameters // null)}] | sort_by(.type)),
+       r: ([.rules[] | {type, parameters: ((.parameters // {}) | with_entries(select(.value != false and .value != null))
+                                           | if . == {} then null else . end)}] | sort_by(.type)),
        b: ([.bypass_actors[]? | {actor_id, actor_type, bypass_mode}] | sort_by(.actor_type, .actor_id))}'
 want=$(jq -cS "$NORM" <<<"$BODY")
 

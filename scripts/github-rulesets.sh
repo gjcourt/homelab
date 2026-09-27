@@ -1,14 +1,23 @@
 #!/usr/bin/env bash
 # Ensure every gjcourt repo has the `default-branch-guard` ruleset.
 #
-# Why: bench-cloud agents act as the `bench-cloud` GitHub App with Contents +
-# Pull requests write. Branch protection here doesn't bind a PR's author once
-# checks pass (no required approvals, enforce_admins off), so on its own it
-# would let the App merge its own PRs. This ruleset restricts updates, deletion
-# and force-pushes on the DEFAULT branch to bypass actors only — and the only
-# bypass actor is the repository Admin role (George, and anything acting with
-# his token, e.g. renovate-automerge). The App is not an admin, so it can push
-# branches and open PRs but cannot merge or push the default branch.
+# What it enforces, for EVERYONE on each repo's DEFAULT branch: changes arrive
+# via a pull request (0 approvals required), the branch can't be deleted, and
+# it can't be force-pushed. None of that gets in the way of George's normal
+# PR-and-merge workflow, so his merges are not rule bypasses.
+#
+# What it does NOT do: stop the bench-cloud GitHub App merging its own PR. The
+# 2026-09-26 trial proved a `restrict updates` rule would — but it also blocks
+# George's own `gh pr merge` unless he uses `--admin`, which his standing rules
+# forbid. Rulesets can only exempt actors, not target one, so any rule that
+# stops the App stops George too. Decision (George, 2026-09-27, "option 2"):
+# no merge block. The App not merging is the agent's policy (managed CLAUDE.md
+# + deny list), and a merge by bench-cloud[bot] is detected and reverted. What
+# the ruleset DOES guarantee is that every App change to a default branch is a
+# visible PR merge — never a direct or force push.
+#
+# The only bypass actor is the repository Admin role (George, and anything
+# acting with his token, e.g. renovate-automerge).
 #
 # Plan: docs/plans/2026-09-25-bench-cloud-agent.md. Runbook:
 # docs/operations/apps/bench-cloud.md (lands with homelab#1483). Scheduled by
@@ -52,7 +61,12 @@ BODY=$(cat <<'JSON'
   "enforcement": "active",
   "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
   "rules": [
-    {"type": "update", "parameters": {"update_allows_fetch_and_merge": false}},
+    {"type": "pull_request", "parameters": {
+      "required_approving_review_count": 0,
+      "dismiss_stale_reviews_on_push": false,
+      "require_code_owner_review": false,
+      "require_last_push_approval": false,
+      "required_review_thread_resolution": false}},
     {"type": "deletion"},
     {"type": "non_fast_forward"}
   ],

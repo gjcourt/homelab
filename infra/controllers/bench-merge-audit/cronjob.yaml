@@ -9,9 +9,25 @@
 # Hourly, 25h lookback: a merge keeps every run failing — and BenchCloudAppMerged
 # (critical) firing continuously — for ~a day, then it ages out and the next
 # clean run clears the alert. Staleness (the CronJob silently not running) is
-# HomelabscopeJobStale's job — see infra/configs/homelabscope/. Runs the script from master
-# at run time (same pattern and trade-off as infra/controllers/github-rulesets).
-# Read-only; George's RENOVATE_TOKEN for search/read across private repos.
+# HomelabscopeJobStale's job — see infra/configs/homelabscope/.
+#
+# Runs the script from master at run time, like infra/controllers/github-rulesets
+# — but that job's argument ("master is guarded, so the App cannot change what
+# runs here") does NOT carry over. Under option 2 the App can merge its own
+# homelab PR, and one merge that edits this script or this CronJob disables the
+# audit before the next run could report that merge. This detects a policy
+# slip, not an agent working around it. See the Risks section of
+# docs/plans/2026-09-25-bench-cloud-agent.md.
+#
+# Token: George's RENOVATE_TOKEN (search/read across private repos). It carries
+# more than this read-only job needs (github-rulesets writes rulesets with it);
+# a dedicated read-only token would be tighter.
+#
+# Expect a second, lower-grade signal: the chart's KubeJobFailed (warning,
+# +alerts@) fires per failed Job, and each hourly run is a new Job name, so a
+# merge also produces roughly one warning email an hour for its 25h window.
+# The gh wrapper in the image only mints an App token when GITHUB_APP_ID is set;
+# it isn't here, so gh uses GH_TOKEN.
 apiVersion: batch/v1
 kind: CronJob
 metadata:

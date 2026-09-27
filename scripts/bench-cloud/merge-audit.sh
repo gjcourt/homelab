@@ -42,10 +42,10 @@ prs=$(retry gh search prs --owner "$OWNER" --merged --merged-at ">=$since" --lim
 n=$(grep -c . <<<"$prs" || true)
 if [[ $n -ge 1000 ]]; then echo "FATAL: hit the 1000-result search cap; shorten --since" >&2; exit 1; fi
 
-found=0 errors=0 read=0
+found=0 errors=0 seen=0
 while read -r repo num; do
   [[ -n "${repo:-}" ]] || continue
-  read=$((read + 1))
+  seen=$((seen + 1))
   # `// "-"`: tab is IFS whitespace, so an empty field (merged_by null for a
   # deleted account) would collapse and shift author into $by.
   if ! line=$(retry gh api "repos/$repo/pulls/$num" \
@@ -60,6 +60,6 @@ while read -r repo num; do
 done <<<"$prs"
 
 echo "---"
-if [[ $read -ne $n ]]; then echo "ERROR   read $read of $n PRs"; errors=$((errors + 1)); fi
+if [[ $seen -ne $n ]]; then echo "ERROR   read $seen of $n PRs"; errors=$((errors + 1)); fi
 echo "window since $since: merged PRs checked=$n merged-by-$BOT=$found read-errors=$errors"
 [[ $found -eq 0 && $errors -eq 0 ]]

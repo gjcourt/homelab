@@ -14,8 +14,9 @@
 #     ttlSecondsAfterFinished keeps the failed Job (and so the alert) for ~a day.
 #   - HomelabscopeJobStale (severity=critical, +critical@) fires once the
 #     CronJob has gone 30h without a success — see infra/configs/homelabscope/.
-#     It has no series until the first successful run, so it stays silent while
-#     this is suspended.
+#     It has no series until the first successful run, and nothing absent()-
+#     guards it, so a job that fails from its very first run only ever raises
+#     KubeJobFailed, never this.
 #   - activeDeadlineSeconds turns a pod that never finishes (image pull stuck,
 #     GitHub hanging) into a failed Job; otherwise concurrencyPolicy: Forbid
 #     would skip every later run without anything failing.
@@ -28,8 +29,9 @@
 # (master is what the cluster runs), master only moves through reviewed PRs,
 # and master is guarded by the ruleset this job maintains against direct and
 # force pushes. Under option 2 (2026-09-27) the bench-cloud App CAN merge a
-# homelab PR, so an App merge could change what runs here — the same gap as
-# bench-merge-audit, recorded in the bench-cloud plan's Risks and deferred.
+# homelab PR, so an App merge could change what runs here, with George's token.
+# bench-merge-audit has the same gap (the plan's Risks section records it for
+# the audit; closing it needs a control outside homelab master).
 # The log line prints the commit.
 #
 # Enabled 2026-09-27 after the one-repo trial (ruleset-trial-scratch) and

@@ -75,7 +75,6 @@ To verify Vitals is working:
 
   | Alert | Fires when | Severity |
   | :--- | :--- | :--- |
-  | `LitestreamNoRecentUpload` | **nothing** uploaded in 26h (the 24h snapshot should have) | critical |
   | `LitestreamReplicationStalled` | local writes in 30m, **zero** uploads in 30m | critical |
   | `LitestreamReplicationStalledDaily` | same comparison over 24h — covers a database written to only occasionally | critical |
   | `LitestreamMetricsAbsent` | any metric the rules depend on missing for 15m | critical |
@@ -90,11 +89,21 @@ To verify Vitals is working:
   endpoint. Every rule is built from the above.
 
   ⚠️ **The known gap: a broken replica on a completely idle database is not detected until the next
-  write.** An absolute "nothing uploaded in 26h" floor was written and then **rejected on
-  measurement** — an idle replica does not upload at all (staging's PUT counter sat flat for two
-  hours while perfectly healthy), so that rule pages for a working system. Both stalled rules
-  therefore key off local writes, which ties detection to data actually being at risk rather than to
-  elapsed time.
+  write.** An absolute "nothing uploaded in 26h" floor has been shipped **twice** and been wrong both
+  times: an idle replica does not upload at all, **including the 24h snapshot**. Litestream 0.5.17
+  only writes a level-9 snapshot when there is something new since the last one. Staging's replica
+  shows it directly (`litestream ltx -level 9`): snapshots on 09-19 and 09-20 while writes were
+  landing, then none for the next seven days once they stopped. The second attempt,
+  `LitestreamNoRecentUpload`, paged critical from 2026-09-19 to its removal on a replica whose S3
+  `max_txid` matched the local `litestream_txid` exactly. Both stalled rules therefore key off local
+  writes, which ties detection to data actually being at risk rather than to elapsed time. Closing
+  the gap properly needs a synthetic heartbeat write, not a time-only floor.
+
+  **To check an idle replica by hand**, compare the local position with the replica's:
+  `litestream_txid` on `:9090` against `max_txid` from
+  `litestream ltx -config /etc/litestream/litestream.yml -level all /data/vitals.db` in the
+  `litestream` container. Equal means S3 holds everything; the listing also proves the credentials
+  can still read the bucket.
 
   ⚠️ **Severity is routing, not drama.** `warning` goes to `gjcourt+alerts@`, which is filtered out
   of the inbox; an off-site copy that stopped being written is data at risk, so those rules are
@@ -113,7 +122,7 @@ continuously to S3.
 | Staging | `s3://gjcourt-homelab-backup/staging/vitals-sqlite` |
 | Region | `us-east-2` |
 | Sync interval | 10s |
-| Snapshot / retention | every 24h, kept **30d production / 14d staging** — matching the CNPG scheme this replaced. Litestream's own defaults are 24h/24h, and retention deletes snapshots *and* their transaction files |
+| Snapshot / retention | every 24h **if anything changed since the last one** (an idle database takes no new snapshot), kept **30d production / 14d staging** — matching the CNPG scheme this replaced. Litestream's own defaults are 24h/24h, and retention deletes snapshots *and* their transaction files |
 | On empty volume | `-restore-if-db-not-exists`: if the PVC comes back blank, the database is pulled from S3 before replication starts |
 | Credentials | `vitals-aws-creds-secret` (SOPS), the same keys the retired Barman ObjectStore used |
 | Config | `vitals-litestream` ConfigMap, one per overlay |

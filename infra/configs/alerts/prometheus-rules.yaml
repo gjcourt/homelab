@@ -264,16 +264,15 @@ spec:
     #   2. A COMPARISON AGAINST LOCAL WRITES CANNOT FIRE ON AN IDLE DATABASE,
     #      and this one is nearly idle. The 30m rule is therefore paired with a
     #      24h one so a database written to once a day is still covered.
-    #      ⚠️ CORRECTED 2026-09-19. #1450 removed an absolute "nothing
-    #      uploaded in 26h" floor on the grounds that an idle replica never
-    #      uploads. That was generalised from a TWO-HOUR observation and is
-    #      wrong: litestream takes its scheduled snapshot regardless of write
-    #      activity — observed in staging at 00:00:01Z with no writes since
-    #      21:48Z the previous evening. snapshot.interval is 24h, so a healthy
-    #      replica uploads at least daily no matter how idle the database is.
-    #      The floor is therefore back as LitestreamNoRecentUpload, and it is
-    #      the ONLY rule that catches a broken replica on an idle database —
-    #      the gap #1450 documented as unavoidable.
+    #      There is NO time-only floor. One was removed (#1450), put back
+    #      (#1454) on the belief that the 24h snapshot uploads regardless of
+    #      writes, and removed again: litestream 0.5.17 skips the snapshot when
+    #      nothing changed since the last one. Staging's level-9 listing shows
+    #      snapshots on 09-19 and 09-20 while writes landed, then none for seven
+    #      days after they stopped. The staging observation #1454 relied on
+    #      (00:00:01Z snapshot, last write 21:48Z) had new data to snapshot, so
+    #      it could not distinguish the two behaviours. See the comment on
+    #      LitestreamReplicationStalledDaily below.
     #
     # Severity: prod replication failures are `critical` and reach
     # gjcourt+critical@. `warning` routes to gjcourt+alerts@, which is filtered
@@ -301,8 +300,9 @@ spec:
         # ⚠️ Deliberately NOT an absolute "no upload in 26h" floor. That was
         # tried TWICE and measured false both times.
         #
-        # The second attempt shipped as LitestreamNoRecentUpload and was removed
-        # on 2026-09-22 after paging for three days on a healthy replica. Its
+        # The second attempt shipped as LitestreamNoRecentUpload (#1454) and
+        # paged critical continuously from 2026-09-19 on a healthy replica whose
+        # S3 max_txid matched the local litestream_txid exactly. Its
         # premise — "snapshot.interval is 24h, so a healthy replica uploads at
         # least once a day even with nobody touching the database" — is not how
         # litestream 0.5.x behaves. Measured on 2026-09-22 with v0.5.17:
@@ -363,7 +363,7 @@ spec:
           annotations:
             summary: "litestream is not replicating {{ $labels.namespace }}/{{ $labels.pod }} despite local writes"
             description: >
-              The local SQLite transaction id advanced in the last 30m but litestream made no PUT to S3 in the same window — the database is taking writes that are not reaching the replica, so a restore would lose them. ⚠️ This rule cannot fire on an idle database; LitestreamNoRecentUpload is the backstop for that case.
+              The local SQLite transaction id advanced in the last 30m but litestream made no PUT to S3 in the same window — the database is taking writes that are not reaching the replica, so a restore would lose them. ⚠️ This rule cannot fire on an idle database; LitestreamReplicationStalledDaily covers writes that arrive less often than 30m, and a broken replica on a fully idle database is a documented, accepted gap (see the group comment).
         # Silence is not health. Asserts on every metric the rules above key
         # off, NOT just one: if a litestream upgrade renames one of them, the
         # rule that depends on it goes permanently dead while a single-metric

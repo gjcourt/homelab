@@ -14,9 +14,9 @@
 # stops the App stops George too. Decision (George, 2026-09-27, "option 2"):
 # no merge block. The App not merging is the agent's policy (managed CLAUDE.md
 # + deny list); a merge by bench-cloud[bot] is caught after the fact by the
-# hourly merge audit (homelab#1491), which pages George to revert it. What
-# the ruleset DOES guarantee is that every App change to a default branch is a
-# visible PR merge — never a direct or force push.
+# hourly merge audit (lands with homelab#1491), which pages George to revert
+# it. What the ruleset DOES guarantee is that every App change to a default
+# branch is a visible PR merge — never a direct or force push.
 #
 # The only bypass actor is the repository Admin role (George, and anything
 # acting with his token, e.g. renovate-automerge).

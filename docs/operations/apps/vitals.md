@@ -92,8 +92,9 @@ To verify Vitals is working:
   write.** An absolute "nothing uploaded in 26h" floor has been shipped **twice** and been wrong both
   times: an idle replica does not upload at all, **including the 24h snapshot**. Litestream 0.5.17
   only writes a level-9 snapshot when there is something new since the last one. Staging's replica
-  shows it directly (`litestream ltx -level 9`): snapshots on 09-19 and 09-20 while writes were
-  landing, then none for the next seven days once they stopped. The second attempt,
+  shows it directly (`litestream ltx -level 9`): snapshots at 00:00 on 09-19 and 09-20, each with
+  new writes to capture (the last write, txid `0x11`, landed 09-19 00:20), then none for the next
+  seven days. The second attempt,
   `LitestreamNoRecentUpload`, paged critical from 2026-09-19 to its removal on a replica whose S3
   `max_txid` matched the local `litestream_txid` exactly. Both stalled rules therefore key off local
   writes, which ties detection to data actually being at risk rather than to elapsed time. Closing

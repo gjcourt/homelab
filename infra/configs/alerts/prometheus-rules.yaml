@@ -268,8 +268,9 @@ spec:
     #      (#1454) on the belief that the 24h snapshot uploads regardless of
     #      writes, and removed again: litestream 0.5.17 skips the snapshot when
     #      nothing changed since the last one. Staging's level-9 listing shows
-    #      snapshots on 09-19 and 09-20 while writes landed, then none for seven
-    #      days after they stopped. The staging observation #1454 relied on
+    #      snapshots at 00:00 on 09-19 and 09-20, each with new writes to
+    #      capture (the last write landed 09-19 00:20), then none for the next
+    #      seven days. The staging observation #1454 relied on
     #      (00:00:01Z snapshot, last write 21:48Z) had new data to snapshot, so
     #      it could not distinguish the two behaviours. See the comment on
     #      LitestreamReplicationStalledDaily below.

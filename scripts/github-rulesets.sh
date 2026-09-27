@@ -1,14 +1,25 @@
 #!/usr/bin/env bash
 # Ensure every gjcourt repo has the `default-branch-guard` ruleset.
 #
-# Why: bench-cloud agents act as the `bench-cloud` GitHub App with Contents +
-# Pull requests write. Branch protection here doesn't bind a PR's author once
-# checks pass (no required approvals, enforce_admins off), so on its own it
-# would let the App merge its own PRs. This ruleset restricts updates, deletion
-# and force-pushes on the DEFAULT branch to bypass actors only — and the only
-# bypass actor is the repository Admin role (George, and anything acting with
-# his token, e.g. renovate-automerge). The App is not an admin, so it can push
-# branches and open PRs but cannot merge or push the default branch.
+# What it enforces on each repo's DEFAULT branch, for everyone but the bypass
+# actor below: changes arrive via a pull request (0 approvals required), the
+# branch can't be deleted, and it can't be force-pushed. None of that gets in
+# the way of George's normal PR-and-merge workflow, so his merges are not rule
+# bypasses (2026-09-27 trial: a plain `gh pr merge`, no --admin, went through).
+#
+# What it does NOT do: stop the bench-cloud GitHub App merging its own PR. The
+# 2026-09-26 trial proved a `restrict updates` rule would — but it also blocks
+# George's own `gh pr merge` unless he uses `--admin`, which his standing rules
+# forbid. Rulesets can only exempt actors, not target one, so any rule that
+# stops the App stops George too. Decision (George, 2026-09-27, "option 2"):
+# no merge block. The App not merging is the agent's policy (managed CLAUDE.md
+# + deny list); a merge by bench-cloud[bot] is caught after the fact by the
+# hourly merge audit (lands with homelab#1491), which pages George to revert
+# it. What the ruleset DOES guarantee is that every App change to a default
+# branch is a visible PR merge — never a direct or force push.
+#
+# The only bypass actor is the repository Admin role (George, and anything
+# acting with his token, e.g. renovate-automerge).
 #
 # Plan: docs/plans/2026-09-25-bench-cloud-agent.md. Runbook:
 # docs/operations/apps/bench-cloud.md (lands with homelab#1483). Scheduled by
@@ -52,7 +63,12 @@ BODY=$(cat <<'JSON'
   "enforcement": "active",
   "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"], "exclude": []}},
   "rules": [
-    {"type": "update", "parameters": {"update_allows_fetch_and_merge": false}},
+    {"type": "pull_request", "parameters": {
+      "required_approving_review_count": 0,
+      "dismiss_stale_reviews_on_push": false,
+      "require_code_owner_review": false,
+      "require_last_push_approval": false,
+      "required_review_thread_resolution": false}},
     {"type": "deletion"},
     {"type": "non_fast_forward"}
   ],
@@ -65,13 +81,33 @@ JSON
 
 errf=$(mktemp); trap 'rm -f "$errf"' EXIT
 
-# Compare what matters: target, enforcement, conditions, every rule *with* its
-# parameters, and the bypass list. jq -S below sorts object keys, so field order
-# in the API response doesn't matter.
+# GitHub does not echo rule parameters back verbatim (measured 2026-09-26/27):
+#   - it OMITS parameters at their default (`update` came back with none,
+#     though created with update_allows_fetch_and_merge:false);
+#   - it ADDS server defaults we never sent (`pull_request` came back with
+#     allowed_merge_methods, required_reviewers and
+#     require_extra_approval_for_unattributed_changes — which GitHub documents
+#     as having no effect when the rule requires zero approvals).
+# So compare only the parameters this script MANAGES — the keys in BODY — and
+# treat default values (false/0/null) as absent on both sides. A managed key
+# flipped to a non-default value (e.g. dismiss_stale_reviews_on_push:true,
+# required_approving_review_count:1) is still drift.
+#
+# Compare what matters: target, enforcement, conditions, every rule with its
+# managed parameters, and the bypass list. jq -S sorts object keys, so field
+# order in the API response doesn't matter. $managed maps rule type -> the
+# parameter keys BODY sets for it.
+# shellcheck disable=SC2016  # $managed/$k/$ty are jq variables, not shell
 NORM='{t: .target, e: .enforcement, c: .conditions,
-       r: ([.rules[] | {type, parameters: (.parameters // null)}] | sort_by(.type)),
+       r: ([.rules[] | .type as $ty
+              | {type, parameters: ((.parameters // {})
+                  | with_entries(select((.key as $k | ($managed[$ty] // []) | index($k)) != null))
+                  | with_entries(select(.value != false and .value != 0 and .value != null))
+                  | if . == {} then null else . end)}] | sort_by(.type)),
        b: ([.bypass_actors[]? | {actor_id, actor_type, bypass_mode}] | sort_by(.actor_type, .actor_id))}'
-want=$(jq -cS "$NORM" <<<"$BODY")
+managed=$(jq -c '[.rules[] | {key: .type, value: ((.parameters // {}) | keys)}] | from_entries' <<<"$BODY")
+norm() { jq -cS --argjson managed "$managed" "$NORM"; }
+want=$(norm <<<"$BODY")
 
 # Fetch the repo list up front: a failure inside `done < <(...)` would be
 # invisible and yield zero repos, i.e. a false-green --check.
@@ -98,7 +134,7 @@ while IFS= read -r repo; do
   if [[ -n "$existing" ]]; then
     live=$(gh api "repos/$OWNER/$repo/rulesets/$existing" 2>"$errf") || {
       echo "FAIL    $repo  (get ruleset $existing: $(tr '\n' ' ' <"$errf"))"; failed=$((failed + 1)); continue; }
-    if [[ "$(jq -cS "$NORM" <<<"$live")" == "$want" ]]; then
+    if [[ "$(norm <<<"$live")" == "$want" ]]; then
       # The Admin-role bypass (actor_id 5) is undocumented; this is GitHub's own
       # answer to "can the caller (George) bypass it?". If not, his merges and
       # renovate-automerge (his PAT) would be blocked too.

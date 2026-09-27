@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Ensure every gjcourt repo has the `default-branch-guard` ruleset.
 #
-# What it enforces, for EVERYONE on each repo's DEFAULT branch: changes arrive
-# via a pull request (0 approvals required), the branch can't be deleted, and
-# it can't be force-pushed. None of that gets in the way of George's normal
-# PR-and-merge workflow, so his merges are not rule bypasses.
+# What it enforces on each repo's DEFAULT branch, for everyone but the bypass
+# actor below: changes arrive via a pull request (0 approvals required), the
+# branch can't be deleted, and it can't be force-pushed. None of that gets in
+# the way of George's normal PR-and-merge workflow, so his merges are not rule
+# bypasses (2026-09-27 trial: a plain `gh pr merge`, no --admin, went through).
 #
 # What it does NOT do: stop the bench-cloud GitHub App merging its own PR. The
 # 2026-09-26 trial proved a `restrict updates` rule would — but it also blocks
@@ -12,7 +13,8 @@
 # forbid. Rulesets can only exempt actors, not target one, so any rule that
 # stops the App stops George too. Decision (George, 2026-09-27, "option 2"):
 # no merge block. The App not merging is the agent's policy (managed CLAUDE.md
-# + deny list), and a merge by bench-cloud[bot] is detected and reverted. What
+# + deny list); a merge by bench-cloud[bot] is caught after the fact by the
+# hourly merge audit (homelab#1491), which pages George to revert it. What
 # the ruleset DOES guarantee is that every App change to a default branch is a
 # visible PR merge — never a direct or force push.
 #
@@ -84,10 +86,12 @@ errf=$(mktemp); trap 'rm -f "$errf"' EXIT
 #     though created with update_allows_fetch_and_merge:false);
 #   - it ADDS server defaults we never sent (`pull_request` came back with
 #     allowed_merge_methods, required_reviewers and
-#     require_extra_approval_for_unattributed_changes).
+#     require_extra_approval_for_unattributed_changes — which GitHub documents
+#     as having no effect when the rule requires zero approvals).
 # So compare only the parameters this script MANAGES — the keys in BODY — and
-# treat false/null as absent on both sides. A managed key flipped to a non-
-# default value (e.g. dismiss_stale_reviews_on_push:true) is still drift.
+# treat default values (false/0/null) as absent on both sides. A managed key
+# flipped to a non-default value (e.g. dismiss_stale_reviews_on_push:true,
+# required_approving_review_count:1) is still drift.
 #
 # Compare what matters: target, enforcement, conditions, every rule with its
 # managed parameters, and the bypass list. jq -S sorts object keys, so field
@@ -98,7 +102,7 @@ NORM='{t: .target, e: .enforcement, c: .conditions,
        r: ([.rules[] | .type as $ty
               | {type, parameters: ((.parameters // {})
                   | with_entries(select((.key as $k | ($managed[$ty] // []) | index($k)) != null))
-                  | with_entries(select(.value != false and .value != null))
+                  | with_entries(select(.value != false and .value != 0 and .value != null))
                   | if . == {} then null else . end)}] | sort_by(.type)),
        b: ([.bypass_actors[]? | {actor_id, actor_type, bypass_mode}] | sort_by(.actor_type, .actor_id))}'
 managed=$(jq -c '[.rules[] | {key: .type, value: ((.parameters // {}) | keys)}] | from_entries' <<<"$BODY")

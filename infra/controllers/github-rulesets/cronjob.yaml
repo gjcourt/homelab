@@ -14,8 +14,9 @@
 #     ttlSecondsAfterFinished keeps the failed Job (and so the alert) for ~a day.
 #   - HomelabscopeJobStale (severity=critical, +critical@) fires once the
 #     CronJob has gone 30h without a success — see infra/configs/homelabscope/.
-#     It has no series until the first successful run, so it stays silent while
-#     this is suspended.
+#     It has no series until the first successful run, and nothing absent()-
+#     guards it, so a job that fails from its very first run only ever raises
+#     KubeJobFailed, never this.
 #   - activeDeadlineSeconds turns a pod that never finishes (image pull stuck,
 #     GitHub hanging) into a failed Job; otherwise concurrencyPolicy: Forbid
 #     would skip every later run without anything failing.
@@ -26,12 +27,15 @@
 # master takes effect at the next run with George's admin token, with no
 # separate deploy step. That is the same trust boundary Flux already has
 # (master is what the cluster runs), master only moves through reviewed PRs,
-# and master is itself guarded by the ruleset this job maintains, so the
-# bench-cloud App cannot change what runs here. The log line prints the commit.
+# and master is guarded by the ruleset this job maintains against direct and
+# force pushes. Under option 2 (2026-09-27) the bench-cloud App CAN merge a
+# homelab PR, so an App merge could change what runs here, with George's token.
+# bench-merge-audit has the same gap (the plan's Risks section records it for
+# the audit; closing it needs a control outside homelab master).
+# The log line prints the commit.
 #
-# SUSPENDED until George has trialled the ruleset on one repo
-# (`scripts/github-rulesets.sh --apply --repo <scratch>`, runbook step 2) and
-# run the first full --apply by hand. Unsuspend in a follow-up PR.
+# Enabled 2026-09-27 after the one-repo trial (ruleset-trial-scratch) and
+# George's first full --apply; --check then reported ok=76 failed=0.
 #
 # Token: George's RENOVATE_TOKEN (the same one renovate-automerge merges with).
 # Writing rulesets needs admin on each repo — classic `repo` scope, or
@@ -43,7 +47,7 @@ metadata:
   name: github-rulesets
   namespace: renovate
 spec:
-  suspend: true
+  suspend: false
   schedule: "17 5 * * *"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1

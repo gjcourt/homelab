@@ -409,6 +409,26 @@ spec:
             description: >
               The staging replica took local writes and uploaded nothing in 24h. Nothing important is lost — staging is disposable — but the restore rehearsal in docs/operations/apps/vitals.md would be rehearsing against a stale prefix.
     # -------------------------------------------------------------------------
+    # bench-cloud: merges by the agents' GitHub App
+    #
+    # The default-branch-guard ruleset lets the bench-cloud App merge its own
+    # PR (a merge block would also block George's merges — option 2,
+    # 2026-09-27). Policy says it never merges; the hourly bench-merge-audit
+    # Job fails when it finds one in the last 25h. Critical: on homelab a merge
+    # is already deploying via Flux.
+    # -------------------------------------------------------------------------
+    - name: bench-cloud
+      rules:
+        - alert: BenchCloudAppMerged
+          expr: max by (job_name) (kube_job_status_failed{namespace="renovate", job_name=~"bench-merge-audit-.*"}) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "bench-cloud[bot] merged a PR (or the merge audit failed)"
+            description: >
+              The hourly merge audit failed: either the bench-cloud GitHub App merged a PR in the last 25h, or the audit itself could not run. Read the Job log for the PR URLs — kubectl -n renovate logs job/{{ $labels.job_name }} — then revert the merge (on homelab it has already reached Flux) and read the task record in hestia:/mnt/main/agent-inbox/runs/. "MERGED-BY-APP" lines = a real merge; "FATAL"/"ERROR" = the audit is broken.
+    # -------------------------------------------------------------------------
     # Flux reconciliation health
     #
     # gotk_resource_info is an Info gauge (always 1) emitted by kube-state-metrics

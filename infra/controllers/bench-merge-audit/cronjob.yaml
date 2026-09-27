@@ -1,0 +1,73 @@
+# Detects PRs merged by the bench-cloud GitHub App (scripts/bench-cloud/merge-audit.sh).
+#
+# Why this exists: the default-branch-guard ruleset (option 2, George
+# 2026-09-27) stops the App pushing to a default branch but NOT merging its own
+# PR — a merge block would also block George's own merges. The agent's policy
+# says never merge; this makes a violation visible within the hour. On homelab a
+# merge deploys via Flux, so the response is: revert the PR, then find out why.
+#
+# Hourly, 25h lookback: a merge keeps the Job failing — and BenchCloudAppMerged
+# (critical) firing — for ~a day, then it ages out. Runs the script from master
+# at run time (same pattern and trade-off as infra/controllers/github-rulesets).
+# Read-only; George's RENOVATE_TOKEN for search/read across private repos.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bench-merge-audit
+  namespace: renovate
+spec:
+  schedule: "7 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 900
+      # Shorter than the schedule, so the alert tracks the LATEST run: a clean
+      # run clears it within the hour instead of a stale failure lingering.
+      ttlSecondsAfterFinished: 3000
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: audit
+              image: ghcr.io/gjcourt/bench-cloud:2026-09-26-6ced067
+              command:
+                - bash
+                - -euo
+                - pipefail
+                - -c
+                - |
+                  git clone -q --depth 1 https://github.com/gjcourt/homelab /tmp/homelab
+                  git -C /tmp/homelab log -1 --format='script @ %h %s'
+                  /tmp/homelab/scripts/bench-cloud/merge-audit.sh --since 25h
+              env:
+                # gh writes state under $HOME; root FS is read-only.
+                - name: HOME
+                  value: /tmp
+                - name: GH_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: secret-renovate-container-env
+                      key: RENOVATE_TOKEN
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests: {cpu: 50m, memory: 64Mi}
+                limits: {cpu: 500m, memory: 256Mi}
+              volumeMounts:
+                - {name: tmp, mountPath: /tmp}
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi

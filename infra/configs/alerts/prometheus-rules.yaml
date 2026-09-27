@@ -416,18 +416,44 @@ spec:
     # 2026-09-27). Policy says it never merges; the hourly bench-merge-audit
     # Job fails when it finds one in the last 25h. Critical: on homelab a merge
     # is already deploying via Flux.
+    #
+    # Keyed on the CronJob, not kube_job_status_failed{job_name}: each hourly
+    # run is a new Job name, so a per-Job alert re-pages every hour as a NEW
+    # alert, and resolves in whatever gap the failed Job's TTL leaves before
+    # the next run. "Last scheduled run is newer than the last success" is one
+    # series that stays true across every failing run and turns false the
+    # moment a run succeeds. The `unless` arm covers a CronJob that has never
+    # succeeded (no last_successful_time series yet — e.g. the very first run
+    # finds a merge). `for: 10m` rides out a run in progress (seconds, or a few
+    # minutes when a node first pulls the large bench-cloud image).
+    #
+    # Also fires when the audit itself is broken (search/read errors, token
+    # revoked). Deliberately critical too: under option 2 this audit is the
+    # only control on App merges, so a blind audit is the same risk; the
+    # script retries once so a single GitHub blip does not page.
     # -------------------------------------------------------------------------
     - name: bench-cloud
       rules:
         - alert: BenchCloudAppMerged
-          expr: max by (job_name) (kube_job_status_failed{namespace="renovate", job_name=~"bench-merge-audit-.*"}) > 0
-          for: 0m
+          expr: >
+            (
+              max by (namespace, cronjob) (kube_cronjob_status_last_schedule_time{namespace="renovate", cronjob="bench-merge-audit"})
+              > on (namespace, cronjob)
+              max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace="renovate", cronjob="bench-merge-audit"})
+            )
+            or
+            (
+              max by (namespace, cronjob) (kube_cronjob_status_last_schedule_time{namespace="renovate", cronjob="bench-merge-audit"})
+              unless on (namespace, cronjob)
+              max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace="renovate", cronjob="bench-merge-audit"})
+            )
+          for: 10m
           labels:
             severity: critical
           annotations:
             summary: "bench-cloud[bot] merged a PR (or the merge audit failed)"
             description: >
-              The hourly merge audit failed: either the bench-cloud GitHub App merged a PR in the last 25h, or the audit itself could not run. Read the Job log for the PR URLs — kubectl -n renovate logs job/{{ $labels.job_name }} — then revert the merge (on homelab it has already reached Flux) and read the task record in hestia:/mnt/main/agent-inbox/runs/. "MERGED-BY-APP" lines = a real merge; "FATAL"/"ERROR" = the audit is broken.
+              The latest hourly merge audit did not succeed: either the bench-cloud GitHub App merged a PR in the last 25h, or the audit itself could not run. Read the log of the newest bench-merge-audit Job — kubectl -n renovate get jobs --sort-by=.metadata.creationTimestamp, then kubectl -n renovate logs job/<name> — then revert the merge (on homelab it has already reached Flux) and read the task record in hestia:/mnt/main/agent-inbox/runs/. "MERGED-BY-APP" lines = a real merge; "FATAL"/"ERROR" = the audit is broken. Stays firing until a run succeeds, i.e. up to ~26h after a merge.
     # -------------------------------------------------------------------------
     # Flux reconciliation health
     #

@@ -6,8 +6,10 @@
 # says never merge; this makes a violation visible within the hour. On homelab a
 # merge deploys via Flux, so the response is: revert the PR, then find out why.
 #
-# Hourly, 25h lookback: a merge keeps the Job failing — and BenchCloudAppMerged
-# (critical) firing — for ~a day, then it ages out. Runs the script from master
+# Hourly, 25h lookback: a merge keeps every run failing — and BenchCloudAppMerged
+# (critical) firing continuously — for ~a day, then it ages out and the next
+# clean run clears the alert. Staleness (the CronJob silently not running) is
+# HomelabscopeJobStale's job — see infra/configs/homelabscope/. Runs the script from master
 # at run time (same pattern and trade-off as infra/controllers/github-rulesets).
 # Read-only; George's RENOVATE_TOKEN for search/read across private repos.
 apiVersion: batch/v1
@@ -24,9 +26,13 @@ spec:
     spec:
       backoffLimit: 0
       activeDeadlineSeconds: 900
-      # Shorter than the schedule, so the alert tracks the LATEST run: a clean
-      # run clears it within the hour instead of a stale failure lingering.
-      ttlSecondsAfterFinished: 3000
+      # BenchCloudAppMerged reads the CronJob's last-schedule vs last-success
+      # times, not the Job objects, so this TTL does not drive the alert. It is
+      # longer than the schedule so a failed Job's log is always readable while
+      # the alert fires (failedJobsHistoryLimit: 1 drops the older failed Job
+      # when the next one fails), and short enough that the chart's
+      # KubeJobFailed (warning) clears ~90m after the first clean run.
+      ttlSecondsAfterFinished: 5400
       template:
         spec:
           restartPolicy: Never

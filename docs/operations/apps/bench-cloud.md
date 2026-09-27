@@ -2,7 +2,7 @@
 title: bench-cloud
 status: Stable
 created: 2026-09-26
-updated: 2026-09-26
+updated: 2026-09-27
 updated_by: gjcourt
 tags: [operations, apps, agents, claude-code]
 ---
@@ -27,7 +27,7 @@ internet, move files to hestia. Plan and decisions:
 | Capability | Mechanism | Limit |
 |---|---|---|
 | Claude | Console: full `claude auth login` on the PVC. Jobs (phase 2): `setup-token` token | Console must never get `CLAUDE_CODE_OAUTH_TOKEN` — it overrides the login and Remote Control refuses it |
-| GitHub | `bench-cloud` GitHub App, 1 h installation tokens | Contents/PRs/Issues RW; no Workflows, no Administration. Default-branch ruleset only George bypasses → can't merge |
+| GitHub | `bench-cloud` GitHub App, 1 h installation tokens | Contents/PRs/Issues RW; no Workflows, no Administration. `default-branch-guard` ruleset → can't push a default branch, only open PRs. **Can merge its own PR** (option 2): policy forbids it, `BenchCloudAppMerged` pages if it happens |
 | Cluster | ServiceAccount `bench-agent` → built-in `view` | Read-only, no Secrets, no exec. `view` **does** include ConfigMaps and `pods/log` cluster-wide — anything an app logs, an agent can read |
 | Internet | CiliumNetworkPolicy: 0.0.0.0/0 **minus RFC1918/CGNAT/link-local**, ports 80/443 | The home LAN is unreachable except hestia:22 |
 | hestia | User `bench-agent`, two keys, each forced to `rrsync` | `hestia-inbox:` → `/mnt/main/agent-inbox` RW (symlinks munged); `hestia-media:` → `/mnt/main/family/media` RO |
@@ -60,11 +60,34 @@ but **commit the secrets only after the rulesets from step 2 exist.**
 5. Fill `apps/production/bench-cloud/secret-github-app.yaml` from its `.example`
    and `sops -e -i` it. Don't commit it until step 2 is done.
 
-### 2. Default-branch rulesets (what actually stops merges)
+### 2. Default-branch rulesets and the merge audit
 
-Applied to every repo by a script — separate PR. Until it runs, the App can merge
-and push to default branches on any repo without one. **Do not start the console
-with the App secret before the rulesets are in place.**
+`scripts/github-rulesets.sh` puts `default-branch-guard` on every repo: default
+branch changes need a PR (0 approvals), no deletion, no force-push; George
+(Admin role) is the only bypass. Trialled 2026-09-26/27 on a scratch repo: the
+App's direct push to `main` was refused (GH013); George's plain `gh pr merge`
+worked without `--admin`; **the App could merge its own PR**.
+
+That last one is deliberate (option 2, George 2026-09-27): a ruleset that blocks
+the App's merges also blocks George's. Instead:
+- the agent's managed `CLAUDE.md` and deny list forbid merging;
+- `infra/controllers/bench-merge-audit` checks hourly for PRs merged by
+  `bench-cloud[bot]` and pages **critical** (`BenchCloudAppMerged`) —
+  response: revert the PR (on homelab it has already reached Flux), then read
+  the task record under `hestia:/mnt/main/agent-inbox/runs/`.
+
+Rollout, as George:
+
+```bash
+scripts/github-rulesets.sh           # dry run
+scripts/github-rulesets.sh --apply
+scripts/github-rulesets.sh --check   # also confirms current_user_can_bypass=always
+```
+
+Then unsuspend `infra/controllers/github-rulesets` (daily --apply + --check, so
+new repos get the ruleset). Until the rollout, the App can push directly to the
+default branch of any repo without it. **Do not start the console with the App
+secret before the rulesets are in place.**
 
 ### 3. hestia
 

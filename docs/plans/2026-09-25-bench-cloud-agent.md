@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_modified: 2026-09-26
+last_modified: 2026-09-27
 summary: "bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia"
 ---
 
@@ -65,7 +65,7 @@ through llmux (llmux gateway plan, phase 2).
 | Capability | Mechanism | Boundary |
 |---|---|---|
 | Claude | Task Jobs: `claude setup-token` token as `CLAUDE_CODE_OAUTH_TOKEN` from a SOPS secret (verified 2026-09-26). Console: an interactive `claude auth login` kept on its PVC | Jobs get an inference-only token: no refresh races, and no Remote Control. The full-scope login lives in one pod only |
-| Code | A **GitHub App** (`bench-cloud`) installed on all of George's repos: **Contents RW, Pull requests RW, Issues RW, Actions R, Commit statuses R**; no Administration, **no Workflows**. Installation tokens (1 h) minted in-pod from the app key | Acts as `bench-cloud[bot]`, not as George. A **default-branch ruleset with George as the only bypass actor** means it can push branches and open PRs but **can't merge or push the default branch**. **Can't change CI**, so it can't widen its own permissions. |
+| Code | A **GitHub App** (`bench-cloud`) installed on all of George's repos: **Contents RW, Pull requests RW, Issues RW, Actions R, Commit statuses R**; no Administration, **no Workflows**. Installation tokens (1 h) minted in-pod from the app key | Acts as `bench-cloud[bot]`, not as George. The **`default-branch-guard` ruleset** (PR required, no deletion, no force-push; George the only bypass) means it **can't push a default branch** — every change arrives as a PR. It **can** merge its own PR: a ruleset that blocked that also blocked George's own `gh pr merge` without `--admin` (trial 2026-09-26), so George chose **option 2** (2026-09-27): never merging is the agent's policy, and the hourly merge audit pages on any merge by the App. **Can't change CI**, so it can't widen its own permissions. |
 | Tests | Toolchains in the image (Go, Node, Python, make, gcc) | No container builds in v1 (needs privileges); images still build in CI |
 | Internet | Egress 80/443 to `0.0.0.0/0` **minus RFC1918/CGNAT/link-local** — not `world`, which includes the home LAN | No inbound; no Gateway route; no LAN host except hestia:22 |
 | hestia | SSH as a new **`bench-agent`** user with **two keys**, each forced to `rrsync` (one directory per key): `rrsync /mnt/main/agent-inbox` (RW) and `rrsync -ro /mnt/main/family/media` (RO) | Not `truenas_admin`; no sudo; no interactive shell (`restrict`); no other datasets |
@@ -99,9 +99,15 @@ Code's version is pinned and bumped by Renovate.
   visible.
 - **An agent with push rights.** A personal token would act *as George*, and
   George merges his own PRs without review — so branch protection could not stop
-  the agent merging its own work. Hence a separate App identity plus a ruleset it
-  can't bypass. A repo missing the ruleset is a repo the agent can push `master`
-  on — phase 1 applies it everywhere by script and CI-checks for drift.
+  the agent merging its own work. Hence a separate App identity. A ruleset can
+  only *exempt* actors, never target one, so no rule stops the App merging
+  without also stopping George's merges — see the Code row above (option 2).
+  What the ruleset does guarantee: no direct or force push to a default branch,
+  so every App change is a visible PR. A merge by the App is caught by the
+  hourly `bench-merge-audit` (critical page, then revert). **On homelab a merge
+  reaches Flux before anyone sees it** — accepted by George. A repo missing the
+  ruleset is one the App can push `master` on — applied everywhere by script and
+  kept there by the daily `github-rulesets` CronJob.
 - **hestia exposure.** The `bench-agent` user is new attack surface on the NAS.
   `rrsync` plus a dataset of its own keep a mistake inside `agent-inbox`.
 

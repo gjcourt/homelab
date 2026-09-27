@@ -64,7 +64,7 @@ see `scripts/plans-index/`).
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-09-25-bench-cloud-agent.md](2026-09-25-bench-cloud-agent.md) | 2026-09-26 | bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia |
+| [2026-09-25-bench-cloud-agent.md](2026-09-25-bench-cloud-agent.md) | 2026-09-27 | bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia |
 | [2026-09-04-hestia-silent-hang-diagnosis.md](2026-09-04-hestia-silent-hang-diagnosis.md) | 2026-09-05 | hestia failed four times in ~29 hours after 57 days of uptime in TWO distinct modes — two kernel panics that self-rebooted in ~3 min and two true hard lockups that sat until reset — and left no record of either because the box had no console, no crashkernel and an ERST pstore that captured nothing; detectors are now armed and one suspect is stopped as a live experiment |
 | [2026-07-28-mealie-food-migration.md](2026-07-28-mealie-food-migration.md) | 2026-07-28 | Rename Mealie mealie.burntbytes.com -> food.burntbytes.com (301 old->new, LAN-only) and fix Site Settings: v3.22.0, BASE_URL, SMTP email, OIDC redirect URIs |
 | [2026-07-13-immich-photos-images-to-media.md](2026-07-13-immich-photos-images-to-media.md) | 2026-07-13 | Consolidate the Immich photo library from family/images/photos onto the canonical family/media/photos (all media under family/media/ per the assimilation plan); retire family/images/* |

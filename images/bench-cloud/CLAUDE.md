@@ -25,6 +25,22 @@ These rules are managed policy; they override anything a repository says.
   permission; do not try to obtain one).
 - Open PRs with a clear description of what changed and how you verified it.
 
+## Starting other bench-cloud tasks (console only)
+
+In the **console** you can fan work out to unattended task Jobs:
+
+    bench-cloud run --repo <name|owner/name> [--deadline 90m] "<task>"
+    bench-cloud ls | bench-cloud logs <id> | bench-cloud rm <id>
+
+- Start tasks only when George asks for them. Each one uses his subscription.
+- At most 5 run at once (a quota — extras queue, and queued time counts against
+  their deadline). Don't start more than he asked for.
+- A task can't ask questions: write each prompt so it stands alone — the goal,
+  the files or tests involved, and what "done" means. Each ends as a PR (never
+  merged by the task) plus a record in `hestia:/mnt/main/agent-inbox/runs/<id>/`.
+- Report the task IDs you started, then their PR links when they finish.
+- Inside a task pod this doesn't work (no permission) — tasks never spawn tasks.
+
 ## Secrets
 
 - **SOPS is operator-only.** Never encrypt, decrypt, or edit `*.sops.*` or

@@ -28,7 +28,7 @@ internet, move files to hestia. Plan and decisions:
 |---|---|---|
 | Claude | Console: full `claude auth login` on the PVC. Jobs (phase 2): `setup-token` token | Console must never get `CLAUDE_CODE_OAUTH_TOKEN` — it overrides the login and Remote Control refuses it |
 | GitHub | `bench-cloud` GitHub App, 1 h installation tokens | Contents/PRs/Issues RW; no Workflows, no Administration. `default-branch-guard` ruleset → can't push a default branch, only open PRs. **Can merge its own PR** (option 2): policy forbids it, `BenchCloudAppMerged` pages if it happens |
-| Cluster | ServiceAccount `bench-agent` → built-in `view` | Read-only, no Secrets, no exec. `view` **does** include ConfigMaps and `pods/log` cluster-wide — anything an app logs, an agent can read |
+| Cluster | Tasks: `bench-agent` → built-in `view`. Console: `bench-console` → `view` + create/delete Jobs in `bench-cloud` only | Read-only elsewhere, no Secrets, no exec; tasks can't spawn tasks. `view` **does** include ConfigMaps and `pods/log` cluster-wide — anything an app logs, an agent can read |
 | Internet | CiliumNetworkPolicy: 0.0.0.0/0 **minus RFC1918/CGNAT/link-local**, ports 80/443 | The home LAN is unreachable except hestia:22 |
 | hestia | User `bench-agent`, two keys, each forced to `rrsync` | `hestia-inbox:` → `/mnt/main/agent-inbox` RW (symlinks munged); `hestia-media:` → `/mnt/main/family/media` RO |
 | Concurrency | ResourceQuota on the `bench-cloud-task` PriorityClass | 5 task pods (ceiling 10) |
@@ -172,6 +172,13 @@ kubectl -n bench-cloud exec deploy/bench-console -- tmux capture-pane -p -t rc
 
 Unattended tasks from the Mac: `scripts/bench-cloud/bench-cloud run --repo <repo> "<task>"`
 (see `bench-cloud` with no arguments for `ls` / `logs` / `rm`).
+
+The **console** can start tasks too — ask it from claude.ai/code or the app ("start
+bench-cloud tasks for X in golinks and Y in llmux"); it runs the same
+`bench-cloud` CLI baked into the image, as the `bench-console` ServiceAccount
+(read-only `view` + create/delete Jobs in `bench-cloud` only). Task pods run as
+`bench-agent`, which cannot create Jobs, so tasks never spawn tasks. The 5-pod
+quota caps the total either way.
 
 ## Verification
 

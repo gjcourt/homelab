@@ -15,6 +15,7 @@ ARG GH_VERSION=2.101.0
 ARG GH_SHA256=9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8
 
 ENV PATH=/usr/local/go/bin:/home/node/go/bin:$PATH \
+    BENCH_CLOUD_JOB_TEMPLATE=/usr/local/share/bench-cloud/job.yaml \
     DISABLE_AUTOUPDATER=1 \
     WORKSPACE=/home/node/work
 
@@ -44,16 +45,21 @@ RUN curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" && npm cache clean --force
 
 # GitHub App auth: git and gh both get short-lived installation tokens.
-COPY github-app-token /usr/local/bin/github-app-token
-COPY gh-wrapper /usr/local/bin/gh
-COPY entrypoint.sh /usr/local/bin/bench-entrypoint
-COPY bench-task /usr/local/bin/bench-task
+COPY images/bench-cloud/github-app-token /usr/local/bin/github-app-token
+COPY images/bench-cloud/gh-wrapper /usr/local/bin/gh
+COPY images/bench-cloud/entrypoint.sh /usr/local/bin/bench-entrypoint
+COPY images/bench-cloud/bench-task /usr/local/bin/bench-task
+# The task CLI + Job template, so the console can start task Jobs itself
+# (bench-console ServiceAccount; task pods run as bench-agent and cannot).
+# Build context is the repo root for exactly these two files.
+COPY scripts/bench-cloud/bench-cloud /usr/local/bin/bench-cloud
+COPY scripts/bench-cloud/job.yaml /usr/local/share/bench-cloud/job.yaml
 # Managed (system-level) Claude Code policy: the house rules and the deny list.
 # Users cannot override managed settings, including the agent itself.
-COPY managed-settings.json /etc/claude-code/managed-settings.json
-COPY CLAUDE.md /etc/claude-code/CLAUDE.md
+COPY images/bench-cloud/managed-settings.json /etc/claude-code/managed-settings.json
+COPY images/bench-cloud/CLAUDE.md /etc/claude-code/CLAUDE.md
 # The trailing version checks fail the BUILD, not the first task, if a tool is missing.
-RUN chmod 0755 /usr/local/bin/github-app-token /usr/local/bin/gh /usr/local/bin/bench-entrypoint /usr/local/bin/bench-task \
+RUN chmod 0755 /usr/local/bin/github-app-token /usr/local/bin/gh /usr/local/bin/bench-entrypoint /usr/local/bin/bench-task /usr/local/bin/bench-cloud \
  && git config --system credential.https://github.com.helper '!/usr/local/bin/github-app-token --git-credential' \
  && git config --system init.defaultBranch main \
  && go version && kubectl version --client=true && /usr/local/lib/gh/gh --version \

@@ -5,6 +5,7 @@ on:
     branches: [master]
     paths:
       - 'images/bench-cloud/**'
+      - 'scripts/bench-cloud/**'
       - '.github/workflows/build-bench-cloud.yml'
   workflow_dispatch:
 
@@ -42,7 +43,9 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v7
         with:
-          context: images/bench-cloud
+          # Repo root: the image also carries scripts/bench-cloud/ (CLI + Job template).
+          context: .
+          file: images/bench-cloud/Dockerfile
           platforms: linux/amd64
           push: true
           tags: |

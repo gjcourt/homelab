@@ -15,12 +15,15 @@
 # to the record, not stdout); before the container starts it shows the pod
 # state instead.
 #
-# Runs on George's Mac with his kubeconfig. Plan:
+# Runs on George's Mac with his kubeconfig, or inside the bench-console pod
+# (in-cluster, as the bench-console ServiceAccount). Plan:
 # docs/plans/2026-09-25-bench-cloud-agent.md; runbook:
 # docs/operations/apps/bench-cloud.md.
 set -euo pipefail
 NS=bench-cloud
 HERE=$(cd "$(dirname "$0")" && pwd)
+# In the image the template lives apart from the script; on the Mac, next to it.
+TEMPLATE=${BENCH_CLOUD_JOB_TEMPLATE:-$HERE/job.yaml}
 
 usage() { sed -n '3,8p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
@@ -64,7 +67,7 @@ cmd_run() {
   id="bt-$(date -u +%Y%m%d)-$(openssl rand -hex 3)"
 
   # Build the Job as JSON with jq --arg, so the prompt needs no escaping.
-  kubectl create --dry-run=client -o json -f "$HERE/job.yaml" |
+  kubectl create --dry-run=client -o json -f "$TEMPLATE" |
     jq --arg id "$id" --arg repo "$repo" --arg prompt "$prompt" --arg model "$model" \
        --arg image "$image" --argjson deadline "$deadline" '
       .metadata.name = $id

@@ -26,7 +26,8 @@ spec:
       labels:
         app: bench-console
     spec:
-      serviceAccountName: bench-agent
+      # bench-console = bench-agent's read-only view + start/stop task Jobs here.
+      serviceAccountName: bench-console
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000

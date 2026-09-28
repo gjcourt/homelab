@@ -57,6 +57,30 @@ spec:
       containers:
         - name: console
           image: ghcr.io/gjcourt/bench-cloud
+          # Bring Remote Control back by itself after any restart (node reboot,
+          # image bump, iSCSI recovery). The login and the one-time consent live
+          # on the PVC, so this only needs relaunching, never re-authorising.
+          # It runs in its own tmux session `rc`; George's working session is
+          # `main` (`tmux new -A -s main`). On a fresh PVC with no login yet,
+          # remote-control fails and the loop retries every 30s; the consent
+          # prompt waits in the `rc` window for George — never auto-answered.
+          # The image ENTRYPOINT (bench-entrypoint) still runs first: it marks
+          # $WORKSPACE trusted, which remote-control requires.
+          args:
+            - bash
+            - -c
+            - |
+              start_rc() {
+                tmux new-session -d -s rc -c "$WORKSPACE" \
+                  'while true; do claude remote-control --name bench-cloud; echo "remote-control exited ($?); retrying in 30s"; sleep 30; done'
+              }
+              trap 'exit 0' TERM INT
+              start_rc
+              # Watchdog: recreate the session if the tmux server ever dies.
+              while true; do
+                tmux has-session -t rc 2>/dev/null || { echo "rc session missing; restarting"; start_rc; }
+                sleep 60 & wait $!
+              done
           env:
             - name: HOME
               value: /home/node

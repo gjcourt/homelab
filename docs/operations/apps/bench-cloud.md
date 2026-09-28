@@ -19,7 +19,7 @@ internet, move files to hestia. Plan and decisions:
 |---|---|---|
 | Image | Claude Code + Go/Node/Python toolchains + GitHub App token helper | `images/bench-cloud/`, `ghcr.io/gjcourt/bench-cloud` |
 | Console | One long-lived pod, tmux + Remote Control, `$HOME` on a 30 Gi PVC | `deploy/bench-console` |
-| Task Jobs | Phase 2 — not yet built | — |
+| Task Jobs | Phase 2: one Job per task, submitted with `bench-cloud run` from the Mac | `scripts/bench-cloud/` (`job.yaml`, `bench-cloud`) |
 | Namespace | `bench-cloud`, PSA `restricted` | `apps/base/bench-cloud/` |
 
 ## Access model
@@ -38,9 +38,14 @@ internet, move files to hestia. Plan and decisions:
 Everything here is George's: it involves secrets, GitHub account settings, or
 hestia users.
 
-**Order matters.** Committing the two encrypted secrets is what lets Flux start
-the console. Do steps 1–3 (App, rulesets, hestia) and prepare both secret files,
-but **commit the secrets only after the rulesets from step 2 exist.**
+**Status (2026-09-27): steps 1–3b are done** — App created, rulesets on every
+repo, hestia user set up and tested, all three secrets committed encrypted. Only
+step 4 (first console login) remains, after Flux starts the console.
+
+**Order matters on a rebuild.** Committing the encrypted secrets is what lets
+Flux start the console. Do steps 1–3 (App, rulesets, hestia) and prepare the
+secret files, but **commit the secrets only after the rulesets from step 2
+exist.**
 
 ### 1. GitHub App
 
@@ -85,9 +90,11 @@ scripts/github-rulesets.sh --check   # also confirms current_user_can_bypass=alw
 ```
 
 Then unsuspend `infra/controllers/github-rulesets` (daily --apply + --check, so
-new repos get the ruleset). Until the rollout, the App can push directly to the
-default branch of any repo without it. **Do not start the console with the App
-secret before the rulesets are in place.**
+new repos get the ruleset). Done 2026-09-27: `--check` reported `ok=76
+needs-change=0 failed=0`, and the CronJob was unsuspended in #1493. A repo
+without the ruleset is one the App can push the default branch of directly —
+**never start the console with the App secret before the rulesets are in
+place.**
 
 ### 3. hestia
 
@@ -122,12 +129,6 @@ On TrueNAS (UI, as it's the source of truth for users/datasets):
 4. Fill `apps/production/bench-cloud/secret-hestia-ssh.yaml` from its `.example`
    and `sops -e -i` it.
 
-### 3b. Task token (for phase 2 task Jobs)
-
-Fill `apps/production/bench-cloud/secret-claude-token.yaml` from its `.example`
-(the `claude setup-token` token) and `sops -e -i` it. Task Jobs only — the
-console must never see it.
-
 ### 3a. Image visibility
 
 Done — `ghcr.io/gjcourt/bench-cloud` published **public** on its first build
@@ -135,6 +136,12 @@ Done — `ghcr.io/gjcourt/bench-cloud` published **public** on its first build
 `imagePullSecrets` and needs none; the image holds no secrets. If it is ever
 made private, add `ghcr-secret` to the namespace and pod spec (see
 `apps/base/golinks/`).
+
+### 3b. Task token (for phase 2 task Jobs)
+
+Fill `apps/production/bench-cloud/secret-claude-token.yaml` from its `.example`
+(the `claude setup-token` token) and `sops -e -i` it. Task Jobs only — the
+console must never see it.
 
 ### 4. First console login
 
@@ -175,10 +182,18 @@ kubectl -n bench-cloud exec deploy/bench-console -- sh -c '
 
 ## Monitoring
 
-No app-specific alerts. The home PVC is covered by `pvc-writeprobe`
-(`PvcNotWritable`), and the readiness probe writes to it too, so a read-only
-remount shows as an unready pod. Check the pod and PVC with
-`kubectl -n bench-cloud get pods,pvc`.
+- **`BenchCloudAppMerged`** (critical) — the last `bench-merge-audit` run
+  (`renovate` namespace, hourly) failed. The audit fails when it finds a PR
+  merged by `bench-cloud[bot]` in its 25 h lookback, but also when the audit
+  itself breaks, so read the run's log first:
+  `kubectl -n renovate logs job/<latest bench-merge-audit job>`. A real merge:
+  revert the PR, then read the task record under
+  `hestia:/mnt/main/agent-inbox/runs/`.
+- **`HomelabscopeJobStale{job="bench-merge-audit"}`** — the audit hasn't
+  succeeded in 30 h (suspended, deleted, or failing every run).
+- The home PVC is covered by `pvc-writeprobe` (`PvcNotWritable`), and the
+  readiness probe writes to it too, so a read-only remount shows as an unready
+  pod. Check the pod and PVC with `kubectl -n bench-cloud get pods,pvc`.
 
 ## Troubleshooting
 

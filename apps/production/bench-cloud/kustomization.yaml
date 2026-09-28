@@ -4,9 +4,8 @@ kind: Kustomization
 # namespace convention for apps without a staging variant).
 resources:
   - ../../base/bench-cloud/
-  # Both SOPS-encrypted by the operator from their .example templates (agents
-  # never run sops in this repo). Until they exist, `kustomize build` — and
-  # CI — fails. That failure is the intended gate.
+  # SOPS-encrypted by the operator from their .example templates (agents never
+  # run sops in this repo); Flux decrypts them at apply time.
   - secret-github-app.yaml
   - secret-hestia-ssh.yaml
   # Task Jobs only (never the console) — see the template.

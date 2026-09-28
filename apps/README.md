@@ -8,6 +8,7 @@
 - [adguard](base/adguard/)
 - [audiobookshelf](base/audiobookshelf/)
 - [authelia](base/authelia/)
+- [bench-cloud](base/bench-cloud/)
 - [burntbytes](base/burntbytes/)
 - [changes](base/changes/)
 - [excalidraw](base/excalidraw/)

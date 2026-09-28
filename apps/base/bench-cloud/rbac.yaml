@@ -1,0 +1,15 @@
+# Read-only cluster access (plan decision 2). `view` is the built-in aggregate
+# role: get/list/watch on most namespaced resources, and deliberately NOT
+# Secrets, Roles/RoleBindings, or pod exec/attach/port-forward.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bench-cloud-view
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: bench-agent
+    namespace: bench-cloud

@@ -1,0 +1,135 @@
+# The console: one long-lived pod for hands-on sessions and Remote Control.
+#
+#   kubectl -n bench-cloud exec -it deploy/bench-console -- tmux new -A -s main
+#
+# Auth is a full-scope `claude auth login` stored on the PVC. This pod must NOT
+# get CLAUDE_CODE_OAUTH_TOKEN: it takes precedence over the stored login and is
+# inference-only, so Remote Control refuses it (measured 2026-09-26). That token
+# is for task Jobs only.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: bench-console
+  namespace: bench-cloud
+  labels:
+    app: bench-console
+spec:
+  replicas: 1
+  # RWO home volume: the old pod must release it before the new one mounts it.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: bench-console
+  template:
+    metadata:
+      labels:
+        app: bench-console
+    spec:
+      serviceAccountName: bench-agent
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        # Default (Always) re-chowns the whole home volume — Go/npm caches,
+        # checkouts — on every start, and ORs group rw into 0600 files.
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # ssh refuses a private key that is group-readable, and a Secret volume
+        # with fsGroup is exactly that. Copy it to a 0600 file on an emptyDir.
+        - name: ssh-key
+          image: ghcr.io/gjcourt/bench-cloud
+          command: ["sh", "-c", "install -m 0600 /var/run/secrets/hestia/id_inbox /ssh/id_inbox && install -m 0600 /var/run/secrets/hestia/id_media /ssh/id_media && install -m 0644 /var/run/secrets/hestia/known_hosts /ssh/known_hosts"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 64Mi}
+          volumeMounts:
+            - {name: hestia-ssh, mountPath: /var/run/secrets/hestia, readOnly: true}
+            - {name: ssh, mountPath: /ssh}
+      containers:
+        - name: console
+          image: ghcr.io/gjcourt/bench-cloud
+          env:
+            - name: HOME
+              value: /home/node
+            - name: GITHUB_APP_ID
+              valueFrom:
+                secretKeyRef: {name: bench-cloud-github-app, key: app-id}
+            - name: GITHUB_APP_INSTALLATION_ID
+              valueFrom:
+                secretKeyRef: {name: bench-cloud-github-app, key: installation-id}
+            - name: GITHUB_APP_PRIVATE_KEY_FILE
+              value: /var/run/secrets/github-app/private-key.pem
+            # Commits are authored as the App's bot user.
+            - name: GIT_AUTHOR_NAME
+              value: bench-cloud[bot]
+            - name: GIT_COMMITTER_NAME
+              value: bench-cloud[bot]
+            - name: GIT_AUTHOR_EMAIL
+              valueFrom:
+                secretKeyRef: {name: bench-cloud-github-app, key: bot-email}
+            - name: GIT_COMMITTER_EMAIL
+              valueFrom:
+                secretKeyRef: {name: bench-cloud-github-app, key: bot-email}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 500m
+              memory: 2Gi
+            limits:
+              cpu: "4"
+              memory: 8Gi
+          # Write bytes, not `touch`: the home volume is iSCSI, and the failure
+          # mode here is an ext4 emergency_ro that still advertises rw (see
+          # AGENTS.md). No livenessProbe: restarting would kill live tmux
+          # sessions, and there is no distinct liveness signal.
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "printf ok > /home/node/.ready && rm -f /home/node/.ready"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - {name: home, mountPath: /home/node}
+            - {name: tmp, mountPath: /tmp}
+            - {name: github-app, mountPath: /var/run/secrets/github-app, readOnly: true}
+            - {name: ssh, mountPath: /var/run/bench-ssh, readOnly: true}
+            # subPath: ConfigMap edits reach the pod only on restart.
+            - {name: ssh-config, mountPath: /etc/ssh/ssh_config.d/hestia.conf, subPath: hestia.conf, readOnly: true}
+      volumes:
+        - name: home
+          persistentVolumeClaim:
+            claimName: bench-console-home
+        - name: tmp
+          emptyDir:
+            sizeLimit: 10Gi
+        - name: ssh
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        - name: github-app
+          secret:
+            secretName: bench-cloud-github-app
+            defaultMode: 0440
+            items:
+              - {key: private-key.pem, path: private-key.pem}
+        - name: hestia-ssh
+          secret:
+            secretName: bench-cloud-hestia-ssh
+            defaultMode: 0440
+        - name: ssh-config
+          configMap:
+            name: bench-cloud-ssh-config

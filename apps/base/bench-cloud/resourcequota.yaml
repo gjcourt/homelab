@@ -1,0 +1,18 @@
+# The concurrency cap, enforced by the API server rather than by convention:
+# at most 5 task pods exist at once (plan decision 4 — raise toward the agreed
+# ceiling of 10 by editing this number). A 6th Job's pod is rejected at
+# creation and the Job controller retries it with backoff, so it waits.
+# Scoped to the bench-cloud-task PriorityClass so the console doesn't count.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: bench-cloud-tasks
+  namespace: bench-cloud
+spec:
+  hard:
+    pods: "5"
+  scopeSelector:
+    matchExpressions:
+      - scopeName: PriorityClass
+        operator: In
+        values: ["bench-cloud-task"]

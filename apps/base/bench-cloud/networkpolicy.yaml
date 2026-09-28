@@ -1,0 +1,68 @@
+# bench-cloud agents run arbitrary code, so egress is an allowlist:
+#
+#   - kube-dns (53) and the API server (read-only `view` RBAC; 443 via the
+#     `kubernetes` Service, 6443 after translation).
+#   - The INTERNET on 80/443 — and only the internet. This deliberately does
+#     NOT use the repo's usual `toEntities: world`: from Cilium's view the home
+#     LAN (hestia's TrueNAS UI, Home Assistant, the switch, every LB IP) is also
+#     `world`, and an agent must not reach those. So: 0.0.0.0/0 minus the
+#     private, CGNAT and link-local ranges.
+#     IPv6 is not allowed anywhere (the cluster is IPv4-only; default-deny
+#     covers it).
+#   - hestia (10.42.2.10) on 22 only — the `bench-agent` user, whose key is
+#     restricted to rrsync on agent-inbox (rw) and media (ro) on the hestia side.
+#
+# No ingress at all: nothing connects to an agent. Kubelet exec probes don't use
+# pod networking. Remote Control is outbound (the pod dials claude.ai).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: bench-cloud
+  namespace: bench-cloud
+  labels:
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "Agents: no ingress; egress to DNS, API server, public internet 80/443, hestia 22."
+  endpointSelector: {}
+  enableDefaultDeny:
+    ingress: true
+    egress: true
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+            - port: "6443"
+              protocol: TCP
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            - 100.64.0.0/10
+            - 169.254.0.0/16
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+            - port: "443"
+              protocol: TCP
+    - toCIDR:
+        - 10.42.2.10/32
+      toPorts:
+        - ports:
+            - port: "22"
+              protocol: TCP

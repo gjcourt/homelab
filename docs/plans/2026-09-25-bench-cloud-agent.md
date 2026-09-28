@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 last_modified: 2026-09-27
 summary: "bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia"
 ---
@@ -65,17 +65,17 @@ through llmux (llmux gateway plan, phase 2).
 | Capability | Mechanism | Boundary |
 |---|---|---|
 | Claude | Task Jobs: `claude setup-token` token as `CLAUDE_CODE_OAUTH_TOKEN` from a SOPS secret (verified 2026-09-26). Console: an interactive `claude auth login` kept on its PVC | Jobs get an inference-only token: no refresh races, and no Remote Control. The full-scope login lives in one pod only |
-| Code | A **GitHub App** (`bench-cloud`) installed on all of George's repos: **Contents RW, Pull requests RW, Issues RW, Actions R, Commit statuses R**; no Administration, **no Workflows**. Installation tokens (1 h) minted in-pod from the app key | Acts as `bench-cloud[bot]`, not as George. A **default-branch ruleset with George as the only bypass actor** means it can push branches and open PRs but **can't push the default branch**. It **can** merge its own PR (option 2, 2026-09-27: a merge block would also block George's merges); policy says it never does, and the hourly `bench-merge-audit` CronJob pages (`BenchCloudAppMerged`) within ~70 min if it does. **Can't change CI**, so it can't widen its own permissions. |
+| Code | A **GitHub App** (`bench-cloud`) installed on all of George's repos: **Contents RW, Pull requests RW, Issues RW, Actions R, Commit statuses R**; no Administration, **no Workflows**. Installation tokens (1 h) minted in-pod from the app key | Acts as `bench-cloud[bot]`, not as George. The **`default-branch-guard` ruleset** (PR required, no deletion, no force-push; George the only bypass) means it **can't push a default branch** — every change arrives as a PR. It **can** merge its own PR: a ruleset that blocked that also blocked George's own `gh pr merge` without `--admin` (trial 2026-09-26), so George chose **option 2** (2026-09-27): never merging is the agent's policy, and the hourly `bench-merge-audit` CronJob pages (`BenchCloudAppMerged`) within ~70 min of any merge by the App. **Can't change CI**, so it can't widen its own permissions. |
 | Tests | Toolchains in the image (Go, Node, Python, make, gcc) | No container builds in v1 (needs privileges); images still build in CI |
-| Internet | Egress 80/443 to `world` | No inbound; no Gateway route |
-| hestia | SSH as a new **`bench-agent`** user, key restricted with `rrsync`: RW under `agent-inbox`, RO media | Not `truenas_admin`; no sudo; no shell; no other datasets |
+| Internet | Egress 80/443 to `0.0.0.0/0` **minus RFC1918/CGNAT/link-local** — not `world`, which includes the home LAN | No inbound; no Gateway route; no LAN host except hestia:22 |
+| hestia | SSH as a new **`bench-agent`** user with **two keys**, each forced to `rrsync` (one directory per key): `rrsync /mnt/main/agent-inbox` (RW) and `rrsync -ro /mnt/main/family/media` (RO) | Not `truenas_admin`; no sudo; no interactive shell (`restrict`); no other datasets |
 | Cluster | ServiceAccount bound to the built-in **`view`** ClusterRole | Read-only; `view` excludes Secrets |
 
 ### Guardrails
 
 - Runs as non-root with a read-only root filesystem apart from the workspace;
   CPU and memory limits per pod.
-- Network policy: DNS, `world` 80/443, hestia 22, the API server — nothing else on
+- Network policy: DNS, public internet (0.0.0.0/0 minus private ranges) 80/443, hestia 22, the API server — nothing else on
   the LAN.
 - The agent's `CLAUDE.md` carries George's rules: branch + PR only, never push the
   default branch, never bypass branch protection, SOPS is operator-only. Claude
@@ -99,21 +99,30 @@ Code's version is pinned and bumped by Renovate.
   visible.
 - **An agent with push rights.** A personal token would act *as George*, and
   George merges his own PRs without review — so branch protection could not stop
-  the agent merging its own work. Hence a separate App identity plus a ruleset it
-  can't bypass. A repo missing the ruleset is a repo the agent can push `master`
-  on — phase 1 applies it everywhere by script and CI-checks for drift.
+  the agent merging its own work. Hence a separate App identity. A ruleset can
+  only *exempt* actors, never target one, so no rule stops the App merging
+  without also stopping George's merges — see the Code row above (option 2).
+  What the ruleset does guarantee: no direct or force push to a default branch,
+  so every App change is a visible PR. A merge by the App is caught by the
+  hourly `bench-merge-audit` (critical page, then revert). **On homelab a merge
+  reaches Flux before anyone sees it** — accepted by George. A repo missing the
+  ruleset is one the App can push `master` on — applied everywhere by script and
+  kept there by the daily `github-rulesets` CronJob.
 - **The merge audit runs from homelab `master`.** `bench-merge-audit` clones its
   script from `master` at run time, and Flux deploys its CronJob from `master`.
   Under option 2 the App can merge its own homelab PR, so one merge that edits the
-  audit disables it before the next run can report that merge. The audit catches
-  a mistake, not an agent working around it; closing that needs a control outside
-  homelab `master`.
+  audit could make it report "no merges" before the next run can report that
+  merge. Deleting or stopping it is caught (homelabscope staleness, 30 h); a
+  quietly edited audit is not. The audit catches a mistake, not an agent working
+  around it. **Fix deferred (George, 2026-09-27):** run the same check from a
+  small repo the App isn't installed on ("bench-watch": scheduled GitHub
+  Action + read-only token). **Revisit before agents run unattended on homelab.**
 - **hestia exposure.** The `bench-agent` user is new attack surface on the NAS.
   `rrsync` plus a dataset of its own keep a mistake inside `agent-inbox`.
 
 ## Phases (one PR each unless noted)
 
-1. **Foundations.** Image and its workflow (new repo); `bench-cloud` namespace,
+1. **Foundations.** Image and its workflow (in-repo: `images/bench-cloud/` + `build-bench-cloud.yml`, the house pattern); `bench-cloud` namespace,
    netpol, quota, `view` binding; the console pod; secrets (operator); hestia
    `bench-agent` user and `agent-inbox` dataset (TrueNAS, operator-assisted);
    the GitHub App and the default-branch ruleset on every repo. Verify:

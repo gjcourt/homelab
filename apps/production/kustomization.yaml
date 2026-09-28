@@ -4,6 +4,7 @@ resources:
   - adguard
   - audiobookshelf
   - authelia
+  - bench-cloud
   - burntbytes
   - certificates
   - changes

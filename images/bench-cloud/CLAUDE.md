@@ -39,6 +39,8 @@ In the **console** you can fan work out to unattended task Jobs:
   the files or tests involved, and what "done" means. Each ends as a PR (never
   merged by the task) plus a record in `hestia:/mnt/main/agent-inbox/runs/<id>/`.
 - Report the task IDs you started, then their PR links when they finish.
+- Use `bench-cloud run`, not hand-written Jobs: the API rejects any Job that
+  doesn't run as `bench-agent` with the `bench-cloud-task` PriorityClass.
 - Inside a task pod this doesn't work (no permission) — tasks never spawn tasks.
 
 ## Secrets

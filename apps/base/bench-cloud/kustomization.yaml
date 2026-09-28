@@ -8,6 +8,7 @@ resources:
   - namespace.yaml
   - serviceaccount.yaml
   - rbac.yaml
+  - admission-policy.yaml
   - priorityclass.yaml
   - resourcequota.yaml
   - limitrange.yaml

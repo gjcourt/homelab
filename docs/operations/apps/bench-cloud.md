@@ -28,7 +28,7 @@ internet, move files to hestia. Plan and decisions:
 |---|---|---|
 | Claude | Console: full `claude auth login` on the PVC. Jobs (phase 2): `setup-token` token | Console must never get `CLAUDE_CODE_OAUTH_TOKEN` — it overrides the login and Remote Control refuses it |
 | GitHub | `bench-cloud` GitHub App, 1 h installation tokens | Contents/PRs/Issues RW; no Workflows, no Administration. `default-branch-guard` ruleset → can't push a default branch, only open PRs. **Can merge its own PR** (option 2): policy forbids it, `BenchCloudAppMerged` pages if it happens |
-| Cluster | Tasks: `bench-agent` → built-in `view`. Console: `bench-console` → `view` + create/delete Jobs in `bench-cloud` only | Read-only elsewhere, no Secrets, no exec; tasks can't spawn tasks. `view` **does** include ConfigMaps and `pods/log` cluster-wide — anything an app logs, an agent can read |
+| Cluster | Tasks: `bench-agent` → built-in `view`. Console: `bench-console` → `view` + create/delete Jobs in `bench-cloud` only | Read-only elsewhere, no Secrets, no exec. A ValidatingAdmissionPolicy (`bench-cloud-task-jobs`) only admits Jobs that run as `bench-agent` with the `bench-cloud-task` PriorityClass, so tasks can't spawn tasks and every task counts against the quota. Creating Jobs does let the console reach any Secret in the namespace through a pod it starts — in practice only `bench-cloud-claude-token` is new to it, and its own full-scope login already covers that. `view` **does** include ConfigMaps and `pods/log` cluster-wide — anything an app logs, an agent can read |
 | Internet | CiliumNetworkPolicy: 0.0.0.0/0 **minus RFC1918/CGNAT/link-local**, ports 80/443 | The home LAN is unreachable except hestia:22 |
 | hestia | User `bench-agent`, two keys, each forced to `rrsync` | `hestia-inbox:` → `/mnt/main/agent-inbox` RW (symlinks munged); `hestia-media:` → `/mnt/main/family/media` RO |
 | Concurrency | ResourceQuota on the `bench-cloud-task` PriorityClass | 5 task pods (ceiling 10) |
@@ -177,8 +177,10 @@ The **console** can start tasks too — ask it from claude.ai/code or the app ("
 bench-cloud tasks for X in golinks and Y in llmux"); it runs the same
 `bench-cloud` CLI baked into the image, as the `bench-console` ServiceAccount
 (read-only `view` + create/delete Jobs in `bench-cloud` only). Task pods run as
-`bench-agent`, which cannot create Jobs, so tasks never spawn tasks. The 5-pod
-quota caps the total either way.
+`bench-agent`, which cannot create Jobs, so tasks never spawn tasks — and the
+`bench-cloud-task-jobs` admission policy rejects any Job that asks for another
+ServiceAccount or leaves out the `bench-cloud-task` PriorityClass, so a Job the
+console writes by hand can't get around that or the 5-pod quota.
 
 ## Verification
 

@@ -70,15 +70,39 @@ spec:
             - bash
             - -c
             - |
-              start_rc() {
-                tmux new-session -d -s rc -c "$WORKSPACE" \
-                  'while true; do claude remote-control --name bench-cloud; echo "remote-control exited ($?); retrying in 30s"; sleep 30; done'
-              }
+              # rc loop (runs inside tmux): logs every exit to the pod log via
+              # PID 1's stdout, and backs off 30s -> 60s -> ... -> 10m while it
+              # keeps failing; a run that lasts 5m+ resets the backoff.
+              RC_LOOP='n=0
+              while true; do
+                t0=$(date +%s); claude remote-control --name bench-cloud; rc=$?
+                if [ $(( $(date +%s) - t0 )) -ge 300 ]; then n=0; else n=$((n + 1)); fi
+                e=$(( n > 1 ? n - 1 : 0 )); d=$(( 30 << (e > 5 ? 5 : e) )); [ $d -gt 600 ] && d=600
+                echo "bench-console rc: remote-control exited ($rc) after $(( $(date +%s) - t0 ))s; consecutive short runs=$n; retrying in ${d}s" | tee -a /proc/1/fd/1
+                sleep $d
+              done'
+              start_rc() { tmux new-session -d -s rc -c "$WORKSPACE" bash -c "$RC_LOOP"; }
+              # Matches only the real process (argv starts `claude remote-control`).
+              # An unanchored "claude remote-control" also matches PID 1, the
+              # tmux server and the loop shell — their argv carries this script's
+              # text — so the heartbeat would never go stale.
+              rc_running() { pgrep -f '^([^ ]*/)?claude(\.exe)? remote-control( |$)' >/dev/null; }
               trap 'exit 0' TERM INT
               start_rc
-              # Watchdog: recreate the session if the tmux server ever dies.
+              sleep 5 & wait $!   # let claude start before the first check
+              # Watchdog (PID 1, every 60s): recreate the tmux session if it
+              # died; refresh /tmp/rc-alive while remote-control is running
+              # (the readinessProbe requires it < 3 min old), and log up/down
+              # transitions so `kubectl logs` / Loki show outages.
+              state=unknown
               while true; do
-                tmux has-session -t rc 2>/dev/null || { echo "rc session missing; restarting"; start_rc; }
+                tmux has-session -t rc 2>/dev/null || { echo "bench-console rc: tmux session missing; restarting"; start_rc; sleep 5; }
+                if rc_running; then
+                  touch /tmp/rc-alive
+                  [ "$state" = up ] || echo "bench-console rc: remote-control UP"; state=up
+                else
+                  [ "$state" = down ] || echo "bench-console rc: remote-control DOWN"; state=down
+                fi
                 sleep 60 & wait $!
               done
           env:
@@ -119,9 +143,16 @@ spec:
           # mode here is an ext4 emergency_ro that still advertises rw (see
           # AGENTS.md). No livenessProbe: restarting would kill live tmux
           # sessions, and there is no distinct liveness signal.
+          # Ready = the home volume takes writes AND remote-control has been
+          # alive within 3 min (heartbeat from the watchdog above). A console
+          # nobody can reach isn't ready; NotReady for 15m trips the stock
+          # KubeDeploymentReplicasMismatch warning. Right after start the pod
+          # is NotReady until the first watchdog pass (~5s) writes the
+          # heartbeat, longer if claude is slow to launch. On a fresh PVC (no
+          # login) it stays NotReady until George logs in — intended.
           readinessProbe:
             exec:
-              command: ["sh", "-c", "printf ok > /home/node/.ready && rm -f /home/node/.ready"]
+              command: ["sh", "-c", "printf ok > /home/node/.ready && rm -f /home/node/.ready && [ -n \"$(find /tmp/rc-alive -mmin -3 2>/dev/null)\" ]"]
             initialDelaySeconds: 5
             periodSeconds: 10
             timeoutSeconds: 3

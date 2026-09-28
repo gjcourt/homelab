@@ -2,7 +2,7 @@
 title: bench-cloud
 status: Stable
 created: 2026-09-26
-updated: 2026-09-27
+updated: 2026-09-28
 updated_by: gjcourt
 tags: [operations, apps, agents, claude-code]
 ---
@@ -145,24 +145,33 @@ console must never see it.
 
 ### 4. First console login
 
+Done 2026-09-28. For a fresh PVC (login and consent lost):
+
 ```bash
 kubectl -n bench-cloud exec -it deploy/bench-console -- tmux new -A -s main
 # inside tmux:
-cd ~/work                         # the only directory the entrypoint marks trusted
 claude auth login                 # opens a URL; complete it on the Mac
-claude remote-control --name bench-cloud   # answer y to the one-time consent
-# detach: Ctrl-b d
+# the pod's `rc` session retries remote-control every 30s; answer its
+# one-time consent there:
+tmux attach -t rc                 # answer y, then Ctrl-b d
 ```
 
 ## Usage
 
+The console starts Remote Control itself (tmux session `rc`, loop +
+60 s watchdog), so after any restart **bench-cloud** reappears in
+claude.ai/code and the Claude app on its own — login and consent persist on
+the PVC (verified 2026-09-28).
+
 ```bash
-# Attach (creates the session if it's gone):
+# Hands-on shell (your own session; leave `rc` alone):
 kubectl -n bench-cloud exec -it deploy/bench-console -- tmux new -A -s main
+# Check Remote Control:
+kubectl -n bench-cloud exec deploy/bench-console -- tmux capture-pane -p -t rc
 ```
 
-Or open **bench-cloud** in claude.ai/code or the Claude app while the
-`remote-control` session runs in tmux.
+Unattended tasks from the Mac: `scripts/bench-cloud/bench-cloud run --repo <repo> "<task>"`
+(see `bench-cloud` with no arguments for `ls` / `logs` / `rm`).
 
 ## Verification
 

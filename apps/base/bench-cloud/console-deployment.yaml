@@ -82,16 +82,22 @@ spec:
                 sleep $d
               done'
               start_rc() { tmux new-session -d -s rc -c "$WORKSPACE" bash -c "$RC_LOOP"; }
+              # Matches only the real process (argv starts `claude remote-control`).
+              # An unanchored "claude remote-control" also matches PID 1, the
+              # tmux server and the loop shell — their argv carries this script's
+              # text — so the heartbeat would never go stale.
+              rc_running() { pgrep -f '^([^ ]*/)?claude(\.exe)? remote-control( |$)' >/dev/null; }
               trap 'exit 0' TERM INT
               start_rc
+              sleep 5 & wait $!   # let claude start before the first check
               # Watchdog (PID 1, every 60s): recreate the tmux session if it
               # died; refresh /tmp/rc-alive while remote-control is running
               # (the readinessProbe requires it < 3 min old), and log up/down
               # transitions so `kubectl logs` / Loki show outages.
               state=unknown
               while true; do
-                tmux has-session -t rc 2>/dev/null || { echo "bench-console rc: tmux session missing; restarting"; start_rc; }
-                if pgrep -f "claude remote-control" >/dev/null; then
+                tmux has-session -t rc 2>/dev/null || { echo "bench-console rc: tmux session missing; restarting"; start_rc; sleep 5; }
+                if rc_running; then
                   touch /tmp/rc-alive
                   [ "$state" = up ] || echo "bench-console rc: remote-control UP"; state=up
                 else
@@ -140,10 +146,10 @@ spec:
           # Ready = the home volume takes writes AND remote-control has been
           # alive within 3 min (heartbeat from the watchdog above). A console
           # nobody can reach isn't ready; NotReady for 15m trips the stock
-          # KubeDeploymentReplicasMismatch warning. First 3 min after start
-          # the heartbeat may not exist yet, so the pod can read NotReady for
-          # up to a minute after start (before the first watchdog pass sees it). On a fresh PVC (no login) it stays NotReady until
-          # George logs in — intended.
+          # KubeDeploymentReplicasMismatch warning. Right after start the pod
+          # is NotReady until the first watchdog pass (~5s) writes the
+          # heartbeat, longer if claude is slow to launch. On a fresh PVC (no
+          # login) it stays NotReady until George logs in — intended.
           readinessProbe:
             exec:
               command: ["sh", "-c", "printf ok > /home/node/.ready && rm -f /home/node/.ready && [ -n \"$(find /tmp/rc-alive -mmin -3 2>/dev/null)\" ]"]

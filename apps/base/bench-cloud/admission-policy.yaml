@@ -1,0 +1,45 @@
+# Enforces "tasks can't spawn tasks" and the task quota at the API server.
+#
+# The console (bench-console SA) may create Jobs here. RBAC cannot constrain a
+# Job's pod template, so without this a console agent could write its own Job
+# that runs as bench-console (a task that can start more tasks) or omits the
+# bench-cloud-task PriorityClass (a pod the 5-pod ResourceQuota never counts).
+# job.yaml already sets both; this makes them the only values the API accepts.
+#
+# CREATE only: serviceAccountName and priorityClassName in a Job's pod template
+# are immutable after creation. Applies to every Job in the namespace, including
+# ones George submits from the Mac (same template, so they pass).
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: bench-cloud-task-jobs
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: bench-cloud
+    resourceRules:
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["jobs"]
+  validations:
+    - expression: >-
+        has(object.spec.template.spec.serviceAccountName) &&
+        object.spec.template.spec.serviceAccountName == 'bench-agent'
+      message: "bench-cloud Jobs must run as serviceAccountName bench-agent (tasks cannot start tasks)"
+      reason: Forbidden
+    - expression: >-
+        has(object.spec.template.spec.priorityClassName) &&
+        object.spec.template.spec.priorityClassName == 'bench-cloud-task'
+      message: "bench-cloud Jobs must use priorityClassName bench-cloud-task (counted by the task ResourceQuota)"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: bench-cloud-task-jobs
+spec:
+  policyName: bench-cloud-task-jobs
+  validationActions: ["Deny"]

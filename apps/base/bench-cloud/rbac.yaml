@@ -13,3 +13,38 @@ subjects:
   - kind: ServiceAccount
     name: bench-agent
     namespace: bench-cloud
+  - kind: ServiceAccount
+    name: bench-console
+    namespace: bench-cloud
+---
+# Console only: start, watch and stop task Jobs in bench-cloud — nowhere else.
+# `view` already covers reading pods, logs and the console Deployment (which
+# bench-cloud run reads for the image tag). Jobs' pods are garbage-collected by
+# the Job controller, so no pod delete right is needed. RBAC can't constrain a
+# Job's pod template, so admission-policy.yaml pins it to bench-agent and the
+# bench-cloud-task PriorityClass (the 5-pod ResourceQuota then caps what the
+# console can start); PSA restricted + the CiliumNetworkPolicy bound what those
+# pods can do.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: bench-task-launcher
+  namespace: bench-cloud
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "delete", "get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: bench-console-task-launcher
+  namespace: bench-cloud
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: bench-task-launcher
+subjects:
+  - kind: ServiceAccount
+    name: bench-console
+    namespace: bench-cloud

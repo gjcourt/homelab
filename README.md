@@ -1,62 +1,73 @@
 # Homelab
 
-GitOps-managed Kubernetes cluster, powered by [Flux](https://fluxcd.io/) and [Kustomize](https://kustomize.io/).
+GitOps repo for a 6-node Talos Kubernetes cluster (`melodic-muse`) running a set
+of self-hosted apps, reconciled by [Flux CD](https://fluxcd.io/) from this
+repository. Cluster state lives entirely in Git: a merge to `master` is picked
+up by Flux on its next reconcile (10 minutes by default, or forced with
+`flux reconcile kustomization apps-production -n flux-system`).
 
-## 📖 Overview
+For what's actually running right now — node health, in-flight work, known
+issues — see [docs/STATUS.md](docs/STATUS.md), not this file.
 
-This repository drives the state of the home infrastructure. It uses a **GitOps** workflow: changes are made in Git (via Pull Requests), and Flux reconciles the cluster to match this state.
+## Layout
 
-**Cluster**: `melodic-muse` — 6 Talos nodes (3 control-plane + 3 workers)
-**Storage**: Synology + hestia (TrueNAS) via democratic-csi iSCSI; hestia NFS backs the photo library
-**Networking**: Cilium (CNI + Gateway API), L2 + BGP load-balancer advertisement
+- `apps/base/<app>/` — environment-agnostic Kustomize base per app (current list: [apps/README.md](apps/README.md))
+- `apps/staging/<app>/`, `apps/production/<app>/` — overlays; production namespaces are unsuffixed, staging uses a `-stage` suffix
+- `infra/controllers/` — HelmReleases for cluster-wide services: Cilium, cert-manager, CNPG, democratic-csi, monitoring, etc. ([infra/README.md](infra/README.md))
+- `infra/configs/` — configuration the controllers depend on (LB IP pools, cert issuers, alert rules)
+- `clusters/melodic-muse/` — Flux Kustomization entrypoints
+- `hosts/` — docker-compose services running directly on hestia/alcatraz (TrueNAS), outside Kubernetes
+- `images/` — Dockerfiles for the container images this repo builds and publishes to ghcr.io
+- `firmware/` — ESPHome configs for IR blasters and sensors
+- `docs/` — architecture, operations runbooks, plans, and incident postmortems ([docs/README.md](docs/README.md))
+- `scripts/` — repo maintenance and host-ops tooling
 
-> **Current state, in-flight work, and known issues:** [`docs/STATUS.md`](docs/STATUS.md).
+## Making a change
 
-## 🏗 Architecture
+Every change goes through a branch and a PR — nothing is committed directly to
+`master` or `staging`.
 
-The repository follows a **dry (Don't Repeat Yourself)** structure using Kustomize bases and overlays:
+```bash
+git checkout master && git pull
+git checkout -b <type>/<description>
 
-- **`apps/base`**: The "source of truth" for application manifests. Agnostic of environment.
-- **`apps/staging`**: Test environment. Applies specific patches (limited resources, staging ingress).
-- **`apps/production`**: Live environment. Applies production patches (full resources, public ingress, persistent storage).
-- **`infra/`**: Core system services (Cert Manager, Monitoring, CNI) that run cluster-wide.
+# edit apps/, infra/, docs/, or scripts/
 
-> Read more: [Overlays and Structure Strategy](docs/architecture/overlays-and-structure.md)
+kubectl kustomize apps/staging/<app>   # validate the overlay you touched
+make test-kustomize                    # or render staging + production + infra in one shot
 
-## 🛠 Operations
+git push origin <type>/<description>
+gh pr create
+```
 
-### Common Tasks
+Opening a PR triggers CI to rebuild the `staging` branch (`master` plus every
+open PR) and deploy it to the `-stage` namespaces, so you can check the change
+against the real cluster before it merges. Merging to `master` deploys to
+production on Flux's next reconcile. Full walkthrough, including adding a new
+app and rolling back: [docs/operations/making-changes.md](docs/operations/making-changes.md).
 
-| Task | Guide |
-|------|-------|
-| **Submit a Change** | [Workflow & PRs](docs/operations/making-changes.md) |
-| **Add a New App**   | [App Structure](docs/architecture/overlays-and-structure.md) |
-| **Debug Deployment**| [Flux & Debugging](docs/operations/flux-and-deployments.md) |
-| **Storage Issues**  | [Synology iSCSI Ops](docs/operations/synology-iscsi-operations.md) |
-| **Update Apps List**| `scripts/update-apps-readme.sh` |
+Secrets are SOPS-encrypted before commit and decrypted in-cluster by Flux; never
+commit a plaintext secret.
 
-### Quick Commands
+## Validating locally
 
-*   **List Apps**: `kubectl get kustomizations -n flux-system`
-*   **Reconcile Now**: `flux reconcile ks apps-production`
-*   **Check Alerts**: `kubectl get alerts -A`
+```bash
+make test-kustomize    # render apps/staging, apps/production, infra/configs, infra/controllers
+make test-kubeconform  # schema-validate the rendered output (requires docker)
+make lint              # yamllint + shellcheck
+```
 
-## 📂 Repository Layout
+## Storage and networking
 
-*   [`apps/`](apps/) - Application definitions.
-    *   [`base/`](apps/base/) - Shared configuration.
-    *   [`production/`](apps/production/) - Live overlays.
-    *   [`staging/`](apps/staging/) - Test overlays.
-*   [`clusters/`](clusters/) - Flux entrypoints.
-*   [`infra/`](infra/) - System-level controllers & configs.
-*   [`hosts/`](hosts/) - Non-Kubernetes host config (hestia TrueNAS Custom Apps, compose).
-*   [`images/`](images/) - Custom container image definitions.
-*   [`docs/`](docs/) - Runbooks and architecture notes.
-*   [`scripts/`](scripts/) - Automation & maintenance tools.
+Persistent volumes are backed by hestia (TrueNAS) via `democratic-csi` iSCSI
+(`truenas-iscsi*` StorageClasses). Synology/alcatraz no longer serves cluster
+volumes; it now handles photo storage and off-box backups. Cilium provides the
+CNI and Gateway API ingress, with L2 + BGP advertisement of load balancer IPs.
 
-## 🔎 Status
+## Documentation
 
-- **Current state / in-flight / known issues**: [docs/STATUS.md](docs/STATUS.md)
-- **Plans index** (status-grouped): [docs/plans/README.md](docs/plans/README.md)
-- **Applications Index**: [See apps/README.md](apps/README.md)
-- **Infrastructure Index**: [See infra/README.md](infra/README.md)
+- [docs/STATUS.md](docs/STATUS.md) — current state, in-flight work, known issues
+- [docs/architecture/](docs/architecture/README.md) — how the cluster is built today
+- [docs/operations/](docs/operations/README.md) — runbooks, per-app guides, incident postmortems
+- [docs/plans/](docs/plans/README.md) — phased migrations and rollouts
+- [AGENTS.md](AGENTS.md) — full repo conventions and invariants

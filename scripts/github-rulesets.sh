@@ -86,6 +86,14 @@ JSON
 # App could open `renovate/anything` with a forged "patch" table and
 # renovate-automerge — which recognises Renovate PRs by branch prefix only —
 # would merge it with George's token.
+#
+# No `non_fast_forward` rule here, deliberately. With it, a force-push by an
+# Admin-bypass actor to renovate/** fails with GitHub "Internal Server Error"
+# (reproduced twice on a scratch repo, 2026-09-29; request ID of the second:
+# F4FC:34C773:C2EE3:F73DD:6ABBD082) — and Renovate force-pushes
+# as George on every rebase. Without it, creation/update/force-push/delete all
+# bypass cleanly. Nothing is lost: `update` already refuses every non-bypass
+# push to renovate/**, forced or not.
 BODY_RENOVATE=$(cat <<'JSON'
 {
   "name": "renovate-branch-guard",
@@ -95,8 +103,7 @@ BODY_RENOVATE=$(cat <<'JSON'
   "rules": [
     {"type": "creation"},
     {"type": "update", "parameters": {"update_allows_fetch_and_merge": false}},
-    {"type": "deletion"},
-    {"type": "non_fast_forward"}
+    {"type": "deletion"}
   ],
   "bypass_actors": [
     {"actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always"}

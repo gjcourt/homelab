@@ -182,6 +182,33 @@ bench-cloud tasks for X in golinks and Y in llmux"); it runs the same
 ServiceAccount or leaves out the `bench-cloud-task` PriorityClass, so a Job the
 console writes by hand can't get around that or the 5-pod quota.
 
+## George's skills and agents in the cluster
+
+On every pod start (console and task Jobs) the entrypoint runs
+`bench-agents-sync`: a shallow clone of private `gjcourt/agents` into
+`~/.cache/bench-agents`, then symlinks **only** the items in
+`/usr/local/share/bench-cloud/agents-allowlist` into `~/.claude` — same layout
+as `install.sh` on the Mac: `skills/<name>/` is a real directory holding a
+`SKILL.md` link plus the skill's `.skill-assets` (critique's `lenses/`), and
+`agents/<name>.md` is a file link. Anything whose real path leaves the clone is
+refused, and git is time-boxed (90 s) so a pod start can't hang on GitHub:
+
+| Kind | Items |
+|---|---|
+| Skills | `babysit`, `critique`, `ci`, `deploy-verify` |
+| Agents | `bench`, `webscout` |
+| User CLAUDE.md | `cluster/CLAUDE.md` — the engineering sections of George's global rules |
+
+The allowlist is reviewed **here** (it's in the image), so a change to
+`gjcourt/agents` can't widen it. Left out on purpose: memory (personal; agents
+read the open web), the life agents, valet / coach-* / collections-scan, gstack
+(needs Chrome), settings/hooks/MCP. git-crypt'd parts of the repo arrive as
+ciphertext (no key in the cluster). Updates to the allowlisted skills reach the
+console on its next restart and every task on its next run — no image rebuild;
+re-sync the console by hand with `kubectl -n bench-cloud exec deploy/bench-console
+-- bench-agents-sync`. It never fails a pod: without GitHub access it logs and
+skips.
+
 ## Verification
 
 ```bash

@@ -19,4 +19,8 @@ node -e '
   fs.writeFileSync(p, JSON.stringify(c, null, 2), { mode: 0o600 });
 '
 
+# George's allowlisted skills, agents and user CLAUDE.md from gjcourt/agents
+# (bench-agents-sync; never fails the pod — without GitHub access it skips).
+bench-agents-sync || true
+
 exec "$@"

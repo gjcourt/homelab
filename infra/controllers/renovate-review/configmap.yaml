@@ -5,7 +5,7 @@ metadata:
   namespace: renovate
 data:
   # Same watched set as the Renovate and automerge CronJobs. Keep in sync.
-  GITHUB_REPOS: gjcourt/homelab,gjcourt/golinks,gjcourt/llmux,gjcourt/Pingo,gjcourt/soundbyte,gjcourt/tempo-interview,gjcourt/vitals,gjcourt/drift,gjcourt/python-nginx-signing,gjcourt/toppingctl
+  GITHUB_REPOS: gjcourt/homelab,gjcourt/golinks,gjcourt/llmux,gjcourt/Pingo,gjcourt/soundbyte,gjcourt/tempo-interview,gjcourt/vitals,gjcourt/drift,gjcourt/python-nginx-signing,gjcourt/toppingctl,gjcourt/workstation
   # Reviewer model. Opus-tier is deliberate: the job runs on ~22% of PRs and the
   # whole point is catching what a cheaper reader would miss.
   REVIEW_MODEL: claude-opus-4-8

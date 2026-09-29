@@ -198,14 +198,32 @@ data:
     # is never auto-merged here, whatever its branch: under "option 2" the App
     # can open and merge PRs, and George's rule is that agent-written code on a
     # default branch goes through him. (renovate-branch-guard already stops the
-    # App touching renovate/ branches; this is the second, independent check.)
+    # App touching renovate/ branches; this is a second check, not a proof.)
+    #
+    # Limits, so nobody leans on it harder than it bears: commit author and
+    # committer logins come from the commit's email, which a `git push` can set
+    # to anything -- a commit pushed with George's email maps to George. It is
+    # reliable for commits the App makes through the API (GitHub stamps those
+    # as the bot) and for the PR author, which cannot be forged. The ruleset is
+    # the control; this catches the honest and the API-made cases.
     APP_LOGIN = os.environ.get("BENCH_CLOUD_APP_LOGIN", "bench-cloud[bot]")
 
 
     def touched_by_app(repo, pr):
+        """True if the App opened or committed to the PR. Fails CLOSED: an API
+        error or a commit list too long to read in one page counts as touched,
+        so the PR is held rather than merged unexamined (and one flaky call
+        does not abort the run for every repo after it)."""
         if (pr.get("user") or {}).get("login") == APP_LOGIN:
             return True
-        for c in gh(f"/repos/{repo}/pulls/{pr['number']}/commits?per_page=100"):
+        try:
+            commits = gh(f"/repos/{repo}/pulls/{pr['number']}/commits?per_page=100")
+        except Exception as exc:
+            print(f"    commit list error ({exc}); holding", flush=True)
+            return True
+        if len(commits) >= 100:
+            return True
+        for c in commits:
             for who in ((c.get("author") or {}).get("login"), (c.get("committer") or {}).get("login")):
                 if who == APP_LOGIN:
                     return True
@@ -378,7 +396,10 @@ data:
         number = pr["number"]
         last_405 = False
         for method in ("squash", "rebase", "merge"):
-            body = {"merge_method": method}
+            # Pin the merge to the head this run examined (touched_by_app, the
+            # table, CI). If anything pushed since, GitHub answers 409 and we
+            # bail rather than merge commits nobody looked at.
+            body = {"merge_method": method, "sha": pr["head"]["sha"]}
             if method in ("squash", "merge"):
                 body["commit_title"] = pr["title"]
             try:

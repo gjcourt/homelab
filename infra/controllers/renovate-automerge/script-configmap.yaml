@@ -182,14 +182,34 @@ data:
         signal Renovate always controls -- every branch it opens is created
         under branchPrefix, which defaults to 'renovate/'.
 
-        Title and author are kept as fallbacks so a rebranded branchPrefix
-        or a genuine renovate[bot] PR still matches."""
+        The branch prefix is the ONLY signal accepted. It used to fall back to
+        a 'chore(deps):' title or a 'renovate' author login, but a title is
+        free text: the bench-cloud GitHub App (Contents + PRs write on every
+        repo) could open a PR from any branch titled 'chore(deps): ...' and
+        this job would merge it with George's token. The prefix is trustworthy
+        only because the `renovate-branch-guard` ruleset
+        (scripts/github-rulesets.sh) lets nobody but the Admin role -- George's
+        PAT, i.e. Renovate and this job -- create or push refs/heads/renovate/**."""
         head = (pr.get("head") or {}).get("ref") or ""
-        return (
-            head.startswith(RENOVATE_BRANCH_PREFIX)
-            or pr["title"].startswith("chore(deps):")
-            or "renovate" in pr["user"]["login"].lower()
-        )
+        return head.startswith(RENOVATE_BRANCH_PREFIX)
+
+
+    # The bench-cloud agents' GitHub App. Anything it authored or committed to
+    # is never auto-merged here, whatever its branch: under "option 2" the App
+    # can open and merge PRs, and George's rule is that agent-written code on a
+    # default branch goes through him. (renovate-branch-guard already stops the
+    # App touching renovate/ branches; this is the second, independent check.)
+    APP_LOGIN = os.environ.get("BENCH_CLOUD_APP_LOGIN", "bench-cloud[bot]")
+
+
+    def touched_by_app(repo, pr):
+        if (pr.get("user") or {}).get("login") == APP_LOGIN:
+            return True
+        for c in gh(f"/repos/{repo}/pulls/{pr['number']}/commits?per_page=100"):
+            for who in ((c.get("author") or {}).get("login"), (c.get("committer") or {}).get("login")):
+                if who == APP_LOGIN:
+                    return True
+        return False
 
 
     def _cell_name(cell):
@@ -388,6 +408,11 @@ data:
         merged, held = [], []
         for pr in renovate:
             print(f"\n  PR #{pr['number']}: {pr['title']}", flush=True)
+            if touched_by_app(repo, pr):
+                reason = f"authored or committed to by {APP_LOGIN} -- George reviews"
+                print(f"    -> hold: {reason}", flush=True)
+                held.append({"pr": pr, "reason": reason})
+                continue
             if any((lab or {}).get("name") == HOLD_LABEL for lab in pr.get("labels") or []):
                 reason = f"held by dependency review ({HOLD_LABEL})"
                 print(f"    -> hold: {reason}", flush=True)

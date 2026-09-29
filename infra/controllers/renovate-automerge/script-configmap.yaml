@@ -189,9 +189,20 @@ data:
         this job would merge it with George's token. The prefix is trustworthy
         only because the `renovate-branch-guard` ruleset
         (scripts/github-rulesets.sh) lets nobody but the Admin role -- George's
-        PAT, i.e. Renovate and this job -- create or push refs/heads/renovate/**."""
-        head = (pr.get("head") or {}).get("ref") or ""
-        return head.startswith(RENOVATE_BRANCH_PREFIX)
+        PAT, i.e. Renovate and this job -- create or push refs/heads/renovate/**.
+
+        A FORK's branch can be named renovate/anything too -- the ruleset only
+        guards this repo's own refs -- so the head must also live in the base
+        repo. Without that, any stranger could open a fork PR from a branch
+        called renovate/x and this job would merge it."""
+        head = pr.get("head") or {}
+        head_repo = (head.get("repo") or {}).get("full_name")
+        base_repo = ((pr.get("base") or {}).get("repo") or {}).get("full_name")
+        return (
+            (head.get("ref") or "").startswith(RENOVATE_BRANCH_PREFIX)
+            and head_repo is not None
+            and head_repo == base_repo
+        )
 
 
     # The bench-cloud agents' GitHub App. Anything it authored or committed to
@@ -228,6 +239,72 @@ data:
                 if who == APP_LOGIN:
                     return True
         return False
+
+
+    # One query per Renovate PR: who edited the body, retitled it, removed a
+    # label or moved its base. Everything classify_pr() and the hold check read
+    # is PR metadata the App can change with Pull requests / Issues: write --
+    # without touching the branch -- e.g. rewrite a major's table to say patch,
+    # or strip held-by-review.
+    PR_EDITS_QUERY = """
+    query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          author { login }
+          userContentEdits(first: 100) {
+            pageInfo { hasNextPage }
+            nodes { editor { login } }
+          }
+          timelineItems(first: 100, itemTypes: [RENAMED_TITLE_EVENT, UNLABELED_EVENT, BASE_REF_CHANGED_EVENT]) {
+            pageInfo { hasNextPage }
+            nodes {
+              __typename
+              ... on RenamedTitleEvent { actor { login } }
+              ... on UnlabeledEvent { actor { login } }
+              ... on BaseRefChangedEvent { actor { login } }
+            }
+          }
+        }
+      }
+    }
+    """
+
+
+    def edited_by_other(repo, pr):
+        """Return a hold reason if anyone but the PR's author edited its body,
+        retitled it, removed a label or changed its base; else None.
+
+        An ALLOWLIST (the author -- self-hosted Renovate opens PRs as George),
+        not a denylist of the App: GraphQL names bots without the "[bot]"
+        suffix REST uses, and an allowlist does not care. Adding a label is not
+        gated -- the only label read here is HOLD_LABEL, and adding it holds.
+        Fails CLOSED: an API error, a missing/deleted actor, or more than one
+        page of history is a hold."""
+        owner, name = repo.split("/", 1)
+        try:
+            res = gh("/graphql", method="POST", body={
+                "query": PR_EDITS_QUERY,
+                "variables": {"owner": owner, "name": name, "number": pr["number"]},
+            })
+            node = res["data"]["repository"]["pullRequest"]
+        except Exception as exc:
+            return f"could not read edit history ({exc})"
+        author = (node.get("author") or {}).get("login")
+        if not author:
+            return "PR author unknown"
+        edits = node["userContentEdits"]
+        events = node["timelineItems"]
+        if edits["pageInfo"]["hasNextPage"] or events["pageInfo"]["hasNextPage"]:
+            return "edit history longer than one page"
+        for e in edits["nodes"]:
+            who = (e.get("editor") or {}).get("login")
+            if who != author:
+                return f"description edited by {who or 'unknown'}, not {author}"
+        for ev in events["nodes"]:
+            who = (ev.get("actor") or {}).get("login")
+            if who != author:
+                return f"{ev.get('__typename')} by {who or 'unknown'}, not {author}"
+        return None
 
 
     def _cell_name(cell):
@@ -349,17 +426,25 @@ data:
 
 
     def ci_passing(repo, pr):
-        """True only when every completed check has succeeded."""
+        """True only when CI has FINISHED and passed on this head: every check
+        run completed as success/neutral/skipped, and the combined commit
+        status is success. A queued or running check, or a pending status, is
+        not passing -- it used to be, so a PR could merge before its CI ran.
+        A head with no check runs and no statuses at all (a repo without CI)
+        still passes, as before."""
         sha = pr["head"]["sha"]
         try:
-            result = gh(f"/repos/{repo}/commits/{sha}/check-runs")
+            result = gh(f"/repos/{repo}/commits/{sha}/check-runs?per_page=100")
             runs = result.get("check_runs", [])
-            if not runs:
-                combined = gh(f"/repos/{repo}/commits/{sha}/status")
-                state = combined.get("state", "")
-                return state in ("success", "pending")
-            completed = [r for r in runs if r["status"] == "completed"]
-            return all(r["conclusion"] == "success" for r in completed)
+            if result.get("total_count", len(runs)) > len(runs):
+                return False  # more than one page: don't guess
+            for r in runs:
+                if r.get("status") != "completed" or r.get("conclusion") not in ("success", "neutral", "skipped"):
+                    return False
+            combined = gh(f"/repos/{repo}/commits/{sha}/status")
+            if combined.get("total_count", 0) == 0:
+                return True  # no commit statuses; check runs (if any) decided
+            return combined.get("state") == "success"
         except Exception as exc:
             print(f"    CI check error: {exc}", flush=True)
             return False
@@ -431,6 +516,12 @@ data:
             print(f"\n  PR #{pr['number']}: {pr['title']}", flush=True)
             if touched_by_app(repo, pr):
                 reason = f"authored or committed to by {APP_LOGIN} -- George reviews"
+                print(f"    -> hold: {reason}", flush=True)
+                held.append({"pr": pr, "reason": reason})
+                continue
+            edit_reason = edited_by_other(repo, pr)
+            if edit_reason:
+                reason = f"PR metadata changed by someone other than its author: {edit_reason} -- George reviews"
                 print(f"    -> hold: {reason}", flush=True)
                 held.append({"pr": pr, "reason": reason})
                 continue

@@ -49,6 +49,8 @@ COPY images/bench-cloud/github-app-token /usr/local/bin/github-app-token
 COPY images/bench-cloud/gh-wrapper /usr/local/bin/gh
 COPY images/bench-cloud/entrypoint.sh /usr/local/bin/bench-entrypoint
 COPY images/bench-cloud/bench-task /usr/local/bin/bench-task
+COPY images/bench-cloud/bench-agents-sync /usr/local/bin/bench-agents-sync
+COPY images/bench-cloud/agents-allowlist /usr/local/share/bench-cloud/agents-allowlist
 # The task CLI + Job template, so the console can start task Jobs itself
 # (bench-console ServiceAccount; task pods run as bench-agent and cannot).
 # Build context is the repo root for exactly these two files.
@@ -59,7 +61,7 @@ COPY scripts/bench-cloud/job.yaml /usr/local/share/bench-cloud/job.yaml
 COPY images/bench-cloud/managed-settings.json /etc/claude-code/managed-settings.json
 COPY images/bench-cloud/CLAUDE.md /etc/claude-code/CLAUDE.md
 # The trailing version checks fail the BUILD, not the first task, if a tool is missing.
-RUN chmod 0755 /usr/local/bin/github-app-token /usr/local/bin/gh /usr/local/bin/bench-entrypoint /usr/local/bin/bench-task /usr/local/bin/bench-cloud \
+RUN chmod 0755 /usr/local/bin/github-app-token /usr/local/bin/gh /usr/local/bin/bench-entrypoint /usr/local/bin/bench-task /usr/local/bin/bench-cloud /usr/local/bin/bench-agents-sync \
  && git config --system credential.https://github.com.helper '!/usr/local/bin/github-app-token --git-credential' \
  && git config --system init.defaultBranch main \
  && go version && kubectl version --client=true && /usr/local/lib/gh/gh --version \

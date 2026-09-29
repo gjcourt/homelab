@@ -1,0 +1,17 @@
+# What bench-agents-sync installs from gjcourt/agents into ~/.claude in every
+# bench-cloud pod. Reviewed here (homelab), not in the agents repo, so an agent
+# change to gjcourt/agents can't widen what gets installed.
+#
+# Deliberately NOT here: memory (George's personal notes — agents read the open
+# web, so prompt-injection exposure), the life agents (coach, chef, trainer,
+# tutor, editor, family-office), valet / coach-* / collections-scan (need Gmail
+# or the life repo), gstack (needs Chrome), settings/hooks/MCP.
+#
+# kind       name            path in gjcourt/agents
+claude-md    -               cluster/CLAUDE.md
+skill        babysit         babysit
+skill        critique        critique
+skill        ci              ci
+skill        deploy-verify   bench/skills/deploy-verify
+agent        bench           bench/AGENT.md
+agent        webscout        webscout/AGENT.md

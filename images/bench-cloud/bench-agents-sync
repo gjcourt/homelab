@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# bench-agents-sync — install George's allowlisted Claude Code skills, agents
+# and user CLAUDE.md from gjcourt/agents into ~/.claude.
+#
+# Runs from the entrypoint on every pod start (console and task Jobs); safe to
+# re-run by hand. Never fails the caller: without GitHub access it logs and
+# exits 0, and the pod starts with the managed policy alone.
+#
+# The allowlist (/usr/local/share/bench-cloud/agents-allowlist) lives in the
+# image, reviewed in homelab — the agents repo can't widen it. git-crypt'd
+# parts of that repo (memory/, valet data) arrive as ciphertext: there is no
+# key in the cluster, and nothing here points at them anyway.
+set -uo pipefail
+
+ALLOW=${BENCH_AGENTS_ALLOWLIST:-/usr/local/share/bench-cloud/agents-allowlist}
+SRC=${BENCH_AGENTS_DIR:-$HOME/.cache/bench-agents}
+URL=${BENCH_AGENTS_REPO:-https://github.com/gjcourt/agents}
+CL="$HOME/.claude"
+MANIFEST="$CL/.bench-agents-managed"
+log() { echo "bench-agents-sync: $*"; }
+
+[[ -n "${GITHUB_APP_ID:-}" ]] || { log "no GitHub App configured; skipping"; exit 0; }
+[[ -r "$ALLOW" ]] || { log "no allowlist at $ALLOW; skipping"; exit 0; }
+
+if [[ -d "$SRC/.git" ]]; then
+  if ! { git -C "$SRC" fetch -q --depth 1 origin HEAD && git -C "$SRC" reset -q --hard FETCH_HEAD; }; then
+    log "refresh failed; keeping the previous copy"
+  fi
+else
+  mkdir -p "$(dirname "$SRC")"
+  git clone -q --depth 1 "$URL" "$SRC" || { log "clone failed; skipping"; exit 0; }
+fi
+log "gjcourt/agents @ $(git -C "$SRC" rev-parse --short HEAD)"
+
+mkdir -p "$CL/skills" "$CL/agents"
+declare -A want=()
+while read -r kind name path _; do
+  [[ -z "${kind:-}" || "$kind" == \#* ]] && continue
+  src="$SRC/$path"
+  [[ -e "$src" ]] || { log "missing in repo, skipped: $kind $name ($path)"; continue; }
+  case "$kind" in
+    skill)     dst="$CL/skills/$name" ;;
+    agent)     dst="$CL/agents/$name.md" ;;
+    claude-md) dst="$CL/CLAUDE.md" ;;
+    *) log "unknown kind '$kind'; skipped"; continue ;;
+  esac
+  # Never clobber something we didn't put there (e.g. a CLAUDE.md George wrote
+  # on the console's PVC): only replace missing paths or our own symlinks.
+  if [[ -e "$dst" && ! -L "$dst" ]]; then
+    log "not replacing non-symlink $dst"; continue
+  fi
+  ln -sfn "$src" "$dst"
+  want["$dst"]=1
+done < "$ALLOW"
+
+# Prune links we installed earlier that are no longer allowlisted.
+if [[ -r "$MANIFEST" ]]; then
+  while read -r old; do
+    [[ -n "$old" && -z "${want[$old]:-}" && -L "$old" ]] && rm -f "$old" && log "removed $old"
+  done < "$MANIFEST"
+fi
+printf '%s\n' "${!want[@]}" | sort > "$MANIFEST"
+log "installed ${#want[@]} item(s)"
+exit 0

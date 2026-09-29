@@ -187,7 +187,11 @@ console writes by hand can't get around that or the 5-pod quota.
 On every pod start (console and task Jobs) the entrypoint runs
 `bench-agents-sync`: a shallow clone of private `gjcourt/agents` into
 `~/.cache/bench-agents`, then symlinks **only** the items in
-`/usr/local/share/bench-cloud/agents-allowlist` into `~/.claude`:
+`/usr/local/share/bench-cloud/agents-allowlist` into `~/.claude` — same layout
+as `install.sh` on the Mac: `skills/<name>/` is a real directory holding a
+`SKILL.md` link plus the skill's `.skill-assets` (critique's `lenses/`), and
+`agents/<name>.md` is a file link. Anything whose real path leaves the clone is
+refused, and git is time-boxed (90 s) so a pod start can't hang on GitHub:
 
 | Kind | Items |
 |---|---|

@@ -16,7 +16,7 @@ issues — see [docs/STATUS.md](docs/STATUS.md), not this file.
 - `infra/controllers/` — HelmReleases for cluster-wide services: Cilium, cert-manager, CNPG, democratic-csi, monitoring, etc. ([infra/README.md](infra/README.md))
 - `infra/configs/` — configuration the controllers depend on (LB IP pools, cert issuers, alert rules)
 - `clusters/melodic-muse/` — Flux Kustomization entrypoints
-- `hosts/` — docker-compose services running directly on hestia/alcatraz (TrueNAS), outside Kubernetes
+- `hosts/` — docker-compose services running directly on hestia (TrueNAS) and alcatraz (Synology), outside Kubernetes
 - `images/` — Dockerfiles for the container images this repo builds and publishes to ghcr.io
 - `firmware/` — ESPHome configs for IR blasters and sensors
 - `docs/` — architecture, operations runbooks, plans, and incident postmortems ([docs/README.md](docs/README.md))

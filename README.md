@@ -60,4 +60,4 @@ Conventions, invariants, and the full command reference:
 
 ## License
 
-No licence file yet.
+MIT License — see [LICENSE](LICENSE).

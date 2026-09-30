@@ -20,7 +20,7 @@ landing as recently as 2026-09-29.
 apps/       Kustomize bases + staging/production overlays, one directory per app
 infra/      controllers (HelmReleases) and the configs they depend on
 clusters/   Flux Kustomization entrypoints
-hosts/      docker-compose services running outside Kubernetes (hestia, alcatraz)
+hosts/      compose files, scripts, and docs for hosts outside Kubernetes (hestia, alcatraz, ...)
 images/     Dockerfiles for the images this repo builds and publishes to ghcr.io
 firmware/   ESPHome configs for IR blasters and sensors
 docs/       architecture, runbooks, plans, incident postmortems
@@ -37,7 +37,7 @@ known issues: [docs/STATUS.md](docs/STATUS.md).
 1. Branch from `master`: `git checkout master && git pull && git checkout -b <type>/<description>`.
 2. Edit `apps/`, `infra/`, `docs/`, or `scripts/`, and validate locally (see Development below).
 3. Push and open a PR. CI rebuilds the `staging` branch (`master` plus every
-   open PR) and deploys it to the `-stage` namespaces, so you can check the
+   open, mergeable PR whose checks pass) and deploys it to the `-stage` namespaces, so you can check the
    change against the real cluster before it merges.
 4. Merging to `master` deploys to production on Flux's next reconcile, or
    force it with `flux reconcile kustomization apps-production -n flux-system`.
@@ -50,7 +50,7 @@ and rolling back:
 ## Development
 
 ```bash
-make test                                    # kustomize build + kubeconform: apps/staging, apps/production, infra/configs, infra/controllers
+make test                                    # kustomize build + kubeconform (apps/staging, apps/production, infra/*) + yamlfmt check
 make lint                                    # yamllint (.yamllint) + shellcheck on scripts/*.sh
 (cd scripts/plans-index && go run . -check)  # verify docs/plans frontmatter matches the generated index
 ```

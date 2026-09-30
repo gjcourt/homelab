@@ -1,7 +1,7 @@
 <!-- readme-type: infra -->
 # Homelab
 
-GitOps for a 6-node Talos Kubernetes homelab cluster, reconciled by Flux CD
+GitOps for a 4-node Talos Kubernetes homelab cluster, reconciled by Flux CD
 
 Running a cluster by hand invites config drift and leaves no record of what
 changed or why. This repo is the single source of truth for the

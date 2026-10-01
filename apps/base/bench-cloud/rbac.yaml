@@ -22,7 +22,7 @@ subjects:
 # bench-cloud run reads for the image tag). Jobs' pods are garbage-collected by
 # the Job controller, so no pod delete right is needed. RBAC can't constrain a
 # Job's pod template, so admission-policy.yaml pins it to bench-agent and the
-# bench-cloud-task PriorityClass (the 5-pod ResourceQuota then caps what the
+# bench-cloud-task PriorityClass (the 8-pod ResourceQuota then caps what the
 # console can start); PSA restricted + the CiliumNetworkPolicy bound what those
 # pods can do.
 apiVersion: rbac.authorization.k8s.io/v1

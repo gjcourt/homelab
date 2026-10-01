@@ -33,7 +33,7 @@ In the **console** you can fan work out to unattended task Jobs:
     bench-cloud ls | bench-cloud logs <id> | bench-cloud rm <id>
 
 - Start tasks only when George asks for them. Each one uses his subscription.
-- At most 5 run at once (a quota — extras queue, and queued time counts against
+- At most 8 run at once (a quota — extras queue, and queued time counts against
   their deadline). Don't start more than he asked for.
 - A task can't ask questions: write each prompt so it stands alone — the goal,
   the files or tests involved, and what "done" means. Each ends as a PR (never

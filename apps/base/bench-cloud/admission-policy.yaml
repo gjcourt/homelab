@@ -3,7 +3,7 @@
 # The console (bench-console SA) may create Jobs here. RBAC cannot constrain a
 # Job's pod template, so without this a console agent could write its own Job
 # that runs as bench-console (a task that can start more tasks) or omits the
-# bench-cloud-task PriorityClass (a pod the 5-pod ResourceQuota never counts).
+# bench-cloud-task PriorityClass (a pod the 8-pod ResourceQuota never counts).
 # job.yaml already sets both; this makes them the only values the API accepts.
 #
 # CREATE only: serviceAccountName and priorityClassName in a Job's pod template

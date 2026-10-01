@@ -49,7 +49,7 @@ subjects:
     name: bench-console
     namespace: bench-cloud
 ---
-# Read-only Gateway API (plan decision 2 extended, 2026-10-01). The built-in
+# Read-only Gateway API (extends plan decision 2, "read-only"). The built-in
 # `view` role doesn't aggregate these CRDs, so agents couldn't see whether a
 # Gateway listener was programmed or an HTTPRoute accepted — the status they
 # need to verify routing changes they propose. Bound to the two bench

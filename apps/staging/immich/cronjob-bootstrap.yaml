@@ -1,0 +1,148 @@
+# Staging testbed bootstrap + health check — see docs/operations/apps/immich.md §10.5.
+#
+# A fresh staging DB (initdb, §10.2) has no admin and no external library, so
+# Immich never indexes the photo slice that immich-photos-30d-sync maintains.
+# On 2026-10-01 staging had 0 users and 0 assets while the sync ran every night.
+# This CronJob runs bootstrap/bootstrap.mjs daily, after the 03:00 sync:
+# creates the admin and the library if missing, queues a scan, and fails if the
+# library is still empty a day after creation (→ KubeJobFailed, warning).
+#
+# After a DB recreate, run it at once instead of waiting for 04:30:
+#   kubectl -n immich-stage create job --from=cronjob/immich-staging-bootstrap bootstrap-now
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: immich-staging-bootstrap
+  namespace: immich-stage
+  labels:
+    app: immich
+    component: staging-bootstrap
+    env: staging
+spec:
+  schedule: "30 4 * * *"
+  timeZone: America/Los_Angeles
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 3600
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      # Up to 5 min waiting for the server, plus the API calls.
+      activeDeadlineSeconds: 900
+      backoffLimit: 1
+      # KubeJobFailed fires while a failed Job object exists. Expiring it after
+      # 20h lets the alert clear on its own once a later run succeeds, and fire
+      # again the next day if the run fails again.
+      ttlSecondsAfterFinished: 72000
+      template:
+        metadata:
+          labels:
+            app: immich
+            component: staging-bootstrap
+            env: staging
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: bootstrap
+              # The immich-server image, for its Node runtime only (no Immich code
+              # runs). Keep this pin in step with apps/base/immich/deployment.yaml
+              # when bumping Immich, so the script talks to the same API version.
+              image: ghcr.io/immich-app/immich-server:v3.2.4@sha256:d317916b28090c33eb36b308464ea391f8b7df1d850fcfea227a39ec879718c2
+              command: ["node", "/bootstrap/bootstrap.mjs"]
+              env:
+                - name: IMMICH_API_URL
+                  value: http://immich-server:2283/api
+                # Same import paths as prod's library, so staging indexes the
+                # slice with prod's layout (/mnt/photos is the slice in staging).
+                - name: IMPORT_PATHS
+                  value: /mnt/photos/george,/mnt/photos/mara
+                - name: ADMIN_EMAIL
+                  valueFrom:
+                    secretKeyRef:
+                      name: immich-staging-admin
+                      key: email
+                - name: ADMIN_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: immich-staging-admin
+                      key: password
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              volumeMounts:
+                - name: script
+                  mountPath: /bootstrap
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: immich-staging-bootstrap-script
+---
+# The bootstrap pod may reach DNS and the Immich server API, nothing else.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: immich-staging-bootstrap
+  namespace: immich-stage
+spec:
+  description: Staging bootstrap Job — egress to DNS and immich-server:2283 only.
+  endpointSelector:
+    matchLabels:
+      app: immich
+      component: staging-bootstrap
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app: immich
+            component: server
+      toPorts:
+        - ports:
+            - port: "2283"
+              protocol: TCP
+---
+# immich-server's base policy only admits the gateway and nodes on 2283. Cilium
+# policies are additive, so this staging-only rule admits the bootstrap pod too.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: immich-server-from-staging-bootstrap
+  namespace: immich-stage
+spec:
+  description: Admit the staging bootstrap Job to immich-server:2283.
+  endpointSelector:
+    matchLabels:
+      app: immich
+      component: server
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            app: immich
+            component: staging-bootstrap
+      toPorts:
+        - ports:
+            - port: "2283"
+              protocol: TCP

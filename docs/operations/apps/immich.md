@@ -281,6 +281,47 @@ The CronJob (busybox, daily at 03:00) does: (1) `find /src -type f -mtime -30` �
 - **Database — manual recreate, recommended weekly / as-needed.** Do **not** automate a CNPG Cluster deletion (scripting a Cluster-CR delete is too risky). Run §10.2 by hand when you want a clean-slate DB (e.g. before rehearsing a migration, or if staging metadata drifts). Weekly is a reasonable default; there's no urgency since the photo set self-maintains.
 - **Lighter refresh (optional).** Instead of a full recreate you can trim accumulated cruft with Immich's own maintenance jobs (Administration → Jobs): re-run the **Library** scan and **Storage Migration**, and use **asset/orphan cleanup** to drop entries whose files aged out of the slice. Prefer the documented recreate when you want a guaranteed-clean DB.
 
+### 10.5 Bootstrap + "staging is empty" check (`cronjob-bootstrap.yaml`)
+
+A fresh DB (§10.2) has **no admin and no external library**, so nothing tells Immich to index
+the slice. On 2026-10-01, 88 days after the July recreate, staging had **0 users and 0 assets**
+while the sync kept a 5,000-file slice up to date. It booted and migrated fine, which is why
+the v3.2.4 rehearsal looked clean while proving nothing about real data.
+
+`immich-staging-bootstrap` (daily 04:30, after the 03:00 sync) runs
+`bootstrap/bootstrap.mjs` on the immich-server image's Node. Every step is idempotent:
+
+1. no admin → `POST /api/auth/admin-sign-up` with the `immich-staging-admin` credentials;
+2. log in; fail if that account isn't an admin;
+3. no library with prod's import paths (`/mnt/photos/george`, `/mnt/photos/mara`) → create one;
+4. queue a library scan, so the day's sync is indexed without waiting for Immich's own schedule;
+5. **health check:** if the library is more than 24h old and still has 0 assets, exit 1. The
+   failed Job trips the existing `KubeJobFailed` warning (→ the alerts inbox). The Job expires
+   after 20h, so the alert clears once a later run succeeds and re-fires daily while it doesn't.
+
+Two CiliumNetworkPolicies come with it: the Job may reach only DNS and `immich-server:2283`, and
+a staging-only rule admits it to the server (the base policy admits only the gateway and nodes).
+
+**Operator setup (once):** `secret-staging-admin.yaml` is SOPS-encrypted and not in Git as
+plaintext. Copy `secret-staging-admin.yaml.example`, fill `email` and `password`, then
+`sops -e -i`. Use your Authelia email: Immich links an OAuth login to an existing user with the
+same email, so **Login with Authelia** on photos.stage.burntbytes.com lands in this admin
+account, which owns the library.
+
+**After a DB recreate (§10.2)**, run it immediately instead of waiting for 04:30:
+
+```bash
+kubectl -n immich-stage create job --from=cronjob/immich-staging-bootstrap bootstrap-now
+kubectl -n immich-stage logs -f job/bootstrap-now
+```
+
+The first scan imports ~5,000 files; thumbnails, metadata, CLIP embeddings and faces follow
+over the next hours. Only then is staging a rehearsal that exercises real rows.
+
+**When bumping Immich**, update the image pin in `cronjob-bootstrap.yaml` with the others — it
+uses the server image only for Node, but keeping it in step means the script is tested against
+the API version it calls.
+
 ### Orphaned Retain PV cleanup (operator, destructive)
 
 Staging accumulated a backlog of `Released` + `Retain` PVs from prior CNPG replica churn (replicas -1/-2/-3/-4/-6 recycled multiple times) plus some stale app volumes. These are **not** in use (`Released` = no bound claim) and hold no data worth keeping — delete them to reclaim the underlying iSCSI/zvol space. Confirm each is still `Released` before deleting:

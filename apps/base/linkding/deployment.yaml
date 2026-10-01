@@ -32,7 +32,7 @@ spec:
 
       containers:
         - name: linkding
-          image: sissbruecker/linkding@sha256:0c0a9a04c7ebd644293c37f98710872fe7cdff0ea1ff7fd9be4d235e4c4678d2
+          image: sissbruecker/linkding@sha256:e35cb50e0581178f245125ffaa909c565416c94c9f22ace305a7d234a4345522
           ports:
             - containerPort: 9090
 
@@ -92,7 +92,7 @@ spec:
       # would otherwise produce 500 errors on every request.
       initContainers:
         - name: migrate
-          image: sissbruecker/linkding@sha256:0c0a9a04c7ebd644293c37f98710872fe7cdff0ea1ff7fd9be4d235e4c4678d2
+          image: sissbruecker/linkding@sha256:e35cb50e0581178f245125ffaa909c565416c94c9f22ace305a7d234a4345522
           command:
             - python
             - /etc/linkding/manage.py

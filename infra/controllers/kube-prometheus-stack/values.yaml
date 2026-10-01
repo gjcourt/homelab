@@ -620,6 +620,17 @@ alertmanager:
       - receiver: 'null'
         matchers:
           - alertname = "Watchdog"
+      # Exception to the staging-warning mute below: a failed
+      # immich-staging-bootstrap Job IS the signal that staging has sat empty
+      # (immich.md §10.5), so it must reach the alerts inbox. Matched by
+      # job_name so every other immich-stage Job stays muted. Must stay ABOVE
+      # the `.+-stage` null route — the first match wins.
+      - receiver: 'email-warning'
+        matchers:
+          - alertname = "KubeJobFailed"
+          - namespace = "immich-stage"
+          - job_name =~ "immich-staging-bootstrap.*"
+        repeat_interval: 24h
       # Staging is an ephemeral PREVIEW environment, continuously rebuilt by CI
       # from `master + open PRs` (see AGENTS.md). Warning-severity alerts there
       # (failed/one-shot Jobs during a migration rehearsal, transient crashloops,

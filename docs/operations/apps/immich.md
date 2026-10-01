@@ -294,10 +294,16 @@ the v3.2.4 rehearsal looked clean while proving nothing about real data.
 1. no admin → `POST /api/auth/admin-sign-up` with the `immich-staging-admin` credentials;
 2. log in; fail if that account isn't an admin;
 3. no library with prod's import paths (`/mnt/photos/george`, `/mnt/photos/mara`) → create one;
-4. queue a library scan, so the day's sync is indexed without waiting for Immich's own schedule;
-5. **health check:** if the library is more than 24h old and still has 0 assets, exit 1. The
-   failed Job trips the existing `KubeJobFailed` warning (→ the alerts inbox). The Job expires
-   after 20h, so the alert clears once a later run succeeds and re-fires daily while it doesn't.
+4. queue a library scan, so the day's sync is indexed now rather than at Immich's own daily
+   scan (default cron `0 0 * * *`, midnight server time). A second scan is harmless — it only
+   imports new files and offlines missing ones;
+5. **health check:** if the library is more than 24h old and still has 0 assets (counted via
+   `GET /api/libraries/{id}/statistics` — the `assetCount` field on `GET /api/libraries` is always
+   0 in v3.2.4), exit 1. The failed Job trips the existing `KubeJobFailed` warning. Staging
+   warnings are normally muted in Alertmanager; a route matching
+   `job_name=~"immich-staging-bootstrap.*"` in `immich-stage` sends this one to the alerts inbox.
+   The Job expires after 20h, so the alert clears before the next run and re-fires daily while
+   staging stays empty.
 
 Two CiliumNetworkPolicies come with it: the Job may reach only DNS and `immich-server:2283`, and
 a staging-only rule admits it to the server (the base policy admits only the gateway and nodes).
@@ -311,8 +317,8 @@ account, which owns the library.
 **After a DB recreate (§10.2)**, run it immediately instead of waiting for 04:30:
 
 ```bash
-kubectl -n immich-stage create job --from=cronjob/immich-staging-bootstrap bootstrap-now
-kubectl -n immich-stage logs -f job/bootstrap-now
+kubectl -n immich-stage create job --from=cronjob/immich-staging-bootstrap immich-staging-bootstrap-now
+kubectl -n immich-stage logs -f job/immich-staging-bootstrap-now
 ```
 
 The first scan imports ~5,000 files; thumbnails, metadata, CLIP embeddings and faces follow

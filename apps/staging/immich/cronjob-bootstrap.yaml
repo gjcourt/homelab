@@ -8,7 +8,7 @@
 # library is still empty a day after creation (→ KubeJobFailed, warning).
 #
 # After a DB recreate, run it at once instead of waiting for 04:30:
-#   kubectl -n immich-stage create job --from=cronjob/immich-staging-bootstrap bootstrap-now
+#   kubectl -n immich-stage create job --from=cronjob/immich-staging-bootstrap immich-staging-bootstrap-now
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -30,9 +30,11 @@ spec:
       # Up to 5 min waiting for the server, plus the API calls.
       activeDeadlineSeconds: 900
       backoffLimit: 1
-      # KubeJobFailed fires while a failed Job object exists. Expiring it after
-      # 20h lets the alert clear on its own once a later run succeeds, and fire
-      # again the next day if the run fails again.
+      # KubeJobFailed fires while a failed Job object exists (staging warnings
+      # are muted except this Job's — see the alertmanager route in
+      # infra/controllers/kube-prometheus-stack/values.yaml). Expiring it after
+      # 20h clears the alert before the next 04:30 run, which re-fires it if
+      # staging is still empty.
       ttlSecondsAfterFinished: 72000
       template:
         metadata:

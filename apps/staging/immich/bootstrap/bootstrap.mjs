@@ -88,9 +88,14 @@ if (!library) {
 await api('POST', `/libraries/${library.id}/scan`, { token });
 log(`scan queued for library ${library.id}`);
 
+// Count assets via /statistics. LibraryResponseDto.assetCount is NOT usable:
+// in v3.2.4 GET /libraries selects library columns only, and mapLibrary() reads
+// entity.assets, so assetCount is always 0 there regardless of the real count.
+const stats = await api('GET', `/libraries/${library.id}/statistics`, { token });
+const total = Number(stats.total);
 const ageHours = (Date.now() - Date.parse(library.createdAt)) / 3_600_000;
-log(`library has ${library.assetCount} assets (created ${ageHours.toFixed(1)}h ago)`);
-if (library.assetCount === 0 && ageHours > EMPTY_GRACE_HOURS) {
+log(`library has ${total} assets (created ${ageHours.toFixed(1)}h ago)`);
+if (total === 0 && ageHours > EMPTY_GRACE_HOURS) {
   fail(`library ${library.id} still has 0 assets ${ageHours.toFixed(0)}h after creation — staging is not a usable rehearsal`);
 }
 log('ok');

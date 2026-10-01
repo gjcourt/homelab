@@ -60,4 +60,4 @@ Conventions, invariants, and the full command reference:
 
 ## License
 
-MIT License — see [LICENSE](LICENSE).
+[MIT](LICENSE)

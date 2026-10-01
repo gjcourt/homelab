@@ -5,27 +5,10 @@ metadata:
   namespace: immich-prod
 spec:
   description: Postgres cluster for Immich — pgvecto.rs → VectorChord migration window
-  # ==========================================================================
-  # OPERATOR-GATED — DO NOT let this reconcile blindly. Part of the Immich v3
-  # upgrade (pgvecto.rs is removed in Immich v3.0). Full procedure + ordering:
-  #   docs/operations/2026-07-02-immich-v3-upgrade.md
-  #
-  # This "migration" image bundles BOTH pgvecto.rs (vectors.so) AND VectorChord
-  # (vchord.so) + pgvector, so the cluster can still READ the existing
-  # pgvecto.rs vector columns while Immich (still on v2.7.5, which supports
-  # both) rebuilds the indexes as VectorChord on startup. Rolling to this image
-  # is NON-destructive on its own (it only ADDS vchord.so; nothing is dropped).
-  #
-  # ORDERING (see runbook): (1) back up + verify restore, (2) apply THIS image +
-  # vchord.so preload while Immich is STILL v2.7.5, (3) CREATE EXTENSION vchord
-  # + let immich-server auto-migrate/reindex, (4) verify search, (5) DROP
-  # EXTENSION vectors + drop vectors.so, (6) ONLY THEN bump immich-server/-ml to
-  # v3.0.1. Immich v3 has NO pgvecto.rs support and will NOT perform the
-  # pgvecto.rs→VectorChord data migration — it must be done on v2.x first.
-  # The DROP EXTENSION vectors step is ONE-WAY: no downgrade below Immich 1.133.
-  # ==========================================================================
-  # Official VectorChord-only image (Phase 2). Config already dropped vectors.so in
-  # Phase 1 (#1032), so this is an image-only change — CNPG accepts it.
+  # VectorChord-only image. The one-way pgvecto.rs → VectorChord migration that
+  # Immich v3 requires was completed 2026-07-03 — procedure and ordering are kept in
+  # docs/operations/2026-07-02-immich-v3-upgrade.md. Immich's supported VectorChord
+  # range is checked on every upgrade (>=0.3 <2 as of v3.2.4).
   imageName: ghcr.io/tensorchord/cloudnative-vectorchord:16-0.4.2@sha256:649da2df5f079dd1f214e3a877cafd0208eff3779e9c60d14d243fbca5e11c97
   instances: 3
   enableSuperuserAccess: true

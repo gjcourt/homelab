@@ -1,6 +1,6 @@
 ---
-status: planned
-last_modified: 2026-07-02
+status: complete
+last_modified: 2026-10-01
 summary: "Migrate Immich CNPG from pgvecto.rs to VectorChord"
 ---
 

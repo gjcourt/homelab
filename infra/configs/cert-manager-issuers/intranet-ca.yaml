@@ -1,0 +1,52 @@
+# Private CA for the bare `go` intranet hostname (go/link style). No public CA
+# will issue a certificate for a single-label name, so https://go/ needs a root
+# we run ourselves — and that root must be trusted on each client device (see
+# docs/operations/apps/golinks.md § HTTPS for bare go).
+#
+# The root is name-constrained to `go` (critical, permitted DNS:go), so even if
+# its key leaks it can't be used to impersonate any other site to a device that
+# trusts it. Verified with openssl and Go crypto/x509: a leaf for `go` validates,
+# a leaf for `www.google.com` fails with a permitted-subtree violation.
+# NameConstraints is a beta, default-on cert-manager feature gate since v1.17.
+#
+# Chain: selfsigned-bootstrap → intranet-root-ca (10y, key never rotated, so a
+# renewal keeps the root devices already trust) → ClusterIssuer intranet-ca.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned-bootstrap
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: intranet-root-ca
+  # cert-manager's cluster resource namespace: a ClusterIssuer of type CA
+  # reads its Secret from here.
+  namespace: security
+spec:
+  isCA: true
+  commonName: burntbytes intranet CA (go)
+  secretName: intranet-root-ca
+  duration: 87600h # 10 years
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+    rotationPolicy: Never
+  nameConstraints:
+    critical: true
+    permitted:
+      dnsDomains:
+        - go
+  issuerRef:
+    name: selfsigned-bootstrap
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: intranet-ca
+spec:
+  ca:
+    secretName: intranet-root-ca

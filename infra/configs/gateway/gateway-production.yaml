@@ -55,6 +55,24 @@ spec:
     # *.burntbytes.com wildcard above does NOT match the apex, so it needs
     # its own listeners. The wildcard cert already SANs burntbytes.com, so
     # the same secret terminates TLS here.
+    # HTTPS for the bare 'go' shortcut. Its cert comes from the private
+    # intranet CA (no public CA issues single-label names), so it only
+    # validates on devices that trust that root.
+    - name: https-go
+      port: 443
+      protocol: HTTPS
+      hostname: "go"
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: go-intranet-tls
+            namespace: security
+      allowedRoutes:
+        namespaces:
+          from: Selector
+          selector:
+            matchLabels:
+              http-ingress: "true"
     - name: http-apex
       port: 80
       protocol: HTTP

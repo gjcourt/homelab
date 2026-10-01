@@ -24,7 +24,7 @@ spec:
       # On deadline or `bench-cloud rm`, bench-task forwards SIGTERM to claude
       # and then uploads the record; this is its window before SIGKILL.
       terminationGracePeriodSeconds: 90
-      # Counted by the bench-cloud-tasks ResourceQuota (5 at once); below every
+      # Counted by the bench-cloud-tasks ResourceQuota (10 at once); below every
       # real workload in scheduling and eviction.
       priorityClassName: bench-cloud-task
       serviceAccountName: bench-agent

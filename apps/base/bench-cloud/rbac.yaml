@@ -48,3 +48,42 @@ subjects:
   - kind: ServiceAccount
     name: bench-console
     namespace: bench-cloud
+---
+# Read-only Gateway API (plan decision 2 extended, 2026-10-01). The built-in
+# `view` role doesn't aggregate these CRDs, so agents couldn't see whether a
+# Gateway listener was programmed or an HTTPRoute accepted — the status they
+# need to verify routing changes they propose. Bound to the two bench
+# ServiceAccounts only rather than aggregated into `view`, which would widen
+# it for every other `view` subject in the cluster.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bench-cloud-gateway-api-read
+rules:
+  - apiGroups: ["gateway.networking.k8s.io"]
+    resources:
+      - backendtlspolicies
+      - gatewayclasses
+      - gateways
+      - grpcroutes
+      - httproutes
+      - listenersets
+      - referencegrants
+      - tlsroutes
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bench-cloud-gateway-api-read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: bench-cloud-gateway-api-read
+subjects:
+  - kind: ServiceAccount
+    name: bench-agent
+    namespace: bench-cloud
+  - kind: ServiceAccount
+    name: bench-console
+    namespace: bench-cloud

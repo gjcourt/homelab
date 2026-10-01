@@ -8,7 +8,7 @@
 #
 # Each run is one Job from job.yaml (next to this script): a fresh clone, one
 # `claude -p`, results as a PR from bench-cloud[bot], and the full record in
-# hestia:/mnt/main/agent-inbox/runs/<id>/. At most 10 run at once (namespace
+# hestia:/mnt/main/agent-inbox/runs/<id>/. At most 8 run at once (namespace
 # ResourceQuota); extras wait in the Job controller until a slot frees — and
 # the deadline counts from submission, so a queued task spends it waiting.
 # `logs` shows the one-line summary once the task ends (claude's output goes

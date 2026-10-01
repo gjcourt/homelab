@@ -1,6 +1,6 @@
 # Homelab Documentation
 
-GitOps repo for a 6-node Talos Kubernetes cluster (`melodic-muse`, 3 control-plane + 3 workers). Documentation is organized into a fixed six-folder taxonomy.
+GitOps repo for a 4-node Talos Kubernetes cluster (`melodic-muse`, 3 control-plane + 1 worker). Documentation is organized into a fixed six-folder taxonomy.
 
 > **Current state at a glance:** [`STATUS.md`](STATUS.md) — cluster/hosts summary, in-flight work, known issues.
 

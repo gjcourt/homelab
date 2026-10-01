@@ -81,7 +81,7 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (20)
+### Planned (19)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
@@ -100,13 +100,12 @@ see `scripts/plans-index/`).
 | [2026-06-28-democratic-csi-ssh-to-api-driver.md](2026-06-28-democratic-csi-ssh-to-api-driver.md) | 2026-06-28 | Migrate democratic-csi from the SSH-based driver to the API driver (freenas-api-iscsi) to remove the SSH+sudo dependency |
 | [2026-06-21-bluetooth-presence-system.md](2026-06-21-bluetooth-presence-system.md) | 2026-06-21 | BLE beacon presence/occupancy system (ESPresense → HA → Grafana) for who/how-many is home, per-room |
 | [2026-06-16-burntbytes-mailserver.md](2026-06-16-burntbytes-mailserver.md) | 2026-06-16 | Self-hosted mail for burntbytes.com (<10 accounts): Mailu on the cluster + VPS SMTP gateway + SES smarthost |
-| [2026-06-02-immich-vectorchord-migration.md](2026-06-02-immich-vectorchord-migration.md) | 2026-07-02 | Migrate Immich CNPG from pgvecto.rs to VectorChord |
 | [2026-05-09-democratic-csi-least-privilege-key.md](2026-05-09-democratic-csi-least-privilege-key.md) | 2026-05-09 | Migrate democratic-csi to a least-privilege TrueNAS API key |
 | [2026-05-06-network-resilience-and-bgp-completion.md](2026-05-06-network-resilience-and-bgp-completion.md) | 2026-05-06 | Unified network resilience + BGP completion plan, phases A-F with GO gates |
 | [2026-03-08-drawer-inserts.md](2026-03-08-drawer-inserts.md) | 2026-05-03 | Cardboard drawer insert design (75×32×12 cm) — physical project, no repo artifacts |
 | [2026-02-21-linkding-db-restore-plan.md](2026-02-21-linkding-db-restore-plan.md) | 2026-05-03 | Live DR drill: destroy and restore Linkding staging DB (never executed) |
 
-### Complete (20)
+### Complete (21)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
@@ -116,6 +115,7 @@ see `scripts/plans-index/`).
 | [2026-06-18-finance-dashboard-multipage.md](2026-06-18-finance-dashboard-multipage.md) | 2026-06-18 | finance.burntbytes.com expanded from one balance-sheet page to a 4-page static site (balance sheet, cash flow, STR model, retirement runway) with encrypted-YAML data + interactive client-side charts |
 | [2026-06-10-docs-reorg-status-dashboard.md](2026-06-10-docs-reorg-status-dashboard.md) | 2026-06-10 | Docs status legibility: plan frontmatter cleanup, generated index, STATUS.md dashboard, HOMELAB.md migration |
 | [2026-06-10-burntbytes-self-host.md](2026-06-10-burntbytes-self-host.md) | 2026-06-10 | burntbytes.com self-hosted on the cluster via Cloudflare tunnel; apex cutover live, GitHub Pages retired |
+| [2026-06-02-immich-vectorchord-migration.md](2026-06-02-immich-vectorchord-migration.md) | 2026-10-01 | Migrate Immich CNPG from pgvecto.rs to VectorChord |
 | [2026-05-09-monitoring-enhancement.md](2026-05-09-monitoring-enhancement.md) | 2026-06-17 | ServiceMonitor coverage audit, critical-alert Signal routing, Flux reconciliation alerts |
 | [2026-05-07-vllm-frontier-model-experiments.md](2026-05-07-vllm-frontier-model-experiments.md) | 2026-05-09 | Stability-first vLLM experiments on 2× 4090 — winner Qwen3.6-35B-A3B-AWQ TP=2 |
 | [2026-05-07-guest-vlan-dns-and-hifiberry-access.md](2026-05-07-guest-vlan-dns-and-hifiberry-access.md) | 2026-06-10 | Guest VLAN DNS + HifiBerry speaker access (firewall rules + mDNS reflector) |

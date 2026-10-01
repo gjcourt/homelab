@@ -46,14 +46,26 @@
       "automerge": false
     },
     {
-      "description": "George's own images (ghcr.io/gjcourt/*) are tagged YYYY-MM-DD-<sha7> (legacy: YYYY-MM-DD, YYYY-MM-DD-N). Renovate's default docker versioning reads 2026-07-26-c14b782 as version 2026 with suffix -07-26-c14b782 and only offers tags with the SAME suffix, so it never proposed a newer build. This regex versioning orders the date as major.minor.patch, keeps the legacy -N as a build number, and ignores the sha (unnamed group: matched, never compared). Two builds on the same day therefore compare equal: Renovate takes whichever tag sorts last (the lexically greatest sha), which is not necessarily the newest build, and it will not move between builds of the same day; the next day's build supersedes them. These PRs are deploys of George's own code, so they are never automerged; this rule must stay AFTER the automerge rule above (last match wins). matchCurrentValue leaves non-date pins (latest, bare sha) on docker versioning.",
+      "description": "George's own images (ghcr.io/gjcourt/*) pinned to YYYY-MM-DD-<sha7>. Renovate's default docker versioning reads 2026-07-26-c14b782 as version 2026 with suffix -07-26-c14b782 and only offers tags with the SAME suffix, so it never proposed a newer build (homelab has never had a Renovate bump of one). This regex orders the date as major.minor.patch and REQUIRES the sha (unnamed group: matched, never compared), so the floating bare-date tag (YYYY-MM-DD, re-pointed on every build that day) is not a valid version and a pin can never move to it. Builds from the same day compare equal; the next day's build supersedes them. These PRs deploy George's own code, so never automerge; keep these rules AFTER the automerge rule above (last match wins).",
       "matchDatasources": [
         "docker"
       ],
       "matchPackageNames": [
         "ghcr.io/gjcourt/**"
       ],
-      "matchCurrentValue": "/^\\d{4}-\\d{2}-\\d{2}(-|$)/",
+      "matchCurrentValue": "/^\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{7}$/",
+      "versioning": "regex:^(?<major>\\d{4})-(?<minor>\\d{2})-(?<patch>\\d{2})-[0-9a-f]{7}$",
+      "automerge": false
+    },
+    {
+      "description": "Legacy pins of George's images in the old YYYY-MM-DD / YYYY-MM-DD-N form (5 as of 2026-10-01). Same date ordering, with -N as a build number and an optional sha, so these can move up to the current YYYY-MM-DD-<sha7> builds. Never automerge.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "ghcr.io/gjcourt/**"
+      ],
+      "matchCurrentValue": "/^\\d{4}-\\d{2}-\\d{2}(-\\d{1,3})?$/",
       "versioning": "regex:^(?<major>\\d{4})-(?<minor>\\d{2})-(?<patch>\\d{2})(?:-(?<build>\\d{1,3}))?(?:-[0-9a-f]{7})?$",
       "automerge": false
     }

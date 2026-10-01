@@ -67,7 +67,9 @@ args=(-p
   # Anything that would still prompt is denied (it would be anyway with no
   # host), and Claude is told nobody can approve it, so it doesn't retry.
   --permission-prompts none
-  --allowedTools "Bash" "Read" "Edit" "Write" "Glob" "Grep" "WebFetch" "WebSearch" "TodoWrite"
+  # Skill: the allowlisted skills bench-agents-sync installs (babysit, ci, ...);
+  # without it a skill invocation that needs approval is denied here.
+  --allowedTools "Bash" "Read" "Edit" "Write" "Glob" "Grep" "WebFetch" "WebSearch" "TodoWrite" "Skill"
   --append-system-prompt "You are running unattended as bench-cloud task $TASK_ID in a fresh clone of $TASK_REPO. Nobody can answer questions mid-task. Deliver your work as a pull request from a new branch, and end with a short summary that includes the PR URL, or says plainly why there is no PR."
   --name "$TASK_ID")
 [[ -n "${TASK_MODEL:-}" ]] && args+=(--model "$TASK_MODEL")

@@ -15,7 +15,7 @@ spec:
         spec:
           containers:
             - name: renovate
-              image: renovate/renovate@sha256:0c04185c9e7ea5284da22ea0b2a2c88dcd3687badd8feb6c71691659b380df9b
+              image: renovate/renovate@sha256:b07b6fe34bd80fe2ce035e2053d63a0205e5f99ba3ee799447e0439f2c728002
 
               args:
                 - gjcourt/homelab
@@ -28,6 +28,7 @@ spec:
                 - gjcourt/soundbyte
                 - gjcourt/python-nginx-signing
                 - gjcourt/toppingctl
+                - gjcourt/workstation
 
               env:
                 # Re-expose the platform token by name so it can be interpolated

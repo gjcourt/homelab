@@ -80,7 +80,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: immich-server
-          image: ghcr.io/immich-app/immich-server:v3.0.1@sha256:46dedfc5848f7313bd6b584ea9f2648057430307aad6de56de968f6710a72cae
+          image: ghcr.io/immich-app/immich-server:v3.2.4@sha256:d317916b28090c33eb36b308464ea391f8b7df1d850fcfea227a39ec879718c2
           ports:
             - name: http
               containerPort: 2283
@@ -196,7 +196,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: immich-microservices
-          image: ghcr.io/immich-app/immich-server:v3.0.1@sha256:46dedfc5848f7313bd6b584ea9f2648057430307aad6de56de968f6710a72cae
+          image: ghcr.io/immich-app/immich-server:v3.2.4@sha256:d317916b28090c33eb36b308464ea391f8b7df1d850fcfea227a39ec879718c2
           env:
             # Run every worker EXCEPT api (thumbnails, metadata, transcode, ML
             # dispatch, storage-template migration, sidecar, library scan).
@@ -301,7 +301,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: immich-machine-learning
-          image: ghcr.io/immich-app/immich-machine-learning:v3.0.1@sha256:cb2128c5cbc554fdaa2a036fb4419c808a9f3e0f27170e569dd9e727243da909
+          image: ghcr.io/immich-app/immich-machine-learning:v3.2.4@sha256:e16c2f166a8174901959fdf85e2e4c7bd1ebc4b37e0b6655de97c41408a260c4
           ports:
             - name: http
               containerPort: 3003
@@ -398,7 +398,7 @@ spec:
       containers:
         - name: redis
           # redis 8-alpine
-          image: redis@sha256:718f745deb7dfefeac6eed7041fc7ec9476b50e61b247932682457c41adafa0e
+          image: redis@sha256:6f81e8915c60b065a524e6967e0ad1c639ba6efa84d669f823683ea04d9150ee
           args:
             - "--save"
             - ""

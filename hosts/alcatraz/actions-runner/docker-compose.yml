@@ -32,7 +32,7 @@ services:
     #               image (FROM myoung34/github-runner + install
     #               docker-compose-plugin) or the apply step will fail. See the
     #               plan's "gotchas" + README "Architecture caveats".
-    image: myoung34/github-runner:ubuntu-noble@sha256:955e732dd29b1d659266a46fe7d9f1c7896ce6c42da433e03864c251b3512df5
+    image: myoung34/github-runner:ubuntu-noble@sha256:20119ea06fec0d96b869b7aa04bd9feb9aef4dc74f89e0fb92f4aadaac88227f
     container_name: gha-runner
     restart: unless-stopped
     environment:

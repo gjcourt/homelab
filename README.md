@@ -1,62 +1,63 @@
+<!-- readme-type: infra -->
 # Homelab
 
-GitOps-managed Kubernetes cluster, powered by [Flux](https://fluxcd.io/) and [Kustomize](https://kustomize.io/).
+GitOps for a 4-node Talos Kubernetes homelab cluster, reconciled by Flux CD
 
-## 📖 Overview
+Running a cluster by hand invites config drift and leaves no record of what
+changed or why. This repo is the single source of truth for the
+`melodic-muse` Talos cluster: every app, controller, and cluster config lives
+here as a Kustomize base, overlay, or Helm release. Flux CD reconciles
+`master` into the cluster on a 10-minute interval (or on demand), so a merged
+PR is the only way anything reaches production.
 
-This repository drives the state of the home infrastructure. It uses a **GitOps** workflow: changes are made in Git (via Pull Requests), and Flux reconciles the cluster to match this state.
+**Status:** in daily use — this is the live source of truth for the
+`melodic-muse` cluster; Flux reconciles `master` continuously, with commits
+landing as recently as 2026-09-29.
 
-**Cluster**: `melodic-muse` — 6 Talos nodes (3 control-plane + 3 workers)
-**Storage**: Synology + hestia (TrueNAS) via democratic-csi iSCSI; hestia NFS backs the photo library
-**Networking**: Cilium (CNI + Gateway API), L2 + BGP load-balancer advertisement
+## Layout
 
-> **Current state, in-flight work, and known issues:** [`docs/STATUS.md`](docs/STATUS.md).
+```text
+apps/       Kustomize bases + staging/production overlays, one directory per app
+infra/      controllers (HelmReleases) and the configs they depend on
+clusters/   Flux Kustomization entrypoints
+hosts/      compose files, scripts, and docs for hosts outside Kubernetes (hestia, alcatraz, ...)
+images/     Dockerfiles for the images this repo builds and publishes to ghcr.io
+firmware/   ESPHome configs for IR blasters and sensors
+docs/       architecture, runbooks, plans, incident postmortems
+scripts/    repo maintenance and host-ops tooling
+renovate/   Renovate dependency-update config
+```
 
-## 🏗 Architecture
+Current app and infra inventory: [apps/README.md](apps/README.md),
+[infra/README.md](infra/README.md). Current cluster state, in-flight work, and
+known issues: [docs/STATUS.md](docs/STATUS.md).
 
-The repository follows a **dry (Don't Repeat Yourself)** structure using Kustomize bases and overlays:
+## Making a change
 
-- **`apps/base`**: The "source of truth" for application manifests. Agnostic of environment.
-- **`apps/staging`**: Test environment. Applies specific patches (limited resources, staging ingress).
-- **`apps/production`**: Live environment. Applies production patches (full resources, public ingress, persistent storage).
-- **`infra/`**: Core system services (Cert Manager, Monitoring, CNI) that run cluster-wide.
+1. Branch from `master`: `git checkout master && git pull && git checkout -b <type>/<description>`.
+2. Edit `apps/`, `infra/`, `docs/`, or `scripts/`, and validate locally (see Development below).
+3. Push and open a PR. CI rebuilds the `staging` branch (`master` plus every
+   open, mergeable PR whose checks pass) and deploys it to the `-stage` namespaces, so you can check the
+   change against the real cluster before it merges.
+4. Merging to `master` deploys to production on Flux's next reconcile, or
+   force it with `flux reconcile kustomization apps-production -n flux-system`.
 
-> Read more: [Overlays and Structure Strategy](docs/architecture/overlays-and-structure.md)
+Secrets are SOPS-encrypted before commit and decrypted in-cluster by Flux;
+never commit a plaintext secret. Full walkthrough, including adding a new app
+and rolling back:
+[docs/operations/making-changes.md](docs/operations/making-changes.md).
 
-## 🛠 Operations
+## Development
 
-### Common Tasks
+```bash
+make test                                    # kustomize build + kubeconform (apps/staging, apps/production, infra/*) + yamlfmt check
+make lint                                    # yamllint (.yamllint) + shellcheck on scripts/*.sh
+(cd scripts/plans-index && go run . -check)  # verify docs/plans frontmatter matches the generated index
+```
 
-| Task | Guide |
-|------|-------|
-| **Submit a Change** | [Workflow & PRs](docs/operations/making-changes.md) |
-| **Add a New App**   | [App Structure](docs/architecture/overlays-and-structure.md) |
-| **Debug Deployment**| [Flux & Debugging](docs/operations/flux-and-deployments.md) |
-| **Storage Issues**  | [Synology iSCSI Ops](docs/operations/synology-iscsi-operations.md) |
-| **Update Apps List**| `scripts/update-apps-readme.sh` |
+Conventions, invariants, and the full command reference:
+[AGENTS.md](AGENTS.md).
 
-### Quick Commands
+## License
 
-*   **List Apps**: `kubectl get kustomizations -n flux-system`
-*   **Reconcile Now**: `flux reconcile ks apps-production`
-*   **Check Alerts**: `kubectl get alerts -A`
-
-## 📂 Repository Layout
-
-*   [`apps/`](apps/) - Application definitions.
-    *   [`base/`](apps/base/) - Shared configuration.
-    *   [`production/`](apps/production/) - Live overlays.
-    *   [`staging/`](apps/staging/) - Test overlays.
-*   [`clusters/`](clusters/) - Flux entrypoints.
-*   [`infra/`](infra/) - System-level controllers & configs.
-*   [`hosts/`](hosts/) - Non-Kubernetes host config (hestia TrueNAS Custom Apps, compose).
-*   [`images/`](images/) - Custom container image definitions.
-*   [`docs/`](docs/) - Runbooks and architecture notes.
-*   [`scripts/`](scripts/) - Automation & maintenance tools.
-
-## 🔎 Status
-
-- **Current state / in-flight / known issues**: [docs/STATUS.md](docs/STATUS.md)
-- **Plans index** (status-grouped): [docs/plans/README.md](docs/plans/README.md)
-- **Applications Index**: [See apps/README.md](apps/README.md)
-- **Infrastructure Index**: [See infra/README.md](infra/README.md)
+MIT License — see [LICENSE](LICENSE).

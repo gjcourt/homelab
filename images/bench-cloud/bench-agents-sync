@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+# bench-agents-sync — install George's allowlisted Claude Code skills, agents
+# and user CLAUDE.md from gjcourt/agents into ~/.claude.
+#
+# Runs from the entrypoint on every pod start (console and task Jobs); safe to
+# re-run by hand. Never fails the caller: without GitHub access it logs and
+# exits 0, and the pod starts with the managed policy alone.
+#
+# The allowlist (/usr/local/share/bench-cloud/agents-allowlist) lives in the
+# image, reviewed in homelab — the agents repo can't widen it. git-crypt'd
+# parts of that repo (memory/, valet data) arrive as ciphertext: there is no
+# key in the cluster, and nothing here points at them anyway.
+#
+# Layout mirrors agents/install.sh on George's Mac (the proven one): a skill is
+# a real directory ~/.claude/skills/<name>/ holding a SKILL.md symlink plus one
+# symlink per entry in the skill's .skill-assets; an agent is a file symlink
+# ~/.claude/agents/<name>.md. Nothing is linked whose real path leaves the clone.
+#
+# No `set -e` on purpose: every failure is logged and skipped, never fatal.
+set -uo pipefail
+
+ALLOW=${BENCH_AGENTS_ALLOWLIST:-/usr/local/share/bench-cloud/agents-allowlist}
+SRC=${BENCH_AGENTS_DIR:-$HOME/.cache/bench-agents}
+URL=${BENCH_AGENTS_REPO:-https://github.com/gjcourt/agents}
+CL="$HOME/.claude"
+MANIFEST="$CL/.bench-agents-managed"
+# A pod start must not hang on the network: bound every git call, and never
+# let git fall back to an interactive credential prompt.
+GIT_TIMEOUT=${BENCH_AGENTS_GIT_TIMEOUT:-90}
+export GIT_TERMINAL_PROMPT=0
+log() { echo "bench-agents-sync: $*"; }
+g() { timeout "$GIT_TIMEOUT" git "$@"; }
+
+[[ -n "${GITHUB_APP_ID:-}" ]] || { log "no GitHub App configured; skipping"; exit 0; }
+[[ -r "$ALLOW" ]] || { log "no allowlist at $ALLOW; skipping"; exit 0; }
+
+if [[ -d "$SRC/.git" ]]; then
+  # reset + clean: the clone is a cache, and anything an agent edited or
+  # dropped into it (it is writable) must not outlive a restart.
+  if ! { g -C "$SRC" fetch -q --depth 1 origin HEAD && g -C "$SRC" reset -q --hard FETCH_HEAD && g -C "$SRC" clean -qfdx; }; then
+    log "refresh failed; keeping the previous copy"
+  fi
+elif [[ -e "$SRC" ]]; then
+  log "$SRC exists but is not a clone; skipping"; exit 0
+else
+  # Clone beside it and rename, so a pod killed mid-clone never leaves a
+  # half-made $SRC that later runs would take for a good copy.
+  mkdir -p "$(dirname "$SRC")"
+  rm -rf "$SRC.new"
+  if ! { g clone -q --depth 1 "$URL" "$SRC.new" && mv "$SRC.new" "$SRC"; }; then
+    log "clone failed; skipping"; rm -rf "$SRC.new"; exit 0
+  fi
+fi
+log "gjcourt/agents @ $(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || echo '?')"
+REAL_SRC=$(realpath -e "$SRC") || { log "cannot resolve $SRC; skipping"; exit 0; }
+
+# inside <path>: true if <path> exists and its real path stays inside the clone.
+# A symlink committed to gjcourt/agents could otherwise point anywhere in the
+# pod and have Claude Code read it as a skill or agent definition.
+inside() {
+  local r
+  r=$(realpath -e "$1" 2>/dev/null) || return 1
+  [[ "$r" == "$REAL_SRC"/* ]]
+}
+
+declare -A want=()
+# place <src> <dst>: symlink dst -> src, unless dst is something we didn't put
+# there (e.g. a CLAUDE.md George wrote on the console's PVC).
+place() {
+  local src=$1 dst=$2
+  if ! inside "$src"; then log "resolves outside the clone, refused: $src"; return 1; fi
+  if [[ -e "$dst" && ! -L "$dst" ]]; then log "not replacing non-symlink $dst"; return 1; fi
+  if [[ -L "$dst" && "$(readlink "$dst")" != "$SRC"/* ]]; then log "not replacing someone else's symlink $dst"; return 1; fi
+  ln -sfn "$src" "$dst" || { log "link failed: $dst"; return 1; }
+  want["$dst"]=1
+}
+
+mkdir -p "$CL/skills" "$CL/agents" || { log "cannot create $CL; skipping"; exit 0; }
+while read -r kind name path _ || [[ -n "${kind:-}" ]]; do
+  [[ -z "${kind:-}" || "$kind" == \#* ]] && continue
+  src="$SRC/$path"
+  [[ -e "$src" ]] || { log "missing in repo, skipped: $kind $name ($path)"; continue; }
+  case "$kind" in
+    skill)
+      dir="$CL/skills/$name"
+      # A symlinked skill dir isn't ours: writing into it would write through it.
+      if [[ -L "$dir" ]]; then log "not replacing symlink $dir"; continue; fi
+      mkdir -p "$dir" || { log "cannot create $dir"; continue; }
+      place "$src/SKILL.md" "$dir/SKILL.md" || continue
+      if [[ -f "$src/.skill-assets" ]]; then
+        while IFS= read -r asset || [[ -n "$asset" ]]; do
+          asset="${asset%%[[:space:]]*}"
+          [[ -z "$asset" || "$asset" == \#* ]] && continue
+          if [[ "$asset" == */* || "$asset" == *..* ]]; then log "illegal asset '$asset' in $name; skipped"; continue; fi
+          place "$src/$asset" "$dir/$asset" || true
+        done < "$src/.skill-assets"
+      fi
+      ;;
+    agent)     place "$src" "$CL/agents/$name.md" || true ;;
+    claude-md) place "$src" "$CL/CLAUDE.md" || true ;;
+    *) log "unknown kind '$kind'; skipped" ;;
+  esac
+done < "$ALLOW"
+
+# Prune links we installed earlier that are no longer wanted (only symlinks —
+# never a real file), then any skill directory that is left empty.
+if [[ -r "$MANIFEST" ]]; then
+  while read -r old; do
+    [[ -n "$old" && -z "${want[$old]:-}" && -L "$old" ]] || continue
+    rm -f "$old" && log "removed $old"
+    [[ "$(dirname "$(dirname "$old")")" == "$CL/skills" ]] && rmdir "$(dirname "$old")" 2>/dev/null
+  done < "$MANIFEST"
+fi
+if (( ${#want[@]} )); then printf '%s\n' "${!want[@]}" | sort > "$MANIFEST"; else : > "$MANIFEST"; fi
+log "installed ${#want[@]} link(s)"
+exit 0

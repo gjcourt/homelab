@@ -1,0 +1,46 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cadence
+  namespace: cadence
+  labels:
+    app.kubernetes.io/name: cadence
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: >-
+    Gateway ingress on 3000. Egress for DNS and outbound HTTPS (443) to the Shopify
+    Admin API and Stripe — both off-cluster, reached via the `world` entity.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: cadence
+  ingress:
+    # Cilium Envoy (Gateway API) upstreams arrive as host / remote-node / ingress.
+    # All three required; kubelet probes are auto-exempted.
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+  egress:
+    # DNS via CoreDNS.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    # Outbound HTTPS: Shopify Admin API + Stripe (external, via `world`).
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

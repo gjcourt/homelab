@@ -10,6 +10,7 @@
 - [authelia](base/authelia/)
 - [bench-cloud](base/bench-cloud/)
 - [burntbytes](base/burntbytes/)
+- [cadence](base/cadence/)
 - [changes](base/changes/)
 - [excalidraw](base/excalidraw/)
 - [finance-dashboard](base/finance-dashboard/)

@@ -1,0 +1,16 @@
+# SQLite store (Shopify sessions + Cadence decisions/orders). DATABASE_URL points the
+# app at /data/cadence.sqlite; without this the DB writes into the ephemeral container
+# FS and every restart drops sessions (merchants re-auth) + the dashboard tally resets.
+# RWO iSCSI; the deployment uses maxSurge:0 so a rollout doesn't Multi-Attach it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: cadence-data
+  namespace: cadence
+spec:
+  storageClassName: truenas-iscsi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

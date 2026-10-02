@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: wyoming-piper
+  namespace: wyoming-piper
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: wyoming-piper

@@ -10,6 +10,7 @@
 - [authelia](base/authelia/)
 - [bench-cloud](base/bench-cloud/)
 - [burntbytes](base/burntbytes/)
+- [cadence-site](base/cadence-site/)
 - [changes](base/changes/)
 - [excalidraw](base/excalidraw/)
 - [finance-dashboard](base/finance-dashboard/)
@@ -37,4 +38,5 @@
 - [truenas-iscsi-monitor](base/truenas-iscsi-monitor/)
 - [vibrato](base/vibrato/)
 - [vitals](base/vitals/)
+- [wyoming-piper](base/wyoming-piper/)
 <!-- apps:list:end -->

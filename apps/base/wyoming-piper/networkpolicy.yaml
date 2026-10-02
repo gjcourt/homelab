@@ -1,0 +1,57 @@
+---
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: wyoming-piper
+  namespace: wyoming-piper
+  labels:
+    app.kubernetes.io/name: wyoming-piper
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: Wyoming on 10200 from Home Assistant only; egress DNS + Hugging Face for voice downloads.
+  endpointSelector:
+    matchLabels:
+      app: wyoming-piper
+  ingress:
+    # Only Home Assistant in the same environment. Each overlay patches the
+    # namespace to homeassistant-prod / homeassistant-stage.
+    - fromEndpoints:
+        - matchLabels:
+            app: homeassistant
+            k8s:io.kubernetes.pod.namespace: homeassistant
+      toPorts:
+        - ports:
+            - port: "10200"
+              protocol: TCP
+    # Kubelet, for the TCP readiness probe.
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - port: "10200"
+              protocol: TCP
+  egress:
+    # DNS through Cilium's proxy so the toFQDNs rule below can match.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+          rules:
+            dns:
+              - matchPattern: "*"
+    # Voice downloads: https://huggingface.co/rhasspy/piper-voices/resolve/main/…
+    # redirects to a regional CDN host (us.aws.cdn.hf.co, observed 2026-10-02),
+    # so *.hf.co covers the redirect. No blanket world egress.
+    - toFQDNs:
+        - matchName: "huggingface.co"
+        - matchPattern: "*.hf.co"
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

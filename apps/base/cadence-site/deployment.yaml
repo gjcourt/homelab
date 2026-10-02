@@ -25,8 +25,10 @@ spec:
     spec:
       serviceAccountName: cadence-site
       automountServiceAccountToken: false
-      # ghcr.io/gjcourt/cadence-site is a public package (a public page, nothing
-      # private in it), so no pull secret.
+      # Private ghcr package: pulled with the shared ghcr-secret, the same
+      # encrypted secret-ghcr.yaml the other gjcourt apps carry in their bases.
+      imagePullSecrets:
+        - name: ghcr-secret
       # Spread replicas across nodes where possible (matters once there are two); ScheduleAnyway
       # so a single-schedulable-node window doesn't block rollout.
       topologySpreadConstraints:

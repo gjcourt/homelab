@@ -14,11 +14,12 @@ and `[COMPANY NAME]` placeholders are filled in upstream.
   `main`. nginx-unprivileged (uid 101) on :8080, `/healthz` for probes. Fonts are self-hosted,
   so the page makes no third-party requests; a strict same-origin CSP is set in the image's
   `nginx.conf`.
-- Public package, so no pull secret.
+- Private ghcr package, pulled with the shared `ghcr-secret` (`secret-ghcr.yaml` in the base is a
+  verbatim copy of the encrypted file the other gjcourt apps use; kustomize sets the namespace).
 - Base in `apps/base/cadence-site/` (copied from `burntbytes`): Deployment, Service,
   ServiceAccount (no token), CiliumNetworkPolicy (gateway ingress on 8080, DNS egress only),
   PDB. One replica.
-- No storage, no database, no secrets.
+- No storage, no database; the only secret is the image pull secret.
 
 ## 3. URLs
 

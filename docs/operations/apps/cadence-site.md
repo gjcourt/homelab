@@ -5,8 +5,7 @@
 The Cadence marketing page: one static page served by nginx. Source and image live in
 `gjcourt/cadence` under `site/` (see its `site/README.md`); this repo only deploys it.
 
-**Status (2026-10-01): staging only.** Production waits until the page's `[CONTACT EMAIL]`
-and `[COMPANY NAME]` placeholders are filled in upstream.
+**Status (2026-10-02):** staging and production. Placeholders filled upstream (cadence#42).
 
 ## 2. Architecture
 
@@ -18,18 +17,19 @@ and `[COMPANY NAME]` placeholders are filled in upstream.
   verbatim copy of the encrypted file the other gjcourt apps use; kustomize sets the namespace).
 - Base in `apps/base/cadence-site/` (copied from `burntbytes`): Deployment, Service,
   ServiceAccount (no token), CiliumNetworkPolicy (gateway ingress on 8080, DNS egress only),
-  PDB. One replica.
+  PDB. One replica in the base; production patches it to two.
 - No storage, no database; the only secret is the image pull secret.
 
 ## 3. URLs
 
 - **Staging:** https://cadence.stage.burntbytes.com (LAN only — `*.stage` isn't in the
   Cloudflare tunnel).
-- **Production (not yet):** https://cadence.burntbytes.com. The tunnel already has an entry for
-  this hostname (`apps/production/cloudflare-tunnel/config.yaml`), left from the Cadence
-  Shopify app work (#1262); point it at this site's service when production lands. When the
-  Shopify app also deploys, its `/pay`, `/app`, `/auth` and `/webhooks` paths route to the app
-  on the same host.
+- **Production:** https://cadence.burntbytes.com (`cadence-site-prod`). Public through the
+  Cloudflare tunnel entry for this hostname (`apps/production/cloudflare-tunnel/config.yaml`),
+  which needs a Cloudflare DNS CNAME to the tunnel (`<tunnel-uuid>.cfargotunnel.com`) — set in the
+  Cloudflare dashboard, not in this repo. LAN clients resolve it to the gateway through the
+  AdGuard `*.burntbytes.com` rewrite. When the Cadence Shopify app also deploys (#1262), its
+  `/pay`, `/app`, `/auth` and `/webhooks` paths route to the app on the same host.
 
 ## 4. Configuration
 
@@ -46,6 +46,7 @@ None at runtime. Copy and layout change in `gjcourt/cadence` `site/`.
 
 ```bash
 kubectl -n cadence-site-stage get pods                       # 1/1 Running
+kubectl -n cadence-site-prod get pods                        # 2/2 Running
 kubectl -n cadence-site-stage exec deploy/cadence-site -- wget -qO- localhost:8080/healthz
 curl -sI https://cadence.stage.burntbytes.com/ | grep -i content-security-policy
 ```

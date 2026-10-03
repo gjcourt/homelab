@@ -21,6 +21,7 @@ resources:
   - homepage-clicks
   - immich
   - jellyfin
+  - kokoro
   - ladder
   - linkding
   - llmux

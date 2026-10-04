@@ -1,0 +1,118 @@
+# Kokoro-82M text-to-speech (Kokoro-FastAPI, OpenAI-compatible API) for Home
+# Assistant — lab brief 03-036. The voice af_heart won the 2026-10-02 blind
+# audition and is the server's default. CPU only (PyTorch on CPU).
+#
+# The image bakes the model weights in at build time (DOWNLOAD_MODEL build
+# arg), so DOWNLOAD_MODEL=false skips the startup re-check and the pod needs no
+# internet egress. It runs as appuser (UID 1000, from the upstream Dockerfile);
+# the only runtime writes are temp files under /app/api/temp_files, mounted
+# below, and /tmp.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kokoro
+  namespace: kokoro
+  labels:
+    app: kokoro
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    # One replica, ~1.5 GB image and a slow warm-up: don't run two at once.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: kokoro
+  template:
+    metadata:
+      labels:
+        app: kokoro
+    spec:
+      serviceAccountName: kokoro
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: kokoro
+          image: ghcr.io/remsky/kokoro-fastapi-cpu:v0.9.0@sha256:ee3111d6a2c903ed62f3b4fa19543c6901205ed39fce3c177e895b34a8386b9c
+          env:
+            - name: DOWNLOAD_MODEL
+              value: "false"
+            - name: DEFAULT_VOICE
+              value: af_heart
+            # Only Home Assistant calls this; the browser player and
+            # cross-origin requests aren't needed.
+            - name: ENABLE_WEB_PLAYER
+              value: "false"
+            - name: CORS_ENABLED
+              value: "false"
+            - name: API_LOG_LEVEL
+              value: INFO
+            # Match PyTorch's thread pool to the CPU limit. The audition ran
+            # Kokoro with its default thread count under a 4-CPU quota and was
+            # throttled most of the time.
+            - name: OMP_NUM_THREADS
+              value: "3"
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: http
+              containerPort: 8880
+              protocol: TCP
+          # Unmeasured in-cluster: 327 MB of weights in PyTorch on CPU. The
+          # audition (kokoro-onnx, not this server) rendered a 26 s paragraph
+          # in 13–15 s under a throttled 4-CPU quota. Re-measure after deploy.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1536Mi
+            limits:
+              cpu: "3"
+              memory: 3Gi
+          # Model load and warm-up synthesis run before /health answers.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Distinct signal from readiness (TCP vs HTTP) per the probe
+          # convention: restart only if the server stops accepting connections.
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: temp-files
+              mountPath: /app/api/temp_files
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi
+        - name: temp-files
+          emptyDir:
+            sizeLimit: 512Mi

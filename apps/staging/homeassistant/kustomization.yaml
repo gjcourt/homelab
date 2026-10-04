@@ -19,3 +19,20 @@ patches:
       - op: replace
         path: /metadata/name
         value: homeassistant-stage
+  # Kokoro TTS (lab brief 03-036) in this environment, for the openai_tts
+  # integration. Per overlay so each Home Assistant reaches only its own.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: homeassistant
+    patch: |
+      - op: add
+        path: /spec/egress/-
+        value:
+          toEndpoints:
+            - matchLabels:
+                app: kokoro
+                k8s:io.kubernetes.pod.namespace: kokoro-stage
+          toPorts:
+            - ports:
+                - port: "8880"
+                  protocol: TCP

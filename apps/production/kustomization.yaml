@@ -6,6 +6,7 @@ resources:
   - authelia
   - bench-cloud
   - burntbytes
+  - cadence-site
   - certificates
   - changes
   - cloudflare-tunnel

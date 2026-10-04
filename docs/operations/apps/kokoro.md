@@ -12,13 +12,15 @@ voice `af_heart` came first in the 2026-10-02 blind audition of 13 stock voices.
 - **Namespaces**: `kokoro-prod`, `kokoro-stage`. One replica, `Recreate` strategy.
 - **Model**: baked into the image at build time. `DOWNLOAD_MODEL=false` skips the startup re-check, so the pod has **no internet egress** (DNS only).
 - **Storage**: none persistent. `emptyDir` volumes at `/tmp` and `/app/api/temp_files`; the root filesystem is read-only.
-- **Security**: UID 1000 (the image's `appuser`), all capabilities dropped. The web player and CORS are turned off because only Home Assistant calls it.
-- **Networking**: `ClusterIP` on 8880, no HTTPRoute. A `CiliumNetworkPolicy` admits only Home Assistant pods in the same environment, and each Home Assistant overlay adds the matching egress rule.
+- **Security**: UID 1000 (the image's `appuser`), all capabilities dropped. CORS is off; the web player is same-origin and doesn't need it.
+- **Networking**: `ClusterIP` on 8880. A `CiliumNetworkPolicy` admits Home Assistant pods in the same environment (each Home Assistant overlay adds the matching egress rule) and the LAN gateway.
+- **Web player (LAN only, no login)**: `ENABLE_WEB_PLAYER=true`, routed by an HTTPRoute in each overlay on that gateway's wildcard listener (`*.burntbytes.com` on `app-gateway-production`, `*.stage.burntbytes.com` on `app-gateway-staging`). The hostname isn't in the Cloudflare tunnel, so it can't be reached from the internet. **Anyone on the LAN can use it**, and the route exposes the whole API, not just the player. There's no login because the gateway's Authelia ext_authz isn't enforcing (see `infra/configs/gateway/cilium-envoy-config-production.yaml` and the [2026-02-27 incident](../incidents/2026-02-27-navidrome-ext-authz-gateway-api-broken.md)). Once that's fixed, add a `one_factor` rule for the hostnames.
 
 ## 3. Endpoints
 - **Production**: `http://kokoro.kokoro-prod.svc.cluster.local:8880/v1`
 - **Staging**: `http://kokoro.kokoro-stage.svc.cluster.local:8880/v1`
 - API: `POST /v1/audio/speech` (OpenAI speech format) and `GET /v1/audio/voices`. Health: `GET /health`.
+- **Browser (LAN)**: web player at https://voice.burntbytes.com/web/ and Swagger UI at https://voice.burntbytes.com/docs. Staging: https://voice.stage.burntbytes.com/web/ and /docs.
 
 ## 4. Configuration
 - **Default voice**: `af_heart`, set by the `DEFAULT_VOICE` env in `apps/base/kokoro/deployment.yaml`. Home Assistant can request any other preset per call.
@@ -36,6 +38,7 @@ Home Assistant's core OpenAI integration only talks to `api.openai.com`, so Koko
 ## 6. Testing
 - Pod ready (the first start loads the model and runs a warm-up): `kubectl -n kokoro-prod get pods`
 - Logs: `kubectl -n kokoro-prod logs deploy/kokoro`
+- From a browser on the LAN: https://voice.burntbytes.com/web/ — type text, pick a voice, play.
 - From Home Assistant: Developer tools → Actions → `tts.speak` on a media player.
 
 ## 7. Disaster recovery

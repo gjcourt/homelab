@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: kokoro-stage
 resources:
   - ../../base/kokoro/
+  - httproute.yaml
 
 labels:
   - pairs:

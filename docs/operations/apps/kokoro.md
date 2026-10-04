@@ -8,7 +8,7 @@ Assistant can speak with no cloud service. CPU only. This is the default TTS voi
 voice `af_heart` came first in the 2026-10-02 blind audition of 13 stock voices.
 
 ## 2. Architecture
-- **Image**: `ghcr.io/remsky/kokoro-fastapi-cpu`, pinned by tag and digest. Apache-2.0, and so are the Kokoro-82M weights.
+- **Image**: `ghcr.io/remsky/kokoro-fastapi-cpu`, pinned by tag and digest. Kokoro-FastAPI and the Kokoro-82M weights are Apache-2.0; the image also bundles `espeak-ng` (GPL-3.0) for phonemization, which is fine for private use but matters if the image is ever redistributed.
 - **Namespaces**: `kokoro-prod`, `kokoro-stage`. One replica, `Recreate` strategy.
 - **Model**: baked into the image at build time. `DOWNLOAD_MODEL=false` skips the startup re-check, so the pod has **no internet egress** (DNS only).
 - **Storage**: none persistent. `emptyDir` volumes at `/tmp` and `/app/api/temp_files`; the root filesystem is read-only.
@@ -23,7 +23,7 @@ voice `af_heart` came first in the 2026-10-02 blind audition of 13 stock voices.
 ## 4. Configuration
 - **Default voice**: `af_heart`, set by the `DEFAULT_VOICE` env in `apps/base/kokoro/deployment.yaml`. Home Assistant can request any other preset per call.
 - **Threads**: `OMP_NUM_THREADS=3` matches PyTorch's thread pool to the 3-CPU limit, to avoid the throttling the audition ran into.
-- **Resources**: request 500m / 1.5Gi, limit 3 CPU / 3Gi. These are estimates; re-measure after deploy and adjust.
+- **Resources**: request 500m / 1.5Gi, limit 3 CPU / 3Gi. First staging measurement (2026-10-04): ~1.0 GiB resident and a few millicores idle, warm-up 2.9 s, a one-sentence `af_heart` MP3 from the Home Assistant pod in under 1 s. Re-measure under real use (long announcements) and adjust.
 
 ## 5. Home Assistant setup (one-time)
 Home Assistant's core OpenAI integration only talks to `api.openai.com`, so Kokoro goes through the

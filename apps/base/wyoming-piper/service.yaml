@@ -1,0 +1,19 @@
+# Cluster-internal only: Home Assistant's Wyoming integration connects to
+# wyoming-piper.wyoming-piper-<env>.svc.cluster.local:10200. No HTTPRoute — the
+# Wyoming protocol is not HTTP, and nothing outside the cluster should reach it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: wyoming-piper
+  namespace: wyoming-piper
+  labels:
+    app: wyoming-piper
+spec:
+  type: ClusterIP
+  selector:
+    app: wyoming-piper
+  ports:
+    - name: wyoming
+      port: 10200
+      protocol: TCP
+      targetPort: 10200

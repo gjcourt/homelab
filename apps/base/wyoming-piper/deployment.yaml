@@ -1,0 +1,111 @@
+# Piper text-to-speech over the Wyoming protocol, for Home Assistant (lab brief
+# 03-036). CPU only. The image's entrypoint (docker_run.sh) runs
+#   python -m wyoming_piper --uri tcp://0.0.0.0:10200 --data-dir /data "$@"
+# so `args` below are appended to that.
+#
+# Voices download from Hugging Face on first start into /data (an emptyDir, so
+# no iSCSI dependency; a restart re-downloads ~63 MB per medium voice).
+#
+# The upstream image has no USER and runs as root. Verified 2026-10-02 that
+# wyoming-piper 2.5.2 runs as a non-root UID with HOME unwritable and writes
+# only the two voice files under --data-dir, so the restricted context below
+# holds. Measured on a 4650GE node (4-CPU quota, shared with other work):
+# ~400 MB RSS with one medium voice; a 23 s paragraph in 3.0–6.5 s
+# (RTF 0.13–0.28); ~1.1 s to first audio once warm; the first request after
+# start also loads the model (~4 s).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wyoming-piper
+  namespace: wyoming-piper
+  labels:
+    app: wyoming-piper
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    # One replica and an emptyDir: Recreate avoids two pods downloading at once.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: wyoming-piper
+  template:
+    metadata:
+      labels:
+        app: wyoming-piper
+    spec:
+      serviceAccountName: wyoming-piper
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: wyoming-piper
+          image: rhasspy/wyoming-piper:2.5.2@sha256:7d39aafac409c2b6b09d999ed04d84c311d632e558b35baa60fad6aac722af7a
+          args:
+            # Default voice until the 03-036 Phase 1 audition picks one. Any
+            # other voice can still be selected per request from Home
+            # Assistant; it downloads on first use.
+            - --voice
+            - en_US-lessac-medium
+          env:
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: wyoming
+              containerPort: 10200
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi
+          # Readiness: the port is bound only after the default voice is
+          # downloaded and the server logs "Ready".
+          readinessProbe:
+            tcpSocket:
+              port: wyoming
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          # Liveness carries a distinct signal: the image's own health check
+          # does a Wyoming Describe/Info round trip, which fails if the event
+          # loop is wedged even though the port stays open. Synthesis runs on
+          # the event loop, so the loose timings tolerate a long render.
+          livenessProbe:
+            exec:
+              command:
+                - /usr/src/.venv/bin/python3
+                - -m
+                - wyoming_piper.health_check
+                - --timeout
+                - "4"
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

@@ -39,4 +39,5 @@
 - [truenas-iscsi-monitor](base/truenas-iscsi-monitor/)
 - [vibrato](base/vibrato/)
 - [vitals](base/vitals/)
+- [wyoming-piper](base/wyoming-piper/)
 <!-- apps:list:end -->

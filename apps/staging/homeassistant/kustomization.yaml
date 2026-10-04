@@ -12,6 +12,26 @@ labels:
     includeSelectors: false
 
 patches:
+  # Wyoming TTS (wyoming-piper, lab brief 03-036) in this environment. Added per
+  # overlay rather than in base so prod HA can only reach prod Piper and staging
+  # HA only staging Piper. Kept first in the list so it doesn't collide with other
+  # egress patches appended at the end (e.g. kokoro, #1532); order doesn't matter
+  # for /spec/egress/- adds.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: homeassistant
+    patch: |
+      - op: add
+        path: /spec/egress/-
+        value:
+          toEndpoints:
+            - matchLabels:
+                app: wyoming-piper
+                k8s:io.kubernetes.pod.namespace: wyoming-piper-stage
+          toPorts:
+            - ports:
+                - port: "10200"
+                  protocol: TCP
   - target:
       kind: Namespace
       name: homeassistant

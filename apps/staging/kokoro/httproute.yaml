@@ -1,0 +1,39 @@
+# LAN-only Kokoro web player: https://voice.stage.burntbytes.com/web/ (the API is on the same host).
+# Served off the *.burntbytes.com wildcard listener; not in the Cloudflare tunnel,
+# so unreachable from the internet. No login yet — the gateway's Authelia
+# ext_authz isn't enforcing; add a one_factor rule for this host once it is.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: kokoro-http
+  namespace: kokoro-stage
+spec:
+  hostnames:
+    - voice.stage.burntbytes.com
+  parentRefs:
+    - name: app-gateway-staging
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: kokoro-https
+  namespace: kokoro-stage
+spec:
+  hostnames:
+    - voice.stage.burntbytes.com
+  parentRefs:
+    - name: app-gateway-staging
+      namespace: default
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: kokoro
+          port: 8880

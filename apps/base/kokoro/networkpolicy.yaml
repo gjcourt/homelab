@@ -7,7 +7,7 @@ metadata:
     app.kubernetes.io/name: kokoro
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: HTTP on 8880 from Home Assistant only; egress DNS only (weights are baked into the image).
+  description: HTTP on 8880 from Home Assistant and the LAN gateway (web player); egress DNS only (weights are baked into the image).
   endpointSelector:
     matchLabels:
       app: kokoro
@@ -21,9 +21,13 @@ spec:
         - ports:
             - port: "8880"
               protocol: TCP
-    # Kubelet, for the startup/readiness/liveness probes.
+    # host: kubelet, for the startup/readiness/liveness probes.
+    # remote-node + ingress: the gateway's Envoy, for the LAN-only web player at
+    # voice.burntbytes.com. The gateway needs all three entities.
     - fromEntities:
         - host
+        - remote-node
+        - ingress
       toPorts:
         - ports:
             - port: "8880"

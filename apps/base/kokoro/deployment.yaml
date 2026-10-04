@@ -45,10 +45,11 @@ spec:
               value: "false"
             - name: DEFAULT_VOICE
               value: af_heart
-            # Only Home Assistant calls this; the browser player and
-            # cross-origin requests aren't needed.
+            # Built-in browser player, served at https://voice.burntbytes.com/web/
+            # (LAN-only, no login yet — see the HTTPRoute). Same-origin, so CORS
+            # stays off.
             - name: ENABLE_WEB_PLAYER
-              value: "false"
+              value: "true"
             - name: CORS_ENABLED
               value: "false"
             - name: API_LOG_LEVEL

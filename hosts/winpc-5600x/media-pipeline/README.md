@@ -140,9 +140,17 @@ would have ended it immediately.
 ### The frame-count gate
 
 Exit code proves nothing here, so the gate compares frames actually present
-against `duration × frame_rate` and fails below 99%. That is the check that
-would have caught this on day one, and it is cheap — ffmpeg already prints the
-number.
+in the encode against the **source's** video packet count (`ffprobe
+-count_packets`) and fails below 99%. That is the check that would have caught
+this on day one. Counting the source re-reads it once, which costs a minute or
+two against an encode measured in hours.
+
+⚠️ **It was `duration × r_frame_rate` until 2026-10-05**, which fails every
+soft-telecined NTSC DVD. The MPEG-2 stream holds 23.976 progressive frames with
+pulldown flags, while the container — and the encode, which inherits the tag —
+reports 29.97. March of the Penguins came out with 115,408 of 115,408 frames
+over the full 4,813 s, and the gate called it 80% and refused to push it.
+`duration × rate` remains only as a fallback if the source count can't be read.
 
 ## Encoder settings
 

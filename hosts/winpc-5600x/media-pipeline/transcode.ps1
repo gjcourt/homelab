@@ -192,11 +192,24 @@ foreach ($it in $runnable) {
 
   # ---- FRAME-COUNT GATE: the check that would have caught this on day one ----
   # ffmpeg exits 0 having encoded 0.85% of the frames, so exit code proves
-  # nothing. Compare frames actually present against duration x frame rate.
-  $fps = Probe $va 'stream=r_frame_rate' 'v:0'
-  $num,$den = ($fps -split '/')
-  $fpsVal = if ($den) { [double]$num / [double]$den } else { [double]$num }
-  $expected = [math]::Round($it.Dur * $fpsVal)
+  # nothing. Compare frames actually present against the SOURCE's frame count.
+  # ⚠️ This used to be duration x r_frame_rate, which is wrong for any soft-
+  # telecined NTSC DVD: the MPEG-2 stream holds 23.976 progressive frames with
+  # pulldown flags, but the container reports 30000/1001 - and the encode
+  # inherits that tag. Measured 2026-10-05 on March of the Penguins: source and
+  # output both 115,408 frames, full 4,813 s duration, yet the gate computed
+  # ~144,260 expected (80%) and refused a perfect encode. The packet count is
+  # exact for both cases; the encode maps v:0 with no rate change, so a good
+  # run matches it frame for frame. Duration x rate stays as the fallback.
+  $expected = 0
+  $srcCnt = & $FP -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of default=nw=1:nk=1 $it.Src 2>$null
+  if ("$srcCnt".Trim() -match '^\d+$') { $expected = [int]"$srcCnt".Trim() }
+  if ($expected -le 0) {
+    $fps = Probe $va 'stream=r_frame_rate' 'v:0'
+    $num,$den = ($fps -split '/')
+    $fpsVal = if ($den) { [double]$num / [double]$den } else { [double]$num }
+    $expected = [math]::Round($it.Dur * $fpsVal)
+  }
   # nb_frames is 'N/A' for plenty of muxers - casting that to [int] throws, and
   # with $ErrorActionPreference='Continue' the throw is printed as a scary
   # stack trace in the middle of a run that then succeeds anyway. The packet

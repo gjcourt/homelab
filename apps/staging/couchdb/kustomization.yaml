@@ -1,0 +1,23 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: couchdb-stage
+resources:
+  - ../../base/couchdb/
+  - httproute.yaml
+  # George adds the SOPS-encrypted secret before merge:
+  # - secret-couchdb-admin.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Namespace
+      name: couchdb
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: couchdb-stage

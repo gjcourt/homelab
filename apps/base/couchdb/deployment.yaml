@@ -1,0 +1,127 @@
+# CouchDB for Obsidian Self-hosted LiveSync — plan:
+# docs/plans/2026-10-06-obsidian-livesync.md. One database per vault; each
+# person is a member of only their vaults' _security. Login is CouchDB's own
+# (require_valid_user) — nothing here relies on the gateway auth gate.
+#
+# Non-root by design: the image starts as root and drops to couchdb (UID 5984)
+# itself, but its root-only block only fixes file ownership, which fsGroup
+# covers here. Writable paths:
+#   /opt/couchdb/data          — the PVC
+#   /opt/couchdb/etc/local.d   — emptyDir; the entrypoint `touch`es docker.ini
+#                                there and appends the [admins] entry from
+#                                COUCHDB_USER/COUCHDB_PASSWORD on every start
+#   /tmp (HOME)                — the image's vm.args leaves -setcookie unset,
+#                                so Erlang writes $HOME/.erlang.cookie
+#   /opt/couchdb/var/log       — writable in the stock image; kept writable
+# No NODENAME / COUCHDB_ERLANG_COOKIE: single node.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: couchdb
+  namespace: couchdb
+  labels:
+    app: couchdb
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  strategy:
+    # RWO iSCSI volume: never two pods at once.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: couchdb
+  template:
+    metadata:
+      labels:
+        app: couchdb
+    spec:
+      serviceAccountName: couchdb
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 5984
+        runAsGroup: 5984
+        fsGroup: 5984
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: couchdb
+          image: couchdb:3.5.2.1@sha256:5fc596110eac7f412173a7d9de14f70aa5d3e816790fb6e70642755d4a4cf464
+          env:
+            - name: COUCHDB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: couchdb-admin
+                  key: username
+            - name: COUCHDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: couchdb-admin
+                  key: password
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: http
+              containerPort: 5984
+              protocol: TCP
+          # Community reports show OOM at 256 MB during a first full sync;
+          # measure in staging and adjust.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          # /_up answers without credentials even with require_valid_user.
+          readinessProbe:
+            httpGet:
+              path: /_up
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: data
+              mountPath: /opt/couchdb/data
+            - name: local-d
+              mountPath: /opt/couchdb/etc/local.d
+            - name: livesync-ini
+              mountPath: /opt/couchdb/etc/local.d/10-livesync.ini
+              subPath: livesync.ini
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+            - name: log
+              mountPath: /opt/couchdb/var/log
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: couchdb-data-pvc
+        - name: local-d
+          emptyDir:
+            sizeLimit: 16Mi
+        - name: livesync-ini
+          configMap:
+            name: couchdb-livesync
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: log
+          emptyDir:
+            sizeLimit: 256Mi

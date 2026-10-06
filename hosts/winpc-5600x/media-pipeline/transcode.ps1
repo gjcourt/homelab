@@ -37,8 +37,12 @@
      coincidences of the one title that happened to have a sparse track.
 
 .PARAMETER Queue
-  TSV file, one title per line: <source path><TAB><Library Name>
+  TSV file, one title per line: <source path><TAB><Library Name>[<TAB><Library Dir>]
   Blank lines and lines starting with # are ignored.
+  <Library Name> is the FILE name (no extension). <Library Dir> is optional and
+  relative to media/video; it defaults to movies/<Library Name>, so existing
+  movie queues are unchanged. TV: a dir like
+  tv/Show (Year)/Season 01 with a name like Show (Year) - S01E01.
 
 .EXAMPLE
   .\transcode.ps1 -Queue .\queue.tsv
@@ -93,7 +97,17 @@ function AacBitrate([int]$ch) {
   if ($ch -le 2) { return 160 }
   return 64 * $ch          # 5.1 -> 384k, 7.1 -> 512k
 }
-function OnHestia($rel) { (ssh -n -o BatchMode=yes $HST "sudo -n test -f '$HBASE/$rel' && echo yes") -match 'yes' }
+# ⚠️ Every remote READ goes through Invoke-SshRead (ledger.ps1), never through
+# ssh stdout. Win32-OpenSSH's ssh.exe (9.5.6.2 here) can fail to exit when its
+# stdout is a pipe and the remote printed anything - well below the 12288-byte
+# threshold ledger.ps1 first recorded. Measured 2026-10-05: `ssh -n host "echo
+# yes"` hung 6/6 through a pipe and finished in 0.1 s redirected to a file. This
+# script hung forever on the post-push sha256sum of March of the Penguins, and
+# on this very existence check for a title already in the library. It is not
+# deterministic (import-music's piped reads completed on 2026-10-01), which is
+# exactly why reads go through a file regardless. Writes that print nothing are
+# unaffected.
+function OnHestia($rel) { (Invoke-SshRead -RemoteHost $HST -Cmd "sudo -n test -f '$HBASE/$rel' && echo yes") -match 'yes' }
 
 . (Join-Path $PSScriptRoot 'ledger.ps1')
 $RUN_ID = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
@@ -112,7 +126,16 @@ foreach ($line in [IO.File]::ReadAllLines($Queue, [Text.UTF8Encoding]::new($fals
   if (-not $l -or $l.StartsWith('#')) { continue }
   $parts = $l -split "`t+"
   if ($parts.Count -lt 2) { Log "SKIP malformed queue line: $l"; continue }
-  $items += [pscustomobject]@{ Src = $parts[0].Trim(); Name = $parts[1].Trim() }
+  $nm  = $parts[1].Trim()
+  $dir = if ($parts.Count -ge 3 -and $parts[2].Trim()) { $parts[2].Trim().Trim('/') } else { "movies/$nm" }
+  # Both end up inside single-quoted remote shell commands and Windows paths:
+  # refuse anything that could escape the library root or break the quoting,
+  # rather than land a file somewhere nobody will look for it.
+  if ($nm -match '[\\/:*?"<>|'']') { Log "SKIP bad Library Name (path/quote chars): $l"; continue }
+  if ($dir -notmatch '^(movies|tv|tv-anime)/' -or $dir -match '\.\.|[\\:*?"<>|'']') {
+    Log "SKIP bad Library Dir (must be under movies/, tv/ or tv-anime/): $l"; continue
+  }
+  $items += [pscustomobject]@{ Src = $parts[0].Trim(); Name = $nm; Dir = $dir }
 }
 if (-not $items) { Log 'ABORT: queue is empty'; exit 1 }
 
@@ -123,7 +146,7 @@ foreach ($i in $items) {
   if (-not (Test-Path $i.Src)) { Log ("  MISSING src  : " + $i.Name + "  <= " + $i.Src); continue }
   $d = Dur $i.Src
   if ($d -le 0) { Log ("  UNREADABLE   : " + $i.Name); continue }
-  $rel = "media/video/movies/$($i.Name)/$($i.Name).mkv"
+  $rel = "media/video/$($i.Dir)/$($i.Name).mkv"
   $onHestia = OnHestia $rel
   if ($onHestia -and -not $Replace) { Log ("  SKIP on hestia: " + $i.Name); continue }
   if ($onHestia) { Log ("  REPLACING     : " + $i.Name + " (already in the library)") }
@@ -138,7 +161,7 @@ foreach ($i in $items) {
   Log ("  QUEUED       : " + $i.Name + "  " + [math]::Round($d/60,1) + "min  subs=" + $nsub + " (muxed after encode, never mapped into it)")
   Log ("                 audio=" + $achan.Count + "  [" + $adesc + "]")
   if ($achan.Count -eq 0) { Log ("  NO AUDIO     : " + $i.Name + " -- skipping"); continue }
-  $runnable += [pscustomobject]@{ Src = $i.Src; Name = $i.Name; Dur = $d; Subs = $nsub
+  $runnable += [pscustomobject]@{ Src = $i.Src; Name = $i.Name; Dir = $i.Dir; Dur = $d; Subs = $nsub
                                   AChan = $achan; ADesc = $adesc }
 }
 Log ("== PREFLIGHT DONE: $($runnable.Count) to encode ==")
@@ -155,7 +178,7 @@ if ($WaitForIdle) {
 # ---- encode ------------------------------------------------------------
 foreach ($it in $runnable) {
   $name = $it.Name
-  $dest = "media/video/movies/$name"; $rel = "$dest/$name.mkv"
+  $dest = "media/video/$($it.Dir)"; $rel = "$dest/$name.mkv"
   $free = (Get-PSDrive C).Free / 1GB
   if ($free -lt $MinFreeGB) { Log ("ABORT low disk: " + [math]::Round($free,1) + "GB < ${MinFreeGB}GB"); break }
 
@@ -310,8 +333,8 @@ foreach ($it in $runnable) {
     VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note='move into library failed' })
     Log "FAIL push: $name -- keeping local"; continue
   }
-  $remoteSha = ((ssh -n -o BatchMode=yes $HST "sudo -n sha256sum '$HBASE/$inc'") -join '').Trim().Split(' ')[0].ToLower()
-  $remoteLen = ((ssh -n -o BatchMode=yes $HST "sudo -n stat -c %s '$HBASE/$inc'") -join '').Trim()
+  $remoteSha = ((Invoke-SshRead -RemoteHost $HST -Cmd "sudo -n sha256sum '$HBASE/$inc'") -join '').Trim().Split(' ')[0].ToLower()
+  $remoteLen = ((Invoke-SshRead -RemoteHost $HST -Cmd "sudo -n stat -c %s '$HBASE/$inc'") -join '').Trim()
   if ($remoteSha -eq $localSha -and $remoteLen -eq "$outLen") {
     ssh -n -o BatchMode=yes $HST "sudo -n mv '$HBASE/$inc' '$HBASE/$rel'"
     if ($LASTEXITCODE -ne 0) {

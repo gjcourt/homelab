@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 last_modified: 2026-10-06
 summary: "Self-hosted Obsidian sync: one CouchDB in the cluster for the LiveSync plugin, one database per vault, E2EE, S3 backups with a restore drill"
 ---
@@ -110,17 +110,12 @@ credentials. Known issue: the wizard's "Detect and Fix CouchDB issues" check can
 non-admin users ([#988](https://github.com/vrtmrz/obsidian-livesync/issues/988)). Provisioning
 the database as admin first, as above, avoids depending on it.
 
-## Decisions for George
+## Decisions (George, 2026-10-06)
 
-1. **LAN-only, or reachable from anywhere?**
-   - **LAN-only:** phones sync only at home. That's the default for every app, and the simplest.
-   - **Through the Cloudflare Tunnel**, like `memos`, `links` and `food`: sync from anywhere.
-     CouchDB's own login plus E2EE (and path obfuscation) protect it, but the admin UI would also
-     be public behind the admin password.
-   - **Recommendation:** start LAN-only in staging and production, then add a tunnel route in a
-     separate PR once backups and the restore drill pass.
-2. **Which vaults, for whom?** A list like `george-personal` (George), `family` (George + …)
-   decides what `provision-vault.sh` creates first.
+1. **LAN-only.** Devices sync on the home network; off-LAN they keep working offline and catch up at
+   home. No Cloudflare Tunnel route; the optional tunnel phase is dropped unless George revisits it.
+2. **First vaults:** `george` (George), `mara` (Mara), and `family` (George and Mara; membership
+   assumed, confirm when provisioning). `provision-vault.sh` creates these three in phase 4.
 
 ## Phases
 
@@ -130,15 +125,15 @@ the database as admin first, as above, avoids depending on it.
 | 2 | Production overlay | Same checks in production |
 | 3 | Backup CronJob + restore runbook | A dump lands in S3; the restore drill passes in staging |
 | 4 | `scripts/couchdb/provision-vault.sh` + device setup guide in the runbook | George provisions the first vaults; Mac, iPhone/iPad and winpc sync with E2EE |
-| 5 (optional) | Cloudflare Tunnel route | Off-LAN sync works, if George chooses it |
 
 Every PR gets a babysit before George merges. Secrets are SOPS-encrypted by George (`.yaml.example`
 only from agents). No cluster changes outside merged PRs.
 
 ## Exit criteria
 
-- [ ] Mac, iPhone/iPad and winpc sync one vault through `obsidian.burntbytes.com` with E2EE on.
-- [ ] A second person's vault is readable only by its members (checked with another user's
-      credentials: 401/403).
+- [ ] Mac, iPhone/iPad and winpc sync the `george` vault through `obsidian.burntbytes.com` with E2EE
+      on.
+- [ ] `mara` is unreadable with George's credentials and `george` with Mara's (401/403); both can
+      read `family`.
 - [ ] A nightly backup lands in S3, and a restore drill has been done once.
 - [ ] CouchDB runs non-root with no restarts over a week; memory measured and limits adjusted.

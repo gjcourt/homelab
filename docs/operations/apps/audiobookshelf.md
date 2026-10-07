@@ -19,7 +19,7 @@ Audiobookshelf is deployed as a standard Kubernetes `Deployment` with a single r
 - **Environment Variables**: Loaded from the `audiobookshelf-container-env` ConfigMap.
 - **ConfigMaps/Secrets**:
   - `audiobookshelf-sso-secret` (Secret): Contains the OIDC client secret for Authelia integration. Managed via SOPS.
-- **SSO Integration**: Audiobookshelf is configured to use Authelia as an OpenID Connect (OIDC) provider. The `hostAliases` patch in the production deployment ensures the pod can resolve the Authelia URL internally.
+- **SSO Integration**: Audiobookshelf is configured to use Authelia as an OpenID Connect (OIDC) provider. The `hostAliases` patch in each overlay pins the Authelia host to the Gateway VIP (prod `10.42.2.40`, staging `10.42.2.42`), and the CiliumNetworkPolicy (`apps/base/audiobookshelf/networkpolicy.yaml`) allows TCP 443 egress to those two VIPs. Both are needed: without the egress rule the Gateway's Envoy rejects the back-channel with `403 Forbidden`.
 
 ## 5. Usage Instructions
 - **Web UI**: Navigate to the URL and log in via Authelia (SSO).
@@ -51,6 +51,7 @@ To verify Audiobookshelf is working:
 - **OIDC Login Failing**:
   - Verify the `audiobookshelf-sso-secret` contains the correct client secret.
   - Check the pod logs for OIDC redirect URI mismatches or connection errors to Authelia.
+  - `OPError: expected 200 OK, got: 403 Forbidden` after a successful Authelia login means the network policy is blocking the back-channel, not Authelia. Confirm from the pod with `kubectl -n audiobookshelf-prod exec deploy/audiobookshelf -- wget -S -O- https://auth.burntbytes.com/.well-known/openid-configuration` and look for `http-request DROPPED` in `hubble observe --from-namespace audiobookshelf-prod --to-ip 10.42.2.40`. If the Gateway VIP changes, update both the overlay `hostAliases` and the policy CIDRs.
   - A redirect URI mismatch is logged by **Authelia**, not ABS: `kubectl -n authelia-prod logs deploy/authelia | grep redirect_uri`. The browser shows `invalid_request` with a hint about pre-registered `redirect_uris`.
   - Since 2.37.1, ABS serves from `ROUTER_BASE_PATH=/audiobookshelf` by default (startup log: `Serving from base path "/audiobookshelf"`), so its callback is `https://<host>/audiobookshelf/auth/openid/callback`. The Authelia `audiobookshelf` client must list that URI. If the base path changes again, update `apps/{production,staging}/authelia/configuration.yaml` to match.
   - Ensure the `hostAliases` patch is correctly resolving `auth.burntbytes.com` to the Gateway API IP.

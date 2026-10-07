@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: audiobookshelf
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Gateway ingress on pod port 13378 (service maps 3005→13378); egress DNS + HTTPS to the Gateway (Authelia OIDC).
+  description: Gateway ingress on pod port 13378 (service maps 3005→13378); egress DNS + Gateway VIP:443 + Authelia pods:9091 (OIDC via the Gateway).
   endpointSelector:
     matchLabels:
       app: audiobookshelf
@@ -41,15 +41,29 @@ spec:
     # browser login completed at Authelia and then failed in ABS with
     # "OPError: expected 200 OK, got: 403 Forbidden".
     # The 403 is Cilium, not Authelia: the Gateway's Envoy enforces this pod's
-    # egress policy and Hubble logs `http-request DROPPED`, direction EGRESS,
-    # destination identity `cidr:10.42.2.40/32` + `reserved:world`. So the
-    # rule must match the VIP as a CIDR (or `world`); the `ingress` entity is
-    # Envoy's own identity and does not match. Keep these CIDRs in sync with
-    # the overlays' deployment-patch.yaml.
+    # egress policy (cilium/proxy#1172, CVE-2025-30162 fix) and Hubble logs
+    # `(ingress) -> cilium-gateway-...:443 http-request DROPPED`.
+    # Allowing only the VIP (#1549) was NOT enough: still 403 on 2026-10-06,
+    # and homepage (egress `world`:443) gets the same 403. Envoy also checks
+    # this egress policy against the BACKEND it routes to, so Authelia's pods
+    # on their container port (9091) must be allowed too (cilium#47768,
+    # cilium#40538). Keep both rules. Keep the CIDRs in sync with the
+    # overlays' deployment-patch.yaml.
     - toCIDRSet:
         - cidr: 10.42.2.40/32
         - cidr: 10.42.2.42/32
       toPorts:
         - ports:
             - port: "443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app: authelia
+          matchExpressions:
+            - key: k8s:io.kubernetes.pod.namespace
+              operator: In
+              values: [authelia-prod, authelia-stage]
+      toPorts:
+        - ports:
+            - port: "9091"
               protocol: TCP

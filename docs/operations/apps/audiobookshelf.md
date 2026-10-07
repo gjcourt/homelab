@@ -51,6 +51,8 @@ To verify Audiobookshelf is working:
 - **OIDC Login Failing**:
   - Verify the `audiobookshelf-sso-secret` contains the correct client secret.
   - Check the pod logs for OIDC redirect URI mismatches or connection errors to Authelia.
+  - A redirect URI mismatch is logged by **Authelia**, not ABS: `kubectl -n authelia-prod logs deploy/authelia | grep redirect_uri`. The browser shows `invalid_request` with a hint about pre-registered `redirect_uris`.
+  - Since 2.37.1, ABS serves from `ROUTER_BASE_PATH=/audiobookshelf` by default (startup log: `Serving from base path "/audiobookshelf"`), so its callback is `https://<host>/audiobookshelf/auth/openid/callback`. The Authelia `audiobookshelf` client must list that URI. If the base path changes again, update `apps/{production,staging}/authelia/configuration.yaml` to match.
   - Ensure the `hostAliases` patch is correctly resolving `auth.burntbytes.com` to the Gateway API IP.
 - **Media Not Showing Up**:
   - Verify the media volume is mounted correctly and the pod has read permissions.

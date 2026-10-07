@@ -1,10 +1,17 @@
 ---
 status: planned
-last_modified: 2026-06-28
+last_modified: 2026-10-06
+blocked_on: "TrueNAS 26.x has no pool.dataset.get_instance; the api-proxy must map the by-id dataset GET to a served method"
 summary: "Migrate democratic-csi from the SSH-based driver to the API driver (freenas-api-iscsi) to remove the SSH+sudo dependency"
 ---
 
 # Democratic-CSI: Migrate from the SSH driver to the API driver (`freenas-api-iscsi`)
+
+> **Outcome (2026-06-28): attempted and reverted.** #1004 switched to the API driver; #1005 reverted
+> it the same day because `CreateVolume`'s by-id dataset GET maps to `pool.dataset.get_instance`,
+> which TrueNAS 26.x rejects with `500 "Method does not exist"`. The SSH driver is still in use.
+> Separately, the expansion problem that motivated part of this plan was fixed by the v1.9.5 image
+> bump (#1019). Details: [storage gotchas](../operations/2026-08-15-storage-gotchas.md#democratic-csi-driver-and-pvc-expansion).
 
 ## Context
 

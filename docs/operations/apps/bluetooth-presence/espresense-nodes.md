@@ -103,6 +103,37 @@ To stop room-flapping at boundaries:
   short sustained window before the room flips. Tune the window up if you see
   flapping, down if room changes lag.
 
+## What the first live node taught (office, 2026-06-24)
+
+The office scanner is the one node in service so far. It is named **`office-presence`** (room
+slug `office_presence`) rather than `presence-office` from the table above, so anything keyed on the
+room slug has to use what the node actually publishes. It runs ESPresense v4.0.6 at `10.42.7.135`
+and publishes to the mosquitto LoadBalancer at `10.42.2.46:1883` as the shared `espresense` user.
+
+**Enrolling a phone (IRK) — two traps, each cost a diagnosis cycle:**
+
+1. **The enrolled id is `phone:<slug>`, not the bare enroll name.** Read the real id from
+   `espresense/settings/irk:<key>/config` (`{"id":"phone:<slug>",...}`). The HA `mqtt_room` sensor's
+   `device_id` and `state_topic` must use that exact id.
+2. **Restart the node after enrolling.** The IRK is saved to settings immediately, but the running
+   BLE scanner loads it into its resolver only at boot. Until a restart nothing publishes under
+   `phone:<slug>`. Restart over MQTT: publish `PRESS` to `espresense/rooms/<room>/restart/set`.
+
+**Single-node `max_distance`.** With one node, nearest-node-wins always picks that node, so BLE's
+range made `mqtt_room` report the office from the kitchen (~12 m away). On 2026-06-24 the office
+node's `max_distance` was lowered from 16 m to 6 m over MQTT
+(`espresense/rooms/office_presence/max_distance/set`) to get a usable in-office/away signal.
+**Put it back to ~16 m when a second scanner is added** — multi-node arbitration needs every node to
+hear the phone so distances can be compared, and a low cap breaks that.
+
+**Antenna.** A XIAO without its u.FL antenna plugged in reports "No networks found" / "Probe Request
+Unsuccessful", which looks like wrong Wi-Fi credentials. Check the antenna first.
+
+**HA side.** The node's own entities (connectivity, uptime, Restart / Update / Enroll buttons)
+appear through MQTT discovery under `homeassistant/#` with no YAML. Only per-device room tracking
+needs an `mqtt_room` sensor. mmWave nodes run ESPHome, not ESPresense; their pinout and build notes
+are in `firmware/esphome/mmwave-office.yaml`.
+
 ## HolyIOT beacon → person (major / minor) map
 
 **3 HolyIOT iBeacons**, one per household member. Each broadcasts a fixed iBeacon

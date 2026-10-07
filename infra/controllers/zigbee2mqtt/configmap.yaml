@@ -16,5 +16,17 @@ data:
       port: tcp://10.42.2.15:6638
     frontend:
       port: 8080
+    # Mark mains-powered devices offline when they stop answering. The dining
+    # room chandelier LEDs lose power when the Lutron master is off, and the
+    # "Nightlight — verify chandelier power is actually off" HA automation
+    # relies on them going `unavailable` within ~5 min.
+    # NOTE: this ConfigMap only seeds /app/data/configuration.yaml on first
+    # install (see the init-config container). The live file on the PVC must
+    # be changed separately, through the Zigbee2MQTT bridge API
+    # (bridge/request/options), followed by a Zigbee2MQTT restart; see PR #1550.
+    availability:
+      enabled: true
+      active:
+        timeout: 5
     advanced:
       network_key: GENERATE

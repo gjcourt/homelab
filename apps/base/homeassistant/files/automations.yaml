@@ -128,6 +128,14 @@
             - service: switch.turn_on
               target:
                 entity_id: switch.dining_room_chandelier
+            # With Zigbee2MQTT availability on, the LEDs read `unavailable`
+            # while unpowered and a light.turn_on sent before they rejoin is
+            # dropped. Wait (up to 60 s) for both to come back online first.
+            - wait_template: >
+                {{ not is_state('light.0xa4c138b55dac7973', 'unavailable')
+                   and not is_state('light.0xa4c138a9f6011cac', 'unavailable') }}
+              timeout: "00:01:00"
+              continue_on_timeout: true
             - service: light.turn_on
               target:
                 entity_id:
@@ -200,6 +208,66 @@
     - service: switch.turn_off
       target:
         entity_id: switch.dining_room_chandelier
+
+# The Lutron master can report "off" without actually cutting power: on
+# 2026-10-05 the bridge confirmed off at 23:08 but both chandelier LEDs kept
+# talking on Zigbee until ~09:15 the next morning. The two MiBoxer LEDs are on
+# the master's circuit, and with Zigbee2MQTT availability enabled
+# (availability.active.timeout: 5) they go `unavailable` within ~5 min of
+# losing power. So if either is still reachable 15 min after the master went
+# off, the power was not cut: re-send the off, and notify if that fails too.
+#
+# A Home Assistant restart drops a pending `for` window and aborts a run that
+# is mid-delay, and the restored "off" state does not re-fire the state
+# trigger. The `homeassistant: start` trigger re-arms the check 15 min after
+# every start; when the master is on, or off with the LEDs unpowered, it is a
+# no-op (and in staging, where neither entity exists, it stops at the first
+# condition).
+- alias: "Nightlight — verify chandelier power is actually off"
+  description: "Re-send the master off and notify if the chandelier LEDs are still powered 15 min after it went off."
+  mode: single
+  max_exceeded: silent
+  trigger:
+    - platform: state
+      entity_id: switch.dining_room_chandelier
+      to: "off"
+      for: "00:15:00"
+    - platform: homeassistant
+      event: start
+      id: ha_start
+  action:
+    - if:
+        - condition: trigger
+          id: ha_start
+      then:
+        - delay: "00:15:00"
+    - condition: state
+      entity_id: switch.dining_room_chandelier
+      state: "off"
+    - condition: template
+      value_template: >
+        {{ not is_state('light.0xa4c138b55dac7973', 'unavailable')
+           or not is_state('light.0xa4c138a9f6011cac', 'unavailable') }}
+    - service: switch.turn_off
+      target:
+        entity_id: switch.dining_room_chandelier
+    - delay: "00:12:00"
+    - condition: template
+      value_template: >
+        {{ is_state('switch.dining_room_chandelier', 'off')
+           and (not is_state('light.0xa4c138b55dac7973', 'unavailable')
+                or not is_state('light.0xa4c138a9f6011cac', 'unavailable')) }}
+    - service: persistent_notification.create
+      data:
+        notification_id: chandelier_power_not_cut
+        title: "Dining room chandelier still powered"
+        message: >
+          The Lutron master reports off, but the chandelier LEDs are still on
+          Zigbee 12 min after a second off command. Check the wall switch.
+    - service: notify.mobile_app_parthenon
+      data:
+        title: "Dining room chandelier still powered"
+        message: "Lutron says off, but the chandelier LEDs are still on. Check the wall switch."
 
 # ============================================================================
 # Laundry room light auto-off timer

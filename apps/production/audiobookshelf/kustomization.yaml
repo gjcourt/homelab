@@ -22,3 +22,13 @@ patches:
       - op: replace
         path: /metadata/name
         value: audiobookshelf-prod
+  - target:
+      kind: CiliumNetworkPolicy
+      name: audiobookshelf
+    patch: |
+      - op: test
+        path: /spec/egress/2/toEndpoints/0/matchLabels/k8s:io.kubernetes.pod.namespace
+        value: authelia
+      - op: replace
+        path: /spec/egress/2/toEndpoints/0/matchLabels/k8s:io.kubernetes.pod.namespace
+        value: authelia-prod

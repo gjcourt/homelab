@@ -105,10 +105,11 @@ To stop room-flapping at boundaries:
 
 ## What the first live node taught (office, 2026-06-24)
 
-The office scanner is the one node in service so far. It is named **`office-presence`** (room
-slug `office_presence`) rather than `presence-office` from the table above, so anything keyed on the
-room slug has to use what the node actually publishes. It runs ESPresense v4.0.6 at `10.42.7.135`
-and publishes to the mosquitto LoadBalancer at `10.42.2.46:1883` as the shared `espresense` user.
+The office scanner was the first node in service (2026-06-24). It was named **`office-presence`**
+(room slug `office_presence`) rather than `presence-office` from the table above, so anything keyed
+on the room slug has to use what the node actually publishes. At the time it ran ESPresense v4.0.6
+at `10.42.7.135` and published to the mosquitto LoadBalancer at `10.42.2.46:1883` as the shared
+`espresense` user.
 
 **Enrolling a phone (IRK) — two traps, each cost a diagnosis cycle:**
 

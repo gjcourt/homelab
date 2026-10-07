@@ -42,8 +42,8 @@ qBittorrent P2P client running as a TrueNAS Custom App on hestia. Used for priva
 ## Recommended qBittorrent settings (set via Web UI on first login)
 
 - **Downloads**:
-  - Default save path: `/downloads/complete`
-  - Keep incomplete torrents in: `/downloads/incomplete` (toggle on, set path)
+  - Default save path: `/downloads` — this is the movies library itself (see below), so a
+    `complete/` or `incomplete/` subfolder here would appear inside the library
   - Append `.!qB` to incomplete files: on
 - **Connection**:
   - Port used for incoming connections: `6881`

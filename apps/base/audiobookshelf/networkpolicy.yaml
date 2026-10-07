@@ -8,7 +8,7 @@ metadata:
     app.kubernetes.io/name: audiobookshelf
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Gateway ingress on pod port 13378 (service maps 3005→13378); egress DNS only.
+  description: Gateway ingress on pod port 13378 (service maps 3005→13378); egress DNS + HTTPS to the Gateway (Authelia OIDC).
   endpointSelector:
     matchLabels:
       app: audiobookshelf
@@ -34,4 +34,25 @@ spec:
             - port: "53"
               protocol: UDP
             - port: "53"
+              protocol: TCP
+    # OIDC back-channel: ABS calls the auth host for discovery, token and
+    # userinfo. The overlays' hostAliases pin that hostname to a Gateway VIP
+    # (prod 10.42.2.40, staging 10.42.2.41). With egress limited to DNS, the
+    # browser login completed at Authelia and then failed in ABS with
+    # "OPError: expected 200 OK, got: 403 Forbidden".
+    # Both rules reach the Gateway only: the "ingress" identity (Envoy) and
+    # the two VIPs. Keep the CIDRs in sync with the overlays'
+    # deployment-patch.yaml.
+    - toEntities:
+        - ingress
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    - toCIDRSet:
+        - cidr: 10.42.2.40/32
+        - cidr: 10.42.2.41/32
+      toPorts:
+        - ports:
+            - port: "443"
               protocol: TCP

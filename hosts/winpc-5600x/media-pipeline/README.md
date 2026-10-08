@@ -56,8 +56,27 @@ Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{
 
 ## The queue is data
 
-`queue.tsv` is `<source path><TAB><Library Name>`. Adding a title never means
-editing the script. Two rules:
+`queue.tsv` is `<source path><TAB><Library Name>[<TAB><Library Dir>]`. Adding a
+title never means editing the script.
+
+The optional third column is the destination directory relative to
+`media/video`. Omitted, it is `movies/<Library Name>` — the only layout the
+script supported before 2026-10-05, so existing movie queues are unchanged. TV
+episodes need it, because Jellyfin wants `Show (Year)/Season NN/` with the
+`SxxEyy` in the filename:
+
+```text
+C:\Video\WORMD1543255\B1_t00.mkv	Through the Wormhole (2010) - S01E01	tv/Through the Wormhole (2010)/Season 01
+```
+
+The directory must sit under `movies/`, `tv/` or `tv-anime/`. Names and
+directories containing `'`, `..`, `\`, `:` or the other Windows-reserved
+characters are **skipped with a log line**: both are interpolated into
+single-quoted remote shell commands and Windows paths, so a stray apostrophe
+used to mean a failed push at best. Write `Mission - Impossible`, not
+`Mission: Impossible`.
+
+Two rules for picking titles:
 
 - **Pick the source by duration, not filename.** The main feature is not always
   `_t00`.

@@ -127,6 +127,7 @@ identity_providers:
         token_endpoint_auth_method: client_secret_basic
         redirect_uris:
           - https://audiobooks.burntbytes.com/auth/openid/callback
+          - https://audiobooks.burntbytes.com/audiobookshelf/auth/openid/callback
         scopes:
           - email
           - openid

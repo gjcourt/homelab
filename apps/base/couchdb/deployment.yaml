@@ -10,8 +10,9 @@
 #   /opt/couchdb/etc/local.d   — emptyDir; the entrypoint `touch`es docker.ini
 #                                there and appends the [admins] entry from
 #                                COUCHDB_USER/COUCHDB_PASSWORD on every start
-#   /tmp (HOME)                — the image's vm.args leaves -setcookie unset,
-#                                so Erlang writes $HOME/.erlang.cookie
+#   /tmp (HOME)                — writable HOME in case Erlang needs to write
+#                                $HOME/.erlang.cookie (vm.args sets no cookie);
+#                                harmless if distribution never starts
 #   /opt/couchdb/var/log       — writable in the stock image; kept writable
 # No NODENAME / COUCHDB_ERLANG_COOKIE: single node.
 apiVersion: apps/v1
@@ -59,6 +60,14 @@ spec:
                 secretKeyRef:
                   name: couchdb-admin
                   key: password
+            # Session-cookie signing secret. Without it CouchDB generates one
+            # into the emptyDir docker.ini, logging out Fauxton sessions on
+            # every restart. LiveSync itself uses Basic auth.
+            - name: COUCHDB_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: couchdb-admin
+                  key: cookie-secret
             - name: HOME
               value: /tmp
           ports:
@@ -74,7 +83,8 @@ spec:
             limits:
               cpu: "1"
               memory: 1Gi
-          # /_up answers without credentials even with require_valid_user.
+          # /_up answers without credentials because livesync.ini sets
+          # require_valid_user_except_for_up.
           readinessProbe:
             httpGet:
               path: /_up

@@ -31,8 +31,12 @@ LAN-only by decision (2026-10-06); devices sync at home and work offline elsewhe
 - Admin UI (Fauxton): `/_utils` on the same host, with the admin credentials.
 
 ## 4. Configuration
-- **Admin credentials**: `secret-couchdb-admin.yaml` (SOPS). Template:
-  `secret-couchdb-admin.yaml.example`. A change takes effect on the next pod restart.
+- **Admin credentials and cookie secret**: `secret-couchdb-admin.yaml` (SOPS), listed in the
+  overlay's kustomization so CI fails until it exists. Template: `secret-couchdb-admin.yaml.example`.
+  A change takes effect on the next pod restart.
+- **Server UUID**: pinned in `livesync.ini`, so clients' sync checkpoints survive restarts.
+- **Health**: `require_valid_user_except_for_up` keeps `/_up` open for probes; everything else
+  needs a login.
 - **Vaults and users**: created by George with `scripts/couchdb/provision-vault.sh` (phase 4), never
   by agents. First vaults: `george`, `mara`, `family`.
 

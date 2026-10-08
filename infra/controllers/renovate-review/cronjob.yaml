@@ -8,7 +8,7 @@ spec:
   # day's PRs exist and their CI has settled before they are reviewed.
   schedule: "0 1 * * *"
   # Enabled 2026-09-24 alongside secret-renovate-review-env. The agent runs in
-  # REVIEW_MODE=shadow (configmap.yaml): it calls the API and posts nothing, so
+  # REVIEW_MODE=shadow (configmap.yaml): it calls the model and posts nothing, so
   # landing this changes no merge behaviour until the mode is advanced to live.
   # Required PAT scopes are documented in secret.yaml.example.
   suspend: false
@@ -27,12 +27,27 @@ spec:
       template:
         spec:
           restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
           containers:
             - name: review
-              # python 3.14-slim
-              image: python@sha256:e06cc1111ed84189e91866447f562b89faadbfbbb9937cd67e6bf4172cdb45df
+              # The bench-cloud image, for its python3 and Claude Code: each
+              # reviewer call is `claude -p`, billed to the subscription token
+              # (CLAUDE_CODE_OAUTH_TOKEN) instead of an API key. `command:`
+              # replaces the image's ENTRYPOINT (bench-entrypoint), so no GitHub
+              # App config or workspace setup runs here. Tag matches the
+              # bench-cloud console (apps/production/bench-cloud).
+              image: ghcr.io/gjcourt/bench-cloud:2026-10-01-60e3604
               command: ["python3", "/scripts/review.py"]
               args: ["--mode", "$(REVIEW_MODE)"]
+              env:
+                # Claude Code writes ~/.claude* state; / is read-only.
+                - name: HOME
+                  value: /tmp
               envFrom:
                 - configMapRef:
                     name: renovate-review-env
@@ -41,15 +56,16 @@ spec:
               volumeMounts:
                 - name: script
                   mountPath: /scripts
+                - name: tmp
+                  mountPath: /tmp
               resources:
                 requests:
-                  cpu: 50m
-                  memory: 64Mi
-                limits:
+                  cpu: 100m
                   memory: 256Mi
+                # Claude Code is a Node process; 256Mi is not enough for it.
+                limits:
+                  memory: 1Gi
               securityContext:
-                runAsNonRoot: true
-                runAsUser: 65534
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
                 capabilities:
@@ -58,3 +74,6 @@ spec:
             - name: script
               configMap:
                 name: renovate-review-script
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi

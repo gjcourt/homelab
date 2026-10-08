@@ -41,11 +41,14 @@ the server.
 
 - **Image:** official `couchdb`, currently `3.5.2.1`
   ([Docker Hub](https://hub.docker.com/_/couchdb)), pinned by tag and digest.
-- **Single node** (`[couchdb] single_node = true`), so no Erlang cookie and no node name.
+- **Single node** (`[couchdb] single_node = true`), so no Erlang cookie and no node name. The server
+  `uuid` and the session-cookie secret are pinned (ConfigMap and SOPS secret); otherwise CouchDB
+  generates them into an emptyDir and they change on every restart. Each environment needs its own
+  `uuid`.
 - **LiveSync's documented `local.ini`**, from its
   [setup guide](https://github.com/vrtmrz/obsidian-livesync/blob/main/docs/setup_own_server.md)
   and mounted from a ConfigMap:
-  - `require_valid_user = true`;
+    - `require_valid_user = true`, plus `require_valid_user_except_for_up = true` so probes can reach `/_up`;
   - `max_document_size = 50000000`;
   - `max_http_request_size = 4294967296`;
   - CORS enabled for `app://obsidian.md, capacitor://localhost, http://localhost` with credentials.
@@ -64,8 +67,9 @@ the server.
   covered by `pvc-writeprobe`, which catches the read-only-remount failure mode.
 - **Resources:** request 100m / 256Mi, limit 1 CPU / 1Gi. Community reports show OOM at 256 MB
   during a first full sync; measure in staging.
-- **Probes:** `/_up` (unauthenticated health endpoint) for readiness, TCP for liveness, per the
-  repo's probe convention.
+- **Probes:** `/_up` for readiness, TCP for liveness, per the repo's probe convention. `/_up` only answers
+  without credentials because the config also sets `require_valid_user_except_for_up = true`; with
+  `require_valid_user` alone, CouchDB 3.5 returns 401 there (found in the #1543 babysit).
 
 ### Access and TLS
 

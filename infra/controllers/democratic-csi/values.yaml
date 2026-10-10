@@ -76,16 +76,12 @@ storageClasses:
       node-publish-secret:
       controller-expand-secret:
 
-  # xfs variants of the iSCSI StorageClasses above.
-  # Rationale: online PVC *expansion* works on xfs but NOT on ext4 with this
-  # democratic-csi + Talos setup. ext4 node-side resize2fs fails the online
-  # EXT4_IOC_RESIZE_FS ioctl with EPERM against the host-mounted globalmount;
-  # xfs grows via `xfs_growfs <mountpoint>` (mountpoint-based, no block-device
-  # ioctl), which succeeds. Verified end-to-end on melodic-muse 2026-06-28
-  # (1Gi -> 2Gi, df confirmed 2Gi, data preserved).
-  # These are *additive* — existing ext4 volumes keep their fsType and still
-  # require recreate-to-grow. Use the xfs classes for NEW volumes that may
-  # need to expand in place.
+  # xfs variants of the iSCSI StorageClasses above. Added 2026-06-28, when
+  # ext4 online expansion appeared broken (resize2fs EPERM). That turned out to
+  # be a democratic-csi v1.9.0 artifact: since v1.9.5 online expansion works on
+  # ext4 too (see docs/operations/2026-08-15-storage-gotchas.md
+  # "democratic-csi driver and PVC expansion"). Both families are fine for new
+  # volumes; existing volumes keep their fsType.
   - name: truenas-iscsi-xfs
     defaultClass: false
     reclaimPolicy: Retain

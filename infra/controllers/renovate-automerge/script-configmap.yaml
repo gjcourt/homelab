@@ -113,6 +113,11 @@ data:
     )
     VERSION_ONLY_RE = re.compile(r"^v?(\d+(?:\.\d+)*)$")
     DIGEST_RE = re.compile(r"^(?:sha256:)?[0-9a-f]{7,}$", re.IGNORECASE)
+    # pip-style pinned requirements render as "==0.16.9" -> "==0.16.10"; strip a
+    # shared specifier before comparing, the same way a shared suffix is
+    # stripped below. Only when both sides agree -- "==1.0" -> ">=1.0" is an
+    # actual change, not a version bump, and should stay unparseable.
+    SPECIFIER_RE = re.compile(r"^(==|>=|<=|~=|!=|>|<)")
     # Renovate's digest titles always end "... digest to <short sha>".
     DIGEST_TITLE_RE = re.compile(r"\bdigest to [0-9a-f]{7,}\s*$")
 
@@ -164,6 +169,9 @@ data:
                 if a_tail == b_tail:
                     a, b = a_head, b_head
                     break
+        a_spec, b_spec = SPECIFIER_RE.match(a), SPECIFIER_RE.match(b)
+        if a_spec and b_spec and a_spec.group(1) == b_spec.group(1):
+            a, b = a[a_spec.end():], b[b_spec.end():]
         ma, mb = VERSION_ONLY_RE.match(a), VERSION_ONLY_RE.match(b)
         if ma and mb:
             return bump_kind(ma.group(1), mb.group(1))

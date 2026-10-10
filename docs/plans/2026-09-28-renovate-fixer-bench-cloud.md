@@ -1,7 +1,7 @@
 ---
 status: planned
-last_modified: 2026-09-28
-summary: "Bench-cloud fixes stuck Renovate PRs; mechanical fixes auto-merge, risky go to George; renovate-review retired"
+last_modified: 2026-10-08
+summary: "Bench-cloud fixes stuck Renovate PRs; mechanical fixes auto-merge, risky go to George; renovate-review kept on subscription billing"
 ---
 
 # Renovate fixer on bench-cloud
@@ -17,7 +17,7 @@ while **majors and truly risky changes still get a human**.
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Existing `renovate-review` (two-call risk reviewer, `held-by-review`) | **Retire it entirely.** |
+| 1 | Existing `renovate-review` (two-call risk reviewer, `held-by-review`) | **Retire it entirely.** Superseded 2026-10-08: George chose to keep it and move its model calls to the Claude subscription (`claude -p`) instead of an API key. See "Retiring renovate-review". |
 | 2 | Who starts fixes | `renovate-automerge` kicks off the task and picks up its result. |
 | 3 | What merges without George | Mechanical fixes (rebase / conflict, dependency-file fixes like `go mod tidy`) on patch/minor. **Majors and risky changes: a human reviews.** |
 
@@ -175,6 +175,10 @@ reviews" tier by construction — the agent can still do the work; it just
 can't land it.
 
 ### Retiring renovate-review
+
+> **Superseded 2026-10-08.** George chose to keep `renovate-review`, with its
+> calls billed to a Claude subscription token through `claude -p` instead of an
+> Anthropic API key. Nothing below in this section is to be done.
 
 Remove `infra/controllers/renovate-review/` (CronJob, script, ConfigMap,
 encrypted Anthropic-key secret and `secret.yaml.example`) and its entry in

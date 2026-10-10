@@ -1,0 +1,16 @@
+# Vault databases. Compaction needs about twice the live size transiently, so
+# leave headroom; grow online (truenas-iscsi allows volume expansion).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: couchdb-data-pvc
+  namespace: couchdb
+  labels:
+    app: couchdb
+spec:
+  storageClassName: truenas-iscsi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

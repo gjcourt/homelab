@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: couchdb-stage
+resources:
+  - ../../base/couchdb/
+  - httproute.yaml
+  # Operator-encrypted (SOPS); template in secret-couchdb-admin.yaml.example.
+  # Listed deliberately before it exists: kustomize build / CI fails until the
+  # encrypted file is committed, which keeps staging from deploying a pod with
+  # no credentials (same gate as apps/staging/mealie).
+  - secret-couchdb-admin.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Namespace
+      name: couchdb
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: couchdb-stage

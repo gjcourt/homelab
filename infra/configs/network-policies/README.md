@@ -6,9 +6,22 @@ Cluster-wide NetworkPolicy scaffolding for `melodic-muse`. Tracks Phase 1 / PR
 ## What ships here
 
 - `default-deny.yaml` — a `CiliumClusterwideNetworkPolicy` named `default-deny`
-  that enforces deny-all ingress + egress, but **only** for pods whose
-  namespace carries the label `network-policies: enforced`. No real
-  namespace has that label yet, so the policy is inert on apply.
+  that puts pods into default-deny for ingress and egress, but **only** pods
+  whose namespace carries the label `network-policies: enforced`. It does
+  this with one empty rule per direction (`- {}`), which allows nothing on
+  its own; each app's own `CiliumNetworkPolicy` allows what it needs.
+- **Rollout status:** staging namespaces only for now: the selector also
+  requires the namespace label `env: staging`, which every `apps/staging`
+  overlay sets. Today that's `adguard-stage`, `excalidraw-stage`,
+  `llmux-stage` and `openwebui-stage`. The labelled `-prod` namespaces carry
+  `env: production` and aren't selected until a follow-up drops that
+  expression after a staging soak.
+- **History:** from when it was added on 2026-05-03 (6eb0b53) until the fix
+  that added this note, the policy used `ingress: []` / `egress: []`, which
+  Cilium rejects as having no rules, so it was never enforced (every agent
+  logs "Unable to add … rule must have at least one of Ingress, IngressDeny,
+  Egress, EgressDeny").
+  `make check-cilium-policies` now catches that.
 
 ## How rollout works
 
@@ -40,7 +53,11 @@ Per-app CiliumNetworkPolicy  ──►  Namespace opt-in  ──►  Default-den
      labels:
        network-policies: enforced
    ```
-3. Open a PR, let staging reconcile, then watch:
+3. While the staged rollout lasts, the policy only takes effect in
+   namespaces that also carry `env: staging` (all `apps/staging` overlays
+   set it). Labelling a prod namespace does nothing until the prod
+   follow-up lands, so a hubble soak there would pass vacuously.
+4. Open a PR, let staging reconcile, then watch:
    ```bash
    hubble observe --verdict DROPPED -n <app>
    ```
@@ -50,25 +67,31 @@ Per-app CiliumNetworkPolicy  ──►  Namespace opt-in  ──►  Default-den
 ### Backing a namespace out
 
 Remove the label. The `default-deny` selector stops matching the namespace's
-pods immediately and traffic flows again. The per-app `CiliumNetworkPolicy`
-stays in place — it only narrows what the namespace will allow once the label
-goes back on.
+pods immediately. Note that this does not open the namespace up: any pod a
+per-app `CiliumNetworkPolicy` selects stays in default-deny for each
+direction that policy has rules for (Cilium does that on its own). Removing
+the label only frees pods that no per-app policy selects.
 
 ## Apps onboarded
 
 | App | Namespace | Per-app policy | Label applied |
 |-----|-----------|----------------|---------------|
-| excalidraw | `excalidraw`, `excalidraw-stage`, `excalidraw-prod` | `apps/base/excalidraw/networkpolicy.yaml` | yes (opt-in is live, default-deny stays inert until other apps land) |
+| adguard | `adguard-stage` | `apps/base/adguard/networkpolicy.yaml` (+ `adguard-sync`) | yes (stage) |
+| excalidraw | `excalidraw-stage`, `excalidraw-prod` | `apps/base/excalidraw/networkpolicy.yaml` | yes |
+| llmux | `llmux-stage`, `llmux-prod` | `apps/base/llmux/networkpolicy.yaml` | yes |
+| openwebui | `openwebui-stage`, `openwebui-prod` | `apps/base/openwebui/networkpolicy.yaml` | yes |
 
 As more apps onboard, append rows to this table in the PR that adds them.
 
-## When to flip the cluster-wide default-deny on
+## Extending it
 
-This file *is* the cluster-wide policy. It will become enforcing on any
-namespace as soon as that namespace is labelled. There is no separate
-"enable" switch — once every app namespace ships a per-app allow policy and
-carries the label, every workload in the cluster is covered. At that point,
-this README should be updated to drop the "inert" caveat.
+Today the policy applies to labelled staging namespaces only. To extend it,
+edit the second `matchExpressions` entry in `default-deny.yaml` (add the
+`-prod` namespaces, or drop the entry so the label alone decides) in its own
+PR, after a staging soak with `hubble observe --verdict DROPPED -n <ns>`
+clean and the apps working. Before labelling any new namespace, check that
+every pod in it is selected by a per-app policy covering both ingress and
+egress, DNS included; a pod no policy selects loses all traffic.
 
 ## Related
 

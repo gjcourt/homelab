@@ -1,0 +1,217 @@
+---
+# Staging-only: makes homepage's siteMonitor probes reach the staging tiles
+# through the Gateway. Cilium policies are additive, so this extends the base
+# `homepage` policy without changing prod.
+#
+# Why (same finding as audiobookshelf, #1549/#1551, see
+# apps/base/audiobookshelf/networkpolicy.yaml): a probe to
+# https://<app>.stage.burntbytes.com goes to the staging Gateway VIP, and the
+# Gateway's Envoy then enforces THIS pod's egress policy against the selected
+# upstream — the backend pod on its container port — not the VIP. Without a
+# rule for the backend, Envoy answers `403 Access denied` (server: envoy),
+# which homepage counts as "up", so a missing rule shows as a green dot.
+# The backend rules are what fix it; the VIP rule below is belt-and-braces
+# (the base policy's world:443 already lets the connection reach the VIP),
+# kept explicit to mirror audiobookshelf, whose egress has no world rule.
+# The backends need no ingress change: they already admit the Gateway
+# (fromEntities ingress/host/remote-node).
+#
+# Keep this list in sync with the tiles in config/services.yaml that carry a
+# siteMonitor. Ports are the pods' container ports (Cilium evaluates after
+# DNAT), and labels are the Services' selectors.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: homepage-sitemonitor
+  namespace: homepage
+  labels:
+    app.kubernetes.io/name: homepage
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: >-
+    Staging homepage siteMonitor egress through the Gateway hairpin: the
+    staging Gateway VIP on 443 plus each monitored backend's pods on their
+    container port.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: homepage
+  egress:
+    # Staging Gateway VIP (cilium-gateway-app-gateway-staging).
+    - toCIDRSet:
+        - cidr: 10.42.2.42/32
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Immich
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: immich-stage
+            app: immich
+            component: server
+      toPorts:
+        - ports:
+            - port: "2283"
+              protocol: TCP
+    # Jellyfin
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: jellyfin-stage
+            app: jellyfin
+      toPorts:
+        - ports:
+            - port: "8096"
+              protocol: TCP
+    # Navidrome
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: navidrome-stage
+            app: navidrome
+      toPorts:
+        - ports:
+            - port: "4533"
+              protocol: TCP
+    # Snapcast (Snapweb)
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: snapcast-stage
+            app: snapcast
+      toPorts:
+        - ports:
+            - port: "1780"
+              protocol: TCP
+    # Audiobookshelf
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: audiobookshelf-stage
+            app: audiobookshelf
+      toPorts:
+        - ports:
+            - port: "13378"
+              protocol: TCP
+    # Vibrato
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: vibrato-stage
+            app.kubernetes.io/name: vibrato
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Memos
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: memos-stage
+            app: memos
+      toPorts:
+        - ports:
+            - port: "5230"
+              protocol: TCP
+    # Linkding
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: linkding-stage
+            app: linkding
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    # Mealie
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: mealie-stage
+            app: mealie
+      toPorts:
+        - ports:
+            - port: "9000"
+              protocol: TCP
+    # Excalidraw
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: excalidraw-stage
+            app: excalidraw
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # Flashcards (app; /healthz is not under /api)
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: flashcards-stage
+            app: flashcards
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Vitals
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: vitals-stage
+            app: vitals
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Open WebUI
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: openwebui-stage
+            app: openwebui
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Changes
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: changes-stage
+            app: changes
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Kokoro
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kokoro-stage
+            app: kokoro
+      toPorts:
+        - ports:
+            - port: "8880"
+              protocol: TCP
+    # Home Assistant
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homeassistant-stage
+            app: homeassistant
+      toPorts:
+        - ports:
+            - port: "8123"
+              protocol: TCP
+    # GoLinks
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: golinks-stage
+            app: golinks
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # AdGuard Home (Service 8080 -> pod port 80; see base policy)
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: adguard-stage
+            app.kubernetes.io/name: adguard
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # Authelia
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: authelia-stage
+            app: authelia
+      toPorts:
+        - ports:
+            - port: "9091"
+              protocol: TCP

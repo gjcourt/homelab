@@ -17,8 +17,8 @@
 # .../policy/layer3/, "egress-default-deny" example). Contrast
 # `fromEndpoints: [{}]`, an empty *selector*, which would allow everything.
 #
-# History: from 2026-05-03 until this fix the policy used `ingress: []` /
-# `egress: []`. Cilium rejects that ("rule must have at least one of Ingress,
+# History: the policy had `ingress: []` / `egress: []` from when it was
+# added on 2026-05-03 (6eb0b53) until this fix. Cilium rejects that ("rule must have at least one of Ingress,
 # IngressDeny, Egress, EgressDeny": an empty list has length 0, see
 # pkg/policy/api/rule_validation.go), so every agent logged "Unable to add"
 # and nothing was enforced, while the comment here called it "inert".
@@ -27,11 +27,12 @@
 #
 # STAGED ROLLOUT: infra/configs is cluster-wide (one object for both
 # environments), so staging-first comes from the selector. For now the
-# policy also requires the pod's namespace to be one of the labelled STAGING
-# namespaces below. The prod follow-up removes that second expression (or
-# adds the -prod namespaces) once staging has soaked with
-# `hubble observe --verdict DROPPED` clean. Keep the list in sync with the
-# `network-policies: enforced` -stage namespaces until then.
+# policy also requires the namespace to carry `env: staging`, which every
+# apps/staging overlay sets on its namespace (prod overlays set
+# `env: production`). So any labelled staging namespace is covered with no
+# list to maintain, and no prod namespace is. The prod follow-up drops that
+# second expression once staging has soaked with
+# `hubble observe --verdict DROPPED` clean.
 #
 # kube-system and flux-system are never labelled, so this never selects
 # them; keep it that way (they would lose DNS/API traffic without their own
@@ -57,14 +58,12 @@ spec:
         operator: In
         values:
           - enforced
-      # Staging-first: only these namespaces until the prod follow-up.
-      - key: k8s:io.kubernetes.pod.namespace
+      # Staging-first: only namespaces labelled env=staging until the prod
+      # follow-up removes this expression.
+      - key: k8s:io.cilium.k8s.namespace.labels.env
         operator: In
         values:
-          - adguard-stage
-          - excalidraw-stage
-          - llmux-stage
-          - openwebui-stage
+          - staging
   # One empty rule per direction: turns default-deny on, allows no peers.
   ingress:
     - {}

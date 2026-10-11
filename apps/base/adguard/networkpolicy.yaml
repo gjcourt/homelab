@@ -2,10 +2,12 @@
 # Per-app CiliumNetworkPolicy for AdGuard Home — implements Step 4
 # (NetworkPolicy hardening) of docs/plans/2026-02-15-adguard-ha.md.
 #
-# This file is a no-op until the namespace gets labelled
-# `network-policies: enforced` (see infra/configs/network-policies/).
-# Land this file first; flip the label per-overlay (staging → production)
-# in follow-up PRs once the rules have been validated.
+# These policies enforce on their own: Cilium puts the pods they select into
+# default-deny for each direction they have rules for. Labelling the
+# namespace `network-policies: enforced` additionally brings in the
+# cluster-wide default-deny (infra/configs/network-policies/), which covers
+# pods no policy here selects. Flip the label per overlay (staging →
+# production) once the rules have been validated.
 #
 # Two policies live here:
 #   - adguard          → applies to the AdGuard StatefulSet pods

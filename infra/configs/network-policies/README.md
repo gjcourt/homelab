@@ -10,13 +10,17 @@ Cluster-wide NetworkPolicy scaffolding for `melodic-muse`. Tracks Phase 1 / PR
   whose namespace carries the label `network-policies: enforced`. It does
   this with one empty rule per direction (`- {}`), which allows nothing on
   its own; each app's own `CiliumNetworkPolicy` allows what it needs.
-- **Rollout status:** staging namespaces only for now (the selector also
-  lists `adguard-stage`, `excalidraw-stage`, `llmux-stage`,
-  `openwebui-stage`). A follow-up extends it to the labelled `-prod`
-  namespaces after a staging soak.
-- **History:** until the fix that added this note, the policy used
-  `ingress: []` / `egress: []`, which Cilium rejects as having no rules, so
-  it was never enforced (agents logged "Unable to add" from 2026-05-03).
+- **Rollout status:** staging namespaces only for now: the selector also
+  requires the namespace label `env: staging`, which every `apps/staging`
+  overlay sets. Today that's `adguard-stage`, `excalidraw-stage`,
+  `llmux-stage` and `openwebui-stage`. The labelled `-prod` namespaces carry
+  `env: production` and aren't selected until a follow-up drops that
+  expression after a staging soak.
+- **History:** from when it was added on 2026-05-03 (6eb0b53) until the fix
+  that added this note, the policy used `ingress: []` / `egress: []`, which
+  Cilium rejects as having no rules, so it was never enforced (every agent
+  logs "Unable to add … rule must have at least one of Ingress, IngressDeny,
+  Egress, EgressDeny").
   `make check-cilium-policies` now catches that.
 
 ## How rollout works
@@ -49,7 +53,11 @@ Per-app CiliumNetworkPolicy  ──►  Namespace opt-in  ──►  Default-den
      labels:
        network-policies: enforced
    ```
-3. Open a PR, let staging reconcile, then watch:
+3. While the staged rollout lasts, the policy only takes effect in
+   namespaces that also carry `env: staging` (all `apps/staging` overlays
+   set it). Labelling a prod namespace does nothing until the prod
+   follow-up lands, so a hubble soak there would pass vacuously.
+4. Open a PR, let staging reconcile, then watch:
    ```bash
    hubble observe --verdict DROPPED -n <app>
    ```

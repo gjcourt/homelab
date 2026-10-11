@@ -45,17 +45,22 @@ def render(path):
 
 
 def problems(doc):
-    meta = doc.get("metadata", {})
+    meta = doc.get("metadata") if isinstance(doc.get("metadata"), dict) else {}
     name = f"{doc['kind']} {meta.get('namespace', '-')}/{meta.get('name')}"
-    specs = []
-    if isinstance(doc.get("spec"), dict):
+    specs, out = [], []
+    if doc.get("spec") is not None:
         specs.append(("spec", doc["spec"]))
-    for i, spec in enumerate(doc.get("specs") or []):
+    raw = doc.get("specs")
+    if raw is not None and not isinstance(raw, list):
+        out.append(f"{name}: specs is not a list")
+    for i, spec in enumerate(raw if isinstance(raw, list) else []):
         specs.append((f"specs[{i}]", spec))
-    if not specs:
+    if not specs and not out:
         return [f"{name}: has neither spec nor specs"]
-    out = []
     for where, spec in specs:
+        if not isinstance(spec, dict):
+            out.append(f"{name} {where}: not a mapping")
+            continue
         if not any(isinstance(spec.get(k), list) and spec[k] for k in RULE_KEYS):
             out.append(
                 f"{name} {where}: no non-empty {', '.join(RULE_KEYS)} — Cilium rejects it "

@@ -12,6 +12,7 @@
 - [burntbytes](base/burntbytes/)
 - [cadence-site](base/cadence-site/)
 - [changes](base/changes/)
+- [couchdb](base/couchdb/)
 - [excalidraw](base/excalidraw/)
 - [finance-dashboard](base/finance-dashboard/)
 - [flashcards-sync](base/flashcards-sync/)

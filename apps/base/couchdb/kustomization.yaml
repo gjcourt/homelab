@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - deployment.yaml
+  - namespace.yaml
+  - networkpolicy.yaml
+  - pdb.yaml
+  - service.yaml
+  - serviceaccount.yaml
+  - storage.yaml
+configMapGenerator:
+  - name: couchdb-livesync
+    namespace: couchdb
+    files:
+      - livesync.ini
+labels:
+  - includeSelectors: false
+    pairs:
+      app.kubernetes.io/name: couchdb
+      app.kubernetes.io/component: database
+      app.kubernetes.io/part-of: homelab
+      app.kubernetes.io/managed-by: flux

@@ -125,8 +125,8 @@ the database as admin first, as above, avoids depending on it.
 2. **First vaults:** `george` (George), `mara` (Mara), and `family` (George and Mara).
    `provision-vault.sh` creates these three in phase 4.
 3. **`family` is the nuclear family** (confirmed 2026-10-11): members are George and Mara now, and
-   their child Niccolo later. Adding him must be one command (`provision-vault.sh --add family
-   niccolo`), not a re-provision. No account for him is created until George asks.
+   Niccolo later. Adding Niccolo must be one command (`provision-vault.sh --add family niccolo`),
+   not a re-provision. No account for Niccolo is created until George asks.
 
 ## Phases
 

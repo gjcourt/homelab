@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_modified: 2026-10-06
+last_modified: 2026-10-11
 summary: "Self-hosted Obsidian sync: one CouchDB in the cluster for the LiveSync plugin, one database per vault, E2EE, S3 backups with a restore drill"
 ---
 
@@ -109,17 +109,24 @@ the environment and:
 2. creates the database;
 3. writes its `_security` with those users as members.
 
-Run it once per vault. On each device, LiveSync's setup wizard then connects with that user's
+Run it once per vault. It is idempotent: re-running skips users and databases that already exist
+and rewrites `_security` with exactly the users given. To add one member to an existing vault
+without restating the others, `provision-vault.sh --add <vault-db> <user>` creates that user if
+needed and appends them to the vault's current members (for example, adding Niccolo to `family`
+later is `provision-vault.sh --add family niccolo`). On each device, LiveSync's setup wizard then connects with that user's
 credentials. Known issue: the wizard's "Detect and Fix CouchDB issues" check can return 403 for
 non-admin users ([#988](https://github.com/vrtmrz/obsidian-livesync/issues/988)). Provisioning
 the database as admin first, as above, avoids depending on it.
 
-## Decisions (George, 2026-10-06)
+## Decisions (George, 2026-10-06; 3 added 2026-10-11)
 
 1. **LAN-only.** Devices sync on the home network; off-LAN they keep working offline and catch up at
    home. No Cloudflare Tunnel route; the optional tunnel phase is dropped unless George revisits it.
-2. **First vaults:** `george` (George), `mara` (Mara), and `family` (George and Mara; membership
-   assumed, confirm when provisioning). `provision-vault.sh` creates these three in phase 4.
+2. **First vaults:** `george` (George), `mara` (Mara), and `family` (George and Mara).
+   `provision-vault.sh` creates these three in phase 4.
+3. **`family` is the nuclear family** (confirmed 2026-10-11): members are George and Mara now, and
+   their child Niccolo later. Adding him must be one command (`provision-vault.sh --add family
+   niccolo`), not a re-provision. No account for him is created until George asks.
 
 ## Phases
 

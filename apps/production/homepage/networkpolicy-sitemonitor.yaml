@@ -1,0 +1,262 @@
+---
+# Prod: makes homepage's siteMonitor probes reach the prod tiles through the
+# Gateway. Cilium policies are additive, so this extends the base `homepage`
+# policy. Staging has its own copy (apps/staging/homepage/).
+#
+# Why (same finding as audiobookshelf, #1549/#1551, and staging, #1564): a
+# probe to https://<app>.burntbytes.com goes to the prod Gateway VIP, and the
+# Gateway's Envoy then enforces THIS pod's egress policy against the selected
+# upstream — the backend pod on its container port — not the VIP. Without a
+# rule for the backend, Envoy answers `403 Access denied` (server: envoy),
+# which homepage counts as "up", so a missing rule shows as a green dot.
+# The backend rules are what fix it; the VIP rule is belt-and-braces (the
+# base policy's world:443 already reaches the VIP).
+#
+# Already covered by the base policy, so not repeated here: AdGuard Home
+# (adguard-prod pods :80) and Prometheus (monitoring pods :9090).
+#
+# scripts/check-homepage-sitemonitor.py (make check-homepage-sitemonitor)
+# fails if a tile has a siteMonitor without a matching rule here or in the
+# base policy. Ports are the pods' container ports (Cilium evaluates after
+# DNAT), and labels are the Services' selectors.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: homepage-sitemonitor
+  namespace: homepage
+  labels:
+    app.kubernetes.io/name: homepage
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: >-
+    Prod homepage siteMonitor egress through the Gateway hairpin: the prod
+    Gateway VIP on 443 plus each monitored backend's pods on their container
+    port.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: homepage
+  egress:
+    # Prod Gateway VIP (cilium-gateway-app-gateway-production).
+    - toCIDRSet:
+        - cidr: 10.42.2.40/32
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+    # Hestia (external-services/hestia: Endpoints 10.42.2.10:80, no pods).
+    - toCIDRSet:
+        - cidr: 10.42.2.10/32
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # Immich
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: immich-prod
+            app: immich
+            component: server
+      toPorts:
+        - ports:
+            - port: "2283"
+              protocol: TCP
+    # Jellyfin
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: jellyfin-prod
+            app: jellyfin
+      toPorts:
+        - ports:
+            - port: "8096"
+              protocol: TCP
+    # Navidrome
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: navidrome-prod
+            app: navidrome
+      toPorts:
+        - ports:
+            - port: "4533"
+              protocol: TCP
+    # Audiobookshelf
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: audiobookshelf-prod
+            app: audiobookshelf
+      toPorts:
+        - ports:
+            - port: "13378"
+              protocol: TCP
+    # Snapcast (Snapweb 1780) and Cast (Iris 6680, cast.burntbytes.com/iris/)
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: snapcast-prod
+            app: snapcast
+      toPorts:
+        - ports:
+            - port: "1780"
+              protocol: TCP
+            - port: "6680"
+              protocol: TCP
+    # Vibrato
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: vibrato-prod
+            app.kubernetes.io/name: vibrato
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Memos
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: memos-prod
+            app: memos
+      toPorts:
+        - ports:
+            - port: "5230"
+              protocol: TCP
+    # Linkding
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: linkding-prod
+            app: linkding
+      toPorts:
+        - ports:
+            - port: "9090"
+              protocol: TCP
+    # Mealie (food.burntbytes.com)
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: mealie-prod
+            app: mealie
+      toPorts:
+        - ports:
+            - port: "9000"
+              protocol: TCP
+    # Excalidraw
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: excalidraw-prod
+            app: excalidraw
+      toPorts:
+        - ports:
+            - port: "80"
+              protocol: TCP
+    # Flashcards (app; /healthz is not under /api)
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: flashcards-prod
+            app: flashcards
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Vitals
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: vitals-prod
+            app: vitals
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Ladder
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: ladder
+            app: ladder
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Finance
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: finance-dashboard
+            app: finance-dashboard
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Open WebUI
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: openwebui-prod
+            app: openwebui
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Changes
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: changes-prod
+            app: changes
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Kokoro
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kokoro-prod
+            app: kokoro
+      toPorts:
+        - ports:
+            - port: "8880"
+              protocol: TCP
+    # Home Assistant
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homeassistant-prod
+            app: homeassistant
+      toPorts:
+        - ports:
+            - port: "8123"
+              protocol: TCP
+    # GoLinks
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: golinks-prod
+            app: golinks
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Zigbee2MQTT
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: zigbee2mqtt
+            app: zigbee2mqtt
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Authelia
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: authelia-prod
+            app: authelia
+      toPorts:
+        - ports:
+            - port: "9091"
+              protocol: TCP
+    # Grafana (Service 80 -> pod 3000; also the Logs tile)
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: grafana
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+    # Alertmanager
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: monitoring
+            app.kubernetes.io/name: alertmanager
+      toPorts:
+        - ports:
+            - port: "9093"
+              protocol: TCP

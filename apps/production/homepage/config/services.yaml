@@ -93,6 +93,28 @@
         href: https://finance.burntbytes.com
         description: Net worth + IPS allocation dashboard
         siteMonitor: https://finance.burntbytes.com
+    # Open WebUI, Changes and Kokoro are appended after George's explicit
+    # Tools order (#1273) rather than slotted into it — where they sit within
+    # Tools is his call. All three probe the same health path as their
+    # readinessProbe; the HTTPRoutes forward every path unchanged.
+    - Open WebUI:
+        icon: open-webui.png
+        href: https://chat.burntbytes.com
+        # Re-added: the tile was dropped 2026-05-10 while openwebui was scaled
+        # to 0 (GPU sold). It runs again, backed by llmux since #1475.
+        description: AI chat interface
+        siteMonitor: https://chat.burntbytes.com/health
+    - Changes:
+        icon: mdi-music-clef-treble
+        href: https://changes.burntbytes.com
+        description: Jazz chord progressions
+        siteMonitor: https://changes.burntbytes.com/api/health
+    - Kokoro:
+        icon: mdi-account-voice
+        # The web player lives at /web/; the root is the API.
+        href: https://voice.burntbytes.com/web/
+        description: Local text-to-speech (web player)
+        siteMonitor: https://voice.burntbytes.com/health
 
 - Infrastructure:
     - Home Assistant:
@@ -145,14 +167,6 @@
         href: https://auth.burntbytes.com
         description: Authentication portal (SSO)
         siteMonitor: https://auth.burntbytes.com
-    - Pingo:
-        icon: mdi-dns
-        href: https://vpn.burntbytes.com
-        description: DNS updater for vpn.burntbytes.com
-        # No siteMonitor: pingo is a CronJob (DNS updater for vpn.burntbytes.com),
-        # not an HTTP service — there is no HTTPRoute for vpn.burntbytes.com,
-        # so any probe returns 404 from the gateway. The href stays clickable
-        # for the operator; the dashboard simply omits the status dot.
 
 - Monitoring:
     - Grafana:

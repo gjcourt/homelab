@@ -26,8 +26,7 @@ Homepage is deployed as a stateless Kubernetes `Deployment` with a single replic
     - `kubernetes.yaml`, `docker.yaml`, `proxmox.yaml`: Empty files required by Homepage to prevent startup crashes.
 
 ### Updating the Dashboard
-To add a new service or change the layout, edit the `configmap-patch.yaml` in the respective environment overlay (`apps/production/homepage/configmap-patch.yaml` or `apps/staging/homepage/configmap-patch.yaml`).
-The `services.yaml` is often shared or patched depending on the environment.
+To add a new service or change the layout, edit the config files in the respective environment overlay (`apps/production/homepage/config/` or `apps/staging/homepage/config/`). Each overlay's `configMapGenerator` merges its own `services.yaml`, `settings.yaml`, `widgets.yaml` and `bookmarks.yaml` over the base, so a tile added to one environment must be added to the other separately (staging uses `*.stage.burntbytes.com` hostnames and carries no `siteMonitor`).
 
 ## 5. Usage Instructions
 Navigate to the Homepage URL. The dashboard is read-only. Clicking on a service icon will open that service in a new tab.
@@ -91,6 +90,8 @@ kubectl -n homepage-prod exec deploy/homepage-clicks -- wget -qO- localhost:8080
 - Within each group, tiles in `services.yaml` are ordered by expected daily-use frequency —
   **except Tools**, whose order was set explicitly by George in #1273 (2026-08-04):
   Vibrato, Memos, Linkding, Mealie, Excalidraw, Flashcards, Vitals, Ladder, Finance.
+  (Open WebUI, Changes and Kokoro were appended after Finance in the 2026-10 prod-sync pass,
+  pending George's placement.)
   That is an owner preference, not a hypothesis. A data-driven pass may propose changes to it
   but must confirm with him before applying them; the other three groups can be reordered freely
   from the panel.

@@ -119,8 +119,9 @@ appends them to the vault's current members. It fails if the vault database does
 Niccolo to `family` later is `provision-vault.sh --add family niccolo`.
 
 On each device, LiveSync's setup wizard then connects with that user's credentials. Known issue:
-the wizard's "Detect and Fix CouchDB issues" check can return 403 for non-admin users ([#988](https://github.com/vrtmrz/obsidian-livesync/issues/988)). Provisioning
-the database as admin first, as above, avoids depending on it.
+the wizard's "Detect and Fix CouchDB issues" check can return 403 for non-admin users
+([#988](https://github.com/vrtmrz/obsidian-livesync/issues/988)). Provisioning the database as
+admin first, as above, avoids depending on it.
 
 ## Decisions (George, 2026-10-06; 3 added 2026-10-10)
 
@@ -139,7 +140,7 @@ the database as admin first, as above, avoids depending on it.
 | 1 | `apps/base/couchdb/` plus staging overlay: Deployment, Service, PVC, ConfigMap (`local.ini`), CiliumNetworkPolicy, PDB, HTTPRoute, `secret-couchdb-admin.yaml.example`; runbook `docs/operations/apps/couchdb.md` | Staging pod Ready non-root with no restarts; `/_up` answers; one desktop vault syncs to `obsidian.stage.burntbytes.com` |
 | 2 | Production overlay | Same checks in production |
 | 3 | Backup CronJob + restore runbook | A dump lands in S3; the restore drill passes in staging |
-| 4 | `scripts/couchdb/provision-vault.sh` (including `--add`) + device setup guide in the runbook | George provisions the first vaults; a re-run changes nothing; `--add` tested on a staging vault; Mac, iPhone/iPad and winpc sync with E2EE |
+| 4 | `scripts/couchdb/provision-vault.sh` (including `--add`) + device setup guide in the runbook | George provisions the first vaults; a re-run with the same members changes nothing; `--add` tested on a staging vault; Mac, iPhone/iPad and winpc sync with E2EE |
 
 Every PR gets a babysit before George merges. Secrets are SOPS-encrypted by George (`.yaml.example`
 only from agents). No cluster changes outside merged PRs.

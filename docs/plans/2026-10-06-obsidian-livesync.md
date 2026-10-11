@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_modified: 2026-10-06
+last_modified: 2026-10-10
 summary: "Self-hosted Obsidian sync: one CouchDB in the cluster for the LiveSync plugin, one database per vault, E2EE, S3 backups with a restore drill"
 ---
 
@@ -109,17 +109,29 @@ the environment and:
 2. creates the database;
 3. writes its `_security` with those users as members.
 
-Run it once per vault. On each device, LiveSync's setup wizard then connects with that user's
-credentials. Known issue: the wizard's "Detect and Fix CouchDB issues" check can return 403 for
-non-admin users ([#988](https://github.com/vrtmrz/obsidian-livesync/issues/988)). Provisioning
-the database as admin first, as above, avoids depending on it.
+Run it once per vault. It is idempotent: re-running skips users and databases that already exist
+and rewrites `_security` with exactly the users given, so a re-run must list every member or it
+drops the ones left out.
 
-## Decisions (George, 2026-10-06)
+`scripts/couchdb/provision-vault.sh --add <vault-db> <user>` adds one member to an existing vault
+without restating the others: it creates the user if needed (prompting for the password) and
+appends them to the vault's current members. It fails if the vault database doesn't exist. Adding
+Niccolo to `family` later is `provision-vault.sh --add family niccolo`.
+
+On each device, LiveSync's setup wizard then connects with that user's credentials. Known issue:
+the wizard's "Detect and Fix CouchDB issues" check can return 403 for non-admin users
+([#988](https://github.com/vrtmrz/obsidian-livesync/issues/988)). Provisioning the database as
+admin first, as above, avoids depending on it.
+
+## Decisions (George, 2026-10-06; 3 added 2026-10-10)
 
 1. **LAN-only.** Devices sync on the home network; off-LAN they keep working offline and catch up at
    home. No Cloudflare Tunnel route; the optional tunnel phase is dropped unless George revisits it.
-2. **First vaults:** `george` (George), `mara` (Mara), and `family` (George and Mara; membership
-   assumed, confirm when provisioning). `provision-vault.sh` creates these three in phase 4.
+2. **First vaults:** `george` (George), `mara` (Mara), and `family` (George and Mara).
+   `provision-vault.sh` creates these three in phase 4.
+3. **`family` is the nuclear family** (confirmed 2026-10-10): members are George and Mara now, and
+   Niccolo later. Adding Niccolo must be one command (`provision-vault.sh --add family niccolo`),
+   not a re-provision. No account for Niccolo is created until George asks.
 
 ## Phases
 
@@ -128,7 +140,7 @@ the database as admin first, as above, avoids depending on it.
 | 1 | `apps/base/couchdb/` plus staging overlay: Deployment, Service, PVC, ConfigMap (`local.ini`), CiliumNetworkPolicy, PDB, HTTPRoute, `secret-couchdb-admin.yaml.example`; runbook `docs/operations/apps/couchdb.md` | Staging pod Ready non-root with no restarts; `/_up` answers; one desktop vault syncs to `obsidian.stage.burntbytes.com` |
 | 2 | Production overlay | Same checks in production |
 | 3 | Backup CronJob + restore runbook | A dump lands in S3; the restore drill passes in staging |
-| 4 | `scripts/couchdb/provision-vault.sh` + device setup guide in the runbook | George provisions the first vaults; Mac, iPhone/iPad and winpc sync with E2EE |
+| 4 | `scripts/couchdb/provision-vault.sh` (including `--add`) + device setup guide in the runbook | George provisions the first vaults; a re-run with the same members changes nothing; `--add` tested on a staging vault; Mac, iPhone/iPad and winpc sync with E2EE |
 
 Every PR gets a babysit before George merges. Secrets are SOPS-encrypted by George (`.yaml.example`
 only from agents). No cluster changes outside merged PRs.

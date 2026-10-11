@@ -44,3 +44,9 @@ jobs:
 
       - name: Validate Home Assistant YAML
         run: python3 scripts/validate-ha-yaml.py apps/base/homeassistant
+
+      - name: Check homepage siteMonitor egress rules
+        run: python3 scripts/check-homepage-sitemonitor.py
+
+      - name: Check Cilium policies have rules
+        run: python3 scripts/check-cilium-policies.py

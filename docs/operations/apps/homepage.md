@@ -26,7 +26,7 @@ Homepage is deployed as a stateless Kubernetes `Deployment` with a single replic
     - `kubernetes.yaml`, `docker.yaml`, `proxmox.yaml`: Empty files required by Homepage to prevent startup crashes.
 
 ### Updating the Dashboard
-To add a new service or change the layout, edit the config files in the respective environment overlay (`apps/production/homepage/config/` or `apps/staging/homepage/config/`). Each overlay's `configMapGenerator` merges its own `services.yaml`, `settings.yaml`, `widgets.yaml` and `bookmarks.yaml` over the base, so a tile added to one environment must be added to the other separately (staging uses `*.stage.burntbytes.com` hostnames and carries no `siteMonitor`).
+To add a new service or change the layout, edit the config files in the respective environment overlay (`apps/production/homepage/config/` or `apps/staging/homepage/config/`). Each overlay's `configMapGenerator` (`behavior: merge`) replaces the base's `services.yaml`, `settings.yaml`, `widgets.yaml` and `bookmarks.yaml` wholesale with its own copies (the other base files, such as `custom.css`, pass through unchanged), so a tile added to one environment must be added to the other separately (staging uses `*.stage.burntbytes.com` hostnames and carries no `siteMonitor`).
 
 ## 5. Usage Instructions
 Navigate to the Homepage URL. The dashboard is read-only. Clicking on a service icon will open that service in a new tab.

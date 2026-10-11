@@ -4,6 +4,7 @@ namespace: homepage-prod
 resources:
   - ../../base/homepage/
   - httproute.yaml
+  - networkpolicy-sitemonitor.yaml
   - rbac.yaml
   - secret-adguard.yaml
 

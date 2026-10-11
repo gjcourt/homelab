@@ -17,7 +17,8 @@
 # (fromEntities ingress/host/remote-node).
 #
 # Keep this list in sync with the tiles in config/services.yaml that carry a
-# siteMonitor. Ports are the pods' container ports (Cilium evaluates after
+# siteMonitor; scripts/check-homepage-sitemonitor.py (make
+# check-homepage-sitemonitor) fails if one is missing. Ports are the pods' container ports (Cilium evaluates after
 # DNAT), and labels are the Services' selectors.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy

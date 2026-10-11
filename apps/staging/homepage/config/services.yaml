@@ -3,64 +3,79 @@
         icon: immich.png
         href: https://photos.stage.burntbytes.com
         description: Photo and video management
+        siteMonitor: https://photos.stage.burntbytes.com
     - Jellyfin:
         icon: jellyfin.png
         href: https://jellyfin.stage.burntbytes.com
         description: Media streaming server
+        siteMonitor: https://jellyfin.stage.burntbytes.com
     - Navidrome:
         icon: navidrome.png
         href: https://music.stage.burntbytes.com
         description: Music server and streamer
+        siteMonitor: https://music.stage.burntbytes.com
     - Snapcast:
         icon: mdi-speaker-multiple
         href: https://snapcast.stage.burntbytes.com
         description: Multi-room audio (Snapweb)
+        siteMonitor: https://snapcast.stage.burntbytes.com
     - Audiobookshelf:
         icon: audiobookshelf.png
         href: https://audiobooks.stage.burntbytes.com
         description: Audiobook and podcast server
+        siteMonitor: https://audiobooks.stage.burntbytes.com
 
 - Tools:
     - Vibrato:
         icon: mdi-coffee-maker
         href: https://vibrato.stage.burntbytes.com
         description: Espresso machine monitor & control (ito + leva!)
+        siteMonitor: https://vibrato.stage.burntbytes.com/healthz
     - Memos:
         icon: memos.png
         href: https://memos.stage.burntbytes.com
         description: Lightweight note-taking service
+        siteMonitor: https://memos.stage.burntbytes.com
     - Linkding:
         icon: linkding.png
         href: https://links.stage.burntbytes.com
         description: Bookmark manager
+        siteMonitor: https://links.stage.burntbytes.com
     - Mealie:
         icon: mealie.png
         href: https://mealie.stage.burntbytes.com
         description: Recipe management
+        siteMonitor: https://mealie.stage.burntbytes.com
     - Excalidraw:
         icon: excalidraw.png
         href: https://excalidraw.stage.burntbytes.com
         description: Virtual whiteboard for sketching
+        siteMonitor: https://excalidraw.stage.burntbytes.com
     - Flashcards:
         icon: mdi-cards
         href: https://flashcards.stage.burntbytes.com
         description: Spaced-repetition flashcards (FSRS)
+        siteMonitor: https://flashcards.stage.burntbytes.com/healthz
     - Vitals:
         icon: mdi-heart-pulse
         href: https://vitals.stage.burntbytes.com
         description: Health and fitness tracker
+        siteMonitor: https://vitals.stage.burntbytes.com
     - Open WebUI:
         icon: open-webui.png
         href: https://chat.stage.burntbytes.com
         description: AI chat interface
+        siteMonitor: https://chat.stage.burntbytes.com/health
     - Changes:
         icon: mdi-music-clef-treble
         href: https://changes.stage.burntbytes.com
         description: Jazz chord progressions
+        siteMonitor: https://changes.stage.burntbytes.com/api/health
     - Kokoro:
         icon: mdi-account-voice
         href: https://voice.stage.burntbytes.com/web/
         description: Local text-to-speech (web player)
+        siteMonitor: https://voice.stage.burntbytes.com/health
 
 - Infrastructure:
     - Synology NAS:
@@ -76,18 +91,22 @@
         icon: home-assistant.png
         href: https://hass.stage.burntbytes.com
         description: Home automation platform
+        siteMonitor: https://hass.stage.burntbytes.com
     - GoLinks:
         icon: mdi-link-variant
         href: https://go.stage.burntbytes.com
         description: URL shortener
+        siteMonitor: https://go.stage.burntbytes.com
     - AdGuard Home:
         icon: adguard-home.png
         href: https://adguard.stage.burntbytes.com
         description: DNS ad blocker
+        siteMonitor: https://adguard.stage.burntbytes.com
     - Authelia:
         icon: mdi-shield-account
         href: https://auth.stage.burntbytes.com
         description: Authentication portal (SSO)
+        siteMonitor: https://auth.stage.burntbytes.com
     - Zigbee2MQTT:
         icon: zigbee2mqtt.png
         href: https://zigbee.stage.burntbytes.com

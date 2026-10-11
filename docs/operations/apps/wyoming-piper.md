@@ -9,7 +9,7 @@ start with a stock voice; a voice trained on George's own recordings may replace
 ## 2. Architecture
 - **Image**: `rhasspy/wyoming-piper` (source: [OHF-Voice/wyoming-piper](https://github.com/OHF-Voice/wyoming-piper)), pinned by tag and digest. It wraps the `piper-tts` engine from [OHF-Voice/piper1-gpl](https://github.com/OHF-Voice/piper1-gpl).
 - **Namespaces**: `wyoming-piper-prod`, `wyoming-piper-stage`. One replica, `Recreate` strategy.
-- **Storage**: none persistent. Voices download from Hugging Face into an `emptyDir` at `/data` on first start (~63 MB per medium voice) and again after a reschedule. No iSCSI dependency.
+- **Storage**: none persistent. Voices download from Hugging Face into an `emptyDir` at `/data` on first start (~63 MB per medium voice) and again after a reschedule. No iSCSI dependency, but the custom-voice mount below is NFS to hestia: while hestia is unreachable a new pod cannot start (it waits in `ContainerCreating` on the mount).
 - **Custom voices**: a read-only NFS mount of hestia's `/mnt/main/voice/serve` at `/voices`, passed as a second `--data-dir`. Every `<voice>.onnx` + `<voice>.onnx.json` pair in that folder is advertised to Home Assistant next to the catalog voices. The export (`10.42.2.0/24`, read-only) holds only the voices meant to be served; training data and other models stay unexported. PV/PVC per overlay in `nfs-voices.yaml`.
 - **Security**: the upstream image runs as root; here it runs as UID 65534 with a read-only root filesystem and all capabilities dropped. Verified locally against 2.5.2 before deployment: it writes only the voice files under `--data-dir`.
 - **Networking**: `ClusterIP` service on 10200, no HTTPRoute. A `CiliumNetworkPolicy` admits only Home Assistant pods in the same environment, and egress is limited to DNS plus `huggingface.co` / `**.hf.co` on 443 (`**.` because the download redirect lands on a multi-label host such as `us.aws.cdn.hf.co`, which Cilium's single-label `*.` would not match). Each Home Assistant overlay adds the matching egress rule to its own policy.
@@ -25,8 +25,8 @@ start with a stock voice; a voice trained on George's own recordings may replace
 
 ### Adding a custom voice
 1. Copy `<voice>.onnx` and `<voice>.onnx.json` into `/mnt/main/voice/serve/` on hestia (0644).
-2. Restart the pod so it rescans: `kubectl -n wyoming-piper-prod rollout restart deploy/wyoming-piper`.
-3. In Home Assistant, the voice appears in the Piper voice list for the pipeline.
+2. No restart is needed: wyoming-piper rebuilds its voice list from the data dirs on every Wyoming Describe. If Home Assistant still doesn't list it, reload the Wyoming Protocol integration, or restart the pod (`kubectl -n wyoming-piper-<env> rollout restart deploy/wyoming-piper`).
+3. In Home Assistant, the voice appears in the Piper voice list for the pipeline. A `.onnx` without its `.onnx.json` is skipped, and the pod log says so.
 
 ## 5. Home Assistant setup (one-time, UI)
 The Wyoming integration is a config-flow integration and can't be set up in YAML.
@@ -52,9 +52,10 @@ Measured on a Ryzen 5 PRO 4650GE node with a 4-CPU quota, while sharing the CPU 
 Re-measure in-cluster once deployed.
 
 ## 8. Disaster recovery
-Stateless. Deleting the pod re-downloads the default voice on start.
+Stateless in the cluster. Deleting the pod re-downloads the default voice on start. Custom voices live only on hestia (`/mnt/main/voice/serve`); nothing in the cluster holds a copy.
 
 ## 9. Troubleshooting
 - **Stuck not-ready on first start**: the voice download is failing. Check the logs for the Hugging Face URL. If Hugging Face's download redirect moves off `hf.co`, the `toFQDNs` rule in `networkpolicy.yaml` needs the new host.
 - **HA can't connect**: confirm Home Assistant's own CiliumNetworkPolicy has the `wyoming-piper-<env>` egress rule (patched in `apps/<env>/homeassistant/kustomization.yaml`), and that the host typed into the integration matches the environment.
+- **Stuck in `ContainerCreating`**: the `wyoming-piper-voices` NFS mount is not attaching. `kubectl -n wyoming-piper-<env> describe pod` shows the mount error; check hestia is up and still exports `/mnt/main/voice/serve` to `10.42.2.0/24`.
 - **Restarts during long renders**: synthesis runs on the server's event loop, so a very long text can starve the health check. Liveness only fails after about 2 minutes of failures. If it still restarts, split the text into smaller requests.

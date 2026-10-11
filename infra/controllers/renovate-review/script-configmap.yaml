@@ -14,11 +14,10 @@ data:
     It can HOLD. It can never approve, merge, or unblock — that is enforced by the
     token's scopes, not by this code.
     """
-    import json, os, re, sys, urllib.request, urllib.error, argparse, hashlib
+    import json, os, re, subprocess, sys, urllib.request, urllib.error, argparse, hashlib
     from collections import defaultdict
 
     GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
-    ANTHROPIC_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
     MODEL = os.environ.get("REVIEW_MODEL", "claude-opus-4-8")
     REPOS = [r.strip() for r in os.environ.get("GITHUB_REPOS", "").split(",") if r.strip()]
     RENOVATE_BRANCH_PREFIX = "renovate/"
@@ -27,6 +26,8 @@ data:
     # deliberately lacks `contents: write`, so labelling is the only lever it has.
     HOLD_LABEL = "held-by-review"
     HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT", "120"))
+    # Seconds per reviewer call, including Claude Code start-up.
+    MODEL_TIMEOUT = int(os.environ.get("MODEL_TIMEOUT", "300"))
     UPDATE_TYPES = ("major", "minor", "patch", "digest", "pin", "pinDigest", "rollback")
 
 
@@ -120,28 +121,45 @@ data:
         return normalise(json.loads(m.group(0)))
 
 
-    def anthropic(system, user):
-        req = urllib.request.Request("https://api.anthropic.com/v1/messages",
-            data=json.dumps({"model": MODEL, "max_tokens": 1024, "system": system,
-                             "messages": [{"role": "user", "content": user}]}).encode(), method="POST")
-        req.add_header("x-api-key", ANTHROPIC_KEY)
-        req.add_header("anthropic-version", "2023-06-01")
-        req.add_header("content-type", "application/json")
-        with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as r:
-            d = json.loads(r.read())
+    def unparseable(why):
+        return {"verdict": "HOLD", "confidence": 1, "root_cause": "unparseable",
+                "reason": f"reviewer output {why}; holding by default"}
+
+
+    def claude(system, user):
+        """One reviewer call through Claude Code (`claude -p`), so it bills the
+        subscription token in CLAUDE_CODE_OAUTH_TOKEN rather than an API key.
+
+        Claude Code prefers ANTHROPIC_API_KEY over the OAuth token whenever both
+        are set, so the key is stripped from the child's environment: a stale key
+        left in the secret must not silently move billing back to the API. The
+        GitHub token is stripped too; the model gets no tools, and nothing it
+        could run needs one. --bare is not usable: it ignores OAuth entirely."""
+        env = {k: v for k, v in os.environ.items()
+               if k not in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "GITHUB_TOKEN")}
+        cmd = ["claude", "-p", "--model", MODEL, "--system-prompt", system,
+               "--tools", "", "--strict-mcp-config", "--disable-slash-commands",
+               "--no-session-persistence", "--output-format", "json"]
+        r = subprocess.run(cmd, input=user, capture_output=True, text=True,
+                           timeout=MODEL_TIMEOUT, env=env, cwd="/tmp")
+        try:
+            d = json.loads(r.stdout)
+        except json.JSONDecodeError:
+            # Auth and usage-limit failures land here; raise so main() logs the
+            # stderr and holds the PR as a reviewer error.
+            raise RuntimeError(f"claude exited {r.returncode}: {(r.stderr or r.stdout)[-300:]}")
+        if d.get("is_error"):
+            raise RuntimeError(f"claude error: {str(d.get('result', ''))[-300:]}")
         if d.get("stop_reason") == "refusal":
             return {"verdict": "HOLD", "confidence": 3, "root_cause": "model refusal",
                     "reason": "reviewer declined to answer; holding by default"}
-        text = next((b["text"] for b in d.get("content", []) if b.get("type") == "text"), "")
-        m = re.search(r"\{.*\}", text, re.S)
+        m = re.search(r"\{.*\}", d.get("result") or "", re.S)
         if not m:
-            return {"verdict": "HOLD", "confidence": 1, "root_cause": "unparseable",
-                    "reason": "reviewer output could not be parsed; holding by default"}
+            return unparseable("could not be parsed")
         try:
             return normalise(json.loads(m.group(0)))
         except json.JSONDecodeError:
-            return {"verdict": "HOLD", "confidence": 1, "root_cause": "unparseable",
-                    "reason": "reviewer output was not valid JSON; holding by default"}
+            return unparseable("was not valid JSON")
 
 
     def apply_hold_label(repo, number):
@@ -216,8 +234,8 @@ data:
             if args.mode == "mock":
                 a = mock_lookup("a", key); b = mock_lookup("b", key)
             else:
-                a = anthropic(REVIEWER_SYSTEM, prompt)
-                b = anthropic(REVIEWER_SYSTEM + "\n\nBe conservative: flag only what you can justify from the evidence.", prompt)
+                a = claude(REVIEWER_SYSTEM, prompt)
+                b = claude(REVIEWER_SYSTEM + "\n\nBe conservative: flag only what you can justify from the evidence.", prompt)
             consensus = is_hold(a) and is_hold(b)
             print(f"  {repo}#{pr['number']}: A={a['verdict']}({a['confidence']}) "
                   f"B={b['verdict']}({b['confidence']}) -> {'HOLD' if consensus else 'pass'}", flush=True)

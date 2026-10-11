@@ -60,10 +60,11 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (16)
+### In progress (17)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-10-06-obsidian-livesync.md](2026-10-06-obsidian-livesync.md) | 2026-10-10 | Self-hosted Obsidian sync: one CouchDB in the cluster for the LiveSync plugin, one database per vault, E2EE, S3 backups with a restore drill |
 | [2026-09-25-bench-cloud-agent.md](2026-09-25-bench-cloud-agent.md) | 2026-09-27 | bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia |
 | [2026-09-04-hestia-silent-hang-diagnosis.md](2026-09-04-hestia-silent-hang-diagnosis.md) | 2026-09-05 | hestia failed four times in ~29 hours after 57 days of uptime in TWO distinct modes — two kernel panics that self-rebooted in ~3 min and two true hard lockups that sat until reset — and left no record of either because the box had no console, no crashkernel and an ERST pstore that captured nothing; detectors are now armed and one suspect is stopped as a live experiment |
 | [2026-07-28-mealie-food-migration.md](2026-07-28-mealie-food-migration.md) | 2026-07-28 | Rename Mealie mealie.burntbytes.com -> food.burntbytes.com (301 old->new, LAN-only) and fix Site Settings: v3.22.0, BASE_URL, SMTP email, OIDC redirect URIs |
@@ -85,7 +86,7 @@ see `scripts/plans-index/`).
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-09-28-renovate-fixer-bench-cloud.md](2026-09-28-renovate-fixer-bench-cloud.md) | 2026-09-28 | Bench-cloud fixes stuck Renovate PRs; mechanical fixes auto-merge, risky go to George; renovate-review retired |
+| [2026-09-28-renovate-fixer-bench-cloud.md](2026-09-28-renovate-fixer-bench-cloud.md) | 2026-10-08 | Bench-cloud fixes stuck Renovate PRs; mechanical fixes auto-merge, risky go to George; renovate-review kept on subscription billing |
 | [2026-09-01-readonly-pvc-recovery.md](2026-09-01-readonly-pvc-recovery.md) | 2026-09-01 | read-only iSCSI remounts have recurred six times and always need an operator; detection is now solved by pvc-writeprobe, so close the remaining gap with a recovery script that encodes the runbook's traps — and deliberately do NOT build a controller that suspends Flux or restarts Postgres |
 | [2026-08-18-hestia-sshd-refused-diagnosis.md](2026-08-18-hestia-sshd-refused-diagnosis.md) | 2026-08-18 | hestia's sshd intermittently refuses port 22 while every other service stays up; the MaxStartups theory carried across sessions is disproven, so collect wedged-state evidence before changing any setting — **blocked:** Evidence from the wedged state, which has been destroyed 4-5 times by restarting the service before capturing it. Next wedge: capture from the TrueNAS web Shell over 443 BEFORE restarting. |
 | [2026-08-18-hestia-deploy-monitoring-gap.md](2026-08-18-hestia-deploy-monitoring-gap.md) | 2026-08-18 | hestia has no per-container metrics and no signal when the GitHub runner dies, so deploys failed silently for days; close it with an off-cluster canary, post-apply verification, and a container probe on the heartbeat that already exists |

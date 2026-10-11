@@ -49,6 +49,18 @@
         icon: mdi-heart-pulse
         href: https://vitals.stage.burntbytes.com
         description: Health and fitness tracker
+    - Open WebUI:
+        icon: open-webui.png
+        href: https://chat.stage.burntbytes.com
+        description: AI chat interface
+    - Changes:
+        icon: mdi-music-clef-treble
+        href: https://changes.stage.burntbytes.com
+        description: Jazz chord progressions
+    - Kokoro:
+        icon: mdi-account-voice
+        href: https://voice.stage.burntbytes.com/web/
+        description: Local text-to-speech (web player)
 
 - Infrastructure:
     - Synology NAS:
@@ -80,10 +92,6 @@
         icon: zigbee2mqtt.png
         href: https://zigbee.stage.burntbytes.com
         description: Zigbee to MQTT Bridge
-    - Pingo:
-        icon: mdi-dns
-        href: https://vpn.burntbytes.com
-        description: DNS updater for vpn.burntbytes.com
 
 - Monitoring:
     - Cluster Resources:

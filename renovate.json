@@ -18,7 +18,7 @@
       "platformAutomerge": false
     },
     {
-      "description": "Language/interpreter runtimes are never automerged by Renovate itself. The rule above automerges every digest/pin/patch/minor update, and Renovate calls a Python 3.12->3.14 bump 'minor' because 3.x IS the minor field in its version model -- so without this an interpreter upgrade self-merges on the daily run. Must stay AFTER that rule: package rules apply in order, last match wins. The renovate-automerge CronJob holds these too, but it is a separate mechanism and does not govern Renovate's own merging.",
+      "description": "Language/interpreter runtimes are never automerged by Renovate itself. The rule above automerges every digest/pin/patch/minor update, and Renovate calls a Python 3.12->3.14 bump 'minor' because 3.x IS the minor field in its version model -- so without this an interpreter upgrade self-merges on the daily run. Must stay AFTER that rule: package rules apply in order, last match wins. The renovate-automerge CronJob holds these too, but it is a separate mechanism and does not govern Renovate's own merging. rebaseWhen defaults to 'auto', which only resolves to 'behind-base-branch' when the PR has automerge enabled or the branch ruleset requires up-to-date branches -- neither is true here, so auto falls back to 'conflicted' and a digest-only PR with no conflicting file changes never gets rebased (observed: #1462, #1553 BEHIND for weeks). Pin it explicitly so these PRs stay current for the manual review they're held for, without changing what gets auto-merged.",
       "matchDepNames": [
         "python",
         "go",
@@ -43,7 +43,8 @@
         "oven/bun",
         "denoland/deno"
       ],
-      "automerge": false
+      "automerge": false,
+      "rebaseWhen": "behind-base-branch"
     },
     {
       "description": "George's own images (ghcr.io/gjcourt/*) pinned to YYYY-MM-DD-<sha7>. Renovate's default docker versioning reads 2026-07-26-c14b782 as version 2026 with suffix -07-26-c14b782 and only offers tags with the SAME suffix, so it never proposed a newer build (homelab has never had a Renovate bump of one). This regex orders the date as major.minor.patch and REQUIRES the sha (unnamed group: matched, never compared), so the floating bare-date tag (YYYY-MM-DD, re-pointed on every build that day) is not a valid version and a pin can never move to it. Builds from the same day compare equal; the next day's build supersedes them. Automerged like any other minor/patch update (George, 2026-10-01: \"this is my homelab, not a production environment\"), by Renovate and by the renovate-automerge CronJob once CI is green.",

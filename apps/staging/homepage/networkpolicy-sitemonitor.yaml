@@ -3,13 +3,16 @@
 # through the Gateway. Cilium policies are additive, so this extends the base
 # `homepage` policy without changing prod.
 #
-# Why both rules (same finding as audiobookshelf, #1549/#1551, see
+# Why (same finding as audiobookshelf, #1549/#1551, see
 # apps/base/audiobookshelf/networkpolicy.yaml): a probe to
 # https://<app>.stage.burntbytes.com goes to the staging Gateway VIP, and the
 # Gateway's Envoy then enforces THIS pod's egress policy against the selected
 # upstream — the backend pod on its container port — not the VIP. Without a
 # rule for the backend, Envoy answers `403 Access denied` (server: envoy),
-# which homepage counts as "up", so every status dot was meaningless.
+# which homepage counts as "up", so a missing rule shows as a green dot.
+# The backend rules are what fix it; the VIP rule below is belt-and-braces
+# (the base policy's world:443 already lets the connection reach the VIP),
+# kept explicit to mirror audiobookshelf, whose egress has no world rule.
 # The backends need no ingress change: they already admit the Gateway
 # (fromEntities ingress/host/remote-node).
 #

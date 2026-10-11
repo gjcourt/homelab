@@ -6,14 +6,12 @@ metadata:
 spec:
   template:
     spec:
-      # Staging-first DNS fix (prod follows once verified): with the default
-      # ndots:5 and three search domains, every *.burntbytes.com siteMonitor
-      # lookup is first tried against each search domain. About 4% of
-      # lookups stall exactly 2.5 s (a resolver retry), and Node's libuv
-      # threadpool (4 threads by default) serialises them: 24 parallel
-      # lookups took 5.1 s, so later tile groups showed about 2 s latency.
-      # ndots:2 sends external names straight to the resolver; in-cluster
-      # names here are FQDNs (prometheus ...svc.cluster.local) or env IPs.
+      # With the default ndots:5 and three search domains, every
+      # *.burntbytes.com siteMonitor lookup is first tried against each
+      # search domain, and a lookup that stalls on a resolver retry holds one
+      # of Node's few libuv threads. ndots:2 sends external names straight to
+      # the resolver; in-cluster names here are FQDNs (prometheus
+      # ...svc.cluster.local) or env IPs.
       dnsConfig:
         options:
           - name: ndots

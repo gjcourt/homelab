@@ -10,6 +10,7 @@ start with a stock voice; a voice trained on George's own recordings may replace
 - **Image**: `rhasspy/wyoming-piper` (source: [OHF-Voice/wyoming-piper](https://github.com/OHF-Voice/wyoming-piper)), pinned by tag and digest. It wraps the `piper-tts` engine from [OHF-Voice/piper1-gpl](https://github.com/OHF-Voice/piper1-gpl).
 - **Namespaces**: `wyoming-piper-prod`, `wyoming-piper-stage`. One replica, `Recreate` strategy.
 - **Storage**: none persistent. Voices download from Hugging Face into an `emptyDir` at `/data` on first start (~63 MB per medium voice) and again after a reschedule. No iSCSI dependency.
+- **Custom voices**: a read-only NFS mount of hestia's `/mnt/main/voice/serve` at `/voices`, passed as a second `--data-dir`. Every `<voice>.onnx` + `<voice>.onnx.json` pair in that folder is advertised to Home Assistant next to the catalog voices. The export (`10.42.2.0/24`, read-only) holds only the voices meant to be served; training data and other models stay unexported. PV/PVC per overlay in `nfs-voices.yaml`.
 - **Security**: the upstream image runs as root; here it runs as UID 65534 with a read-only root filesystem and all capabilities dropped. Verified locally against 2.5.2 before deployment: it writes only the voice files under `--data-dir`.
 - **Networking**: `ClusterIP` service on 10200, no HTTPRoute. A `CiliumNetworkPolicy` admits only Home Assistant pods in the same environment, and egress is limited to DNS plus `huggingface.co` / `**.hf.co` on 443 (`**.` because the download redirect lands on a multi-label host such as `us.aws.cdn.hf.co`, which Cilium's single-label `*.` would not match). Each Home Assistant overlay adds the matching egress rule to its own policy.
 
@@ -21,6 +22,11 @@ start with a stock voice; a voice trained on George's own recordings may replace
 - **Default voice**: `en_US-lessac-medium` (the `--voice` arg in `apps/base/wyoming-piper/deployment.yaml`). This is a placeholder until the 03-036 audition picks one. Change the default with that arg; Home Assistant can also request any other voice per call, which downloads on first use.
 - **Voice licences** vary per voice (see each voice's `MODEL_CARD` in `rhasspy/piper-voices`). Several, including `en_US-ryan-*` and `en_US-hfc_*`, are non-commercial only. The default `en_US-lessac-medium` is trained on the Lessac Blizzard 2013 data, which CSTR distributes under a research licence. Fine for household use; check the card before using any voice elsewhere.
 - **Resources**: request 100m / 512Mi, limit 2 CPU / 1Gi. Measured about 400 MB RSS with one medium voice loaded.
+
+### Adding a custom voice
+1. Copy `<voice>.onnx` and `<voice>.onnx.json` into `/mnt/main/voice/serve/` on hestia (0644).
+2. Restart the pod so it rescans: `kubectl -n wyoming-piper-prod rollout restart deploy/wyoming-piper`.
+3. In Home Assistant, the voice appears in the Piper voice list for the pipeline.
 
 ## 5. Home Assistant setup (one-time, UI)
 The Wyoming integration is a config-flow integration and can't be set up in YAML.

@@ -52,6 +52,11 @@ spec:
             # Assistant; it downloads on first use.
             - --voice
             - en_US-lessac-medium
+            # Custom voices: every *.onnx (+ .onnx.json) here is advertised to
+            # Home Assistant alongside the catalog voices. Downloads still go
+            # to /data, the first data dir.
+            - --data-dir
+            - /voices
           env:
             - name: HOME
               value: /tmp
@@ -102,6 +107,9 @@ spec:
               mountPath: /data
             - name: tmp
               mountPath: /tmp
+            - name: voices
+              mountPath: /voices
+              readOnly: true
       volumes:
         - name: data
           emptyDir:
@@ -109,3 +117,10 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        # Read-only NFS export of hestia's voice/serve folder (custom voices
+        # only; training data and other models are not exported). PV and PVC
+        # live in each overlay (nfs-voices.yaml).
+        - name: voices
+          persistentVolumeClaim:
+            claimName: wyoming-piper-voices
+            readOnly: true

@@ -52,7 +52,7 @@ plans-index-check: ## Verify docs/plans frontmatter and index are in sync
 	cd scripts/plans-index && go run . -check
 
 .PHONY: test
-test: test-kustomize test-kubeconform fmt-yaml-check check-homepage-sitemonitor ## Render + validate manifests
+test: test-kustomize test-kubeconform fmt-yaml-check check-homepage-sitemonitor check-cilium-policies ## Render + validate manifests
 
 .PHONY: test-kustomize
 test-kustomize: ## Render key overlays with kustomize (via kubectl)
@@ -60,6 +60,10 @@ test-kustomize: ## Render key overlays with kustomize (via kubectl)
 	kubectl kustomize apps/production >/tmp/kustomize-production.yaml
 	kubectl kustomize infra/configs >/tmp/kustomize-infra-configs.yaml
 	kubectl kustomize infra/controllers >/tmp/kustomize-infra-controllers.yaml
+
+.PHONY: check-cilium-policies
+check-cilium-policies: ## Fail on Cilium policies with no ingress/egress rules, which Cilium rejects (needs PyYAML)
+	python3 scripts/check-cilium-policies.py
 
 .PHONY: check-homepage-sitemonitor
 check-homepage-sitemonitor: ## Fail if a homepage siteMonitor has no matching egress rule (needs PyYAML)

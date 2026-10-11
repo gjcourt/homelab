@@ -30,13 +30,17 @@ import sys
 from pathlib import Path
 from urllib.parse import urlsplit
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    sys.exit("check-homepage-sitemonitor: needs PyYAML (pip install pyyaml)")
 
 ROOT = Path(__file__).resolve().parent.parent
 GATEWAYS = {"production": "app-gateway-production", "staging": "app-gateway-staging"}
 
 # (namespace, service, service port) -> (pod labels, container port) for
-# Services created by Helm charts, which kustomize doesn't render.
+# Services created by Helm charts, which kustomize doesn't render. Keep in
+# sync with infra/controllers/kube-prometheus-stack (chart values/version).
 HELM_BACKENDS = {
     ("monitoring", "kube-prometheus-stack-grafana", 80): ({"app.kubernetes.io/name": "grafana"}, 3000),
     ("monitoring", "kube-prometheus-stack-prometheus", 9090): ({"app.kubernetes.io/name": "prometheus"}, 9090),
@@ -47,12 +51,15 @@ NS_KEYS = ("k8s:io.kubernetes.pod.namespace", "io.kubernetes.pod.namespace")
 
 
 def render(path):
-    if shutil.which("kustomize"):
-        cmd = ["kustomize", "build", str(ROOT / path)]
-    else:
+    # Same renderer as `make test-kustomize` when kubectl is present.
+    if shutil.which("kubectl"):
         cmd = ["kubectl", "kustomize", str(ROOT / path)]
-    out = subprocess.run(cmd, check=True, capture_output=True, text=True).stdout
-    return [d for d in yaml.safe_load_all(out) if d]
+    else:
+        cmd = ["kustomize", "build", str(ROOT / path)]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode:
+        sys.exit(f"check-homepage-sitemonitor: rendering {path} failed:\n{result.stderr}")
+    return [d for d in yaml.safe_load_all(result.stdout) if d]
 
 
 def site_monitors(env):
@@ -65,9 +72,30 @@ def site_monitors(env):
                         yield f"{group_name}/{tile_name}", spec["siteMonitor"]
 
 
-def find_backend(routes, gateway, url):
-    """(namespace, service, port) of the backendRef the longest matching
-    path prefix selects, or None."""
+def _path_match(match, path):
+    """Rank of a Gateway API path match against path (higher wins), or None.
+    Exact beats PathPrefix; a longer prefix beats a shorter one; a prefix
+    matches whole path segments only (/api matches /api and /api/x, not
+    /apix). Anything else (RegularExpression, header, query or method
+    matches) is refused rather than guessed."""
+    if set(match) - {"path"}:
+        raise LookupError(f"route match {match} uses more than a path; the check can't evaluate it")
+    kind = (match.get("path") or {}).get("type", "PathPrefix")
+    value = (match.get("path") or {}).get("value", "/")
+    if kind == "Exact":
+        return (2, len(value)) if path == value else None
+    if kind == "PathPrefix":
+        prefix = value.rstrip("/")
+        if not prefix or path == prefix or path.startswith(prefix + "/"):
+            return (1, len(prefix))
+        return None
+    raise LookupError(f"route match type {kind!r} isn't supported by the check")
+
+
+def find_backends(routes, gateway, url):
+    """Every (namespace, service, port) the matching rule sends url to (all
+    of a rule's weighted backendRefs), or None if no route matches. Only the
+    route's HTTPS listeners count (sectionName https*, or none)."""
     parts = urlsplit(url)
     host, path = parts.hostname, parts.path or "/"
     best = None
@@ -75,27 +103,32 @@ def find_backend(routes, gateway, url):
         spec = route.get("spec", {})
         if host not in spec.get("hostnames", []):
             continue
-        if gateway not in [p.get("name") for p in spec.get("parentRefs", [])]:
+        parents = [
+            p
+            for p in spec.get("parentRefs", [])
+            if p.get("name") == gateway and (p.get("sectionName") or "https").startswith("https")
+        ]
+        if not parents:
             continue
         for rule in spec.get("rules", []):
             refs = [b for b in rule.get("backendRefs") or [] if b.get("kind", "Service") == "Service"]
             if not refs:
-                continue
+                continue  # redirect-only rule
             for match in rule.get("matches") or [{}]:
-                prefix = (match.get("path") or {}).get("value", "/")
-                if path.startswith(prefix) and (best is None or len(prefix) > len(best[0])):
-                    ref = refs[0]
-                    ns = ref.get("namespace", route["metadata"].get("namespace"))
-                    best = (prefix, (ns, ref["name"], ref.get("port")))
+                rank = _path_match(match, path)
+                if rank is not None and (best is None or rank > best[0]):
+                    ns = route["metadata"].get("namespace")
+                    best = (rank, [(r.get("namespace", ns), r["name"], r.get("port")) for r in refs if r.get("weight", 1) != 0])
     return best[1] if best else None
 
 
 def resolve(objects, ns, svc_name, svc_port):
-    """What the homepage pod's egress must allow for this backend:
-    ("pods", pod labels, container port) or ("ips", [ip], port)."""
+    """What the homepage pod's egress must allow for this backend, as a list
+    (one entry per workload behind the Service): ("pods", pod labels,
+    container port) or ("ips", [ip], port)."""
     if (ns, svc_name, svc_port) in HELM_BACKENDS:
         labels, port = HELM_BACKENDS[(ns, svc_name, svc_port)]
-        return ("pods", labels, port)
+        return [("pods", labels, port)]
     svc = objects.get(("Service", ns, svc_name))
     if svc is None:
         raise LookupError(f"Service {ns}/{svc_name} isn't in the rendered repo or HELM_BACKENDS")
@@ -121,9 +154,9 @@ def resolve(objects, ns, svc_name, svc_port):
                     ips = [a["ip"] for s in subsets for a in s.get("addresses", [])]
                     eports = [p["port"] for s in subsets for p in s.get("ports", [])]
                 if ips:
-                    return ("ips", ips, eports[0] if eports else target)
+                    return [("ips", ips, eports[0] if eports else target)]
         raise LookupError(f"Service {ns}/{svc_name} has no selector and no rendered endpoints")
-    pod_labels, container_port = None, target if isinstance(target, int) else None
+    needs = []
     # A selector on statefulset.kubernetes.io/pod-name (set by the controller,
     # not in the pod template) names one pod of a StatefulSet: <sts>-<ordinal>.
     sts_pod = selector.get("statefulset.kubernetes.io/pod-name")
@@ -136,39 +169,64 @@ def resolve(objects, ns, svc_name, svc_port):
             matches = kind == "StatefulSet" and sts_pod.rsplit("-", 1)[0] == name
         else:
             matches = all(labels.get(k) == v for k, v in selector.items())
-        if matches:
-            pod_labels = labels
-            if isinstance(target, str):
-                for c in template["spec"].get("containers", []):
-                    for p in c.get("ports", []):
-                        if p.get("name") == target:
-                            container_port = p["containerPort"]
-            break
-    if pod_labels is None:
-        pod_labels = selector  # workload not rendered; the selector is a subset of the pod's labels
-    if container_port is None:
-        raise LookupError(f"Service {ns}/{svc_name} targets named port {target!r}, which no rendered workload defines")
-    return ("pods", pod_labels, container_port)
+        if not matches:
+            continue
+        container_port = target if isinstance(target, int) else None
+        if isinstance(target, str):
+            for c in template["spec"].get("containers", []):
+                for p in c.get("ports", []):
+                    if p.get("name") == target:
+                        container_port = p["containerPort"]
+        if container_port is None:
+            raise LookupError(f"{kind} {ns}/{name} has no container port named {target!r} (Service {svc_name})")
+        needs.append(("pods", labels, container_port))
+    if needs:
+        return needs
+    # Workload not rendered here. Only trust the selector if it carries no
+    # controller-set label Cilium leaves out of identities.
+    if sts_pod or not isinstance(target, int):
+        raise LookupError(f"Service {ns}/{svc_name}: no rendered workload matches its selector {selector}")
+    return [("pods", selector, target)]
 
 
-def rule_ports(rule):
-    return {int(p["port"]) for tp in rule.get("toPorts", []) for p in tp.get("ports", []) if str(p.get("port", "")).isdigit()}
+def _port_allowed(rule, port):
+    """True if the rule's toPorts allow TCP to port (no toPorts = any port)."""
+    to_ports = rule.get("toPorts")
+    if not to_ports:
+        return True
+    for tp in to_ports:
+        for p in tp.get("ports", []):
+            if p.get("protocol", "ANY").upper() not in ("TCP", "ANY"):
+                continue
+            first = str(p.get("port", "0"))
+            if not first.isdigit():
+                continue  # named ports aren't evaluated; treat as not allowing
+            low, high = int(first), int(p.get("endPort", first))
+            if int(first) == 0 or low <= port <= high:
+                return True
+    return False
 
 
 def allowed(policies, need):
     kind, what, port = need
     for policy in policies:
         for rule in policy["spec"].get("egress", []):
-            if port not in rule_ports(rule):
+            if not _port_allowed(rule, port):
                 continue
+            entities = set(rule.get("toEntities", []))
+            if "all" in entities or (kind == "pods" and "cluster" in entities) or (kind == "ips" and "world" in entities):
+                return True
             if kind == "pods":
                 for sel in rule.get("toEndpoints", []):
+                    if sel.get("matchExpressions"):
+                        continue  # not evaluated; doesn't count as allowing
                     labels = dict(sel.get("matchLabels", {}))
-                    ns = next((labels.pop(k) for k in NS_KEYS if k in labels), None)
+                    ns = next((labels.pop(k) for k in NS_KEYS if k in labels), policy["metadata"].get("namespace"))
                     if ns == what.get("__ns__") and all(what.get(k) == v for k, v in labels.items()):
                         return True
             else:
-                cidrs = [c.get("cidr") for c in rule.get("toCIDRSet", [])] + list(rule.get("toCIDR", []))
+                cidrs = [c.get("cidr") for c in rule.get("toCIDRSet", []) if not c.get("except")]
+                cidrs += list(rule.get("toCIDR", []))
                 for cidr in cidrs:
                     net = ipaddress.ip_network(cidr, strict=False)
                     if all(ipaddress.ip_address(ip) in net for ip in what):
@@ -183,39 +241,47 @@ def check(env):
         meta = d.get("metadata", {})
         objects[(d.get("kind"), meta.get("namespace"), meta.get("name"))] = d
     routes = [d for d in docs if d.get("kind") == "HTTPRoute"]
+    namespace = f"homepage-{'prod' if env == 'production' else 'stage'}"
+    deploy = objects.get(("Deployment", namespace, "homepage"))
+    if deploy is None:
+        return [f"{env}: no homepage Deployment rendered in {namespace}"]
+    pod_labels = deploy["spec"]["template"].get("metadata", {}).get("labels", {})
+    # Only policies that actually select the homepage pod count.
     policies = [
         d
         for d in docs
         if d.get("kind") == "CiliumNetworkPolicy"
-        and d["metadata"].get("namespace") == f"homepage-{'prod' if env == 'production' else 'stage'}"
-        and d["spec"].get("endpointSelector", {}).get("matchLabels", {}).get("app.kubernetes.io/name") == "homepage"
+        and d["metadata"].get("namespace") == namespace
+        and not d["spec"].get("endpointSelector", {}).get("matchExpressions")
+        and all(pod_labels.get(k) == v for k, v in d["spec"].get("endpointSelector", {}).get("matchLabels", {}).items())
     ]
     if not policies:
-        return [f"{env}: no homepage CiliumNetworkPolicy rendered"]
+        return [f"{env}: no CiliumNetworkPolicy selects the homepage pod"]
     failures = []
     for tile, url in site_monitors(env):
-        backend = find_backend(routes, GATEWAYS[env], url)
-        if backend is None:
-            failures.append(f"{env} {tile}: no HTTPRoute on {GATEWAYS[env]} for {url}")
-            continue
         try:
-            need = resolve(objects, *backend)
+            backends = find_backends(routes, GATEWAYS[env], url)
+            if backends is None:
+                failures.append(f"{env} {tile}: no HTTPRoute on {GATEWAYS[env]} for {url}")
+                continue
+            for backend in backends:
+                for need in resolve(objects, *backend):
+                    if need[0] == "pods":
+                        need = ("pods", {**need[1], "__ns__": backend[0]}, need[2])
+                    if allowed(policies, need):
+                        print(f"ok   {env} {tile}: {url} -> {backend[0]}/{backend[1]} port {need[2]}")
+                        continue
+                    if need[0] == "pods":
+                        labels = {k: v for k, v in need[1].items() if k != "__ns__"}
+                        target = f"pods in {backend[0]} with labels {labels}"
+                    else:
+                        target = f"IPs {need[1]}"
+                    failures.append(
+                        f"{env} {tile}: {url} -> {backend[0]}/{backend[1]}; "
+                        f"no homepage egress rule allows {target} on port {need[2]}"
+                    )
         except LookupError as exc:
             failures.append(f"{env} {tile}: {exc}")
-            continue
-        if need[0] == "pods":
-            need = ("pods", {**need[1], "__ns__": backend[0]}, need[2])
-        if allowed(policies, need):
-            print(f"ok   {env} {tile}: {url} -> {backend[0]}/{backend[1]} port {need[2]}")
-        else:
-            if need[0] == "pods":
-                labels = {k: v for k, v in need[1].items() if k != "__ns__"}
-                target = f"pods in {backend[0]} with labels {labels}"
-            else:
-                target = f"IPs {need[1]}"
-            failures.append(
-                f"{env} {tile}: {url} -> {backend[0]}/{backend[1]}; no homepage egress rule allows {target} on port {need[2]}"
-            )
     return failures
 
 

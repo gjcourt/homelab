@@ -26,10 +26,10 @@ Snapcast client or group of clients, and exposes each speaker to HA as a
 
 - `snapcast` pod (stage + prod): `snapserver` 0.34.0, `go-librespot` (Spotify Connect
   "Snapcast"), `mopidy` (Iris on 6680, MPD on 6600, Subsonic → Navidrome).
-- Streams: `default` (`/tmp/snapfifo`, 48 kHz), `spotify`, `navidrome`.
+- Streams: `default` (`/tmp/snapfifo`, 48 kHz), `spotify` and `navidrome` (44.1 kHz FIFOs).
 - Prod clients: kitchen, living-room, office. Each is already in its own group, so
   per-speaker routing is a per-group stream switch.
-- `cast.burntbytes.com` → Service port 6680 (Iris).
+- `cast.burntbytes.com` → Service port 6680 (Iris), prod only; stage has no Iris route.
 - Each Pi also runs its own go-librespot (per-room Spotify Connect). Untouched by this plan.
 
 ## Design

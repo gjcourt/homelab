@@ -101,6 +101,8 @@ Steps 1–4 are reversible by reverting the PR; step 5 is the only one that remo
 - Does MA leave groups as it found them after playback, or does it regroup clients?
   Spotify on a Pi and MA on the same speaker are two ways into one room — confirm they
   don't fight.
+- The `snapcast` pod runs as uid 1000 with `runAsNonRoot`. Does the MA server image run
+  as non-root, or does it need its own `securityContext`?
 - MA web UI authentication. `cast.burntbytes.com` is LAN-only today; keep it that way.
 
 ## UI

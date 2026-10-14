@@ -230,7 +230,7 @@ try {
 
   # ---- 6. decrypt -----------------------------------------------------------
   if (-not $Mkv) {
-    Log "next: re-run with -Mkv, disc still loaded, to rip $iso (the identity check and a no-op ddrescue pass run first)"
+    Log "next: re-run with -Mkv, disc still loaded, to rip $iso (the identity check and ddrescue run again first; on a complete map ddrescue has nothing left to read)"
     Write-LedgerRun -Event 'RUN_END' -Note "imaged only, unrecovered=$bad"
     exit 0
   }

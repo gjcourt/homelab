@@ -380,6 +380,9 @@ the work in two:
    resumes. You can clean the disc or move it to another drive between runs, and
    only the missing sectors are read again.
 2. **MakeMKV decrypts the ISO** (`-Mkv`) into `C:\Video\<Name>`.
+   Without `-Mkv` the run stops after imaging. Ripping later means re-running
+   with `-Mkv` **with the same disc still loaded**: the drive probe and identity
+   check run on every invocation, before ddrescue and MakeMKV.
 
 ```powershell
 cd C:\Users\George\src\homelab\hosts\winpc-5600x\media-pipeline

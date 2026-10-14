@@ -365,3 +365,44 @@ gone before claiming the space back.
 Without `-Delete` the script is read-only: it writes ledger rows and an audit
 TSV (`<RUN_ID>.verify.tsv`, kept both locally and on hestia) and touches nothing
 else.
+
+---
+
+# rescue-disc.ps1 — damaged discs: image first, decrypt second
+
+MakeMKV reads and decrypts a disc in one pass. A damaged area stalls that pass,
+and when it fails the next attempt starts again from sector 0. This script splits
+the work in two:
+
+1. **`ddrescue` images the disc to an ISO.** Pass 1 (`-n`) copies everything that
+   reads cleanly and skips damage. Pass 2 (`-r N`) retries only what is still
+   missing. Progress lives in a **map file**, so re-running the same command
+   resumes. You can clean the disc or move it to another drive between runs, and
+   only the missing sectors are read again.
+2. **MakeMKV decrypts the ISO** (`-Mkv`) into `C:\Video\<Name>`.
+
+```powershell
+.\rescue-disc.ps1 -Name SPIDERVERSE          # image only; re-run to resume/retry
+.\rescue-disc.ps1 -Name SPIDERVERSE -Mkv     # image, then rip the ISO
+```
+
+Imaging a BD-50 takes 1–2 hours, so **detach it** the same way as the other long
+jobs (`Invoke-CimMethod ... Win32_Process Create`; see the script's `.EXAMPLE`).
+
+| Choice | Why |
+| :--- | :--- |
+| **Cygwin, not WSL** | WSL2 cannot see the optical drive without USB passthrough (`usbipd`), and passthrough detaches the drive from Windows, so MakeMKV loses it. Cygwin reads the Windows drive in place. Install: `setup-x86_64.exe --quiet-mode --no-admin --root C:\cygwin64 --packages ddrescue`. |
+| **Drive found by probing, not hard-coded** | Cygwin numbers `/dev/srN` by Windows device index. On this box `/dev/sr0` is a phantom (`No such device`) and the BD-RE is `/dev/sr1`. The script reads one sector from each `srN` and requires exactly one to answer. |
+| **`-b 2048`** | The optical sector size, so ddrescue's block math matches the disc. |
+| **Completeness from the map, not the exit code** | ddrescue exits 0 when it *finishes*, not when it recovers everything. `ddrescuelog -t` gives the unrecovered byte count, and the script reports it. |
+| **Rips an incomplete image, loudly** | A gap usually costs a few seconds of picture. `transcode.ps1`'s frame and duration gates are the real check on the result. |
+
+**ddrescue does not decrypt.** The ISO is a raw copy, encryption included. If a
+**clean** disc fails at the start with AACS/key errors, that is copy protection,
+not damage, and imaging will not help. The BH16NS40 runs in **LibreDrive mode**
+(`makemkvcon -r info disc:0` → `Using LibreDrive mode`), which covers most of
+that case.
+
+The ISO is kept in `C:\media-work\rescue\` until you delete it (50 GB each, so
+clear them after a successful transcode). The script refuses to start below
+`-MinFreeGB` (default 55).

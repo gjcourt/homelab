@@ -112,7 +112,7 @@ $lockPath = Join-Path $WorkDir '.rescue.lock'
 try {
   $lock = [IO.File]::Open($lockPath, 'OpenOrCreate', 'ReadWrite', 'None')
 } catch {
-  Log "ABORT: another rescue-disc run holds $lockPath. One drive, one run."
+  Log "ABORT: cannot take $lockPath - another rescue-disc run holds it? One drive, one run. ($($_.Exception.Message))"
   exit 1
 }
 
@@ -215,12 +215,12 @@ try {
   # itself (status column: '+' rescued; '?', '*', '/', '-' all not), so the
   # count does not depend on the wording of ddrescuelog's human summary.
   $mapLines = Get-Content $map | Where-Object { $_ -match '^0x[0-9A-Fa-f]+\s+0x[0-9A-Fa-f]+\s+[?*/+-]' }
+  if (-not $mapLines) { Abort "could not parse any blocks from $map" }
   $bad = [int64]0
   foreach ($l in $mapLines) {
     $f = $l -split '\s+'
     if ($f[2] -ne '+') { $bad += [Convert]::ToInt64($f[1].Substring(2), 16) }
   }
-  if (-not $mapLines) { Abort "could not parse any blocks from $map" }
   TitleLedger 'IMAGED' @{ Bytes = (Get-Item $iso).Length; Src = $disc.Label; Dest = $iso; Note = "unrecovered=$bad" }
   if ($bad -gt 0) {
     Log ("UNRECOVERED: {0:N0} bytes ({1:N1} MB). Clean the disc or move it to another drive, then re-run the same command; only those areas are read again." -f $bad, ($bad / 1MB))
@@ -230,7 +230,7 @@ try {
 
   # ---- 6. decrypt -----------------------------------------------------------
   if (-not $Mkv) {
-    Log "next: re-run with -Mkv to rip $iso"
+    Log "next: re-run with -Mkv, disc still loaded, to rip $iso (the identity check and a no-op ddrescue pass run first)"
     Write-LedgerRun -Event 'RUN_END' -Note "imaged only, unrecovered=$bad"
     exit 0
   }
@@ -259,6 +259,12 @@ try {
   TitleLedger 'RIPPED' @{ Bytes = ($mkvs | Measure-Object Length -Sum).Sum; Src = $iso; Dest = $out; Note = "titles=$($mkvs.Count) unrecovered=$bad" }
   Write-LedgerRun -Event 'RUN_END' -Note "ripped titles=$($mkvs.Count) unrecovered=$bad"
   Log "done. Pick the main feature by duration before queueing it for transcode.ps1. Delete $iso once the transcode has landed."
+}
+catch {
+  # Anything not routed through Abort. A -Detach run discards stdout/stderr, so
+  # without this an unexpected error would leave no trace in the log and a
+  # RUN_START with no matching end in the ledger.
+  Abort "unexpected error: $($_.Exception.Message) (at line $($_.InvocationInfo.ScriptLineNumber))"
 }
 finally {
   $lock.Dispose()

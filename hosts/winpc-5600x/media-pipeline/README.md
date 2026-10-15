@@ -338,6 +338,21 @@ append-only and later rows win per `Src`. The verifier still re-hashes the
 library file before trusting any of them, so a wrong correction row blocks; it
 cannot clear anything by itself.
 
+Applying a correction file is a manual step, done once after its PR merges.
+Copy the file to hestia, then append it under the **same lock** `ledger.ps1`
+takes, so it cannot interleave with a row a running script is writing:
+
+```bash
+# on hestia, with the .tsv copied to /tmp
+sudo flock /mnt/main/archive/_inventory/rips/ledger.tsv.lock \
+  -c 'cat /tmp/2026-10-15-transcode-src.tsv >> /mnt/main/archive/_inventory/rips/ledger.tsv'
+```
+
+Then dry-run `verify-before-delete.ps1 -Mode Video` before any `-Delete`.
+Correction files must stay LF-only with 13 tab-separated fields, the ledger
+schema; a trailing CR rides into the `note` field, and the verifier silently
+skips a row with fewer than 12 fields.
+
 ## The library index, and why it is not in the ledger
 
 `index-library.sh` runs on hestia and emits `sha256 <TAB> bytes <TAB> relpath`.

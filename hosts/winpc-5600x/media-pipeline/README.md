@@ -318,6 +318,41 @@ then hashed — usually one file, never 1.6 TB. Nothing is ever judged *on* size
 a match of the right number of wrong bytes is precisely the failure
 `transcode.ps1` stopped accepting when it replaced its size check with a hash.
 
+### The `LANDED` row's `Src` is what a delete keys on
+
+For video the ledger row is the only link between a rip and its transcode, so
+the `Src` column decides **which local file** a verified library copy clears.
+Until 2026-10-14 `transcode.ps1` wrote `Src=$i.Src` — the preflight loop's
+variable, still holding the **last queued file** — instead of `$it.Src`. Every
+title in a multi-title run was recorded against that one path:
+
+| Effect | Seen |
+| :--- | :--- |
+| Real sources never matched, so they were never cleared | Godzilla, Mad Max, Marty Supreme, Kaguya — all recorded as `C:\Video\OLDBOY\title_t00.mkv` |
+| **Fail-open**: if the last queued title failed while an earlier one landed, the failed title's source would be "verified" against the other film and deleted | not hit — both deletions made under the bug (Oldboy 10/5, Wormhole S01E08 10/6) happened to be the last item *and* the last to land |
+
+The fix uses `$it.Src` and removes `$i` after preflight, so a regression writes
+an empty `Src`, which the verifier skips. Rows already written are corrected by
+**appending** rows with the true path (`ledger-corrections/`) — the ledger is
+append-only and later rows win per `Src`. The verifier still re-hashes the
+library file before trusting any of them, so a wrong correction row blocks; it
+cannot clear anything by itself.
+
+Applying a correction file is a manual step, done once after its PR merges.
+Copy the file to hestia, then append it under the **same lock** `ledger.ps1`
+takes, so it cannot interleave with a row a running script is writing:
+
+```bash
+# on hestia, with the .tsv copied to /tmp
+sudo flock /mnt/main/archive/_inventory/rips/ledger.tsv.lock \
+  -c 'cat /tmp/2026-10-15-transcode-src.tsv >> /mnt/main/archive/_inventory/rips/ledger.tsv'
+```
+
+Then dry-run `verify-before-delete.ps1 -Mode Video` before any `-Delete`.
+Correction files must stay LF-only with 13 tab-separated fields, the ledger
+schema; a trailing CR rides into the `note` field, and the verifier silently
+skips a row with fewer than 12 fields.
+
 ## The library index, and why it is not in the ledger
 
 `index-library.sh` runs on hestia and emits `sha256 <TAB> bytes <TAB> relpath`.

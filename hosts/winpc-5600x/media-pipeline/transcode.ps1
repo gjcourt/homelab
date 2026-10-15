@@ -165,6 +165,11 @@ foreach ($i in $items) {
                                   AChan = $achan; ADesc = $adesc }
 }
 Log ("== PREFLIGHT DONE: $($runnable.Count) to encode ==")
+# The preflight loop variable outlives its loop. Until 2026-10-14 the ENCODED and
+# LANDED rows below read $i.Src instead of $it.Src, so every title in a run was
+# recorded against the LAST queued file - and verify-before-delete keys on that
+# path. Drop it here so a stray $i is $null (no Src, never deletable), not wrong.
+Remove-Variable i
 VLedgerRun 'RUN_START' "queue=$Queue titles=$($items.Count) runnable=$($runnable.Count) bitrate=$Bitrate dryrun=$DryRun"
 VLedger 'QUEUED' @($runnable | ForEach-Object {
   [pscustomobject]@{ Scope='title'; Title=$_.Name; Src=$_.Src; Note='preflight passed' } })
@@ -312,7 +317,7 @@ foreach ($it in $runnable) {
   # Hash it, exactly as the music path does before it trusts a landed file.
   $localSha = (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash.ToLower()
   VLedger 'ENCODED' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$localSha; Bytes=$outLen
-                                         Src=$i.Src; Dest=$rel
+                                         Src=$it.Src; Dest=$rel
                                          Note="validated: duration, bitrate, decoded frame, audio [$($it.ADesc)]" })
 
   $tmp = "/tmp/mediapush_$([guid]::NewGuid().ToString('N')).mkv"
@@ -344,7 +349,7 @@ foreach ($it in $runnable) {
     # LANDED is written only here, after the hash is proven in the library, so a
     # row means "this film is there and it matched" - not "we pushed it".
     VLedger 'LANDED' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$remoteSha; Bytes=$remoteLen
-                                          Src=$i.Src; Dest=$rel; Note='sha256 verified on hestia' })
+                                          Src=$it.Src; Dest=$rel; Note='sha256 verified on hestia' })
     Remove-Item $local -Force
     VLedger 'LOCAL_DELETED' @([pscustomobject]@{ Scope='title'; Title=$name; Src=$local
                                                  Note='local copy removed after verification' })

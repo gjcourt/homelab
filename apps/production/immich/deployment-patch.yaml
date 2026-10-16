@@ -323,7 +323,7 @@ spec:
           # v3.0.1). When bumping, keep this and the base in step: take the
           # top-level `Digest:` from
           # `docker buildx imagetools inspect ghcr.io/immich-app/immich-machine-learning:vX.Y.Z`.
-          image: ghcr.io/immich-app/immich-machine-learning:v3.2.4@sha256:e16c2f166a8174901959fdf85e2e4c7bd1ebc4b37e0b6655de97c41408a260c4
+          image: ghcr.io/immich-app/immich-machine-learning:v3.3.3@sha256:73915f07e1f4289ba45b174c58443db74cef47ddf502613f475fc5e52458ea42
           securityContext:
             privileged: true
           env:

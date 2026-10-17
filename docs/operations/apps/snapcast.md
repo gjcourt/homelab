@@ -9,9 +9,9 @@ Snapcast is deployed as a Kubernetes `Deployment` with a single replica in the `
   - `snapserver`: The main Snapcast server that reads audio streams and serves them to clients.
   - `go-librespot` (Sidecar): An open-source Spotify client that acts as a Spotify Connect receiver. It outputs raw PCM audio to a shared named pipe (FIFO) that `snapserver` reads.
 - **Storage**:
-  - **Spotify State / Server State**: Uses a PersistentVolumeClaim (`snapcast-spotify-state`) backed by the `synology-iscsi` storage class. Both containers share this PVC:
+  - **Spotify State / Server State**: Uses a PersistentVolumeClaim (`snapcast-spotify-state`) backed by the `truenas-iscsi` storage class. Both containers share this PVC:
     - `go-librespot` mounts it at `/config` — stores `state.json` (Spotify OAuth credentials and device ID).
-    - `snapserver` mounts it at `/var/lib/snapserver` (`XDG_CONFIG_HOME`) — stores `snapserver/server.json` (client MAC addresses and their group/stream assignments). This persistence means kitchen and living-room stay on the `spotify` stream across pod restarts.
+    - `snapserver` mounts it at `/var/lib/snapserver` and runs with `HOME=/var/lib/snapserver` — stores `.config/snapserver/server.json` (client MACs, **volumes**, and group/stream assignments). snapserver writes to `$HOME/.config/` and ignores `XDG_CONFIG_HOME`; before #1255 `HOME` was `/tmp`, so every restart reset all clients to 100% volume. This persistence keeps volumes and stream assignments across pod restarts.
   - **Shared Audio**: Uses an `emptyDir` volume to share the named pipe (`/audio/spotify.fifo`) between the `go-librespot` sidecar and `snapserver`.
 - **Networking**:
   - The `snapcast` Service is a `LoadBalancer` (via Cilium IPAM) exposing:
@@ -118,10 +118,19 @@ go-librespot uses interactive OAuth (Spotify's PKCE flow). The one-time auth mus
 **Notes:**
 - The URL expires if the pod restarts. If the pod crashes during auth (it can happen if the callback arrives malformed), delete the pod to get a fresh URL: `kubectl delete pod -n snapcast-prod -l app=snapcast`
 - `zeroconf_enabled: false` in the go-librespot config means the device registers via Spotify cloud, not mDNS. "Snapcast" appears in the Spotify "Devices Available" list without needing mDNS propagation.
+- **Egress must allow TCP 4070.** go-librespot does OAuth and apresolve over 443, then connects to a Spotify access point on **4070**. With only 443 open it completes the token exchange, dies at the AP connect, and never persists credentials (`credentials.data: null`). That was the cause of the 2026-06 outage, fixed in #996 (`apps/base/snapcast/networkpolicy.yaml`). With 4070 open and credentials persisted, restarts reconnect on their own; re-auth is only needed after a password change or a Spotify-side revoke.
+- **Never request `/login` without a `code`.** go-librespot fatal-exits (`code must be supplied`) and the auth URL rotates. Health-check with `curl http://127.0.0.1:57622/` (root) instead.
+- **Completing auth from a phone.** The redirect target is `http://127.0.0.1:57622/login?code=…`, which on a phone points at the phone itself, so the page fails to load — but the address bar still holds the full URL with `code=`. Copy it and replay it from the Mac through the port-forward: `curl 'http://127.0.0.1:57622/login?code=…'`.
+- **Restarting only go-librespot** (to get a fresh URL without disrupting snapserver): the image has no `kill` binary (only the shell builtin) and PID 1 ignores SIGTERM, so kill the worker child from a shell loop:
+  ```bash
+  kubectl exec -n snapcast-prod deploy/snapcast -c go-librespot -- sh -c \
+    'for d in /proc/[0-9]*; do c=$(cat "$d/comm" 2>/dev/null); pid=${d#/proc/}; [ "$c" = go-librespot ] && [ "$pid" != 1 ] && kill "$pid"; done'
+  ```
+  Success after re-auth: logs show `authenticated AP` and `authenticated Login5`, and `state.json` has non-null `credentials.data`.
 
 ## 9. Disaster Recovery
 - **Backup Strategy**:
-  - **Spotify State + Server State**: The `snapcast-spotify-state` PVC stores both go-librespot credentials (`state.json`) and snapserver's client/stream assignments (`snapserver/server.json`). Backed up via Synology Snapshot Replication.
+  - **Spotify State + Server State**: The `snapcast-spotify-state` PVC stores both go-librespot credentials (`state.json`) and snapserver's client state (`.config/snapserver/server.json`). It is a hestia iSCSI volume, covered by hestia's ZFS snapshots.
   - **Config**: `snapserver.conf` and `go-librespot` config are in Git (ConfigMaps).
 - **Restore Procedure**:
   1. Restore the `snapcast-spotify-state` LUN via Synology DSM if necessary.

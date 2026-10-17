@@ -21,7 +21,9 @@ spec:
       # a persistent KubeJobFailed alert.
       # A hung model call must not wedge the CronJob: concurrencyPolicy is
       # Forbid, so one stuck Job would block every future run, silently.
-      activeDeadlineSeconds: 1800
+      # 2h: reviewers read a checkout at high effort, minutes per call, and the
+      # run must still finish before renovate-automerge's 06:00 pass.
+      activeDeadlineSeconds: 7200
       ttlSecondsAfterFinished: 3600
       backoffLimit: 0 # never retry: a re-run would duplicate PR comments
       template:
@@ -63,8 +65,9 @@ spec:
                   cpu: 100m
                   memory: 256Mi
                 # Claude Code is a Node process; 256Mi is not enough for it.
+                # Passes A and B run as two concurrent processes.
                 limits:
-                  memory: 1Gi
+                  memory: 2Gi
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
@@ -75,5 +78,6 @@ spec:
               configMap:
                 name: renovate-review-script
             - name: tmp
+              # Also holds one shallow PR checkout at a time (review.py WORK_ROOT).
               emptyDir:
-                sizeLimit: 256Mi
+                sizeLimit: 1Gi

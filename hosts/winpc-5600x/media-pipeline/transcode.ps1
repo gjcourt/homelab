@@ -43,6 +43,7 @@
   relative to media/video; it defaults to movies/<Library Name>, so existing
   movie queues are unchanged. TV: a dir like
   tv/Show (Year)/Season 01 with a name like Show (Year) - S01E01.
+  The dir must be under movies/, tv/, tv-anime/ or music-videos/.
 
 .EXAMPLE
   .\transcode.ps1 -Queue .\queue.tsv

@@ -69,7 +69,7 @@ episodes need it, because Jellyfin wants `Show (Year)/Season NN/` with the
 C:\Video\WORMD1543255\B1_t00.mkv	Through the Wormhole (2010) - S01E01	tv/Through the Wormhole (2010)/Season 01
 ```
 
-The directory must sit under `movies/`, `tv/` or `tv-anime/`. Names and
+The directory must sit under `movies/`, `tv/`, `tv-anime/` or `music-videos/`. Names and
 directories containing `'`, `..`, `\`, `:` or the other Windows-reserved
 characters are **skipped with a log line**: both are interpolated into
 single-quoted remote shell commands and Windows paths, so a stray apostrophe

@@ -43,6 +43,7 @@
   relative to media/video; it defaults to movies/<Library Name>, so existing
   movie queues are unchanged. TV: a dir like
   tv/Show (Year)/Season 01 with a name like Show (Year) - S01E01.
+  The dir must be under movies/, tv/, tv-anime/ or music-videos/.
 
 .EXAMPLE
   .\transcode.ps1 -Queue .\queue.tsv
@@ -132,8 +133,8 @@ foreach ($line in [IO.File]::ReadAllLines($Queue, [Text.UTF8Encoding]::new($fals
   # refuse anything that could escape the library root or break the quoting,
   # rather than land a file somewhere nobody will look for it.
   if ($nm -match '[\\/:*?"<>|'']') { Log "SKIP bad Library Name (path/quote chars): $l"; continue }
-  if ($dir -notmatch '^(movies|tv|tv-anime)/' -or $dir -match '\.\.|[\\:*?"<>|'']') {
-    Log "SKIP bad Library Dir (must be under movies/, tv/ or tv-anime/): $l"; continue
+  if ($dir -notmatch '^(movies|tv|tv-anime|music-videos)/' -or $dir -match '\.\.|[\\:*?"<>|'']') {
+    Log "SKIP bad Library Dir (must be under movies/, tv/, tv-anime/ or music-videos/): $l"; continue
   }
   $items += [pscustomobject]@{ Src = $parts[0].Trim(); Name = $nm; Dir = $dir }
 }

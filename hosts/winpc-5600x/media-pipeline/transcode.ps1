@@ -132,8 +132,8 @@ foreach ($line in [IO.File]::ReadAllLines($Queue, [Text.UTF8Encoding]::new($fals
   # refuse anything that could escape the library root or break the quoting,
   # rather than land a file somewhere nobody will look for it.
   if ($nm -match '[\\/:*?"<>|'']') { Log "SKIP bad Library Name (path/quote chars): $l"; continue }
-  if ($dir -notmatch '^(movies|tv|tv-anime)/' -or $dir -match '\.\.|[\\:*?"<>|'']') {
-    Log "SKIP bad Library Dir (must be under movies/, tv/ or tv-anime/): $l"; continue
+  if ($dir -notmatch '^(movies|tv|tv-anime|music-videos)/' -or $dir -match '\.\.|[\\:*?"<>|'']') {
+    Log "SKIP bad Library Dir (must be under movies/, tv/, tv-anime/ or music-videos/): $l"; continue
   }
   $items += [pscustomobject]@{ Src = $parts[0].Trim(); Name = $nm; Dir = $dir }
 }

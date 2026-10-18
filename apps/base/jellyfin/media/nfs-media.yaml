@@ -135,3 +135,46 @@ spec:
   resources:
     requests:
       storage: 1Ti
+---
+# Static PV for the hestia NFS music-videos library (Jellyfin "Music Videos" type).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: jellyfin-musicvideos-pv
+  labels:
+    app: jellyfin
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 10.42.2.10
+    path: /mnt/main/family/media/video/music-videos
+    readOnly: true
+  mountOptions:
+    - nfsvers=3
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+    - nolock
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-musicvideos-pvc
+  namespace: jellyfin
+  labels:
+    app: jellyfin
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  volumeName: jellyfin-musicvideos-pv
+  resources:
+    requests:
+      storage: 1Ti

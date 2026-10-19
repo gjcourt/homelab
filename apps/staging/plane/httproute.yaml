@@ -62,10 +62,24 @@ spec:
       backendRefs:
         - name: plane-space
           port: 3000
+    # The admin image's nginx answers a bare /god-mode with an absolute
+    # redirect to its own port (http://<host>:3000/god-mode/), which hangs
+    # the browser. Redirect it here instead so nginx never sees it.
+    - matches:
+        - path:
+            type: Exact
+            value: /god-mode
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /god-mode/
+            statusCode: 301
     - matches:
         - path:
             type: PathPrefix
-            value: /god-mode
+            value: /god-mode/
       backendRefs:
         - name: plane-admin
           port: 3000

@@ -38,27 +38,40 @@ four 5.1 tracks, 28.9 GB raw. Both hestia runs used `nice -n 19`.
 | Raw copy winpc → hestia, wired Realtek GbE | **4.1 min, 938 Mbps**, byte-identical (`cmp`) |
 
 **What this means:**
-- x265 does not scale one 1080p encode across 64 threads. Each Zen 4c core is
-  also slower than a 5600X core, so **parallelism is the whole win**.
+- x265 does not scale one 1080p encode across 64 threads. A lone encode on
+  hestia (0.99x) is no faster than one on winpc (1.0–1.4x), so
+  **parallelism is the whole win**.
 - Three slices running together each went *faster* (1.25x) than the lone
   encode. The lone run was partly slowed by a 29 GB `cmp` reading the disk at
   the same time.
 - A peak load of 46/64 means four concurrent encodes should fit. Five would
-  need measuring.
+  need measuring. Load average counts runnable threads, not CPU time, so this
+  is a proxy. Scaling 46 by 4/3 gives about 61, which is above the `cpus: 48`
+  cap below: a fourth slot would be throttled by that cap unless it is raised.
 - Since winpc moved to wired GbE (10-19), the hand-off costs about 4 min per
-  feature against about 2 h of encoding. **The network is not the bottleneck.**
-  10 GbE for winpc is not needed: there is no free PCIe slot, and its USB
-  ports are 5 Gbps.
+  feature against about 2 h of encoding. **The network is not the throughput
+  bottleneck.** 10 GbE for winpc is not needed: there is no free PCIe slot,
+  its USB ports are 5 Gbps, and hestia's own active NIC is 1 GbE too
+  (`enp201s0`; the 25 GbE card was removed 2026-05-14, see
+  `hosts/hestia/README.md`).
+- That same 1 GbE link carries the cluster's iSCSI and NFS traffic. A hand-off
+  at 938 Mbps nearly fills it for about 4 min per feature, so the hand-off is a
+  contention risk even though it is not a throughput limit.
 
 **Not measured:** how hestia's other jobs behave while it encodes. That means
-NFS latency for Jellyfin and Immich, ARC pressure, and the GHA runner.
+NFS latency for Jellyfin and Immich, ARC pressure, and the GHA runner. Also
+not measured: what a full-rate hand-off does to iSCSI and NFS latency on
+hestia's 1 GbE link.
 Phase 2 has to measure this before cut-over.
 
 ## Goal
 
 - winpc **rips and hands off**. hestia **encodes, gates, lands and records**.
 - **Throughput:** at least 3x today's titles per hour, without degrading
-  hestia's other services.
+  hestia's other services. At `SLOTS=3` the measured figures give 3.75x
+  against winpc at 1.0x but about 2.7x against winpc at 1.4x, and the 3.75x
+  came from 10-min slices of one title, not full titles. Meeting 3x may need
+  `SLOTS=4`; Phase 2 measures it on full titles.
 - **Every guard `transcode.ps1` has today is kept, and none are weakened:**
   - the frame-count gate
   - duration, bitrate and real-frame validation
@@ -68,6 +81,10 @@ Phase 2 has to measure this before cut-over.
   - `-Replace` semantics
   - ledger rows
   - verify-before-delete
+  - the `MinFreeGB` free-space floor, which becomes a floor on `main` checked
+    before each claim
+  - library ownership and mode (today `chown 1028:100` and `chmod 644` on the
+    `.incoming` file)
 - **Same output:** same encoder, same flags, same library layout and names.
   Jellyfin must not be able to tell which machine encoded a title.
 
@@ -110,6 +127,12 @@ verify-before-delete.ps1 -Mode Video    ◀── proves from LANDED rows, as to
   release tag and sha256** in the Dockerfile, so x265 is reproducible. Renovate
   tracks the tag. A bump changes encoder output, so it gets a shadow run
   (Phase 2) before it merges, and it is never automerged.
+  - That needs explicit config. `renovate.json` today automerges digest, pin,
+    patch and minor updates, including the `ghcr.io/gjcourt/**` date-sha
+    pins. Phase 1 adds a `packageRule` with `automerge: false` for both the
+    ffmpeg pin in the Dockerfile (which also needs a custom regex manager)
+    and the `ghcr.io/gjcourt/transcoder` pin in the compose file, since a new
+    image build can carry a new ffmpeg.
 - **Why Python and not PowerShell 7 on Linux:**
   - About half of `transcode.ps1`'s guards exist only for Windows quirks: the
     OEM codepage, Win32-OpenSSH stdout hangs, `Invoke-SshRead`, native stderr
@@ -122,7 +145,9 @@ verify-before-delete.ps1 -Mode Video    ◀── proves from LANDED rows, as to
     **excluded from snapshots** because it is scratch. It is outside
     `family/media/music`, so the alcatraz pull never sees it.
   - `/mnt/main/family/media/video`: read-write, the library.
-  - `/mnt/main/archive/_inventory/rips`: the ledger.
+  - `/mnt/main/archive/_inventory/rips`: the ledger. The worker appends under
+    the same `flock` on `ledger.tsv.lock` that `ledger.ps1` uses, so the slots
+    and winpc's `SUBMITTED` writes never interleave half-written lines.
 - **Limits:**
   - **Encode slots:** `SLOTS=3` to start, raised to 4 only after Phase 2
     measures it.
@@ -173,6 +198,7 @@ verify-before-delete.ps1 -Mode Video    ◀── proves from LANDED rows, as to
 6. **Land:**
    - Write to `<lib>/<name>.mkv.incoming` in the **library** dataset. It is a
      different dataset from `media-work`, so this is a copy, not a rename.
+   - Set ownership and mode as today (`1028:100`, `644`).
    - Hash it there, then rename it onto the final name.
    - `LANDED` records the hash.
 7. **Finish:**
@@ -180,9 +206,18 @@ verify-before-delete.ps1 -Mode Video    ◀── proves from LANDED rows, as to
    - **Any gate failure:** move it to `failed/<job>/` with `reason.txt`, keep
      the source, and write `VERIFY_FAIL`. Today's "keeping local" behaviour is
      unchanged; only the location moves.
+   - One small widening: today only the frame-count, audio-track and landing
+     failures write `VERIFY_FAIL`. The duration, bitrate and decoded-frame
+     failures only log. The worker writes `VERIFY_FAIL` for all of them.
 8. **Restart safety:** on startup, anything still in `work/` goes back to
    `inbox/` and its partial outputs are discarded. Encodes are re-runnable;
    only `LANDED` is a commitment.
+   - A crash during Land can also leave a `<lib>/<name>.mkv.incoming` file, or
+     a renamed final file with no `LANDED` row. Before the rename, the worker
+     writes the expected hash to `work/<job>/landing.sha`. On startup it
+     deletes any stray `.incoming` for a job in `work/`. If the final file
+     hashes to `landing.sha`, it writes the missing `LANDED` row instead of
+     re-encoding. Otherwise the job re-runs, and `-Replace` rules still apply.
 
 ### When winpc's raw copy may be deleted: decision needed
 
@@ -197,10 +232,23 @@ gain a second proof type: the `SUBMITTED` row's inbox file still exists and
 still hashes to the recorded sha256. It re-checks the file, as the `LANDED`
 proof does, rather than trusting the row.
 
+The job directory moves (`inbox/` → `work/` → `done/` or `failed/`), and the
+source is deleted from `done/` once it lands. So the proof has to look for the
+source in `inbox/<job>`, `work/<job>` or `failed/<job>`, or accept a `LANDED`
+row for the same `Src`. Checking `inbox/` alone would block deletion of any
+title a slot has already claimed.
+
 ### Observability
 
 - **homelabscope:** `homelabscope_job_last_success_seconds{job="transcoder"}`
   is touched on each `LANDED`, plus a queue-depth gauge (inbox + work).
+  - These go through the node-exporter textfile collector on hestia, like the
+    other hestia jobs, so the container needs that directory mounted.
+  - The generic `HomelabscopeJobStale` alert compares each job's age to its
+    own `max_age`. Discs arrive in batches, so a transcoder with an empty
+    queue would look stale. The worker should also touch the heartbeat on an
+    empty-queue poll, or carry a `max_age` that covers the gap between
+    batches. Phase 1 picks one.
 - **Alert:** a job that has sat in `work/` for more than 6 h, or a
   `failed/` directory that is not empty. Both use the existing email route.
 - **Logs:** the worker logs to stdout (`docker logs transcoder`), one line per
@@ -223,7 +271,8 @@ proof does, rather than trusting the row.
   3.75x already sitting idle on hestia.
 - **10 GbE for winpc.** It would save about 3 min per feature against roughly
   30 min of parallel encoding per feature. It would also need the GPU's only
-  PCIe slot or an M.2 adapter. Not worth it.
+  PCIe slot or an M.2 adapter, and it would save nothing until hestia also had
+  a faster NIC than its 1 GbE `enp201s0`. Not worth it.
 - **Encoding in the Talos cluster.** The workers would read 30–40 GB sources
   and write over NFS, and would compete with workloads that have SLOs. hestia
   is where the bytes already are.
@@ -237,3 +286,6 @@ proof does, rather than trusting the row.
    impact?
 3. **Inbox location:** a new `main/media-work` dataset excluded from
    snapshots, or an existing scratch dataset?
+4. **Hand-off rate:** cap `scp` (for example `-l`) so a hand-off cannot fill
+   hestia's 1 GbE link, or leave it uncapped unless Phase 2 shows iSCSI or
+   NFS impact?

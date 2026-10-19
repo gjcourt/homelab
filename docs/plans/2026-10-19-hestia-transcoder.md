@@ -194,8 +194,10 @@ verify-before-delete.ps1 -Mode Video    ◀── proves from LANDED rows, as to
    - a real decoded frame of at least `MinFrameKB`
    - the audio-track gate: same track count and channel counts
 5. **Subtitle mux:** after the encode, as today. The subtitle backpressure
-   deadlock was a pipe-buffer problem, and the post-encode mux keeps it from
-   coming back.
+   deadlock was a demuxer-backpressure problem: a sparse subtitle stream's
+   output queue never fills, so ffmpeg reads the whole source and drops most
+   video frames (see the `transcode.ps1` header). The post-encode copy pass
+   keeps it from coming back.
 6. **Land:**
    - Write to `<lib>/<name>.mkv.incoming` in the **library** dataset. It is a
      different dataset from `media-work`, so this is a copy, not a rename.
@@ -203,7 +205,8 @@ verify-before-delete.ps1 -Mode Video    ◀── proves from LANDED rows, as to
    - Hash it there, then rename it onto the final name.
    - `LANDED` records the hash.
 7. **Finish:**
-   - **Success:** move the job to `done/` and delete its source.
+   - **Success:** move the job to `done/`, delete its source, and record the
+     deletion in the ledger, as `LOCAL_DELETED` does today.
    - **Any gate failure:** move it to `failed/<job>/` with `reason.txt`, keep
      the source, and write `VERIFY_FAIL`. Today's "keeping local" behaviour is
      unchanged; only the location moves.

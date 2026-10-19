@@ -21,6 +21,9 @@ headerStyle: clean
 # exception: as of 2026-08-04 its order is set explicitly by George, not by the
 # heuristic (see the header of services.yaml). Staging never took the tab split,
 # so its layout was already this shape.
+# Homepage fits four groups per row by default; without this, the fifth
+# (Monitoring) wraps to a full-width row of its own.
+fiveColumns: true
 layout:
   Media:
     style: column

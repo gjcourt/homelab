@@ -391,12 +391,18 @@ views:
       heading: Audio / Visual Remotes
       heading_style: title
     - type: markdown
-      content: '**IR blaster offline** for {{ relative_time(states.button.ir_blaster_pl200_power.last_changed) if states.button.ir_blaster_pl200_power is not none else "an unknown time" }}. Its remotes are hidden until it reconnects.'
+      # No duration: last_changed resets on every HA restart, so it understates
+      # how long the blaster has been down.
+      content: '**IR blaster offline.** Its remotes are hidden until it reconnects.'
       visibility:
       - condition: state
         entity: button.ir_blaster_pl200_power
         state: unavailable
     - type: markdown
+      visibility:
+      - condition: state
+        entity: button.ir_blaster_pl200_power
+        state_not: unavailable
       content: 'IR blaster (ESP32) → Home Assistant. Tap a control to send the IR command to the device it points at. PL200 = SMSL CD player, D90 III Discrete = DAC.'
   - type: grid
     column_span: 3

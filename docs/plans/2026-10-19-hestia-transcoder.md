@@ -134,9 +134,10 @@ verify-before-delete.ps1 -Mode Video    ◀── proves from LANDED rows, as to
     and the `ghcr.io/gjcourt/transcoder` pin in the compose file, since a new
     image build can carry a new ffmpeg.
 - **Why Python and not PowerShell 7 on Linux:**
-  - About half of `transcode.ps1`'s guards exist only for Windows quirks: the
-    OEM codepage, Win32-OpenSSH stdout hangs, `Invoke-SshRead`, native stderr
-    under `Stop`.
+  - Many of the pipeline's guards exist only for Windows quirks: the OEM
+    codepage check and the Win32-OpenSSH stdout hangs behind `Invoke-SshRead`
+    (`transcode.ps1`, `ledger.ps1`), and native stderr under `Stop`
+    (`rescue-disc.ps1`, which stays on winpc).
   - The worker runs on the same box as the library, so the remote-read
     machinery disappears entirely.
   - Python keeps the gates small and testable.
@@ -259,8 +260,8 @@ title a slot has already claimed.
 | Phase | Work | Exit criterion |
 |---|---|---|
 | **0** | This plan, as a plan-only PR | George approves the design and the deletion option. |
-| **1** | Image and worker. **Gate tests** run in CI on lavfi-synthesised clips: no audio, one track dropped, a stereo downmix, truncation, and soft-telecined 23.976-in-29.97. The compose ships with `x-deploy.archived: true`. | CI is green. Every gate rejects its bad clip and passes the good one. |
-| **2** | **Shadow run.** Deploy the app, hand-submit 3–4 titles that winpc is also encoding, and compare the gate verdicts, durations and sizes. During one full-load night, record the NFS latency seen by Jellyfin and Immich pods, ARC hit rate and `node_load`. | Identical verdicts, sizes within 1%, and no measurable service impact at `SLOTS=3`. Then decide whether 4 slots is safe. |
+| **1** | Image and worker. **Gate tests** run in CI on lavfi-synthesised clips: no audio, one track dropped, a stereo downmix, truncation, and soft-telecined 23.976-in-29.97. The compose ships with `x-deploy.archived: true`. The Renovate `automerge: false` rule lands here, and the heartbeat choice for an idle queue is made here. | CI is green. Every gate rejects its bad clip and passes the good one. |
+| **2** | **Shadow run.** Deploy the app, hand-submit 3–4 titles that winpc is also encoding, and compare the gate verdicts, durations and sizes. During one full-load night, record the NFS latency seen by Jellyfin and Immich pods, ARC hit rate and `node_load`. Record iSCSI and NFS latency during at least one full-rate hand-off. Run the full-title throughput against the 3x goal. | Identical verdicts, sizes within 1%, and no measurable service impact at `SLOTS=3`. Then decide whether 4 slots is safe. |
 | **3** | Cut over. `submit.ps1` becomes the default and `transcode.ps1` stays as `-Local` fallback. `verify-before-delete.ps1` gains the `SUBMITTED` proof if option B is chosen. Runbook updated. | One real disc batch lands entirely through hestia. |
 | **4** | Retire the winpc encode loop after two clean batches. Keep `transcode.ps1` encode-only code for one release, then delete it. | `media-pipeline/README.md` describes the new flow. |
 

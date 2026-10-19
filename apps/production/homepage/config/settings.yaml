@@ -1,7 +1,8 @@
 title: BurntBytes Home
 description: Production Environment
 headerStyle: clean
-# Single page, four columns — no tabs. The Home/Admin tab split (#1171) was
+# Single page, five columns — no tabs (Tools became Home & Life plus Notes &
+# Learning on 2026-10-19). The Home/Admin tab split (#1171) was
 # tried for ~2 weeks and reverted 2026-08-04: hiding Infrastructure and
 # Monitoring behind a tab optimized for a clean first paint, but the dashboard's
 # actual job is showing at a glance everything that's available. A tab you have
@@ -24,7 +25,10 @@ layout:
   Media:
     style: column
     rows: 10
-  Tools:
+  Home & Life:
+    style: column
+    rows: 10
+  Notes & Learning:
     style: column
     rows: 10
   Infrastructure:

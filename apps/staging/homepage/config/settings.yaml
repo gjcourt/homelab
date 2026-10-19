@@ -5,7 +5,10 @@ layout:
   Media:
     style: column
     rows: 8
-  Tools:
+  Home & Life:
+    style: column
+    rows: 8
+  Notes & Learning:
     style: column
     rows: 8
   Infrastructure:

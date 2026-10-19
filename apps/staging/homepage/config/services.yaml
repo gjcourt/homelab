@@ -25,12 +25,24 @@
         description: Audiobook and podcast server
         siteMonitor: https://audiobooks.stage.burntbytes.com
 
-- Tools:
+- Home & Life:
     - Vibrato:
         icon: mdi-coffee-maker
         href: https://vibrato.stage.burntbytes.com
         description: Espresso machine monitor & control (ito + leva!)
         siteMonitor: https://vibrato.stage.burntbytes.com/healthz
+    - Mealie:
+        icon: mealie.png
+        href: https://mealie.stage.burntbytes.com
+        description: Recipe management
+        siteMonitor: https://mealie.stage.burntbytes.com
+    - Vitals:
+        icon: mdi-heart-pulse
+        href: https://vitals.stage.burntbytes.com
+        description: Health and fitness tracker
+        siteMonitor: https://vitals.stage.burntbytes.com
+
+- Notes & Learning:
     - Memos:
         icon: memos.png
         href: https://memos.stage.burntbytes.com
@@ -41,11 +53,6 @@
         href: https://links.stage.burntbytes.com
         description: Bookmark manager
         siteMonitor: https://links.stage.burntbytes.com
-    - Mealie:
-        icon: mealie.png
-        href: https://mealie.stage.burntbytes.com
-        description: Recipe management
-        siteMonitor: https://mealie.stage.burntbytes.com
     - Excalidraw:
         icon: excalidraw.png
         href: https://excalidraw.stage.burntbytes.com
@@ -56,11 +63,6 @@
         href: https://flashcards.stage.burntbytes.com
         description: Spaced-repetition flashcards (FSRS)
         siteMonitor: https://flashcards.stage.burntbytes.com/healthz
-    - Vitals:
-        icon: mdi-heart-pulse
-        href: https://vitals.stage.burntbytes.com
-        description: Health and fitness tracker
-        siteMonitor: https://vitals.stage.burntbytes.com
     - Open WebUI:
         icon: open-webui.png
         href: https://chat.stage.burntbytes.com

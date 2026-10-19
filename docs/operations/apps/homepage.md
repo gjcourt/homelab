@@ -83,7 +83,12 @@ Verify the beacon:
 kubectl -n homepage-prod exec deploy/homepage-clicks -- wget -qO- localhost:8080/metrics | grep homepage_tile_clicks_total
 ```
 
-### Layout: one page, four columns + within-group order
+### Layout: one page, five columns + within-group order
+- **Tools was split on 2026-10-19** into **Home & Life** (Vibrato, Mealie, Vitals, Ladder,
+  Finance) and **Notes & Learning** (Memos, Linkding, Excalidraw, Flashcards, Open WebUI,
+  Changes, Kokoro). It had grown to 12 tiles against 5-6 in the other columns. Both halves keep
+  George's Tools order below, so the Tools rules below apply to both. Every one of those tiles
+  changed group, so their click series fork at that date (see the group-move note below).
 - **No tabs.** Every group renders on a single page as a column (`layout.<group>.style: column`).
   The Home/Admin tab split (#1171) was reverted in #1272: a tab you have to remember to click
   hides what the dashboard exists to show. Do not reintroduce `layout.<group>.tab`.

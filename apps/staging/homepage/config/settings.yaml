@@ -1,8 +1,8 @@
 title: BurntBytes Staging
 description: Staging Environment
 headerStyle: clean
-# Homepage fits four groups per row by default; without this, the fifth
-# (Monitoring) wraps to a full-width row of its own.
+# Five groups in one row from 1800px. Narrower, base custom.css lays them
+# out as rows of 3 and 2 (Homepage would otherwise do 4 and 1).
 fiveColumns: true
 layout:
   Media:

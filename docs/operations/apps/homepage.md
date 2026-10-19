@@ -89,6 +89,9 @@ kubectl -n homepage-prod exec deploy/homepage-clicks -- wget -qO- localhost:8080
   Changes, Kokoro). It had grown to 12 tiles against 5-6 in the other columns. Both halves keep
   George's Tools order below, so the Tools rules below apply to both. Every one of those tiles
   changed group, so their click series fork at that date (see the group-move note below).
+- **Rows by width.** One row of five from 1800px (`fiveColumns: true`); 1280-1799px is rows of
+  3 and 2 (a `custom.css` override of Homepage's 4-per-row xl rule, which left Monitoring alone
+  on a full-width row); narrower falls back to Homepage's thirds, halves, then one column.
 - **No tabs.** Every group renders on a single page as a column (`layout.<group>.style: column`).
   The Home/Admin tab split (#1171) was reverted in #1272: a tab you have to remember to click
   hides what the dashboard exists to show. Do not reintroduce `layout.<group>.tab`.

@@ -29,7 +29,7 @@ views:
         columns: 9
     - type: custom:mushroom-template-card
       primary: All Lights Off
-      secondary: "{{ states('sensor.lights_on') }} on"
+      secondary: "{{ states('sensor.lights_on') ~ ' on' if states('sensor.lights_on') | is_number else '— (count unavailable)' }}"
       icon: mdi:lightbulb-group-off
       icon_color: "{{ 'amber' if states('sensor.lights_on') | int(0) > 0 else 'disabled' }}"
       layout: vertical
@@ -69,7 +69,7 @@ views:
       features:
       - type: media-player-volume-slider
     - type: tile
-      entity: media_player.office_snapcast_client
+      entity: media_player.office_snapcast_client_2
       name: Office
       icon: mdi:desk
       features:
@@ -87,35 +87,35 @@ views:
     - type: custom:mushroom-template-card
       primary: Kitchen
       icon: mdi:silverware-fork-knife
-      icon_color: "{{ 'amber' if ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: navigate
         navigation_path: area-kitchen
     - type: custom:mushroom-template-card
       primary: Front Foyer
       icon: mdi:door
-      icon_color: "{{ 'amber' if ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: navigate
         navigation_path: area-front-foyer
     - type: custom:mushroom-template-card
       primary: Hallway
       icon: mdi:door-sliding
-      icon_color: "{{ 'amber' if ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: navigate
         navigation_path: area-hallway
     - type: custom:mushroom-template-card
       primary: Master Bedroom
       icon: mdi:bed
-      icon_color: "{{ 'amber' if ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: navigate
         navigation_path: area-master-bedroom
     - type: custom:mushroom-template-card
       primary: Master Bathroom
       icon: mdi:shower
-      icon_color: "{{ 'amber' if ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: navigate
         navigation_path: area-master-bathroom
@@ -379,7 +379,7 @@ views:
       features:
       - type: media-player-volume-slider
     - type: tile
-      entity: media_player.office_snapcast_client
+      entity: media_player.office_snapcast_client_2
       name: Office
       icon: mdi:desk
       features:
@@ -391,9 +391,19 @@ views:
       heading: Audio / Visual Remotes
       heading_style: title
     - type: markdown
+      content: '**IR blaster offline** for {{ relative_time(states.button.ir_blaster_pl200_power.last_changed) if states.button.ir_blaster_pl200_power is not none else "an unknown time" }}. Its remotes are hidden until it reconnects.'
+      visibility:
+      - condition: state
+        entity: button.ir_blaster_pl200_power
+        state: unavailable
+    - type: markdown
       content: 'IR blaster (ESP32) → Home Assistant. Tap a control to send the IR command to the device it points at. PL200 = SMSL CD player, D90 III Discrete = DAC.'
   - type: grid
     column_span: 3
+    visibility:
+    - condition: state
+      entity: button.ir_blaster_pl200_power
+      state_not: unavailable
     cards:
     - type: heading
       heading: SMSL PL200 — Playback
@@ -436,6 +446,10 @@ views:
       color: green
   - type: grid
     column_span: 3
+    visibility:
+    - condition: state
+      entity: button.ir_blaster_pl200_menu
+      state_not: unavailable
     cards:
     - type: heading
       heading: SMSL PL200 — Functions
@@ -460,42 +474,50 @@ views:
       name: Repeat
   - type: grid
     column_span: 3
+    visibility:
+    - condition: state
+      entity: button.ir_blaster_pl200_1
+      state_not: unavailable
     cards:
     - type: heading
       heading: SMSL PL200 — Track Select
       heading_style: title
     - type: tile
       entity: button.ir_blaster_pl200_1
-      name: 1
+      name: "1"
     - type: tile
       entity: button.ir_blaster_pl200_2
-      name: 2
+      name: "2"
     - type: tile
       entity: button.ir_blaster_pl200_3
-      name: 3
+      name: "3"
     - type: tile
       entity: button.ir_blaster_pl200_4
-      name: 4
+      name: "4"
     - type: tile
       entity: button.ir_blaster_pl200_5
-      name: 5
+      name: "5"
     - type: tile
       entity: button.ir_blaster_pl200_6
-      name: 6
+      name: "6"
     - type: tile
       entity: button.ir_blaster_pl200_7
-      name: 7
+      name: "7"
     - type: tile
       entity: button.ir_blaster_pl200_8
-      name: 8
+      name: "8"
     - type: tile
       entity: button.ir_blaster_pl200_9
-      name: 9
+      name: "9"
     - type: tile
       entity: button.ir_blaster_pl200_0
-      name: 0
+      name: "0"
   - type: grid
     column_span: 3
+    visibility:
+    - condition: state
+      entity: button.ir_blaster_d90_iii_discrete_power
+      state_not: unavailable
     cards:
     - type: heading
       heading: D90 III Discrete (DAC)
@@ -545,6 +567,10 @@ views:
       name: Brightness
   - type: grid
     column_span: 3
+    visibility:
+    - condition: state
+      entity: button.ir_blaster_dx5_ii_power
+      state_not: unavailable
     cards:
     - type: heading
       heading: DX5 II (DAC / Amp)
@@ -594,6 +620,10 @@ views:
       name: Brightness
   - type: grid
     column_span: 3
+    visibility:
+    - condition: state
+      entity: button.ir_blaster_d30_pro_d50s_power
+      state_not: unavailable
     cards:
     - type: heading
       heading: D30 Pro / D50s (DAC)
@@ -641,55 +671,6 @@ views:
     - type: tile
       entity: button.ir_blaster_d30_pro_d50s_m
       name: M
-  - type: grid
-    column_span: 3
-    cards:
-    - type: heading
-      heading: TOPPING BC-15A (generic)
-      heading_style: title
-    - type: tile
-      entity: button.ir_blaster_topping_power
-      name: Power
-      color: red
-    - type: tile
-      entity: button.ir_blaster_topping_mute
-      name: Mute
-      color: amber
-    - type: tile
-      entity: button.ir_blaster_topping_volume_down
-      name: Vol −
-      color: blue
-    - type: tile
-      entity: button.ir_blaster_topping_volume_up
-      name: Vol +
-      color: blue
-    - type: tile
-      entity: button.ir_blaster_topping_previous
-      name: Previous
-    - type: tile
-      entity: button.ir_blaster_topping_next
-      name: Next
-    - type: tile
-      entity: button.ir_blaster_topping_menu
-      name: Menu
-    - type: tile
-      entity: button.ir_blaster_topping_output
-      name: Output
-    - type: tile
-      entity: button.ir_blaster_topping_auto
-      name: Auto
-    - type: tile
-      entity: button.ir_blaster_topping_fir
-      name: Filter
-    - type: tile
-      entity: button.ir_blaster_topping_brightness
-      name: Brightness
-    - type: tile
-      entity: button.ir_blaster_topping_c1
-      name: C1
-    - type: tile
-      entity: button.ir_blaster_topping_c2
-      name: C2
 - title: Lights
   theme: Tinted
   path: lights
@@ -709,9 +690,9 @@ views:
       icon: mdi:silverware-fork-knife
     - type: custom:mushroom-template-card
       primary: All Kitchen Lights
-      secondary: "{{ ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -780,9 +761,9 @@ views:
       icon: mdi:sofa
     - type: custom:mushroom-template-card
       primary: All Living Room Lights
-      secondary: "{{ ['light.living_room_sconces'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.living_room_sconces'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.living_room_sconces'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.living_room_sconces'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -815,9 +796,9 @@ views:
       icon: mdi:table-furniture
     - type: custom:mushroom-template-card
       primary: All Dining Room Lights
-      secondary: "{{ ['light.dining_room_sconces', 'light.0xa4c138b55dac7973', 'light.0xa4c138a9f6011cac'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.dining_room_sconces', 'light.0xa4c138b55dac7973', 'light.0xa4c138a9f6011cac'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.dining_room_sconces', 'light.0xa4c138b55dac7973', 'light.0xa4c138a9f6011cac'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.dining_room_sconces', 'light.0xa4c138b55dac7973', 'light.0xa4c138a9f6011cac'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -884,9 +865,9 @@ views:
       icon: mdi:door
     - type: custom:mushroom-template-card
       primary: All Front Foyer Lights
-      secondary: "{{ ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -937,9 +918,9 @@ views:
       icon: mdi:door-sliding
     - type: custom:mushroom-template-card
       primary: All Hallway Lights
-      secondary: "{{ ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -990,9 +971,9 @@ views:
       icon: mdi:bed
     - type: custom:mushroom-template-card
       primary: All Master Bedroom Lights
-      secondary: "{{ ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1079,9 +1060,9 @@ views:
       icon: mdi:shower
     - type: custom:mushroom-template-card
       primary: All Master Bathroom Lights
-      secondary: "{{ ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1132,9 +1113,9 @@ views:
       icon: mdi:desk
     - type: custom:mushroom-template-card
       primary: All Office Lights
-      secondary: "{{ ['light.office_main_lights'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.office_main_lights'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.office_main_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.office_main_lights'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1167,9 +1148,9 @@ views:
       icon: mdi:bed
     - type: custom:mushroom-template-card
       primary: All Niccolo Bedroom Lights
-      secondary: "{{ ['light.niccolo_bedroom_main_lights'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.niccolo_bedroom_main_lights'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.niccolo_bedroom_main_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.niccolo_bedroom_main_lights'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1202,9 +1183,9 @@ views:
       icon: mdi:cradle
     - type: custom:mushroom-template-card
       primary: All Nursery Bedroom Lights
-      secondary: "{{ ['light.nursery_bedroom_main_lights', 'light.nursery_bedroom_closet_light'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.nursery_bedroom_main_lights', 'light.nursery_bedroom_closet_light'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.nursery_bedroom_main_lights', 'light.nursery_bedroom_closet_light'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.nursery_bedroom_main_lights', 'light.nursery_bedroom_closet_light'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1255,9 +1236,9 @@ views:
       icon: mdi:toilet
     - type: custom:mushroom-template-card
       primary: All Hall Bathroom Lights
-      secondary: "{{ ['light.hall_bathroom_main_lights', 'light.hall_bathroom_vanity_lights'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.hall_bathroom_main_lights', 'light.hall_bathroom_vanity_lights'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.hall_bathroom_main_lights', 'light.hall_bathroom_vanity_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.hall_bathroom_main_lights', 'light.hall_bathroom_vanity_lights'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1308,9 +1289,9 @@ views:
       icon: mdi:toilet
     - type: custom:mushroom-template-card
       primary: All Powder Bathroom Lights
-      secondary: "{{ ['light.powder_bathroom_chandelier'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.powder_bathroom_chandelier'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.powder_bathroom_chandelier'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.powder_bathroom_chandelier'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1343,9 +1324,9 @@ views:
       icon: mdi:cupboard
     - type: custom:mushroom-template-card
       primary: All Butler Pantry Lights
-      secondary: "{{ ['light.butler_pantry_main_lights'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.butler_pantry_main_lights'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.butler_pantry_main_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.butler_pantry_main_lights'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1378,9 +1359,9 @@ views:
       icon: mdi:washing-machine
     - type: custom:mushroom-template-card
       primary: All Laundry Room Lights
-      secondary: "{{ ['light.laundry_room_main_lights', 'light.laundry_room_cove'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.laundry_room_main_lights', 'light.laundry_room_cove'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.laundry_room_main_lights', 'light.laundry_room_cove'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.laundry_room_main_lights', 'light.laundry_room_cove'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1431,9 +1412,9 @@ views:
       icon: mdi:home-outline
     - type: custom:mushroom-template-card
       primary: All Exterior Lights
-      secondary: "{{ ['light.exterior_east', 'light.exterior_west'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.exterior_east', 'light.exterior_west'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.exterior_east', 'light.exterior_west'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.exterior_east', 'light.exterior_west'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1495,9 +1476,9 @@ views:
       icon: mdi:door
     - type: custom:mushroom-template-card
       primary: All Front Foyer Lights
-      secondary: "{{ ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1570,9 +1551,9 @@ views:
       icon: mdi:silverware-fork-knife
     - type: custom:mushroom-template-card
       primary: All Kitchen Lights
-      secondary: "{{ ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1665,9 +1646,9 @@ views:
       icon: mdi:door-sliding
     - type: custom:mushroom-template-card
       primary: All Hallway Lights
-      secondary: "{{ ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.hallway_long', 'light.hallway_landing'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1740,9 +1721,9 @@ views:
       icon: mdi:bed
     - type: custom:mushroom-template-card
       primary: All Master Bedroom Lights
-      secondary: "{{ ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle
@@ -1855,9 +1836,9 @@ views:
       icon: mdi:shower
     - type: custom:mushroom-template-card
       primary: All Master Bathroom Lights
-      secondary: "{{ ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count }} on"
+      secondary: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
       icon: mdi:lightbulb-group
-      icon_color: "{{ 'amber' if ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] | select('is_state', 'on') | list | count > 0 else 'disabled' }}"
+      icon_color: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
         action: perform-action
         perform_action: script.smart_light_toggle

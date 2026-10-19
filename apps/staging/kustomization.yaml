@@ -25,6 +25,7 @@ resources:
   - navidrome
   - netscope
   - openwebui
+  - plane
   - snapcast
   - vibrato
   - vitals

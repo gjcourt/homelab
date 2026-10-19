@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 last_modified: 2026-10-18
 summary: "Self-hosted Plane CE (the tracker for lab 03-042's agent desk) on staging: Flux HelmRelease of plane-ce with post-render fixes, CNPG Postgres, LAN/VPN only, in-cluster webhooks to the dispatcher, restore drill before production"
 ---
@@ -83,6 +83,13 @@ their rendered output would drift. So:
 `restricted`. If the Plane images can't run as non-root (#339 says they run as root today), the
 fallback is `baseline` on `plane-stage` only, recorded here with the reason. Step 3 finds out
 which.
+
+*Recorded 2026-10-18 (manifests PR):* the namespace enforces `baseline` and audits and warns at
+`restricted`. From the Dockerfiles: the web and admin images are nginx built to start as root,
+and the chart-local Valkey, RabbitMQ and MinIO (plus its bucket Job) chown their data, so those
+six can't meet `restricted` without image changes. The backend (api, workers, migrator), space and
+live run as uid 1000 with all capabilities dropped, and a server-side dry run shows they pass
+`restricted`. Step 3 confirms they actually start that way.
 
 ### Backing services
 

@@ -1,0 +1,57 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: plane-db-staging-cnpg-v1
+  namespace: plane-stage
+
+spec:
+  description: Postgres cluster for Plane
+  # Postgres 15: what Plane ships and tests (its Compose file and chart bundle
+  # 15.7). Plane documents no supported range, so moving to 17 like the other
+  # apps is its own change after an upgrade test.
+  imageName: ghcr.io/cloudnative-pg/postgresql:15.19
+
+  instances: 1
+
+  inheritedMetadata:
+    labels:
+      app: plane-database
+      env: staging
+      policy-type: "database"
+
+  monitoring:
+    enablePodMonitor: true
+
+  # Cross-cluster spread: see apps/production/golinks/database.yaml.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          policy-type: database
+
+  storage:
+    storageClass: truenas-iscsi
+    size: 2Gi
+
+  postgresql:
+    parameters:
+      # Small DB on a small volume: right-size WAL as memos does.
+      max_wal_size: "256MB"
+      wal_keep_size: "128MB"
+      max_slot_wal_keep_size: "256MB"
+
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: plane-db-staging-cnpg-v1-backup
+        serverName: plane-db-staging-cnpg-v1-v1
+
+  # No owner secret: CNPG generates plane-db-staging-cnpg-v1-app, whose `uri`
+  # key becomes Plane's DATABASE_URL (see release-patch.yaml).
+  bootstrap:
+    initdb:
+      database: app
+      owner: app

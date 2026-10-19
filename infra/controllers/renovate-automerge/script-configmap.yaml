@@ -102,6 +102,15 @@ data:
         "oven/bun", "denoland/deno",
     }
 
+    # Packages held for review whatever the update type: Home Assistant's
+    # monthly release is a "minor" to Renovate (2026.9 -> 2026.10) but carries
+    # breaking changes and one-way config migrations. renovate.json holds it
+    # from Renovate's own automerge too. Matched on the whole name, like
+    # RUNTIME_DEPS.
+    HELD_DEPS = {
+        "ghcr.io/home-assistant/home-assistant",
+    }
+
     # Renovate renders the arrow as a literal, an entity, or '->' depending
     # on the platform and on whether the cell is inside a link.
     _ARROW = r"(?:->|-&gt;|\u2192|&#8594;|&rarr;)"
@@ -352,6 +361,20 @@ data:
         return found
 
 
+    def held_deps_in_table(table):
+        """HELD_DEPS named anywhere in Renovate's summary table."""
+        found = set()
+        for line in table.splitlines():
+            line = line.strip()
+            if not line.startswith("|"):
+                continue
+            for cell in line.strip("|").split("|"):
+                name = _cell_name(cell)
+                if name in HELD_DEPS:
+                    found.add(name)
+        return found
+
+
     def classify_pr(pr):
         """Return (safe: bool, reason: str) based on title and PR body."""
         title = pr["title"].lower()
@@ -368,6 +391,9 @@ data:
         runtimes = runtime_deps_in_table(table)
         if runtimes:
             return False, "language runtime upgrade: " + ", ".join(sorted(runtimes))
+        held = held_deps_in_table(table)
+        if held:
+            return False, "held for review: " + ", ".join(sorted(held))
 
         # Preferred signal: the explicit Update column. The closing pipe is
         # matched by lookahead rather than consumed, so two type words that
@@ -412,8 +438,8 @@ data:
         # a PR whose table we could not read is exactly the case to fail closed
         # on rather than fall through to a version-string comparison.
         if any(re.search(r"(?<![\w./-])" + re.escape(d) + r"(?![\w./-])", title)
-               for d in RUNTIME_DEPS):
-            return False, "possible runtime upgrade, unreadable update table"
+               for d in RUNTIME_DEPS | HELD_DEPS):
+            return False, "possible runtime or held-package upgrade, unreadable update table"
 
         # Digest pins are content-addressed -- same logical version -- but
         # trust the title only once the table has said nothing, and only for

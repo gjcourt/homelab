@@ -51,17 +51,17 @@ four 5.1 tracks, 28.9 GB raw. Both hestia runs used `nice -n 19`.
 - Since winpc moved to wired GbE (10-19), the hand-off costs about 4 min per
   feature against about 2 h of encoding. **The network is not the throughput
   bottleneck.** 10 GbE for winpc is not needed: there is no free PCIe slot,
-  its USB ports are 5 Gbps, and hestia's own active NIC is 1 GbE too
-  (`enp201s0`; the 25 GbE card was removed 2026-05-14, see
-  `hosts/hestia/README.md`).
-- That same 1 GbE link carries the cluster's iSCSI and NFS traffic. A hand-off
-  at 938 Mbps nearly fills it for about 4 min per feature, so the hand-off is a
-  contention risk even though it is not a throughput limit.
+  and its USB ports are 5 Gbps.
+- hestia is on **10 GbE** (`enp13s0f0np0`, link up at 10000 Mb/s, checked
+  2026-10-19); its onboard 1 GbE ports are down. A hand-off at winpc's 1 Gbps
+  uses about a tenth of that link, which also carries the cluster's iSCSI and
+  NFS traffic. ⚠️ `hosts/hestia/README.md` still names the 1 GbE `enp201s0` as
+  the active NIC; that is stale and should be fixed separately.
 
 **Not measured:** how hestia's other jobs behave while it encodes. That means
 NFS latency for Jellyfin and Immich, ARC pressure, and the GHA runner. Also
-not measured: what a full-rate hand-off does to iSCSI and NFS latency on
-hestia's 1 GbE link.
+not measured: whether a 1 Gbps hand-off moves iSCSI or NFS latency on the
+10 GbE link. That is unlikely at a tenth of the link, but it is unmeasured.
 Phase 2 has to measure this before cut-over.
 
 ## Goal
@@ -275,8 +275,7 @@ title a slot has already claimed.
   3.75x already sitting idle on hestia.
 - **10 GbE for winpc.** It would save about 3 min per feature against roughly
   30 min of parallel encoding per feature. It would also need the GPU's only
-  PCIe slot or an M.2 adapter, and it would save nothing until hestia also had
-  a faster NIC than its 1 GbE `enp201s0`. Not worth it.
+  PCIe slot or an M.2 adapter. Not worth it.
 - **Encoding in the Talos cluster.** The workers would read 30–40 GB sources
   and write over NFS, and would compete with workloads that have SLOs. hestia
   is where the bytes already are.
@@ -290,6 +289,6 @@ title a slot has already claimed.
    impact?
 3. **Inbox location:** a new `main/media-work` dataset excluded from
    snapshots, or an existing scratch dataset?
-4. **Hand-off rate:** cap `scp` (for example `-l`) so a hand-off cannot fill
-   hestia's 1 GbE link, or leave it uncapped unless Phase 2 shows iSCSI or
-   NFS impact?
+4. **Hand-off rate:** leave `scp` uncapped (it is bounded by winpc's 1 GbE,
+   about a tenth of hestia's 10 GbE link), and add a cap only if Phase 2 shows
+   iSCSI or NFS impact?

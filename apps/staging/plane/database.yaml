@@ -65,6 +65,11 @@ spec:
   bootstrap:
     recovery:
       source: plane-db-backup
+      # Pin the original cluster's base backup. The fresh clusters created during
+      # the prune wrote base backups of their own (empty) databases into v1 too,
+      # and recovery otherwise picks the newest, which can't replay v1's WAL.
+      recoveryTarget:
+        backupID: 20261019T033306
       database: app
       owner: app
 

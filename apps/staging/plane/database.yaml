@@ -49,15 +49,19 @@ spec:
   #        the recovery bootstrap reached it. Empty data; don't restore from it.
   #   v3 — same: that fresh cluster picked v3 up and archived to it before it
   #        was deleted. Don't restore from it.
-  #   v4 — archive after restoring from v1. The archiver needs an empty path, so
-  #        bump on every future restore or recreate, and change it only while
-  #        no cluster is running, or the running one archives into it.
+  #   v4 — archive after restoring from v1: WAL 07:49Z-08:29Z, no base backup.
+  #        The cluster was pruned at ~08:30Z when this PR went CONFLICTING and
+  #        the staging rebuild dropped it.
+  #   v5 — archive after the second restore from v1. The archiver needs an
+  #        empty path, so bump on every future restore or recreate, and change
+  #        it only while no cluster is running, or the running one archives
+  #        into it.
   plugins:
     - name: barman-cloud.cloudnative-pg.io
       isWALArchiver: true
       parameters:
         barmanObjectName: plane-db-staging-cnpg-v1-backup
-        serverName: plane-db-staging-cnpg-v1-v4
+        serverName: plane-db-staging-cnpg-v1-v5
 
   # Restored from v1 (plan step 6, the restore drill). No owner secret: CNPG
   # generates plane-db-staging-cnpg-v1-app, whose `uri` key becomes Plane's

@@ -1,6 +1,6 @@
 services:
   runner:
-    image: myoung34/github-runner:ubuntu-noble@sha256:537853e225fffdc0a67602ffff563b6ab1b170c6191451ee9bb445b14bf1f95a
+    image: myoung34/github-runner:ubuntu-noble@sha256:55569c4b07dfa9ee7b46cd2e6284d017baed3dabce6df39caaccba49b591051b
     container_name: gha-runner
     restart: unless-stopped
     environment:

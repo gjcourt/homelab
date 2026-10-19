@@ -59,9 +59,14 @@ jobs:
           MERGED=0
           SKIPPED=0
 
-          # Get list of open, mergeable PRs targeting master
+          # Get open PRs targeting master, skipping only known conflicts.
+          # Right after master moves, GitHub reports every PR as UNKNOWN until
+          # it recomputes mergeability. Requiring MERGEABLE then drops all
+          # previews and Flux prunes their namespaces (2026-10-19: plane-stage
+          # was deleted twice this way). The `git merge` below is the real
+          # conflict check, so UNKNOWN PRs are attempted.
           PRS=$(gh pr list --state open --base master --json number,mergeable --limit 50 \
-            --jq '.[] | select(.mergeable == "MERGEABLE") | .number')
+            --jq '.[] | select(.mergeable != "CONFLICTING") | .number')
 
           if [ -z "$PRS" ]; then
             echo "No mergeable PRs found."

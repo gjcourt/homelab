@@ -82,10 +82,11 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (19)
+### Planned (20)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-10-18-plane-staging.md](2026-10-18-plane-staging.md) | 2026-10-18 | Self-hosted Plane CE (the tracker for lab 03-042's agent desk) on staging: Flux HelmRelease of plane-ce with post-render fixes, CNPG Postgres, LAN/VPN only, in-cluster webhooks to the dispatcher, restore drill before production |
 | [2026-09-28-renovate-fixer-bench-cloud.md](2026-09-28-renovate-fixer-bench-cloud.md) | 2026-10-08 | Bench-cloud fixes stuck Renovate PRs; mechanical fixes auto-merge, risky go to George; renovate-review kept on subscription billing |
 | [2026-09-01-readonly-pvc-recovery.md](2026-09-01-readonly-pvc-recovery.md) | 2026-09-01 | read-only iSCSI remounts have recurred six times and always need an operator; detection is now solved by pvc-writeprobe, so close the remaining gap with a recovery script that encodes the runbook's traps — and deliberately do NOT build a controller that suspends Flux or restarts Postgres |
 | [2026-08-18-hestia-sshd-refused-diagnosis.md](2026-08-18-hestia-sshd-refused-diagnosis.md) | 2026-08-18 | hestia's sshd intermittently refuses port 22 while every other service stays up; the MaxStartups theory carried across sessions is disproven, so collect wedged-state evidence before changing any setting — **blocked:** Evidence from the wedged state, which has been destroyed 4-5 times by restarting the service before capturing it. Next wedge: capture from the TrueNAS web Shell over 443 BEFORE restarting. |

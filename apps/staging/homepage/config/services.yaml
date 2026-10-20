@@ -26,6 +26,13 @@
         siteMonitor: https://audiobooks.stage.burntbytes.com
 
 - Home & Life:
+    # Moved Infrastructure -> Home & Life 2026-10-19 at George's request; its
+    # click series forks at that date (see the GoLinks note in Infrastructure).
+    - Home Assistant:
+        icon: home-assistant.png
+        href: https://hass.stage.burntbytes.com
+        description: Home automation platform
+        siteMonitor: https://hass.stage.burntbytes.com
     - Vibrato:
         icon: mdi-coffee-maker
         href: https://vibrato.stage.burntbytes.com
@@ -89,11 +96,6 @@
           url: https://10.42.2.11:5001
           username: "{{HOMEPAGE_VAR_SYNOLOGY_USER}}"
           password: "{{HOMEPAGE_VAR_SYNOLOGY_PASS}}"
-    - Home Assistant:
-        icon: home-assistant.png
-        href: https://hass.stage.burntbytes.com
-        description: Home automation platform
-        siteMonitor: https://hass.stage.burntbytes.com
     - GoLinks:
         icon: mdi-link-variant
         href: https://go.stage.burntbytes.com

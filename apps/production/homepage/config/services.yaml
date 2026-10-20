@@ -47,6 +47,13 @@
 # Tools was split in two on 2026-10-19 (it had grown to 12 tiles against 5-6
 # in the other columns). Each half keeps George's explicit Tools order (#1273).
 - Home & Life:
+    # Moved Infrastructure -> Home & Life 2026-10-19 at George's request; its
+    # click series forks at that date (see the GoLinks note in Infrastructure).
+    - Home Assistant:
+        icon: home-assistant.png
+        href: https://hass.burntbytes.com
+        description: Home automation platform
+        siteMonitor: https://hass.burntbytes.com
     - Vibrato:
         icon: mdi-coffee-maker
         href: https://vibrato.burntbytes.com
@@ -122,11 +129,6 @@
         siteMonitor: https://voice.burntbytes.com/health
 
 - Infrastructure:
-    - Home Assistant:
-        icon: home-assistant.png
-        href: https://hass.burntbytes.com
-        description: Home automation platform
-        siteMonitor: https://hass.burntbytes.com
     # Moved Tools -> Infrastructure 2026-08-04. NOTE for anyone reading the
     # "Clicks by Tile + Group (least used first)" panel: homepage_tile_clicks_total
     # is labelled {service, group}, so this move minted a NEW series and stranded

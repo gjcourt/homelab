@@ -84,8 +84,8 @@ kubectl -n homepage-prod exec deploy/homepage-clicks -- wget -qO- localhost:8080
 ```
 
 ### Layout: one page, five columns + within-group order
-- **Tools was split on 2026-10-19** into **Home & Life** (Vibrato, Mealie, Vitals, Ladder,
-  Finance) and **Notes & Learning** (Memos, Linkding, Excalidraw, Flashcards, Open WebUI,
+- **Tools was split on 2026-10-19** into **Home & Life** (Home Assistant, Vibrato, Mealie, Vitals,
+  Ladder, Finance; Home Assistant moved in from Infrastructure the same day, at the top) and **Notes & Learning** (Memos, Linkding, Excalidraw, Flashcards, Open WebUI,
   Changes, Kokoro). It had grown to 12 tiles against 5-6 in the other columns. Both halves keep
   George's Tools order below, so the Tools rules below apply to both. Every one of those tiles
   changed group, so their click series fork at that date (see the group-move note below).

@@ -72,7 +72,7 @@ services:
     # manifest inspect` reports a per-platform manifest digest; the index digest
     # below came from `docker buildx imagetools inspect`, which is the one that
     # resolves correctly regardless of architecture.
-    image: rmcrackan/libation:13.7.8@sha256:8a6cd5c3a532512f7871401c3c63110acf3115a3b19e744ccb118a4a99bef186
+    image: rmcrackan/libation:13.7.11@sha256:946177d3077b7c0afad8f37911e011ee7a9917727105ccff0f14a3fb4b644ec1
     container_name: libation
     # `unless-stopped`, deliberately, after trying `on-failure:5` and reverting.
     #

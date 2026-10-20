@@ -42,6 +42,12 @@ jobs:
           ref: master
           fetch-depth: 0
 
+      # For regenerating the plans index on a conflict (see Merge Passing PRs).
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
@@ -59,14 +65,27 @@ jobs:
           MERGED=0
           SKIPPED=0
 
-          # Get open PRs targeting master, skipping only known conflicts.
-          # Right after master moves, GitHub reports every PR as UNKNOWN until
-          # it recomputes mergeability. Requiring MERGEABLE then drops all
-          # previews and Flux prunes their namespaces (2026-10-19: plane-stage
-          # was deleted twice this way). The `git merge` below is the real
-          # conflict check, so UNKNOWN PRs are attempted.
-          PRS=$(gh pr list --state open --base master --json number,mergeable --limit 50 \
-            --jq '.[] | select(.mergeable != "CONFLICTING") | .number')
+          # docs/plans/README.md holds an index generated from every plan's
+          # frontmatter, so any two PRs that add or edit a plan conflict there.
+          # When that file is the only conflict, regenerate the index from the
+          # merged plans and complete the merge. Any other conflict, or a
+          # conflict marker left outside the generated block, still fails.
+          resolve_plans_index() {
+            [ "$(git diff --name-only --diff-filter=U)" = "docs/plans/README.md" ] || return 1
+            (cd scripts/plans-index && go run . -write) || return 1
+            ! grep -qE '^(<<<<<<<|=======|>>>>>>>)' docs/plans/README.md || return 1
+            git add docs/plans/README.md && git commit --no-edit
+          }
+
+          # Get every open PR targeting master. GitHub's mergeable field is not
+          # used as a filter: right after master moves it reports UNKNOWN, and
+          # it reports CONFLICTING for a clash in the generated plans index,
+          # which the merge step below resolves. Either way, dropping the PR
+          # makes Flux prune its staging namespace (2026-10-19: plane-stage was
+          # deleted three times). The `git merge` below is the real conflict
+          # check.
+          PRS=$(gh pr list --state open --base master --json number --limit 50 \
+            --jq '.[].number')
 
           if [ -z "$PRS" ]; then
             echo "No mergeable PRs found."
@@ -99,8 +118,11 @@ jobs:
               if git merge "pr-$PR_NUM" --no-edit -m "Merge PR #$PR_NUM into staging"; then
                 echo "  Successfully merged PR #$PR_NUM"
                 MERGED=$((MERGED + 1))
+              elif resolve_plans_index; then
+                echo "  Merged PR #$PR_NUM (regenerated docs/plans/README.md index)"
+                MERGED=$((MERGED + 1))
               else
-                echo "  Conflict merging PR #$PR_NUM — skipping."
+                echo "::warning::PR #$PR_NUM conflicts with master and was left out of staging; Flux will prune anything only it adds."
                 git merge --abort
                 SKIPPED=$((SKIPPED + 1))
               fi

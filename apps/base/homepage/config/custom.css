@@ -1,1 +1,12 @@
 /* Custom CSS — overridden per environment if needed. */
+
+/* Five groups don't fit in one row below Homepage's 3xl breakpoint (1800px,
+   where fiveColumns applies); its xl rule (1280px+) puts four in a row and
+   leaves Monitoring alone on a full-width row. Use three per row there, so
+   the page reads as rows of 3 and 2. Below 1280px Homepage already uses
+   thirds (lg), then halves, then one column. */
+@media (min-width: 1280px) and (max-width: 1799.98px) {
+  .services-group {
+    flex-basis: 33.333% !important;
+  }
+}

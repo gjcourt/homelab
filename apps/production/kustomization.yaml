@@ -31,6 +31,7 @@ resources:
   - mqttscope
   - navidrome
   - openwebui
+  - plane
   - snapcast
   - thermalscope
   - thermalscope-smart

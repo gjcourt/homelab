@@ -123,6 +123,24 @@ fails, the database never came up: check the CNPG cluster before touching the He
 `flux reconcile helmrelease plane -n plane-stage --reset`. An upgrade reruns `migrate`, which does
 nothing on an up-to-date schema.
 
+### API returns 500s: "failed to resolve host ... Try again"
+
+**Symptom:** a scattering of 500s (about 2% of production api requests on 2026-10-21, staging too),
+each logging `failed to resolve host '<cluster>-rw.<ns>': [Errno -3] Try again` after a 5 s wait.
+Retrying the same action works.
+
+**Cause:** cluster DNS lookups occasionally time out, and Plane does a lot of them. Django opens a
+new database connection per request (`dj_database_url.config()` with no `conn_max_age`, and Plane
+has no env knob for it), and with the default `ndots:5` each lookup walked the three search domains
+first: four queries, each one a chance to time out.
+
+**Fix in place (2026-10-21):** Plane's Deployments and the migrator run with `ndots:1`, and
+`DATABASE_URL` comes from CNPG's `fqdn-uri` key, so the database host
+(`<cluster>-rw.<ns>.svc.cluster.local`) is one query. See the "DNS lookups" comment in
+`apps/base/plane/release.yaml`. The underlying CoreDNS timeouts are cluster-wide, not Plane's.
+
+**Check:** `kubectl -n plane-prod logs deploy/plane-api-wl --since=60m | grep -c "failed to resolve"`.
+
 ### Plane staging disappeared
 
 The staging branch is rebuilt from master plus open PRs. If #1595 (or any PR that carries Plane)
@@ -131,8 +149,11 @@ PR, then restore the database by section 5.
 
 ## 7. Production first install
 
-**Activation** (operator steps; SOPS is operator-only). The overlay `apps/production/plane/` is
-not yet listed in `apps/production/kustomization.yaml`, so merging it changes nothing live.
+**Done 2026-10-21** (#1627): every check below passed. The migrator retried three times while CNPG
+started, then migrated cleanly, so the first-install fix is proven. The first base backup completed
+at 05:44Z. Kept as the procedure for a rebuild.
+
+**Activation** (operator steps; SOPS is operator-only).
 
 1. Create the three Secrets from their templates in `apps/production/plane/`, encrypt each with
    `sops -e -i`, and uncomment them in that directory's `kustomization.yaml`:
@@ -166,4 +187,19 @@ not yet listed in `apps/production/kustomization.yaml`, so merging it changes no
 
 **Not covered yet:** the MinIO bucket has no backup beyond its Retain volume. The repo has no
 volume-snapshot schedule or bucket mirror today; see the production PR for the open item.
+
+## 8. Bot accounts (SMTP off)
+
+Automation gets its own workspace **Member** (never Admin), with an API token created while logged
+in as that bot, so one token can be revoked alone. Bots so far: `gjcourt+plane-sync@gmail.com` and
+`gjcourt+agent-desk@gmail.com` (Gmail plus-addresses: they reach George's inbox if SMTP is ever
+turned on).
+
+Production has no SMTP, so the invite emails fail (the worker logs `Connection refused`). The
+invite still exists:
+
+1. Workspace settings → Members → Add member: the bot's email, role **Member**.
+2. Copy the invite link and open it in a private window. It lets the bot set a password, with
+   instance sign-up still **off** (done this way 2026-10-21).
+3. Create the bot's API token only when its job is ready, and put it straight into a SOPS secret.
 

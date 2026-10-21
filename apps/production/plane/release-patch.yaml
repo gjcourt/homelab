@@ -1,8 +1,12 @@
 # Production's own post-render patches, appended after the base ones.
 #
-# DATABASE_URL: from the `uri` key of the Secret CNPG generates for the
+# DATABASE_URL: from the `fqdn-uri` key of the Secret CNPG generates for the
 # cluster's owner. `env` beats the chart's envFrom, whose DATABASE_URL is
-# empty with postgres.local_setup false.
+# empty with postgres.local_setup false. `fqdn-uri`, not `uri`: its host is
+# `<cluster>-rw.<ns>.svc.cluster.local`, which with the base's ndots:1 is
+# looked up once, as written. `uri`'s host (`<cluster>-rw.<ns>`) would be
+# tried as an absolute name first and forwarded upstream before the search
+# list found it (see docs/operations/apps/plane.md, "DNS lookups").
 #
 # No WEBHOOK_ALLOWED_HOSTS yet: production has no webhook receiver. 03-042's
 # dispatcher adds its own in-cluster host here when it exists (staging names
@@ -30,7 +34,7 @@
                           valueFrom:
                             secretKeyRef:
                               name: plane-db-production-cnpg-v1-app
-                              key: uri
+                              key: fqdn-uri
         - target:
             kind: Deployment
             name: plane-worker-wl
@@ -49,7 +53,7 @@
                           valueFrom:
                             secretKeyRef:
                               name: plane-db-production-cnpg-v1-app
-                              key: uri
+                              key: fqdn-uri
         - target:
             kind: Deployment
             name: plane-beat-worker-wl
@@ -68,7 +72,7 @@
                           valueFrom:
                             secretKeyRef:
                               name: plane-db-production-cnpg-v1-app
-                              key: uri
+                              key: fqdn-uri
         # The migrator's name carries the Helm revision; the chart gives its
         # container no env list, so this creates one.
         - target:
@@ -82,4 +86,4 @@
                   valueFrom:
                     secretKeyRef:
                       name: plane-db-production-cnpg-v1-app
-                      key: uri
+                      key: fqdn-uri

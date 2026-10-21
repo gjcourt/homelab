@@ -1,8 +1,12 @@
 # Staging's own post-render patches, appended after the base ones.
 #
-# DATABASE_URL: from the `uri` key of the Secret CNPG generates for the
+# DATABASE_URL: from the `fqdn-uri` key of the Secret CNPG generates for the
 # cluster's owner. `env` beats the chart's envFrom, whose DATABASE_URL is
-# empty with postgres.local_setup false.
+# empty with postgres.local_setup false. `fqdn-uri`, not `uri`: its host is
+# `<cluster>-rw.<ns>.svc.cluster.local`, which with the base's ndots:1 is
+# looked up once, as written. `uri`'s host (`<cluster>-rw.<ns>`) would be
+# tried as an absolute name first and forwarded upstream before the search
+# list found it (see docs/operations/apps/plane.md, "DNS lookups").
 #
 # WEBHOOK_ALLOWED_HOSTS: Plane's SSRF guard refuses webhooks to private
 # addresses unless the host is listed here. It checks when a webhook is saved
@@ -32,7 +36,7 @@
                           valueFrom:
                             secretKeyRef:
                               name: plane-db-staging-cnpg-v1-app
-                              key: uri
+                              key: fqdn-uri
                         - name: WEBHOOK_ALLOWED_HOSTS
                           value: webhook-receiver.plane-stage.svc.cluster.local
         - target:
@@ -53,7 +57,7 @@
                           valueFrom:
                             secretKeyRef:
                               name: plane-db-staging-cnpg-v1-app
-                              key: uri
+                              key: fqdn-uri
                         - name: WEBHOOK_ALLOWED_HOSTS
                           value: webhook-receiver.plane-stage.svc.cluster.local
         - target:
@@ -74,7 +78,7 @@
                           valueFrom:
                             secretKeyRef:
                               name: plane-db-staging-cnpg-v1-app
-                              key: uri
+                              key: fqdn-uri
         # The migrator's name carries the Helm revision; the chart gives its
         # container no env list, so this creates one.
         - target:
@@ -88,4 +92,4 @@
                   valueFrom:
                     secretKeyRef:
                       name: plane-db-staging-cnpg-v1-app
-                      key: uri
+                      key: fqdn-uri

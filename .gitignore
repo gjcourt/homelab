@@ -18,3 +18,4 @@ docs/plans/george.md
 # Only the *.env.example templates are tracked.
 hosts/*/actions-runner/.env
 .env
+.gstack/

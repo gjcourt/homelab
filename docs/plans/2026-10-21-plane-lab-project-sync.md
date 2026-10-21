@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 last_modified: 2026-10-21
 summary: "Track lab briefs and repo plans in production Plane: a project per lab category and per repo, a one-time import, then an in-cluster plane-sync CronJob. Briefs: Plane owns status, synced back by PR. Plans (incl. open plan PRs): the repo owns status, Plane mirrors"
 ---
@@ -119,6 +119,26 @@ today. When the PR merges, the item moves to the plan's frontmatter state.
 `lab: 03-043` (or a list). `plans-index` ignores unknown keys, so this needs no tooling change. The
 sync adds a Plane relation between the plan item and the brief item, so a brief shows which plans
 carry it out.
+
+## API findings (staging, 2026-10-21)
+
+Step 3, measured against staging Plane 1.4.2 (`plane.stage.burntbytes.com`, workspace
+`my-test-workspacce`) in two throwaway projects, `SYNCT` and `SYNCU`, deleted afterwards. All paths
+are under `/api/v1/workspaces/<slug>/`, authenticated with the `X-API-Key` header.
+
+| Area | Finding | Design consequence |
+| --- | --- | --- |
+| Work items | `POST/GET/PATCH projects/<id>/work-items/`; create takes `name`, `description_html`, `state`, `labels` (ids), `external_id`, `external_source`. PATCH of `state` and `name` works. | As planned. |
+| Dedupe on create | A second create with the same `external_id` + `external_source` returns **409** with the existing item's `id`. | The importer can create blindly and fall back to the returned id, with no prior lookup. |
+| Dedupe scope | `external_id` uniqueness is **per project**: the same pair was accepted in a second project. | Matching is always (project, `external_source`, `external_id`). A brief that moves category would duplicate; the sync detects that by scanning all projects and reports it. |
+| Lookup | `GET work-items/?external_id=X&external_source=Y` returns **the single item** (200), or **404** when it doesn't exist, not a list. | The client handles the single-object and 404 shape. |
+| States | `GET/POST projects/<id>/states/`. New projects get Backlog, Todo, In Progress, Done and Cancelled. A custom `Proposed` state in the `backlog` group was created (200). | As planned. |
+| Labels | `POST projects/<id>/labels/` returns 201. A duplicate name returns **409** with the existing label's `id`. | Same create-or-reuse pattern as work items. |
+| Relations | `GET/POST work-items/<id>/relations/` with `{"relation_type", "issues": [...]}`. Types: `blocking`, `blocked_by`, `duplicate`, `relates_to`, `start_after`, `start_before`, `finish_after`, `finish_before`. There is **no "implements"** type. Relations work **across projects** and show on both items. Re-posting the same relation is idempotent (201, still one relation). | Plan → brief uses **`relates_to`**. The item description carries the direction ("Implements 03-043"). |
+| Links and comments | `POST work-items/<id>/links/` (`url`, `title`) and `POST work-items/<id>/comments/` (`comment_html`) work. | PR links on plan items; conflict reports as comments. |
+| Pagination | Cursor paging: `per_page` plus `cursor` (`next_cursor`, `next_page_results`); `fields=` trims the payload. | The client always walks cursors at `per_page=100` with `fields`. |
+| Rate limit | **60 requests per minute per API key**. A burst got 429 (`RATE_LIMIT_EXCEEDED`) at about the 60th request in the window, with `Retry-After` and `X-RateLimit-Remaining` headers. | The importer paces itself at 1 request/s and honours `Retry-After`. A first import of about 140 briefs and 70 plans, plus labels and relations, is roughly 450 requests, or about 8 minutes. The sync and the agents must **not share a key**; plane-sync uses its own bot token. |
+| Projects | `POST projects/` takes an `identifier` of at most **12 chars**, letters and digits only (no `-`). `POST projects/<id>/members/` with `{"member", "role"}` adds a member (201). | Identifiers like `AUDIO`, `WOOD`, `HOMEAUTO`, `FIN`, `PIANO`, `COFFEE`, `CROSS`, `HOMELAB`, `DOMESTIQUE`. The bot creates the projects, so the importer adds George (role 20) to each one it creates. |
 
 ## How it runs
 

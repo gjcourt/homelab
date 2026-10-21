@@ -1,0 +1,101 @@
+# Plane's path routing, taken from the chart's own Ingress (ingress.yaml in
+# plane-ce 1.8.4), which this replaces. Gateway API matches the longest
+# prefix, so `/` only catches what nothing else does.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: plane-http
+  namespace: plane-prod
+spec:
+  hostnames:
+    - plane.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: plane-https
+  namespace: plane-prod
+spec:
+  hostnames:
+    - plane.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: https
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /api
+        - path:
+            type: PathPrefix
+            value: /auth
+        - path:
+            type: PathPrefix
+            value: /static/
+      backendRefs:
+        - name: plane-api
+          port: 8000
+    # Websockets for collaborative editing (live). Staging's smoke test
+    # confirmed the upgrade passes the gateway.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /live/
+      backendRefs:
+        - name: plane-live
+          port: 3000
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /spaces
+      backendRefs:
+        - name: plane-space
+          port: 3000
+    # The admin image's nginx answers a bare /god-mode with an absolute
+    # redirect to its own port (http://<host>:3000/god-mode/), which hangs
+    # the browser. Redirect it here instead so nginx never sees it.
+    - matches:
+        - path:
+            type: Exact
+            value: /god-mode
+      filters:
+        - type: RequestRedirect
+          requestRedirect:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /god-mode/
+            statusCode: 301
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /god-mode/
+      backendRefs:
+        - name: plane-admin
+          port: 3000
+    # Uploads: the browser talks to MinIO through the bucket path
+    # (env.docstore_bucket, default "uploads").
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /uploads
+      backendRefs:
+        - name: plane-minio
+          port: 9000
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: plane-web
+          port: 3000

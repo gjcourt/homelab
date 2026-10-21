@@ -1,0 +1,70 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: plane-db-production-cnpg-v1
+  namespace: plane-prod
+
+spec:
+  description: Postgres cluster for Plane (production)
+  # Postgres 15, as on staging: what Plane ships and tests. See
+  # apps/staging/plane/database.yaml.
+  imageName: ghcr.io/cloudnative-pg/postgresql:15.19
+
+  instances: 3
+
+  inheritedMetadata:
+    labels:
+      app: plane-database
+      env: production
+      policy-type: "database"
+
+  monitoring:
+    enablePodMonitor: true
+
+  # Cross-cluster spread: see apps/production/golinks/database.yaml.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          policy-type: database
+
+  # Staging's database was 20 MB on 2026-10-20 with a test workspace. 5Gi
+  # leaves room for the lab-project import and years of tickets.
+  storage:
+    storageClass: truenas-iscsi
+    size: 5Gi
+
+  postgresql:
+    parameters:
+      max_wal_size: "256MB"
+      wal_keep_size: "128MB"
+      max_slot_wal_keep_size: "256MB"
+
+  # serverName must be a path no cluster has ever archived to (the archiver
+  # refuses a non-empty one). Bump it on every restore or recreate, and change
+  # it only while no cluster is running. History lives in
+  # docs/operations/apps/plane.md.
+  #   plane-db-production-cnpg-v1 — first install.
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: plane-db-production-cnpg-v1-backup
+        serverName: plane-db-production-cnpg-v1
+
+  # No owner secret: CNPG generates plane-db-production-cnpg-v1-app, whose
+  # `uri` key becomes Plane's DATABASE_URL (see release-patch.yaml).
+  bootstrap:
+    initdb:
+      database: app
+      owner: app
+
+  externalClusters:
+    - name: plane-db-backup
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: plane-db-production-cnpg-v1-backup
+          serverName: plane-db-production-cnpg-v1

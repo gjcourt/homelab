@@ -166,12 +166,18 @@ The PR ships `.yaml.example` files only. George encrypts the real ones:
    *Done 2026-10-19, unplanned: two staging-rebuild deletions forced two real restores. Steps,
    timings and the `serverName` rule are in the [Plane runbook](../operations/apps/plane.md).*
 7. **Production PR**, separate: production storage decision, SMTP, hostname, resources from
-   staging's observed usage.
+   staging's observed usage. *Opened 2026-10-20 (`apps/production/plane`); activation and the
+   first-install checks are in [runbook section 7](../operations/apps/plane.md#7-production-first-install).*
+8. **Access check, staging and production:** confirm the hostname loads on LAN and over the VPN,
+   and does not resolve or connect from outside (phone on cellular with the VPN off, or an
+   external DNS lookup). The hostname must not appear in
+   `apps/production/cloudflare-tunnel/config.yaml`.
 
 ## Exit criteria (staging)
 
-- [ ] Plane CE 1.4.2 reconciles from Flux at chart 1.8.4, with readiness probes and securityContext
-      patched in.
+- [x] Plane CE 1.4.2 reconciles from Flux at chart 1.8.4, with readiness probes and securityContext
+      patched in. *(2026-10-20: HelmRelease Ready at chart 1.8.4 / app 1.4.2 after #1595 merged to
+      master.)*
 - [ ] Reachable at `https://plane.stage.burntbytes.com` on LAN and VPN, and not from the internet.
       *(LAN confirmed 2026-10-19. VPN and the not-from-internet check not yet run.)*
 - [x] A ticket, a comment, an upload and a two-browser page edit all work. *(Ticket, comment,

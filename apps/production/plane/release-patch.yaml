@@ -1,0 +1,85 @@
+# Production's own post-render patches, appended after the base ones.
+#
+# DATABASE_URL: from the `uri` key of the Secret CNPG generates for the
+# cluster's owner. `env` beats the chart's envFrom, whose DATABASE_URL is
+# empty with postgres.local_setup false.
+#
+# No WEBHOOK_ALLOWED_HOSTS yet: production has no webhook receiver. 03-042's
+# dispatcher adds its own in-cluster host here when it exists (staging names
+# its smoke-test receiver; see apps/staging/plane/release-patch.yaml).
+- op: add
+  path: /spec/postRenderers/-
+  value:
+    kustomize:
+      patches:
+        - target:
+            kind: Deployment
+            name: plane-api-wl
+          patch: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: plane-api-wl
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: plane-api
+                      env:
+                        - name: DATABASE_URL
+                          valueFrom:
+                            secretKeyRef:
+                              name: plane-db-production-cnpg-v1-app
+                              key: uri
+        - target:
+            kind: Deployment
+            name: plane-worker-wl
+          patch: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: plane-worker-wl
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: plane-worker
+                      env:
+                        - name: DATABASE_URL
+                          valueFrom:
+                            secretKeyRef:
+                              name: plane-db-production-cnpg-v1-app
+                              key: uri
+        - target:
+            kind: Deployment
+            name: plane-beat-worker-wl
+          patch: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: plane-beat-worker-wl
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: plane-beat-worker
+                      env:
+                        - name: DATABASE_URL
+                          valueFrom:
+                            secretKeyRef:
+                              name: plane-db-production-cnpg-v1-app
+                              key: uri
+        # The migrator's name carries the Helm revision; the chart gives its
+        # container no env list, so this creates one.
+        - target:
+            kind: Job
+            name: plane-api-migrate-.*
+          patch: |
+            - op: add
+              path: /spec/template/spec/containers/0/env
+              value:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: plane-db-production-cnpg-v1-app
+                      key: uri

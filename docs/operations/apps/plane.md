@@ -4,7 +4,8 @@
 
 Plane Community Edition is the self-hosted tracker behind lab project 03-042 (the agent desk).
 Agents in `bench-cloud` read and update tickets over Plane's REST API and its MCP server. It runs
-on **staging only** (`plane-stage`) until plan step 7 adds production.
+on staging (`plane-stage`) and production (`plane-prod`, added by plan step 7; see section 7 for
+activation).
 Plan: [`docs/plans/2026-10-18-plane-staging.md`](../../plans/2026-10-18-plane-staging.md).
 
 ## 2. Architecture
@@ -18,7 +19,11 @@ Plan: [`docs/plans/2026-10-18-plane-staging.md`](../../plans/2026-10-18-plane-st
 - **Database:** CNPG cluster `plane-db-staging-cnpg-v1` (Postgres 15, 1 instance, 2Gi
   `truenas-iscsi`). WAL and base backups go to S3 through the barman-cloud plugin
   (`plane-db-staging-cnpg-v1-backup` ObjectStore).
-- **Chart-local services:** Valkey, RabbitMQ, and MinIO for uploads (staging only).
+- **Production database:** CNPG cluster `plane-db-production-cnpg-v1` (Postgres 15, 3 instances,
+  5Gi `truenas-iscsi`), backups to `s3://gjcourt-homelab-backup/production/plane`.
+- **Chart-local services:** Valkey, RabbitMQ, and MinIO for uploads. Production's MinIO volume
+  uses the Retain class `truenas-iscsi` (10Gi) and runs with its own root credentials
+  (`plane-doc-store` Secret); staging's uses the Delete class and the chart defaults.
 
 ## 3. URLs
 
@@ -27,11 +32,15 @@ Plan: [`docs/plans/2026-10-18-plane-staging.md`](../../plans/2026-10-18-plane-st
 | App                      | `https://plane.stage.burntbytes.com` (LAN and VPN) |
 | Instance admin           | `https://plane.stage.burntbytes.com/god-mode/`     |
 | API from `bench-cloud`   | `http://plane-api.plane-stage.svc.cluster.local:8000` |
+| Production app           | `https://plane.burntbytes.com` (LAN and VPN)       |
+| Production admin         | `https://plane.burntbytes.com/god-mode/`           |
+| Production API (cluster) | `http://plane-api.plane-prod.svc.cluster.local:8000` |
 
 ## 4. Backups and the `serverName` rule
 
 The barman-cloud archiver **refuses to write into an S3 path that already holds data**. Every
-database lifetime therefore needs its own `serverName`, set in `apps/staging/plane/database.yaml`:
+database lifetime therefore needs its own `serverName`, set in each overlay's `database.yaml`
+(`apps/staging/plane/` and `apps/production/plane/`):
 
 - **Bump `serverName` on every restore or recreate.** A restored or freshly initialised cluster
   archiving into an old path fails, or worse, mixes its own base backups into that path (see the
@@ -46,6 +55,12 @@ database lifetime therefore needs its own `serverName`, set in `apps/staging/pla
 | `…-v2`, `-v3` | Fresh-initdb clusters created mid-rebuild. Empty data; never restore from them            |
 | `…-v4`       | WAL from the first restore, 07:49Z–08:29Z on 10-19, no base backup                         |
 | `…-v5`       | Archive of the current cluster (second restore, 16:14Z on 10-19)                           |
+
+Production (`s3://gjcourt-homelab-backup/production/plane`):
+
+| `serverName`                  | Holds                                       |
+| ----------------------------- | ------------------------------------------- |
+| `plane-db-production-cnpg-v1` | First install. Never written to before it.  |
 
 ## 5. Restore drill (plan step 6) — 2026-10-19
 
@@ -113,3 +128,42 @@ nothing on an up-to-date schema.
 The staging branch is rebuilt from master plus open PRs. If #1595 (or any PR that carries Plane)
 conflicts with master, the rebuild drops it and Flux deletes `plane-stage`. Merge master into the
 PR, then restore the database by section 5.
+
+## 7. Production first install
+
+**Activation** (operator steps; SOPS is operator-only). The overlay `apps/production/plane/` is
+not yet listed in `apps/production/kustomization.yaml`, so merging it changes nothing live.
+
+1. Create the three Secrets from their templates in `apps/production/plane/`, encrypt each with
+   `sops -e -i`, and uncomment them in that directory's `kustomization.yaml`:
+   - `secret-app-keys.yaml` (`plane-app-keys`): `SECRET_KEY` and `LIVE_SERVER_SECRET_KEY`, new
+     values, not staging's. Never rotate `SECRET_KEY` afterwards.
+   - `secret-doc-store.yaml` (`plane-doc-store`): MinIO root user and password, repeated as the
+     `AWS_*` pair. Set before the first install; MinIO only reads it when its volume is new.
+   - `secret-aws-creds.yaml` (`plane-aws-creds-secret`): the S3 backup credentials, same keys as
+     the other production clusters.
+2. Add `- plane` to `apps/production/kustomization.yaml` in the same PR.
+
+**Checks before any real data goes in:**
+
+- [ ] **Migrator:** `kubectl -n plane-prod logs job/plane-api-migrate-1` shows "Postgres not
+      accepting connections yet" retries (or none, if CNPG was already up), then a successful
+      `migrate`. Not a failed Job.
+- [ ] **HelmRelease:** `kubectl -n plane-prod get helmrelease plane` is Ready, and its history has
+      no failed install attempt.
+- [ ] **Fresh `serverName`:** the cluster archives to `plane-db-production-cnpg-v1`, and that path
+      held nothing before this install.
+- [ ] **Backups healthy:** the `immediate` base backup completed
+      (`kubectl -n plane-prod get backups`), and the cluster reports WAL archiving working
+      (`kubectl cnpg status plane-db-production-cnpg-v1 -n plane-prod`, or the Cluster's
+      `ContinuousArchiving` condition True).
+- [ ] **MinIO volume:** the PV behind `pvc-plane-minio-vol-plane-minio-wl-0` has reclaim policy
+      `Retain`.
+- [ ] **Access:** `https://plane.burntbytes.com` loads on LAN and over the VPN, and not from the
+      internet (plan step 8). The hostname is not in the Cloudflare tunnel config.
+- [ ] **Admin:** create the instance admin at `/god-mode/` straight away. Until then, anyone on
+      the LAN who reaches the page first can claim it.
+
+**Not covered yet:** the MinIO bucket has no backup beyond its Retain volume. The repo has no
+volume-snapshot schedule or bucket mirror today; see the production PR for the open item.
+

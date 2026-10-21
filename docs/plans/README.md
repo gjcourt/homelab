@@ -83,10 +83,11 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (20)
+### Planned (21)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-10-21-plane-lab-project-sync.md](2026-10-21-plane-lab-project-sync.md) | 2026-10-21 | Track lab briefs and repo plans in production Plane: a project per lab category and per repo, a one-time import, then an in-cluster plane-sync CronJob. Briefs: Plane owns status, synced back by PR. Plans (incl. open plan PRs): the repo owns status, Plane mirrors |
 | [2026-10-19-hestia-transcoder.md](2026-10-19-hestia-transcoder.md) | 2026-10-19 | Move x265 encoding from winpc to a hestia Custom App running 3-4 encodes in parallel; winpc only rips and hands off |
 | [2026-09-28-renovate-fixer-bench-cloud.md](2026-09-28-renovate-fixer-bench-cloud.md) | 2026-10-08 | Bench-cloud fixes stuck Renovate PRs; mechanical fixes auto-merge, risky go to George; renovate-review kept on subscription billing |
 | [2026-09-01-readonly-pvc-recovery.md](2026-09-01-readonly-pvc-recovery.md) | 2026-09-01 | read-only iSCSI remounts have recurred six times and always need an operator; detection is now solved by pvc-writeprobe, so close the remaining gap with a recovery script that encodes the runbook's traps — and deliberately do NOT build a controller that suspends Flux or restarts Postgres |

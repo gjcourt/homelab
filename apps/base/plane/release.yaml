@@ -299,6 +299,49 @@ spec:
                   capabilities:
                     drop:
                       - ALL
+          # --- DNS lookups ----------------------------------------------
+          #
+          # ndots:1 on Plane's own workloads (every Deployment, which includes
+          # the backing services' consumers, plus the migrator Job). With the
+          # cluster default ndots:5, every name with fewer than five dots walks
+          # the three search domains before being tried as written, so one
+          # lookup of `plane-redis.plane-prod.svc.cluster.local` was four DNS
+          # queries (A and AAAA each). Django opens a new database connection
+          # per request (dj_database_url.config() is called without
+          # conn_max_age, and Plane has no env knob for it), so that cost is
+          # paid on every request. On 2026-10-21 about 2% of production api
+          # requests failed with "failed to resolve host ... Try again".
+          #
+          # Every name these pods resolve still works with ndots:1:
+          #   - the *.svc.cluster.local names (Redis, RabbitMQ, the api, and
+          #     the database through the overlays' `fqdn-uri`) are tried as
+          #     written, first, and answer;
+          #   - `plane-minio` (no dots) still uses the search list;
+          #   - public names (sites.plane.so, GitHub for link previews) are
+          #     tried as written first, which is now one query instead of four.
+          # The chart-local Redis, RabbitMQ and MinIO StatefulSets are left on
+          # the default: they resolve almost nothing, and RabbitMQ's Erlang
+          # node naming is not worth the risk for no gain.
+          - target:
+              kind: Deployment
+              labelSelector: app.kubernetes.io/instance=plane
+            patch: |
+              - op: add
+                path: /spec/template/spec/dnsConfig
+                value:
+                  options:
+                    - name: ndots
+                      value: "1"
+          - target:
+              kind: Job
+              name: plane-api-migrate-.*
+            patch: |
+              - op: add
+                path: /spec/template/spec/dnsConfig
+                value:
+                  options:
+                    - name: ndots
+                      value: "1"
           # --- chart-local backing services ------------------------------
           - target:
               kind: StatefulSet

@@ -1,0 +1,91 @@
+# Staging's own post-render patches, appended after the base ones.
+#
+# DATABASE_URL: from the `uri` key of the Secret CNPG generates for the
+# cluster's owner. `env` beats the chart's envFrom, whose DATABASE_URL is
+# empty with postgres.local_setup false.
+#
+# WEBHOOK_ALLOWED_HOSTS: Plane's SSRF guard refuses webhooks to private
+# addresses unless the host is listed here. It checks when a webhook is saved
+# (api) and again at delivery (worker), so both need it. One exact name, never
+# a CIDR. For now it names the throwaway receiver for the plan's step 4 smoke
+# test; 03-042's dispatcher replaces it once that exists.
+- op: add
+  path: /spec/postRenderers/-
+  value:
+    kustomize:
+      patches:
+        - target:
+            kind: Deployment
+            name: plane-api-wl
+          patch: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: plane-api-wl
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: plane-api
+                      env:
+                        - name: DATABASE_URL
+                          valueFrom:
+                            secretKeyRef:
+                              name: plane-db-staging-cnpg-v1-app
+                              key: uri
+                        - name: WEBHOOK_ALLOWED_HOSTS
+                          value: webhook-receiver.plane-stage.svc.cluster.local
+        - target:
+            kind: Deployment
+            name: plane-worker-wl
+          patch: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: plane-worker-wl
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: plane-worker
+                      env:
+                        - name: DATABASE_URL
+                          valueFrom:
+                            secretKeyRef:
+                              name: plane-db-staging-cnpg-v1-app
+                              key: uri
+                        - name: WEBHOOK_ALLOWED_HOSTS
+                          value: webhook-receiver.plane-stage.svc.cluster.local
+        - target:
+            kind: Deployment
+            name: plane-beat-worker-wl
+          patch: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: plane-beat-worker-wl
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: plane-beat-worker
+                      env:
+                        - name: DATABASE_URL
+                          valueFrom:
+                            secretKeyRef:
+                              name: plane-db-staging-cnpg-v1-app
+                              key: uri
+        # The migrator's name carries the Helm revision; the chart gives its
+        # container no env list, so this creates one.
+        - target:
+            kind: Job
+            name: plane-api-migrate-.*
+          patch: |
+            - op: add
+              path: /spec/template/spec/containers/0/env
+              value:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: plane-db-staging-cnpg-v1-app
+                      key: uri

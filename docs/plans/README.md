@@ -60,10 +60,11 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (17)
+### In progress (18)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-10-18-plane-staging.md](2026-10-18-plane-staging.md) | 2026-10-21 | Self-hosted Plane CE (the tracker for lab 03-042's agent desk) on staging: Flux HelmRelease of plane-ce with post-render fixes, CNPG Postgres, LAN/VPN only, in-cluster webhooks to the dispatcher, restore drill before production |
 | [2026-10-06-obsidian-livesync.md](2026-10-06-obsidian-livesync.md) | 2026-10-10 | Self-hosted Obsidian sync: one CouchDB in the cluster for the LiveSync plugin, one database per vault, E2EE, S3 backups with a restore drill |
 | [2026-09-25-bench-cloud-agent.md](2026-09-25-bench-cloud-agent.md) | 2026-09-27 | bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia |
 | [2026-09-04-hestia-silent-hang-diagnosis.md](2026-09-04-hestia-silent-hang-diagnosis.md) | 2026-09-05 | hestia failed four times in ~29 hours after 57 days of uptime in TWO distinct modes — two kernel panics that self-rebooted in ~3 min and two true hard lockups that sat until reset — and left no record of either because the box had no console, no crashkernel and an ERST pstore that captured nothing; detectors are now armed and one suspect is stopped as a live experiment |
@@ -82,12 +83,11 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (21)
+### Planned (20)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
 | [2026-10-19-hestia-transcoder.md](2026-10-19-hestia-transcoder.md) | 2026-10-19 | Move x265 encoding from winpc to a hestia Custom App running 3-4 encodes in parallel; winpc only rips and hands off |
-| [2026-10-18-plane-staging.md](2026-10-18-plane-staging.md) | 2026-10-18 | Self-hosted Plane CE (the tracker for lab 03-042's agent desk) on staging: Flux HelmRelease of plane-ce with post-render fixes, CNPG Postgres, LAN/VPN only, in-cluster webhooks to the dispatcher, restore drill before production |
 | [2026-09-28-renovate-fixer-bench-cloud.md](2026-09-28-renovate-fixer-bench-cloud.md) | 2026-10-08 | Bench-cloud fixes stuck Renovate PRs; mechanical fixes auto-merge, risky go to George; renovate-review kept on subscription billing |
 | [2026-09-01-readonly-pvc-recovery.md](2026-09-01-readonly-pvc-recovery.md) | 2026-09-01 | read-only iSCSI remounts have recurred six times and always need an operator; detection is now solved by pvc-writeprobe, so close the remaining gap with a recovery script that encodes the runbook's traps — and deliberately do NOT build a controller that suspends Flux or restarts Postgres |
 | [2026-08-18-hestia-sshd-refused-diagnosis.md](2026-08-18-hestia-sshd-refused-diagnosis.md) | 2026-08-18 | hestia's sshd intermittently refuses port 22 while every other service stays up; the MaxStartups theory carried across sessions is disproven, so collect wedged-state evidence before changing any setting — **blocked:** Evidence from the wedged state, which has been destroyed 4-5 times by restarting the service before capturing it. Next wedge: capture from the TrueNAS web Shell over 443 BEFORE restarting. |

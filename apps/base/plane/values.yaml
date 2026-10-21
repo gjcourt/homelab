@@ -1,0 +1,41 @@
+# Values for the plane-ce chart (https://helm.plane.so/). Environment-specific
+# values (appHost, storage classes) live in the overlay's values file, which
+# the HelmRelease merges on top of this one.
+# Plan: docs/plans/2026-10-18-plane-staging.md
+planeVersion: v1.4.2
+
+# Routing is ours: an HTTPRoute per environment on the Cilium gateway. The
+# chart still reads ingress.appHost for WEB_URL and CORS, so the overlay sets
+# it even with the chart's ingress off.
+ingress:
+  enabled: false
+ssl:
+  # TLS ends at the gateway; this makes WEB_URL https.
+  externalTermination: true
+
+# Postgres is a CNPG cluster in the overlay. DATABASE_URL is injected from
+# its `-app` Secret by the HelmRelease's post-render patch.
+postgres:
+  local_setup: false
+
+# Fail the render rather than fall back to the chart's public example
+# SECRET_KEY / LIVE_SERVER_SECRET_KEY.
+env:
+  requireExplicitSecrets: true
+external_secrets:
+  app_keys_existingSecret: plane-app-keys
+
+# The HTTPRoute needs ClusterIP Services; the chart defaults to headless.
+web:
+  assign_cluster_ip: true
+space:
+  assign_cluster_ip: true
+admin:
+  assign_cluster_ip: true
+live:
+  assign_cluster_ip: true
+api:
+  assign_cluster_ip: true
+# Uploads go browser -> gateway -> MinIO on the bucket path.
+minio:
+  assign_cluster_ip: true

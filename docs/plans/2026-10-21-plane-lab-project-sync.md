@@ -19,6 +19,13 @@ per-category `projects.md` index. This plan puts every brief in production Plane
   Domestique come first, and their projects start empty (see Later).
 - **Source of truth:** Plane owns status. The lab repo is synced back, so the briefs stay accurate on
   GitHub.
+- **Cancelled** becomes a fourth lab status (George, 2026-10-21: "Add cancelled"). A lab PR adds it to
+  the invariants (`ALLOWED_STATUS`) and the README Status line, before the import.
+- **README counts** are updated by the sync PR along with the briefs and `projects.md` rows (George:
+  "Yes").
+- **Sync PRs merge themselves** once lab CI passes (George: "Merge themselves"). The bot enables
+  GitHub auto-merge on its own PR. This is a normal merge after required checks, not a bypass: branch
+  protection stays as it is, and the exception covers only this bot's status-sync PRs in `gjcourt/lab`.
 
 ## Who owns what
 
@@ -52,7 +59,7 @@ directly in Plane stays Plane-only, and the sync reports it rather than writing 
 | Not Started           | Backlog                         | Backlog or Todo → Not Started     |
 | In Progress           | In Progress                     | In Progress → In Progress         |
 | Done                  | Done                            | Done → Done                       |
-| (no lab equivalent)   | Cancelled                       | **open question**, see below      |
+| Cancelled             | Cancelled                       | Cancelled → Cancelled             |
 
 ## How it runs
 
@@ -66,8 +73,9 @@ directly in Plane stays Plane-only, and the sync reports it rather than writing 
    - **repo → Plane:** new briefs become items, and changed titles or labels are updated.
    - **Plane → repo:** status differences are gathered into a single branch,
      `chore/plane-status-sync`, which updates both the brief's frontmatter and its `projects.md` row.
-     One PR is opened or updated, titled "chore(plane-sync): status updates", and George merges it.
-     The job never pushes to `main` and never merges.
+     It also updates the README Status counts. One PR is opened or updated, titled
+     "chore(plane-sync): status updates", with GitHub auto-merge enabled so it merges once lab CI
+     passes. The job never pushes to `main` and never merges past a failing or pending check.
    - **Report:** a summary of Plane-only items, items whose brief was deleted, and any conflicts.
 
 **Conflict rule:** if a brief's `status:` changed in git since the last sync AND the Plane state also
@@ -90,15 +98,18 @@ body. Otherwise Plane wins.
   - a Plane API token for a dedicated `plane-sync` bot user, a workspace member, not George's own
     token;
   - a GitHub fine-grained token or App installation scoped to `gjcourt/lab`, with contents and pull
-    requests write. The branch protection on `main` stays as it is.
+    requests write. The branch protection on `main` stays as it is. The repo's "Allow auto-merge"
+    setting must be on (George's OK, or he flips it).
 - **No staging deploy of the CronJob.** Staging Plane is a test instance, and a second sync target
   would open duplicate PRs against the same lab repo. Instead, the importer and reconciler are tested
   against staging Plane from a workstation run, with `--dry-run` for the git side.
 
 ## Steps
 
-1. **This plan PR.** Review the decisions, the mapping and the open questions.
-2. **Verify the API against staging:**
+1. **This plan PR.** Review the decisions and the mapping.
+2. **Lab PR: Cancelled status.** Add `Cancelled` to `scripts/check_invariants.py`'s allowed set and the
+   README Status line format, so the import and sync can write it.
+3. **Verify the API against staging:**
    - the work-items create, list and patch schemas;
    - the `external_id` / `external_source` filters;
    - the states endpoint;
@@ -106,42 +117,33 @@ body. Otherwise Plane wins.
    - the API rate limit for 140 creates.
 
    Record the findings in this plan, because the third-party docs disagree on details.
-3. **Tool PR:** `images/plane-sync/`, with unit tests for frontmatter round-trips (byte-identical when
+4. **Tool PR:** `images/plane-sync/`, with unit tests for frontmatter round-trips (byte-identical when
    nothing changes) and for the status mapping.
-4. **Dry-run the import against staging,** then do a real import into staging and have George look
+5. **Dry-run the import against staging,** then do a real import into staging and have George look
    at it in the UI.
-5. **Production:**
+6. **Production:**
    - production Plane activated (#1624's secrets);
    - bot user and tokens created;
    - real import, then the CronJob PR.
-6. **First sync round-trip:**
+7. **First sync round-trip:**
    - George moves one item in Plane;
    - the PR appears with the frontmatter and `projects.md` change;
    - lab CI passes;
-   - George merges.
+   - the PR merges itself.
 
 ## Exit criteria
 
 - [ ] All 140 briefs exist in production Plane across 7 projects, with labels and links, and a
       re-run of the import creates nothing new.
 - [ ] A new brief merged to the lab repo appears in Plane within one sync interval.
-- [ ] A state change in Plane produces one status-sync PR that passes lab CI, touching only
-      `status:` lines and `projects.md` rows.
+- [ ] A state change in Plane produces one status-sync PR that passes lab CI and merges itself,
+      touching only `status:` lines, `projects.md` rows and the README Status counts.
 - [ ] A simulated conflict is flagged and nothing is overwritten.
 - [ ] The sync's NetworkPolicy allows only DNS, Plane's api and GitHub.
 
 ## Open questions
 
-1. **Cancelled.** The lab repo allows only Not Started / In Progress / Done. When an item is
-   Cancelled in Plane, the options are:
-   - add `Cancelled` to the lab invariants and the README counts;
-   - map it back to `Not Started` with a `cancelled` label;
-   - leave the brief untouched and only report it.
-2. **README counts.** The README Status line ("1 done, 15 in progress") isn't checked by the
-   invariants today. Should the sync PR update it too? My suggestion: yes, since it is the same edit.
-3. **Merge cadence.** Should status-sync PRs wait for George's merge every time, or may they
-   auto-merge once lab CI passes? They touch only status lines, so auto-merging is the cheaper option,
-   but it changes the "George merges" rule for this one bot, so it is George's call.
+None open. George answered all three on 2026-10-21 (see Decisions).
 
 ## Later (not in this plan)
 

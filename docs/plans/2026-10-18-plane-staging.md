@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_modified: 2026-10-18
+last_modified: 2026-10-21
 summary: "Self-hosted Plane CE (the tracker for lab 03-042's agent desk) on staging: Flux HelmRelease of plane-ce with post-render fixes, CNPG Postgres, LAN/VPN only, in-cluster webhooks to the dispatcher, restore drill before production"
 ---
 
@@ -163,6 +163,8 @@ The PR ships `.yaml.example` files only. George encrypts the real ones:
    and update the test ticket, post a comment, change its state and attach a link.
 6. **Restore drill:** restore the CNPG cluster from its S3 backup into a new cluster, point Plane at
    it, and confirm the test ticket and comment survive. Record the timings.
+   *Done 2026-10-19, unplanned: two staging-rebuild deletions forced two real restores. Steps,
+   timings and the `serverName` rule are in the [Plane runbook](../operations/apps/plane.md).*
 7. **Production PR**, separate: production storage decision, SMTP, hostname, resources from
    staging's observed usage.
 
@@ -171,11 +173,19 @@ The PR ships `.yaml.example` files only. George encrypts the real ones:
 - [ ] Plane CE 1.4.2 reconciles from Flux at chart 1.8.4, with readiness probes and securityContext
       patched in.
 - [ ] Reachable at `https://plane.stage.burntbytes.com` on LAN and VPN, and not from the internet.
-- [ ] A ticket, a comment, an upload and a two-browser page edit all work.
-- [ ] A bench-cloud pod can read and update a ticket over the REST API and over MCP stdio.
-- [ ] A webhook delivers to the allowlisted in-cluster host, and other private URLs are refused.
-- [ ] A restore from S3 brings back the test data.
-- [ ] Pod security level recorded: `restricted`, or `baseline` with the reason.
+      *(LAN confirmed 2026-10-19. VPN and the not-from-internet check not yet run.)*
+- [x] A ticket, a comment, an upload and a two-browser page edit all work. *(Ticket, comment,
+      upload: 2026-10-19. Two-browser edit, synced both ways in about 110 ms: 2026-10-20.)*
+- [x] A bench-cloud pod can read and update a ticket over the REST API and over MCP stdio.
+      *(2026-10-19, after the egress rule in #1596.)*
+- [x] A webhook delivers to the allowlisted in-cluster host, and other private URLs are refused.
+      *(2026-10-19: 4 signed deliveries; the in-cluster api, the gateway IP and localhost were
+      refused.)*
+- [x] A restore from S3 brings back the test data. *(2026-10-19, twice; about 6 minutes from
+      cluster create to Ready. Timings and steps:
+      [runbook section 5](../operations/apps/plane.md#5-restore-drill-plan-step-6--2026-10-19).)*
+- [x] Pod security level recorded: `restricted`, or `baseline` with the reason. *(`baseline`,
+      recorded 2026-10-18 under Pod security above.)*
 
 ## Risks
 

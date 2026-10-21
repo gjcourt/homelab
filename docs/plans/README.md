@@ -64,7 +64,7 @@ see `scripts/plans-index/`).
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-10-18-plane-staging.md](2026-10-18-plane-staging.md) | 2026-10-18 | Self-hosted Plane CE (the tracker for lab 03-042's agent desk) on staging: Flux HelmRelease of plane-ce with post-render fixes, CNPG Postgres, LAN/VPN only, in-cluster webhooks to the dispatcher, restore drill before production |
+| [2026-10-18-plane-staging.md](2026-10-18-plane-staging.md) | 2026-10-21 | Self-hosted Plane CE (the tracker for lab 03-042's agent desk) on staging: Flux HelmRelease of plane-ce with post-render fixes, CNPG Postgres, LAN/VPN only, in-cluster webhooks to the dispatcher, restore drill before production |
 | [2026-10-06-obsidian-livesync.md](2026-10-06-obsidian-livesync.md) | 2026-10-10 | Self-hosted Obsidian sync: one CouchDB in the cluster for the LiveSync plugin, one database per vault, E2EE, S3 backups with a restore drill |
 | [2026-09-25-bench-cloud-agent.md](2026-09-25-bench-cloud-agent.md) | 2026-09-27 | bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia |
 | [2026-09-04-hestia-silent-hang-diagnosis.md](2026-09-04-hestia-silent-hang-diagnosis.md) | 2026-09-05 | hestia failed four times in ~29 hours after 57 days of uptime in TWO distinct modes — two kernel panics that self-rebooted in ~3 min and two true hard lockups that sat until reset — and left no record of either because the box had no console, no crashkernel and an ERST pstore that captured nothing; detectors are now armed and one suspect is stopped as a live experiment |

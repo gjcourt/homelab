@@ -258,10 +258,32 @@ spec:
                           timeoutSeconds: 3
                           failureThreshold: 3
           # The migrator's name carries the Helm revision (plane-api-migrate-N).
+          #
+          # Wait for Postgres before migrating. The image's own wait step,
+          # `manage.py wait_for_db`, never opens a connection, so it reports
+          # "Database available!" even when Postgres is down. On a first install
+          # the migrator then fails `migrate` while CNPG is still starting, uses
+          # up backoffLimit 3 (about 70 s) and fails the install. Seen on
+          # staging 2026-10-19. This loop opens a real connection, for about
+          # 12 minutes (80 tries of ~4 s check + 5 s sleep, inside the 15m Helm
+          # timeout), then runs the stock entrypoint, which still fails loudly
+          # if the database never came up.
           - target:
               kind: Job
               name: plane-api-migrate-.*
             patch: |
+              - op: replace
+                path: /spec/template/spec/containers/0/command
+                value:
+                  - /bin/bash
+                  - -c
+                  - |
+                    for i in $(seq 1 80); do
+                      python manage.py shell -c "from django.db import connection; connection.ensure_connection()" >/dev/null 2>&1 && break
+                      echo "Postgres not accepting connections yet ($i/80); retrying in 5s"
+                      sleep 5
+                    done
+                    exec ./bin/docker-entrypoint-migrator.sh
               - op: add
                 path: /spec/template/spec/securityContext
                 value:

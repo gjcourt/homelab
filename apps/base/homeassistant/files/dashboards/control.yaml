@@ -96,6 +96,8 @@ views:
     # the icon lights up amber when any light in the room is on.
     - type: custom:mushroom-template-card
       primary: Kitchen
+      # Appliance glance: the one thing worth knowing from across the house.
+      secondary: "{% set off = ['Off', 'unavailable', 'unknown'] %}{% if is_state('binary_sensor.42_french_door_refrigerator_door', 'on') or is_state('binary_sensor.42_french_door_freezer_door', 'on') %}Fridge door open{% elif states('sensor.30_double_wall_oven_cooking_mode') not in off or states('sensor.30_double_wall_oven_lower_oven_cooking_mode') not in off %}Oven on{% elif states('sensor.24_dishwasher_wash_status') in ['Running', 'Drying'] %}Dishwasher running{% endif %}"
       icon: mdi:silverware-fork-knife
       icon_color: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -361,7 +363,7 @@ views:
       color: amber
     - type: tile
       entity: sensor.nightlight_turn_off_time
-      name: Tonight's Off Time
+      name: Off tonight
       color: blue
   - type: grid
     column_span: 3
@@ -738,8 +740,8 @@ views:
       heading_style: title
       icon: mdi:silverware-fork-knife
     - type: custom:mushroom-template-card
-      primary: All Kitchen Lights
-      secondary: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -809,8 +811,8 @@ views:
       heading_style: title
       icon: mdi:sofa
     - type: custom:mushroom-template-card
-      primary: All Living Room Lights
-      secondary: "{% set l = ['light.living_room_sconces'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.living_room_sconces'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.living_room_sconces'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -844,8 +846,8 @@ views:
       heading_style: title
       icon: mdi:table-furniture
     - type: custom:mushroom-template-card
-      primary: All Dining Room Lights
-      secondary: "{% set l = ['light.dining_room_sconces', 'light.0xa4c138b55dac7973', 'light.0xa4c138a9f6011cac', 'light.dining_room_chandelier'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.dining_room_sconces', 'light.0xa4c138b55dac7973', 'light.0xa4c138a9f6011cac', 'light.dining_room_chandelier'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.dining_room_sconces', 'light.0xa4c138b55dac7973', 'light.0xa4c138a9f6011cac', 'light.dining_room_chandelier'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -910,7 +912,7 @@ views:
           }
     - type: custom:mushroom-light-card
       entity: light.dining_room_chandelier
-      name: Chandelier power
+      name: Chandelier
       show_brightness_control: true
       use_light_color: true
       collapsible_controls: true
@@ -933,8 +935,8 @@ views:
       heading_style: title
       icon: mdi:door
     - type: custom:mushroom-template-card
-      primary: All Front Foyer Lights
-      secondary: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1004,8 +1006,8 @@ views:
       heading_style: title
       icon: mdi:door-sliding
     - type: custom:mushroom-template-card
-      primary: All Hallway Lights
-      secondary: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1057,8 +1059,8 @@ views:
       heading_style: title
       icon: mdi:bed
     - type: custom:mushroom-template-card
-      primary: All Master Bedroom Lights
-      secondary: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south', 'light.master_bedroom_closet_light'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south', 'light.master_bedroom_closet_light'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south', 'light.master_bedroom_closet_light'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1164,8 +1166,8 @@ views:
       heading_style: title
       icon: mdi:shower
     - type: custom:mushroom-template-card
-      primary: All Master Bathroom Lights
-      secondary: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1217,8 +1219,8 @@ views:
       heading_style: title
       icon: mdi:desk
     - type: custom:mushroom-template-card
-      primary: All Office Lights
-      secondary: "{% set l = ['light.office_main_lights', 'light.office_closet'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.office_main_lights', 'light.office_closet'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.office_main_lights', 'light.office_closet'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1270,8 +1272,8 @@ views:
       heading_style: title
       icon: mdi:bed
     - type: custom:mushroom-template-card
-      primary: All Niccolo Bedroom Lights
-      secondary: "{% set l = ['light.niccolo_bedroom_main_lights', 'light.secondary_bedroom_closet_light'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.niccolo_bedroom_main_lights', 'light.secondary_bedroom_closet_light'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.niccolo_bedroom_main_lights', 'light.secondary_bedroom_closet_light'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1323,8 +1325,8 @@ views:
       heading_style: title
       icon: mdi:cradle
     - type: custom:mushroom-template-card
-      primary: All Nursery Bedroom Lights
-      secondary: "{% set l = ['light.nursery_bedroom_main_lights', 'light.nursery_bedroom_closet_light'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.nursery_bedroom_main_lights', 'light.nursery_bedroom_closet_light'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.nursery_bedroom_main_lights', 'light.nursery_bedroom_closet_light'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1376,8 +1378,8 @@ views:
       heading_style: title
       icon: mdi:toilet
     - type: custom:mushroom-template-card
-      primary: All Hall Bathroom Lights
-      secondary: "{% set l = ['light.hall_bathroom_main_lights', 'light.hall_bathroom_vanity_lights'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.hall_bathroom_main_lights', 'light.hall_bathroom_vanity_lights'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.hall_bathroom_main_lights', 'light.hall_bathroom_vanity_lights'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1429,8 +1431,8 @@ views:
       heading_style: title
       icon: mdi:toilet
     - type: custom:mushroom-template-card
-      primary: All Powder Bathroom Lights
-      secondary: "{% set l = ['light.powder_bathroom_chandelier'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.powder_bathroom_chandelier'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.powder_bathroom_chandelier'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1464,8 +1466,8 @@ views:
       heading_style: title
       icon: mdi:cupboard
     - type: custom:mushroom-template-card
-      primary: All Butler Pantry Lights
-      secondary: "{% set l = ['light.butler_pantry_main_lights'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.butler_pantry_main_lights'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.butler_pantry_main_lights'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1499,8 +1501,8 @@ views:
       heading_style: title
       icon: mdi:washing-machine
     - type: custom:mushroom-template-card
-      primary: All Laundry Room Lights
-      secondary: "{% set l = ['light.laundry_room_main_lights', 'light.laundry_room_cove'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.laundry_room_main_lights', 'light.laundry_room_cove'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.laundry_room_main_lights', 'light.laundry_room_cove'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1552,8 +1554,8 @@ views:
       heading_style: title
       icon: mdi:home-outline
     - type: custom:mushroom-template-card
-      primary: All Exterior Lights
-      secondary: "{% set l = ['light.exterior_east', 'light.exterior_west'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      primary: All lights
+      secondary: "{% set l = ['light.exterior_east', 'light.exterior_west'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.exterior_east', 'light.exterior_west'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1617,7 +1619,7 @@ views:
       icon: mdi:door
     - type: custom:mushroom-template-card
       primary: All Front Foyer Lights
-      secondary: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      secondary: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1711,7 +1713,7 @@ views:
       icon: mdi:silverware-fork-knife
     - type: custom:mushroom-template-card
       primary: All Kitchen Lights
-      secondary: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      secondary: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1790,6 +1792,215 @@ views:
             background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
             transition: background 0.3s ease;
           }
+  # Sub-Zero / Wolf / Cove appliances (orienw/ha-subzero, cloud push). Status
+  # first; nothing here changes an appliance with one tap — every card opens
+  # more-info, where the setpoint / mode controls live. Templates handle
+  # unavailable themselves, so cards don't flash in and out when the cloud
+  # connection drops. Fridge figures are SETPOINTS: the fridge reports no
+  # measured temperature.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Kitchen Appliances
+      heading_style: title
+      icon: mdi:fridge-outline
+    - type: custom:mushroom-template-card
+      primary: Fridge
+      secondary: "{% set fd = is_state('binary_sensor.42_french_door_refrigerator_door', 'on') %}{% set zd = is_state('binary_sensor.42_french_door_freezer_door', 'on') %}{% set f = states('sensor.42_french_door_refrigerator_setpoint') %}{% set z = states('sensor.42_french_door_freezer_setpoint') %}{% if not f | is_number %}Status unavailable{% else %}{{ 'Fridge door open · ' if fd else '' }}{{ 'Freezer door open · ' if zd else '' }}Set {{ f }}°F · freezer {{ z ~ '°F' if z | is_number else '—' }}{% endif %}"
+      icon: mdi:fridge
+      icon_color: "{{ 'red' if is_state('binary_sensor.42_french_door_refrigerator_door', 'on') or is_state('binary_sensor.42_french_door_freezer_door', 'on') else ('blue' if states('sensor.42_french_door_refrigerator_setpoint') | is_number else 'disabled') }}"
+      tap_action:
+        action: more-info
+        entity: climate.42_french_door_refrigerator
+      hold_action:
+        action: none
+      double_tap_action:
+        action: none
+      grid_options:
+        columns: full
+    - type: custom:mushroom-template-card
+      primary: Ovens
+      secondary: >-
+        {%- set ns = namespace(p=[], known=false) -%}
+        {%- for name, m, t, s, pre in [
+          ('Upper', 'sensor.30_double_wall_oven_cooking_mode', 'sensor.30_double_wall_oven_oven_temperature', 'sensor.30_double_wall_oven_oven_setpoint', 'binary_sensor.30_double_wall_oven_preheated'),
+          ('Lower', 'sensor.30_double_wall_oven_lower_oven_cooking_mode', 'sensor.30_double_wall_oven_lower_oven_temperature', 'sensor.30_double_wall_oven_lower_oven_setpoint', 'binary_sensor.30_double_wall_oven_lower_oven_preheated')] -%}
+        {%- set mode = states(m) -%}
+        {%- if mode not in ['unavailable', 'unknown'] -%}{%- set ns.known = true -%}{%- endif -%}
+        {%- if mode not in ['Off', 'unavailable', 'unknown'] -%}
+        {%- set ns.p = ns.p + [name ~ ' ' ~ mode ~ ' ' ~ (states(t) ~ '°' if states(t) | is_number else '—') ~ ' → ' ~ (states(s) ~ '°F' if states(s) | is_number else '—') ~ (' · ready' if is_state(pre, 'on') else '')] -%}
+        {%- endif -%}
+        {%- endfor -%}
+        {{ ns.p | join(' · ') if ns.p else ('Off' if ns.known else 'Status unavailable') }}
+      icon: mdi:stove
+      icon_color: "{{ 'deep-orange' if [states('sensor.30_double_wall_oven_cooking_mode'), states('sensor.30_double_wall_oven_lower_oven_cooking_mode')] | reject('in', ['Off', 'unavailable', 'unknown']) | list | count > 0 else 'disabled' }}"
+      tap_action:
+        action: more-info
+        entity: climate.30_double_wall_oven_oven
+      hold_action:
+        action: none
+      double_tap_action:
+        action: none
+      grid_options:
+        columns: full
+    # Probe readout only while a probe is plugged in.
+    - type: custom:mushroom-template-card
+      primary: Probe
+      secondary: >-
+        {%- set ns = namespace(p=[]) -%}
+        {%- for name, use, t, s, done in [
+          ('Upper', 'binary_sensor.30_double_wall_oven_probe_in_use', 'sensor.30_double_wall_oven_probe_temperature', 'sensor.30_double_wall_oven_probe_setpoint', 'binary_sensor.30_double_wall_oven_probe_target_reached'),
+          ('Lower', 'binary_sensor.30_double_wall_oven_lower_oven_probe_in_use', 'sensor.30_double_wall_oven_lower_oven_probe_temperature', 'sensor.30_double_wall_oven_lower_oven_probe_setpoint', 'binary_sensor.30_double_wall_oven_lower_oven_probe_target_reached')] -%}
+        {%- if is_state(use, 'on') -%}
+        {%- set ns.p = ns.p + [name ~ ' ' ~ (states(t) ~ '°' if states(t) | is_number else '—') ~ ' → ' ~ (states(s) ~ '°F' if states(s) | is_number else '—') ~ (' · done' if is_state(done, 'on') else '')] -%}
+        {%- endif -%}
+        {%- endfor -%}
+        {{ ns.p | join(' · ') }}
+      icon: mdi:thermometer-probe
+      icon_color: "{{ 'green' if is_state('binary_sensor.30_double_wall_oven_probe_target_reached', 'on') or is_state('binary_sensor.30_double_wall_oven_lower_oven_probe_target_reached', 'on') else 'deep-orange' }}"
+      tap_action:
+        action: more-info
+        entity: sensor.30_double_wall_oven_probe_temperature
+      hold_action:
+        action: none
+      grid_options:
+        columns: full
+      visibility:
+      - condition: or
+        conditions:
+        - condition: state
+          entity: binary_sensor.30_double_wall_oven_probe_in_use
+          state: "on"
+        - condition: state
+          entity: binary_sensor.30_double_wall_oven_lower_oven_probe_in_use
+          state: "on"
+    # Oven kitchen timers: a live countdown tile (timestamp sensor) while
+    # running, a "done" line once finished. Tapping "done" opens the Dismiss
+    # button's dialog (one step removed), never dismisses on the first tap.
+    - type: tile
+      entity: sensor.30_double_wall_oven_kitchen_timer_end
+      name: Oven timer 1
+      icon: mdi:timer-sand
+      color: deep-orange
+      grid_options:
+        columns: full
+      visibility:
+      - condition: state
+        entity: binary_sensor.30_double_wall_oven_kitchen_timer_active
+        state: "on"
+    - type: tile
+      entity: sensor.30_double_wall_oven_kitchen_timer_2_end
+      name: Oven timer 2
+      icon: mdi:timer-sand
+      color: deep-orange
+      grid_options:
+        columns: full
+      visibility:
+      - condition: state
+        entity: binary_sensor.30_double_wall_oven_kitchen_timer_2_active
+        state: "on"
+    - type: custom:mushroom-template-card
+      primary: Oven timer 1 done
+      secondary: Tap to dismiss
+      icon: mdi:timer-check
+      icon_color: green
+      tap_action:
+        action: more-info
+        entity: button.30_double_wall_oven_dismiss_kitchen_timer
+      hold_action:
+        action: none
+      grid_options:
+        columns: full
+      visibility:
+      - condition: state
+        entity: binary_sensor.30_double_wall_oven_kitchen_timer_complete
+        state: "on"
+    - type: custom:mushroom-template-card
+      primary: Oven timer 2 done
+      secondary: Tap to dismiss
+      icon: mdi:timer-check
+      icon_color: green
+      tap_action:
+        action: more-info
+        entity: button.30_double_wall_oven_dismiss_kitchen_timer_2
+      hold_action:
+        action: none
+      grid_options:
+        columns: full
+      visibility:
+      - condition: state
+        entity: binary_sensor.30_double_wall_oven_kitchen_timer_2_complete
+        state: "on"
+    - type: custom:mushroom-template-card
+      primary: Dishwasher
+      secondary: "{% set s = states('sensor.24_dishwasher_wash_status') %}{% set e = states('sensor.24_dishwasher_wash_cycle_end') %}{% if s in ['unavailable', 'unknown'] %}Status unavailable{% else %}{{ s }}{% if s in ['Running', 'Drying'] and as_datetime(e, none) is not none %} · done about {{ as_timestamp(e) | timestamp_custom('%-I:%M %p') }}{% endif %}{% endif %}"
+      icon: mdi:dishwasher
+      icon_color: "{% set s = states('sensor.24_dishwasher_wash_status') %}{{ 'blue' if s in ['Running', 'Drying', 'Delayed', 'Start pending'] else ('green' if s == 'Complete' else ('red' if s == 'Error' else 'disabled')) }}"
+      tap_action:
+        action: more-info
+        entity: sensor.24_dishwasher_wash_status
+      hold_action:
+        action: none
+      double_tap_action:
+        action: none
+      grid_options:
+        columns: full
+    # Maintenance: only shows when something needs doing.
+    - type: custom:mushroom-template-card
+      primary: Needs attention
+      secondary: >-
+        {%- set ns = namespace(p=[]) -%}
+        {%- for name, e in [('Fridge', 'binary_sensor.42_french_door_service_required'), ('Ovens', 'binary_sensor.30_double_wall_oven_service_required'), ('Dishwasher', 'binary_sensor.24_dishwasher_service_required')] -%}
+        {%- if is_state(e, 'on') -%}{%- set ns.p = ns.p + [name ~ ' needs service'] -%}{%- endif -%}
+        {%- endfor -%}
+        {%- for name, e in [('Fridge', 'sensor.42_french_door_active_faults'), ('Ovens', 'sensor.30_double_wall_oven_active_faults'), ('Dishwasher', 'sensor.24_dishwasher_active_faults')] -%}
+        {%- if states(e) | int(0) > 0 -%}{%- set ns.p = ns.p + [name ~ ': ' ~ states(e) ~ ' fault' ~ ('s' if states(e) | int(0) > 1 else '')] -%}{%- endif -%}
+        {%- endfor -%}
+        {%- for name, e in [('Water filter', 'sensor.42_french_door_water_filter_remaining'), ('Air filter', 'sensor.42_french_door_air_filter_remaining')] -%}
+        {%- if states(e) | is_number and states(e) | float < 15 -%}{%- set ns.p = ns.p + [name ~ ' ' ~ states(e) ~ '% left'] -%}{%- endif -%}
+        {%- endfor -%}
+        {%- if is_state('binary_sensor.24_dishwasher_rinse_aid_low', 'on') -%}{%- set ns.p = ns.p + ['Rinse aid low'] -%}{%- endif -%}
+        {{ ns.p | join(' · ') }}
+      icon: mdi:alert-circle-outline
+      icon_color: amber
+      tap_action:
+        action: none
+      hold_action:
+        action: none
+      grid_options:
+        columns: full
+      visibility:
+      - condition: or
+        conditions:
+        - condition: state
+          entity: binary_sensor.42_french_door_service_required
+          state: "on"
+        - condition: state
+          entity: binary_sensor.30_double_wall_oven_service_required
+          state: "on"
+        - condition: state
+          entity: binary_sensor.24_dishwasher_service_required
+          state: "on"
+        - condition: numeric_state
+          entity: sensor.42_french_door_active_faults
+          above: 0
+        - condition: numeric_state
+          entity: sensor.30_double_wall_oven_active_faults
+          above: 0
+        - condition: numeric_state
+          entity: sensor.24_dishwasher_active_faults
+          above: 0
+        - condition: numeric_state
+          entity: sensor.42_french_door_water_filter_remaining
+          below: 15
+        - condition: numeric_state
+          entity: sensor.42_french_door_air_filter_remaining
+          below: 15
+        - condition: state
+          entity: binary_sensor.24_dishwasher_rinse_aid_low
+          state: "on"
+    - type: markdown
+      content: Fridge and freezer show their **set** temperatures; the fridge doesn't report a measured one. Tap a card for its controls. The oven only starts remotely after **Remote Ready** is pressed on its panel.
 - title: Hallway
   theme: Tinted
   path: area-hallway
@@ -1806,7 +2017,7 @@ views:
       icon: mdi:door-sliding
     - type: custom:mushroom-template-card
       primary: All Hallway Lights
-      secondary: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      secondary: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1881,7 +2092,7 @@ views:
       icon: mdi:bed
     - type: custom:mushroom-template-card
       primary: All Master Bedroom Lights
-      secondary: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south', 'light.master_bedroom_closet_light'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      secondary: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south', 'light.master_bedroom_closet_light'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south', 'light.master_bedroom_closet_light'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -2015,7 +2226,7 @@ views:
       icon: mdi:shower
     - type: custom:mushroom-template-card
       primary: All Master Bathroom Lights
-      secondary: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' unavailable' if u else '' }}"
+      secondary: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:

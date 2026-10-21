@@ -76,7 +76,7 @@ views:
       features:
       - type: media-player-volume-slider
     - type: tile
-      entity: media_player.office_snapcast_client_2
+      entity: media_player.office_snapcast_client
       name: Office
       icon: mdi:desk
       state_content:
@@ -419,7 +419,7 @@ views:
       features:
       - type: media-player-volume-slider
     - type: tile
-      entity: media_player.office_snapcast_client_2
+      entity: media_player.office_snapcast_client
       name: Office
       icon: mdi:desk
       state_content:

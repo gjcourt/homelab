@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: plane-prod
-# Not yet listed in apps/production/kustomization.yaml: the three Secrets
+# Listed in apps/production/kustomization.yaml. The three Secrets
 # below are operator-created (SOPS is operator-only). Activation steps are in
 # docs/operations/apps/plane.md ("Production first install").
 resources:
@@ -11,9 +11,9 @@ resources:
   - scheduledbackup.yaml
   - httproute.yaml
   - networkpolicy.yaml
-  # - secret-app-keys.yaml
-  # - secret-doc-store.yaml
-  # - secret-aws-creds.yaml
+  - secret-app-keys.yaml
+  - secret-doc-store.yaml
+  - secret-aws-creds.yaml
 
 labels:
   - pairs:

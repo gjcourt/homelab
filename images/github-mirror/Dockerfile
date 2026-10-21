@@ -11,7 +11,7 @@
 # The image is deliberately storage-agnostic (DEST is just an env/mount) so the
 # same artifact runs as a k8s CronJob elsewhere — see the example in
 # hosts/hestia/github-mirror/k8s-cronjob.example.yaml.
-FROM alpine:3.23
+FROM alpine:3.24
 
 # git   — the mirror engine
 # curl  — list repos via the GitHub REST API

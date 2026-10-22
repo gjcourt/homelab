@@ -324,6 +324,73 @@ From `kubectl get nodes` and `kubectl describe nodes` (allocated requests), and 
   that followed the node to a new cable and port (talos-kot-7x7, 2026-10-22). Agents scheduled there
   will see flaky network until that's fixed. It doesn't change the capacity numbers.
 
+## Step 2 findings (staging, 2026-10-22)
+
+Run against staging Plane (CE 1.4.2). `agent-desk` has no staging account, so the workspace Member
+`collab-test` stood in for it. The SANDBOX project, the three states and the five labels now exist
+on staging, and `collab-test` is a member of SANDBOX and SMOKE only.
+
+**1. A Member's token on a project it isn't a member of: contents refused, but it can see the
+project.**
+
+| Call, with the Member's API key, on AUDIO (not a member) | Result |
+| --- | --- |
+| `GET /projects/` | 200, and **AUDIO is listed**, with every other project |
+| `GET /projects/<AUDIO>/` | 200 |
+| `GET /projects/<AUDIO>/work-items/` and `/labels/` | 403 |
+| `POST /projects/<AUDIO>/work-items/` | 403 |
+| `GET /projects/<SANDBOX>/work-items/` (a member) | 200 |
+
+- The listing is visible because every project here is **public** (`network: 2`). Project names
+  and metadata leak to every workspace Member; the work items don't.
+- **A Member can join any public project by itself, through a browser session.** The source says
+  so: `UserProjectInvitationsViewset.create` (`app/views/project/invite.py`) refuses only
+  `network == SECRET` for non-admins. That endpoint takes session auth only; the v1 API's member
+  POST needs project admin (`api/views/member.py`). So the API key the dispatcher holds can't
+  join, but anyone who logs in as `agent-desk` with its password can. Not tested live: the
+  self-join call was blocked by the session's safety check, so this is from the source.
+- **What follows:** the dispatcher's project allowlist stays the real gate, with membership as the
+  second layer. To make membership a boundary as well, set HOMELAB (and any project agents must
+  never see) to **private** (`network: 0`). George's call; it changes nothing for George, who
+  is a workspace admin.
+
+**2. The activity API shows who added a label. The `ready` gate can be built as designed.**
+
+`GET /projects/<id>/work-items/<id>/activities/` returns one row per label change. Sequence on
+SANDBOX-1, read back with the Member's token:
+
+| Who | Change | `field` | `old_value` → `new_value` | `old_identifier` / `new_identifier` | `actor` |
+| --- | --- | --- | --- | --- | --- |
+| Member | adds `playbook:docs-fix` | `labels` | `""` → `playbook:docs-fix` | – / label id | Member's id |
+| George | adds `ready` | `labels` | `""` → `ready` | – / `ready`'s id | George's id |
+| Member | removes `ready` | `labels` | `ready` → `""` | `ready`'s id / – | Member's id |
+| Member | re-adds `ready` | `labels` | `""` → `ready` | – / `ready`'s id | Member's id |
+
+- **The rule:** take the latest activity whose `new_identifier` or `old_identifier` is `ready`'s
+  label id. It counts only if it's an add (`new_identifier` set) by George's user id. In the run
+  above, the last `ready` was added by the Member, so the ticket isn't startable. Match on the
+  label **id**, not the name, so renaming a label can't spoof or break the gate.
+- Activity rows appeared within about a second of the PATCH.
+
+**3. Webhook payloads carry the actor and the label diff.**
+
+A throwaway receiver on the allowlisted name (`webhook-receiver.plane-stage`, deleted after) caught
+all four events. Each had the headers `X-Plane-Delivery`, `X-Plane-Event` and `X-Plane-Signature`.
+
+| Event | `event`, `action` | What's in it |
+| --- | --- | --- |
+| Label change | `issue`, `updated` | `activity.field = "labels"`; `activity.old_value` and `new_value` are the **full lists of label ids** before and after; `activity.actor` is the user (id, email, display name); `data` is the whole work item, with `data.labels` as objects with names, and `data.project` |
+| Comment | `issue_comment`, `created` | `activity.actor`; `data.comment_html`, `data.issue`, `data.project`, `data.created_by`, `data.actor` |
+
+- **Trap:** on `issue` events, `data.created_by` is the item's **creator**, not who made the change.
+  The actor is `activity.actor`. (On comments the two agree.)
+- The webhook's actor is enough to act fast, but the dispatcher still re-reads the activity API
+  before starting a Job: a webhook is a hint, the activity record is the authority. The poll path
+  uses only the activity API anyway.
+
+**Exit met:** all three answered. One follow-up for George, from finding 1: whether to make HOMELAB
+private.
+
 ## Steps
 
 Staging first. There is one bench-cloud, and it's production, so staging never launches a real Job:
@@ -340,7 +407,7 @@ RBAC and the admission policy.
      - what the webhook payload carries for label and comment events.
    - **Exit:** all three answered, with evidence.
 3. **The sandbox (decision 1). George creates it, or OKs its creation.**
-   - Repo `gjcourt/agent-sandbox` (name to confirm), with a small CI workflow so `main-ci` and the
+   - Repo `gjcourt/agent-sandbox` (private; created 2026-10-22), with a small CI workflow so `main-ci` and the
      PR checks have something to run.
    - The `default-branch-guard` ruleset, applied by the daily `github-rulesets` CronJob (check it
      covers the new repo). The bench-cloud GitHub App is installed on all repositories, so it's
@@ -428,14 +495,18 @@ RBAC and the admission policy.
   tests it with webhooks off.
 - **Plane rate limit.** At 24 Jobs the comment hook alone approaches the default 60/min on the Jobs'
   key. Raise `API_KEY_RATE_LIMIT` (step 3a) rather than adding keys.
-- **The actor check depends on Plane exposing it.** If step 2 finds the activity API doesn't show
-  who added a label, the `ready` and `over-cap` gates need another design before step 4. Stop and
-  revisit rather than ship a gate an agent could open.
+- **The actor check depends on Plane exposing it.** Step 2 found that it does (findings, item 2).
+  The gate keys on the label id and George's user id, so an upgrade that changes the activity
+  format would close the gate rather than open it: no matching row, no start.
+- **Self-join on public projects** (findings, item 1). A browser session as `agent-desk` can join
+  any public project. The allowlist still stops the dispatcher acting there; making HOMELAB
+  private closes it in Plane too.
 
 ## Open questions
 
-- **Sandbox repo name and visibility.** `gjcourt/agent-sandbox` is a proposal. Public or private is
-  George's call.
+- ~~Sandbox repo name and visibility.~~ **`gjcourt/agent-sandbox`, private** (George, 2026-10-22).
+  Created the same day, with a `lint-and-test` CI workflow.
+- **Make HOMELAB private in Plane?** From step 2's finding 1.
 - **Production `API_KEY_RATE_LIMIT` value.** It's set from step 5's measured rate, not guessed here.
 
 ## Phase 2 pointer

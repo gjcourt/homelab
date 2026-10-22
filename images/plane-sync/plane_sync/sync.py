@@ -90,13 +90,35 @@ def save_state(path: Path, state: dict) -> None:
 def norm_html(value: str | None) -> str:
     """Plane stores description_html wrapped in <div>...</div>, with quotes
     unescaped and rel="noopener noreferrer" on links, so compare on a
-    normalized form or every run would re-update every item."""
+    normalized form or every run would re-update every item. Opening an item
+    in Plane's editor also re-saves it with class, data-id and target
+    attributes, so keep only href."""
     v = (value or "").strip()
     if v.startswith("<div>") and v.endswith("</div>"):
         v = v[5:-6]
-    # Plane also adds rel/target attributes to links.
-    v = re.sub(r'\s(?:rel|target|class)="[^"]*"', "", v)
+
+    def keep_href(m: re.Match) -> str:
+        href = re.search(r'\shref="[^"]*"', m.group(2) or "")
+        return f"<{m.group(1)}{href.group(0) if href else ''}>"
+
+    v = re.sub(r"<([A-Za-z][A-Za-z0-9]*)(\s[^>]*)?>", keep_href, v)
     return html.unescape(v)
+
+
+def inline_md(text: str) -> str:
+    """Escape a markdown paragraph and render its inline code, links and bold,
+    so Plane shows formatting rather than raw backticks and asterisks."""
+    spans: list[str] = []
+
+    def stash(m: re.Match) -> str:
+        spans.append(f"<code>{html.escape(m.group(1))}</code>")
+        return f"\x00{len(spans) - 1}\x00"
+
+    v = re.sub(r"`([^`]+)`", stash, text)
+    v = html.escape(v)
+    v = re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r'<a href="\2">\1</a>', v)
+    v = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", v)
+    return re.sub(r"\x00(\d+)\x00", lambda m: spans[int(m.group(1))], v)
 
 
 def differs(item: dict, body: dict) -> dict:
@@ -133,7 +155,7 @@ def plan_url(owner: str, p: Plan) -> str:
 
 def brief_body(cfg: Config, b: labmod.Brief, label_ids: list[str]) -> dict:
     meta = " · ".join(x for x in (b.difficulty, b.time_commitment) if x)
-    desc = (f"<p>{html.escape(b.summary)}</p>" if b.summary else "") + (
+    desc = (f"<p>{inline_md(b.summary)}</p>" if b.summary else "") + (
         f'<p><a href="{brief_url(cfg, b)}">Brief {b.number}</a>'
         + (f" · {html.escape(meta)}" if meta else "") + "</p>")
     return {"name": f"{b.number} · {b.title}", "description_html": desc, "labels": sorted(label_ids)}
@@ -142,7 +164,7 @@ def brief_body(cfg: Config, b: labmod.Brief, label_ids: list[str]) -> dict:
 def plan_body(owner: str, p: Plan) -> dict:
     parts = []
     if p.summary:
-        parts.append(f"<p>{html.escape(p.summary)}</p>")
+        parts.append(f"<p>{inline_md(p.summary)}</p>")
     link = plan_url(owner, p)
     where = f"PR #{p.pr_number}" if p.proposed else f"docs/plans/{p.filename}"
     parts.append(f'<p><a href="{link}">{html.escape(where)}</a></p>')

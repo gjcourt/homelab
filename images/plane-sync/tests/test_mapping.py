@@ -59,3 +59,24 @@ def test_description_compare_ignores_plane_normalisation():
     link_sent = {"description_html": '<p><a href="https://x/y">Brief</a></p>'}
     link_stored = {"description_html": '<div><p><a href="https://x/y" rel="noopener noreferrer">Brief</a></p></div>'}
     assert differs(link_stored, link_sent) == {}
+
+
+def test_description_compare_ignores_plane_editor_resave():
+    # Opening an item in Plane's editor re-saves it with class/data-id/target attributes (seen on
+    # staging, 2026-10-21); without this every viewed item was re-patched on each sync.
+    from plane_sync.sync import differs
+    sent = {"description_html": '<p>Uses <code>x</code></p><p><a href="https://x/y">Brief</a> · Hard</p>'}
+    stored = {"description_html": (
+        '<p class="editor-paragraph-block" data-id="97ba">Uses <code class="c">x</code></p>'
+        '<p class="editor-paragraph-block" data-id="b6c9"><a target="_blank" class="text-accent-secondary '
+        'underline underline-offset-[3px]" href="https://x/y" rel="noopener noreferrer">Brief</a> · Hard</p>')}
+    assert differs(stored, sent) == {}
+    assert differs(stored, {"description_html": '<p>Uses <code>x</code></p><p><a href="https://x/z">Brief</a> · Hard</p>'})
+
+
+def test_inline_markdown_rendered():
+    from plane_sync.sync import inline_md
+    out = inline_md("The tracker is **[Plane](https://plane.so)**, see `a<b>.md` & **bench-cloud**.")
+    assert out == ('The tracker is <strong><a href="https://plane.so">Plane</a></strong>, see '
+                   '<code>a&lt;b&gt;.md</code> &amp; <strong>bench-cloud</strong>.')
+    assert inline_md("no `**bold**` inside code") == "no <code>**bold**</code> inside code"

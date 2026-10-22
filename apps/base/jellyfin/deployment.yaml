@@ -130,7 +130,7 @@ spec:
         #      4194304 = 4GiB. No probe by design: the janitor's health must
         #      not gate Jellyfin's pod readiness.
         - name: transcode-janitor
-          image: busybox:1.37.0
+          image: busybox:1.38.0
           command:
             - /bin/sh
             - -c

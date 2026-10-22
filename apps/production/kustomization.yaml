@@ -32,6 +32,7 @@ resources:
   - navidrome
   - openwebui
   - plane
+  - plane-sync
   - snapcast
   - thermalscope
   - thermalscope-smart

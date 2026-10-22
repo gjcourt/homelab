@@ -6,7 +6,7 @@ resources:
   - ../../base/plane-sync/
   # SOPS-encrypted by the operator from its .example template (agents never
   # run sops in this repo); Flux decrypts it at apply time.
-  # - secret-plane-sync.yaml
+  - secret-plane-sync.yaml
 
 labels:
   - pairs:

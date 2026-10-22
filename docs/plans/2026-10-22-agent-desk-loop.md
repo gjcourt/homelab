@@ -2,7 +2,7 @@
 status: planned
 last_modified: 2026-10-22
 lab: 03-042
-summary: "The agent desk loop (lab 03-042 phase 1): a stateless in-cluster dispatcher turns startable Plane tickets into bench-cloud Jobs, links each PR back to its ticket, and carries questions and mid-run comments through the ticket; docs-fix and dependency-hold playbooks first"
+summary: "The agent desk loop (lab 03-042 phase 1): a stateless in-cluster dispatcher turns ready Plane tickets into bench-cloud Jobs (up to 24 pods, 6 per playbook without asking), links each PR back to its ticket, and carries questions and mid-run comments through the ticket; sandbox repo first; docs-fix, dep-hold and main-ci playbooks"
 ---
 
 # Agent desk: Plane tickets worked by bench-cloud agents
@@ -21,13 +21,13 @@ tickets into pull requests". The pieces under it are done:
   ([staging plan, exit criteria](2026-10-18-plane-staging.md#exit-criteria-staging)).
 
 This plan covers **phase 1 only**: the loop that connects them. Matrix sessions (phase 2) are out of
-scope.
+scope; see [Phase 2 pointer](#phase-2-pointer).
 
 ```text
-George labels a ticket "ready"  (or its playbook is auto-start)
+George labels a ticket "ready"
         │  Plane webhook (signed)  +  slow API poll as backstop
         ▼
-dispatcher ── checks: playbook, ready rule, repo not denied, no live Job, quota
+dispatcher ── checks: playbook, ready by George, repo not denied, no live Job, caps
         │  creates Job in bench-cloud (ticket as the brief)
         ▼
 bench-cloud Job ── Plane MCP: reads ticket, comments, attaches PR link
@@ -36,7 +36,7 @@ bench-cloud Job ── Plane MCP: reads ticket, comments, attaches PR link
 George merges ── dispatcher sees the merge on GitHub ── ticket → "Done"
 ```
 
-## Decisions already made (George, 2026-10-18, from the brief)
+## Decisions (George, 2026-10-18, from the brief)
 
 - **Tracker:** self-hosted Plane.
 - **Ready gate:** per playbook. Each playbook declares whether its tickets start on their own or
@@ -45,13 +45,25 @@ George merges ── dispatcher sees the merge on GitHub ── ticket → "Done
   fix in the [bench-cloud plan](2026-09-25-bench-cloud-agent.md#risks)).
 - **The ticket is the chat** in phase 1: questions and mid-run messages go through ticket comments.
 
+## Decisions (George, 2026-10-22, on this plan)
+
+| # | Question | Decision |
+| --- | --- | --- |
+| 1 | Repos first | **A sandbox first.** A throwaway repo (proposed `gjcourt/agent-sandbox`) with its own Plane project carries the first end-to-end runs. Real repos are added after the milestone passes |
+| 2 | Auto-start | **Neither playbook auto-starts.** `docs-fix`, `dep-hold` (and `main-ci`, below) all wait for `ready`. Revisit later |
+| 3 | Third playbook | **Failing CI on main** (`main-ci`): a red default branch opens a ticket; the agent investigates and proposes a fix PR |
+| 4 | Renovate fixer | **It opens `dep-hold` tickets** instead of launching Jobs directly, so all agent work goes through Plane |
+| 5 | Concurrency | George: "we should be able to run up to 24 concurrent pods, w/ no more than 6 pods on one workflow w/out asking permission". **24 agent pods in total; 6 Jobs per playbook**, more only with George's approval |
+| 6 | Notifications | **Plane notifications only** in phase 1. George: "let's bias towards plane first, and then when we get the chat server up and running, we can think through alternate notification mechanisms" |
+
 ## Design
 
 ### Where agents work
 
 | Plane project | Agent tickets? | Why |
 | --- | --- | --- |
-| Repo projects other than HOMELAB (DOMESTIQUE today; more as repos are added) | **Yes** | One project per repo, so the project decides the repo |
+| **SANDBOX** (`gjcourt/agent-sandbox`, decision 1) | **Yes, first** | Throwaway repo: a wrong PR costs nothing |
+| Other repo projects except HOMELAB (DOMESTIQUE today; more as repos are added) | **After the milestone** (decision 1) | One project per repo, so the project decides the repo |
 | HOMELAB | **No** | Deny list, until bench-watch |
 | Lab categories (AUDIO, AUTO, COFFEE, CROSS, FIN, PIANO, WOOD) | **No** | Briefs are long-form ideas whose status plane-sync owns, not units of agent work |
 
@@ -68,6 +80,8 @@ plane-sync counts those as `plane_only_items` and never edits them
 configured (`REPO_PROJECTS`: `domestique:DOMESTIQUE:Domestique`), so it only ensures the project
 exists. When a repo project also mirrors plans, plan items carry `external_source: plan:<repo>`; the
 dispatcher ignores any item that has an `external_source`, so the two never touch the same item.
+The SANDBOX project is created by hand in Plane, not through plane-sync: the sandbox has no plans to
+mirror.
 
 ### Dispatcher
 
@@ -78,10 +92,10 @@ A small service, `agent-desk`, in its own namespace.
 | Language | **Python 3.12**, stdlib + PyYAML + the official `kubernetes` client | Reuses plane-sync's Plane client: 1 req/s pacing, `Retry-After`, 409 handling, description normalisation, all already tested against Plane 1.4.2 |
 | Source | **`images/agent-desk/`** in this repo, built by `build-agent-desk.yml` | The house pattern (plane-sync, bench-cloud). This reverses the staging plan's "outside this repo": while homelab is on the deny list, no agent can edit the dispatcher that gates agents |
 | Namespace | **`agent-desk`** (prod), **`agent-desk-stage`** (staging) | bench-cloud has no ingress at all; webhooks need some. A separate namespace keeps that true |
-| State | **None of its own.** Plane (state, labels, links, comments) and Kubernetes (Jobs labelled with the ticket id) are the record | No PVC means no exposure to the iSCSI read-only failure mode ([AGENTS.md](../../AGENTS.md#recovering-read-only-iscsi-volumes-recurring)). A restart re-derives everything with one full poll |
+| State | **None of its own.** Plane (state, labels, links, comments) and Kubernetes (Jobs labelled with the ticket id and playbook) are the record | No PVC means no exposure to the iSCSI read-only failure mode ([AGENTS.md](../../AGENTS.md#recovering-read-only-iscsi-volumes-recurring)). A restart re-derives everything with one full poll |
 | Creating Jobs | A ServiceAccount `agent-desk` bound by a **RoleBinding in `bench-cloud`** to the existing `bench-task-launcher` Role (Jobs: create, delete, get, list, watch; that namespace only) | The existing admission policy already pins every Job there to `serviceAccountName: bench-agent` and `priorityClassName: bench-cloud-task`, so the dispatcher can't start a privileged task or one the quota doesn't count |
 | Plane identity | The **`agent-desk`** bot, with **two API tokens**: one for the dispatcher, one for Jobs | Bot actions are visibly not George's; each token is revocable on its own. Plane's limit is per key (`API_KEY_RATE_LIMIT`, default 60/min), so two keys also halve contention |
-| GitHub identity | A **read-only** fine-grained PAT: Pull requests read, on the in-scope repos | It only needs to see whether a linked PR merged or closed. Plane's GitHub integration isn't in CE |
+| GitHub identity | A **read-only** fine-grained PAT: Pull requests read and Actions read, on the in-scope repos | It sees whether a linked PR merged or closed, and whether a default branch's CI is red (`main-ci`). Plane's GitHub integration isn't in CE |
 
 **Inputs.**
 
@@ -92,27 +106,49 @@ A small service, `agent-desk`, in its own namespace.
     which already reserves the spot. Never a CIDR.
 - **Backstop poll** every 10 minutes: list items in the allowlisted projects and re-evaluate.
   Plane retries a delivery up to 5 times and then drops it, so this is what catches an outage.
-- **GitHub poll** every 5 minutes for tickets in "In review": the PR's state.
+- **GitHub poll** every 5 minutes:
+  - the PR state of tickets in "In review";
+  - the latest default-branch workflow runs of in-scope repos (`main-ci` trigger).
 
 **The startable rule.** A ticket starts only if **all** hold:
 
 1. It's in an allowlisted project, and has no `external_source`.
 2. It carries exactly one `playbook:<name>` label naming a playbook the dispatcher knows.
-3. Ready rule:
-   - `ready` playbooks: a `ready` label **applied by George's Plane account**. The dispatcher checks
-     the actor in the item's activity. An agent can add labels through MCP, and the gate must not
-     be one it can open itself.
-   - `auto` playbooks: the ticket was **created** by George or by an allowlisted automation
-     identity. Never by `agent-desk`, so an agent can't create work that starts itself.
+3. **A `ready` label applied by George's Plane account.** The dispatcher checks the actor in the
+   item's activity. An agent can add labels through MCP, and the gate must not be one it can open
+   itself. Every playbook is ready-gated (decision 2). The `auto` rule stays in the format for later,
+   and when used, starts only tickets **created** by George or an allowlisted automation identity,
+   never by `agent-desk`.
 4. The project's repo is not on the deny list (`gjcourt/homelab`).
 5. No Job labelled with this ticket id is active, and the ticket isn't already In Progress, In review
    or Blocked.
-6. The dispatcher's own concurrency cap isn't reached (proposed **3**, below the `bench-cloud-tasks`
-   quota of 8 pods in `apps/base/bench-cloud/resourcequota.yaml`). That leaves room for George's own
-   `bench-cloud run` tasks and the renovate fixer's up-to-2 per run.
+6. The **playbook's cap** isn't reached: fewer than its `maxConcurrent` (6) Jobs labelled with that
+   playbook are active, unless George approved this ticket past the cap (below).
 
-If a rule fails, the dispatcher leaves at most one comment saying which one, and only for rules 2
-and 4: a missing playbook or a denied repo is something George would want to know.
+If rule 2 or 4 fails, the dispatcher leaves one comment saying which. A missing playbook or a denied
+repo is something George would want to know. Other failures stay silent until they change.
+
+**Concurrency (decision 5).**
+
+| Limit | Value | Enforced by |
+| --- | --- | --- |
+| All agent pods | **24** | bench-cloud's `ResourceQuota` (raised from 8, step 3a). Covers dispatcher Jobs and George's own `bench-cloud run` tasks alike; a pod over it waits in the Job queue, as today |
+| One playbook ("workflow") | **6 Jobs**, without asking | The dispatcher, counting active Jobs labelled `agent-desk/playbook=<name>` |
+| Above 6 for one playbook | Only with George's approval | The dispatcher asks; George approves per ticket or raises the cap |
+
+- **A ticket over its playbook's cap waits; it doesn't start.**
+  - The dispatcher moves it to a custom state **Awaiting approval** (group `unstarted`).
+  - It comments once: "`<playbook>` is at 6/6 running. Add `over-cap` to start this one now, or it
+    starts when a slot frees."
+- **Two ways forward:**
+  - When a slot frees, the oldest waiting ticket for that playbook starts. No approval is needed:
+    it's within 6.
+  - George adds the label **`over-cap`**. The dispatcher checks it was applied by George, as with
+    `ready`, and starts the ticket above 6, still inside the quota of 24.
+- **A standing raise** is a change to the playbook's `maxConcurrent` in the dispatcher's ConfigMap,
+  which lives in this repo. It's a PR George approves, and agents can't edit homelab.
+- Three playbooks at 6 each is **18 dispatcher Jobs** at most without approval, leaving at least 6 of
+  the 24 for George's own tasks.
 
 **Launching.** The Job is `scripts/bench-cloud/job.yaml` plus:
 
@@ -129,8 +165,9 @@ On create, the ticket moves to **In Progress** with a comment naming the Job.
 | Ticket after the Job | Dispatcher does |
 | --- | --- |
 | In review, with a PR link | Nothing; the GitHub poll takes over |
+| In review, no PR, with a findings comment (a playbook's no-PR outcome) | Nothing; George reads it and closes the ticket |
 | Blocked, with a question comment | Nothing; waits for George |
-| Anything else (crash, deadline, no PR) | Moves it to **Blocked** with a comment: exit code, and where the record is (`hestia:agent-inbox/runs/<task-id>/`) |
+| Anything else (crash, deadline, no PR and no findings) | Moves it to **Blocked** with a comment: exit code, and where the record is (`hestia:agent-inbox/runs/<task-id>/`) |
 
 ### Ticket ⇄ PR
 
@@ -140,8 +177,8 @@ On create, the ticket moves to **In Progress** with a comment naming the Job.
 - **The dispatcher**, polling GitHub:
   - merged → **Done**;
   - closed without merging → back to **Todo**, with a comment.
-- New states are created per in-scope project: **In review** (group `started`) and **Blocked**
-  (group `started`).
+- New states are created per in-scope project: **In review** (group `started`), **Blocked** (group
+  `started`) and **Awaiting approval** (group `unstarted`).
 
 ### Questions and the ticket as chat
 
@@ -155,13 +192,16 @@ On create, the ticket moves to **In Progress** with a comment naming the Job.
   - It reads through a small **conversation-channel interface** (`poll() -> new messages`,
     `post(text)`), with Plane comments as its only implementation, so phase 2 can add Matrix
     without rewriting it.
-  - Rate: at most one Plane call per 30 seconds per Job, whatever the tool-call rate. Eight Jobs
-    stay well under 60/min.
+  - Rate: at most one Plane call per 30 seconds per Job, whatever the tool-call rate. At 24 Jobs
+    that is up to 48 requests/min on the Jobs' key, close to the default 60/min, so step 3a also
+    raises `API_KEY_RATE_LIMIT` (a chart setting; see Risks).
   - Step 4 confirms against the Claude Code version pinned in the image that a hook can inject
     context this way.
 - **What the Job must change.** Today `bench-task` tells Claude "Nobody can answer questions
   mid-task" and runs with `--permission-prompts none`. In ticket mode the system prompt says instead
   that questions go on the ticket via the Blocked loop. Permission prompts stay off.
+- **Notifications:** Plane's own notifications (web and mobile app) are the only push channel in
+  phase 1 (decision 6). Nothing extra is built.
 
 ### Playbooks
 
@@ -170,6 +210,7 @@ Two parts, split by who may change them:
 - **The rules** live in the dispatcher's ConfigMap, reviewed in this repo:
   - name;
   - ready rule (`ready` | `auto`);
+  - `maxConcurrent` (default 6);
   - allowed repos;
   - deadline;
   - optional model;
@@ -182,21 +223,40 @@ Hooks and MCP config are not synced from `gjcourt/agents` (the allowlist exclude
 settings/hooks/MCP on purpose). For ticket Jobs they're baked into the image's managed settings,
 also reviewed here.
 
-**First two playbooks.**
+**The first three playbooks** are all ready-gated (decision 2), each capped at 6.
 
-| Playbook | Does | Allowed repos | Proposed ready rule |
-| --- | --- | --- | --- |
-| `docs-fix` | Docs-only changes: typos, stale commands, broken links, a README section the ticket describes. Verification: the diff touches only docs paths (`*.md`, `docs/`), and the repo's own lint passes | In-scope repos | `ready` at first; **auto after five clean runs**, if George agrees |
-| `dep-hold` | Investigates why a dependency update is held or stuck, and either opens a fix PR or writes up the cause on the ticket. Verification: a PR, or a ticket comment that names the blocking change | In-scope repos | `ready` |
+| Playbook | Trigger | Does | Allowed repos | Verification |
+| --- | --- | --- | --- | --- |
+| `docs-fix` | George writes a ticket | Docs-only changes: typos, stale commands, broken links, a README section the ticket describes | In-scope repos | The diff touches only docs paths (`*.md`, `docs/`), and the repo's own lint passes |
+| `dep-hold` | George writes a ticket, or the renovate fixer opens one (decision 4) | Investigates why a dependency update is held or stuck; opens a fix PR, or writes up the cause | In-scope repos | A PR whose CI passes, or a findings comment that names the blocking change |
+| `main-ci` | The dispatcher, when a default branch goes red (below) | Investigates a failing default-branch workflow; proposes a fix PR, or writes up why there isn't one | In-scope repos | A PR on which the previously failing workflow passes, citing the failed run and the root cause; or, if the cause isn't in the repo (flaky test, outage, expired secret), a findings comment saying so with evidence |
 
-- The brief lists both as auto-start candidates. **Auto-start is George's call per playbook**, so
-  both start ready-gated and the plan only proposes when to flip them.
-- **`dep-hold` overlaps the [renovate fixer plan](2026-09-28-renovate-fixer-bench-cloud.md)**
-  (`planned`), where `renovate-automerge` launches the fixes itself. This playbook is the
-  ticket-driven version for one-off holds George wants looked at. If both ship, the renovate fixer
-  could open its work as `dep-hold` tickets instead of bare Jobs. That's an open question below,
-  not decided here.
-- The brief's exit criteria ask for **at least three** playbooks. The third is an open question.
+**`main-ci` trigger.**
+
+- The GitHub poll reads the most recent completed workflow runs on each in-scope repo's default
+  branch.
+- When a run concludes `failure` and the repo has no open `main-ci` ticket, the dispatcher creates
+  one in the repo's project. It carries the `playbook:main-ci` label, the run URL, the failing jobs,
+  and the head commit.
+- **One open ticket per repo.** Further failures add a comment to it rather than a new ticket.
+- **If the branch goes green before George starts it**, the dispatcher comments and moves the ticket
+  to Cancelled.
+- The ticket is created by `agent-desk` and still needs George's `ready`. An agent-created ticket
+  can never start itself.
+
+**Renovate fixer → `dep-hold` tickets (decision 4).** The
+[renovate fixer plan](2026-09-28-renovate-fixer-bench-cloud.md) has `renovate-automerge` launch fix
+Jobs itself and track them in a `renovate-fixer-state` ConfigMap. Under this plan it instead **opens
+a `dep-hold` ticket** naming the Renovate PR, the failing check and the classification. The
+dispatcher launches the Job, and Plane becomes the record.
+
+- With decision 2, those tickets **wait for George's `ready`**. That replaces the fixer plan's
+  decision 2 ("`renovate-automerge` kicks off the task").
+- The fixer plan's merge gates for mechanical fixes are not changed here.
+
+**Auto-start later.** The format keeps `auto` so a playbook can be flipped without a redesign. One
+possible bar for flipping one is a run of clean results, e.g. five merged PRs with no George fix-ups.
+That's an idea for George to revisit, not a decision.
 
 ### Plane access inside a Job
 
@@ -217,8 +277,8 @@ also reviewed here.
 - The dispatcher's Plane token is scoped to the workspace (and, by membership, to the in-scope
   projects). It holds **no GitHub write scope**; Jobs keep bench-cloud's existing GitHub App.
 - **Ticket text is untrusted input** to the agent, the same as any issue body. The prompt fences it.
-  The gates above (George-applied `ready`, George-created auto tickets, George-authored comments)
-  don't trust anything an agent can write.
+  The gates above (George-applied `ready` and `over-cap`, George-authored comments) don't trust
+  anything an agent can write.
 
 ### Network
 
@@ -231,22 +291,72 @@ also reviewed here.
 
 Plane's own policies get the matching egress (worker) and ingress rules.
 
+### Capacity for 24 pods (measured 2026-10-22)
+
+Task pods request **500m CPU / 1Gi** each, with limits of **2 CPU / 4Gi**. Ephemeral storage is
+1Gi requested, 20Gi limit, with `home` 16Gi and `tmp` 4Gi emptyDirs (`scripts/bench-cloud/job.yaml`).
+The init container (10m / 16Mi) doesn't add to that. The `bench-cloud` LimitRange defaults are the
+same, with a per-container max of 4 CPU / 8Gi.
+
+From `kubectl get nodes` and `kubectl describe nodes` (allocated requests), and `kubectl top nodes`:
+
+| Node | Allocatable CPU / memory | Requested now | Free by requests | In use now (`top`) |
+| --- | --- | --- | --- | --- |
+| talos-2mz-rfj | 11.95 / 61.5Gi | 4.08 / 11.9Gi | 7.87 / 49.6Gi | 0.95 / 9.6Gi |
+| talos-fpd-h0t | 11.95 / 61.5Gi | 4.09 / 11.7Gi | 7.86 / 49.8Gi | 1.54 / 12.8Gi |
+| talos-kot-7x7 | 11.95 / 61.6Gi | 7.13 / 14.1Gi | 4.82 / 47.5Gi | 4.72 / 6.4Gi |
+| talos-ykb-uir | 11.95 / 61.5Gi | 4.39 / 11.6Gi | 7.56 / 49.9Gi | 1.42 / 11.1Gi |
+| **Cluster** | **47.8 / 246Gi** | **19.7 / 49.3Gi** | **28.1 / 196.8Gi** | **8.6 / 39.9Gi** |
+
+- **Requests fit.** 24 pods request 12 CPU and 24Gi, against 28.1 CPU and 196.8Gi free. Each node
+  can take its share: 6 pods per node is 3 CPU and 6Gi, under every node's free amount, including
+  kot-7x7's 4.82 CPU.
+- **Memory limits fit.** 24 × 4Gi = 96Gi worst case, added to 39.9Gi in use today, is about 136Gi of
+  246Gi.
+- **CPU limits don't, and needn't.** 24 × 2 CPU = 48 CPU, the whole cluster's allocatable. CPU over a
+  request is throttled, not evicted. If many agents compile at once they slow each other and contend
+  with real workloads, and CPU shares follow requests. Task pods are priority −100, so they schedule
+  last and are evicted first under memory pressure. This is a finding, not a blocker: the quota can
+  go to 24, and the cost of a busy hour is slower agents.
+- **Ephemeral storage fits.** Allocatable is about 212Gi on three nodes and 836Gi on kot-7x7, with
+  3–6Gi requested on each. 6 pods × 20Gi = 120Gi worst case per node.
+- **Network caveat, same day:** kot-7x7's link shows ~2–5% packet loss and switch receive errors
+  that followed the node to a new cable and port (talos-kot-7x7, 2026-10-22). Agents scheduled there
+  will see flaky network until that's fixed. It doesn't change the capacity numbers.
+
 ## Steps
 
 Staging first. There is one bench-cloud, and it's production, so staging never launches a real Job:
 the staging dispatcher runs in **dry-run**, creating Jobs with `dryRun=All`. That still exercises
 RBAC and the admission policy.
 
-1. **This plan PR.** Review; answer the open questions.
+1. **This plan PR.** Review.
 2. **Plane prep and checks on staging.**
-   - Create the In review and Blocked states, the `ready` and `playbook:*` labels, and a test repo
-     project. Add `agent-desk` to that project only.
+   - Create the In review, Blocked and Awaiting approval states; the `ready`, `over-cap` and
+     `playbook:*` labels; and a SANDBOX project. Add `agent-desk` to that project only.
    - Verify, recording what's found here:
      - a Member's token is refused on a project it isn't a member of;
      - the activity API shows who added a label;
      - what the webhook payload carries for label and comment events.
    - **Exit:** all three answered, with evidence.
-3. **Dispatcher on staging, dry-run.** Image, `agent-desk-stage` namespace, RBAC, network policies,
+3. **The sandbox (decision 1). George creates it, or OKs its creation.**
+   - Repo `gjcourt/agent-sandbox` (name to confirm), with a small CI workflow so `main-ci` and the
+     PR checks have something to run.
+   - The `default-branch-guard` ruleset, applied by the daily `github-rulesets` CronJob (check it
+     covers the new repo). The bench-cloud GitHub App is installed on all repositories, so it's
+     covered.
+   - A SANDBOX project in production Plane, with `agent-desk` as its only bot member.
+   - **Exit:** the repo exists with the ruleset, and the bot sees SANDBOX and nothing else agents
+     shouldn't touch.
+
+   **3a. Concurrency (decision 5).**
+   - Raise `apps/base/bench-cloud/resourcequota.yaml` from 8 to **24** pods. This supersedes the
+     bench-cloud plan's "ceiling of 10" (its decision 4), by George's 2026-10-22 decision.
+   - Raise production Plane's `API_KEY_RATE_LIMIT`; the value is set from step 5's measured hook
+     rate.
+   - Capacity is above.
+   - **Exit:** the quota reads 24, and 24 trivial task pods schedule at once.
+4. **Dispatcher on staging, dry-run.** Image, `agent-desk-stage` namespace, RBAC, network policies,
    webhook secret, the staging `WEBHOOK_ALLOWED_HOSTS` switched from the smoke-test receiver to the
    dispatcher. **Exit:**
    - a signed delivery is accepted and a bad signature rejected;
@@ -254,27 +364,39 @@ RBAC and the admission policy.
    - `ready` added by `agent-desk` does not;
    - a ticket in HOMELAB (or a project mapped to `gjcourt/homelab`) is refused;
    - a second `ready` on a running ticket doesn't create a second Job;
+   - with the playbook cap set to 1 for the test, a second ticket goes to Awaiting approval; George's
+     `over-cap` starts it, and `agent-desk` adding `over-cap` does not;
    - with webhooks disabled, the poll still finds the ticket within 10 minutes.
-4. **Ticket mode in bench-cloud.**
+5. **Ticket mode in bench-cloud.**
    - `bench-task` learns `TASK_TICKET`; the image gets the pinned Plane MCP server, the comment hook
      and the managed settings.
    - The Jobs' Plane token goes into a SOPS secret (operator).
    - **Exit:** a hand-launched ticket Job against a staging ticket reads it, comments, attaches a
      link and sets In review, and a comment George writes mid-run reaches the agent.
-5. **Production dispatcher with `docs-fix`, ready-gated: first end-to-end milestone.** **Exit:**
-   George labels one ticket `ready` → a bench-cloud Job opens a PR → the PR is linked on the ticket
-   → the ticket reaches **In review**. George merges → the ticket reaches **Done**.
-6. **Question loop live.** **Exit:**
+6. **Production dispatcher with `docs-fix`, on SANDBOX: first end-to-end milestone.** **Exit:**
+   George labels one SANDBOX ticket `ready` → a bench-cloud Job opens a PR in
+   `gjcourt/agent-sandbox` → the PR is linked on the ticket → the ticket reaches **In review**.
+   George merges → the ticket reaches **Done**.
+7. **Question loop live (SANDBOX).** **Exit:**
    - an agent's question parks the ticket in Blocked;
    - George's reply resumes it in a new Job that has the answer;
    - a crashed Job's ticket lands in Blocked with the record path.
-7. **`dep-hold` playbook.** **Exit:** one real held update investigated through a ticket.
-8. **Auto-start, per George's decision per playbook.** **Exit:** one auto playbook starts a
-   George-created ticket without `ready`; an `agent-desk`-created ticket with the same playbook does
-   not start.
-9. **Planner, later.** A merged plan PR → draft tickets in Triage, written as a bench-cloud skill
-   (per the brief).
-10. **Third playbook and the pilot:** one real plan → tickets → merged PRs through the loop.
+8. **`main-ci` playbook (SANDBOX).** **Exit:**
+   - breaking the sandbox's default branch opens exactly one ticket, and a second failure comments
+     on it;
+   - after George's `ready`, the agent's PR turns the workflow green;
+   - a red-then-green branch with no `ready` ends as Cancelled.
+9. **`dep-hold` playbook, and the renovate fixer migration (decision 4).**
+   - `renovate-automerge` opens `dep-hold` tickets instead of Jobs.
+   - The fixer plan is updated to match: its decision 2 is superseded and `renovate-fixer-state`
+     goes away, since Plane plus Job labels are the record.
+   - **Exit:** one held Renovate update becomes a ticket, and after George's `ready` the agent opens
+     a fix PR or writes up the cause.
+10. **Real repos (decision 1).** Add the first real repo project to the dispatcher's allowlist and
+    `agent-desk`'s project memberships. **Exit:** one `docs-fix` ticket on it goes ready → PR → Done.
+11. **Planner, later.** A merged plan PR → draft tickets in Triage, written as a bench-cloud skill
+    (per the brief).
+12. **Pilot:** one real plan → tickets → merged PRs through the loop.
 
 ## Exit criteria (the brief's phase 1, restated for this plan)
 
@@ -282,9 +404,11 @@ RBAC and the admission policy.
 - [ ] An agent question on a ticket, answered by George, resumes the same work.
 - [ ] A comment George writes on a ticket reaches its running Job mid-task, and the reply appears on
       the ticket.
-- [ ] At least three playbooks exist, each declaring its own ready rule, and at least one runs on
-      its own.
-- [ ] The dispatcher provably refuses homelab-repo tickets and duplicate pickups.
+- [ ] At least three playbooks exist, each declaring its own ready rule. *(The brief adds "at least
+      one runs on its own". George chose ready-gating for all three on 2026-10-22, so this one waits
+      for a later decision to flip a playbook to `auto`.)*
+- [ ] The dispatcher provably refuses homelab-repo tickets and duplicate pickups, and holds a
+      playbook at 6 without George's `over-cap`.
 - [ ] A merged plan PR produces draft tickets in Plane without manual copying.
 - [ ] One full project goes plan → tickets → merged PRs through the loop, with George merging every
       PR.
@@ -294,29 +418,28 @@ RBAC and the admission policy.
 - **Prompt injection through tickets.** Ticket text reaches an agent with push rights. Mitigated by
   fencing and by gates an agent can't satisfy itself. Not eliminated: an agent can still be misled
   within its own task, which is why babysit, critique and George's merge stay in the loop.
-- **Subscription burn.** Every dispatched ticket is a Job on George's Claude subscription. The
-  dispatcher's cap (proposed 3) bounds it. Per-task usage is already recorded in each run's
-  `result.json`.
-- **Missed events.** Webhooks retry 5 times and stop. The 10-minute poll is the backstop, and step 3
+- **Subscription burn.** Every dispatched ticket is a Job on George's Claude subscription, and 24 at
+  once uses the plan's limits roughly 24 times as fast as one (the bench-cloud plan's risk, scaled
+  up). The per-playbook cap of 6 and George's `ready` on every ticket bound it. Per-task usage is
+  already recorded in each run's `result.json`.
+- **CPU contention at full concurrency** (see Capacity): slower agents and some pressure on real
+  workloads when many compile at once.
+- **Missed events.** Webhooks retry 5 times and stop. The 10-minute poll is the backstop, and step 4
   tests it with webhooks off.
-- **Two Plane keys at one rate limit each.** If Jobs plus the hook outgrow 60/min, raise
-  `API_KEY_RATE_LIMIT` (a chart setting) rather than adding keys.
+- **Plane rate limit.** At 24 Jobs the comment hook alone approaches the default 60/min on the Jobs'
+  key. Raise `API_KEY_RATE_LIMIT` (step 3a) rather than adding keys.
 - **The actor check depends on Plane exposing it.** If step 2 finds the activity API doesn't show
-  who added a label, the ready gate needs another design before step 3, e.g. George sets a state
-  only his account can see. Stop and revisit rather than ship a gate an agent could open.
+  who added a label, the `ready` and `over-cap` gates need another design before step 4. Stop and
+  revisit rather than ship a gate an agent could open.
 
-## Open questions for George
+## Open questions
 
-1. **Repos in scope first.** DOMESTIQUE is the only repo project today. Which repos should get Plane
-   projects and agent access for the first milestone, and should the first end-to-end run use a
-   real repo or a throwaway sandbox repo?
-2. **Auto-start.** Keep both first playbooks ready-gated? If `docs-fix` should go auto later, is
-   "five clean runs" the right bar?
-3. **Third playbook.** Candidates from the brief's automations: failing main CI, a recurring chore.
-   Or something George does by hand often.
-4. **Renovate fixer.** Should it open `dep-hold` tickets (one record, visible in Plane), or keep
-   launching Jobs directly as its plan says?
-5. **Dispatcher concurrency cap.** 3 of the 8-pod quota, or another number?
-6. **Notifications.** Plane's own notifications are the phase-1 push channel (web and mobile app).
-   Is that enough for "an agent asked you a question", or does George want something louder
-   (e.g. an email via the existing alert path) before phase 2?
+- **Sandbox repo name and visibility.** `gjcourt/agent-sandbox` is a proposal. Public or private is
+  George's call.
+- **Production `API_KEY_RATE_LIMIT` value.** It's set from step 5's measured rate, not guessed here.
+
+## Phase 2 pointer
+
+Out of scope here, per the brief: Matrix sessions. One item carries over from this plan. **Alternate
+notification mechanisms** (anything beyond Plane's own) are revisited once the phase-2 chat server
+is running (decision 6).

@@ -28,7 +28,7 @@ PRINT_WIDTH = 100
 CATEGORY_IDENTIFIERS = {
     "01": "AUDIO",
     "02": "WOOD",
-    "03": "HOMEAUTO",
+    "03": "AUTO",
     "04": "FIN",
     "05": "PIANO",
     "06": "COFFEE",
@@ -41,7 +41,7 @@ class Category:
     prefix: str  # "03"
     dirname: str  # "03-homelab-automation"
     name: str  # "Homelab & Automation"
-    identifier: str  # "HOMEAUTO"
+    identifier: str  # "AUTO"
 
 
 @dataclass

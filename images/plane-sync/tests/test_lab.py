@@ -15,7 +15,7 @@ def test_parse_briefs(lab_root):
     assert b.depends_on == ["homelab/cilium"]
     assert b.summary == "First paragraph of IP Cleanup, which becomes the Plane description."
     cats = {c.prefix: c for c in lab.categories(lab_root)}
-    assert cats["03"].name == "Homelab & Automation" and cats["03"].identifier == "HOMEAUTO"
+    assert cats["03"].name == "Homelab & Automation" and cats["03"].identifier == "AUTO"
 
 
 def test_frontmatter_roundtrip_is_byte_identical(lab_root):

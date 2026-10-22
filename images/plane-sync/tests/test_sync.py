@@ -148,14 +148,14 @@ def test_import_creates_everything_and_is_idempotent(lab_root, tmp_path):
     s = Syncer(plane, cfg, gh=FakeGH(), log=lambda m: None)
     r = s.run(initial=True)
     s.save()
-    assert sorted(r.created_projects) == ["COFFEE", "DOMESTIQUE", "HOMEAUTO", "HOMELAB"]
+    assert sorted(r.created_projects) == ["AUTO", "COFFEE", "DOMESTIQUE", "HOMELAB"]
     assert r.created_items == {"brief": 3, "plan": 1}
-    pid, it = plane.item("HOMEAUTO", "03-002")
-    assert it["state"] == plane.state_id("HOMEAUTO", "Backlog")
+    pid, it = plane.item("AUTO", "03-002")
+    assert it["state"] == plane.state_id("AUTO", "Backlog")
     assert it["name"] == "03-002 · IP Cleanup"
     assert "george" in plane.members[pid]
-    _, done = plane.item("HOMEAUTO", "03-001")
-    assert done["state"] == plane.state_id("HOMEAUTO", "Done")
+    _, done = plane.item("AUTO", "03-001")
+    assert done["state"] == plane.state_id("AUTO", "Done")
     # plan relates to its brief (cross-project)
     _, plan = plane.item("HOMELAB", "2026-01-01-ip.md")
     assert plane.rel[plan["id"]] == [it["id"]]
@@ -173,8 +173,8 @@ def test_reconcile_plane_status_writes_back(lab_root, tmp_path):
     s = Syncer(plane, cfg, gh=FakeGH(), log=lambda m: None)
     s.run(initial=True)
     s.save()
-    pid, it = plane.item("HOMEAUTO", "03-002")
-    plane.update_item(pid, it["id"], {"state": plane.state_id("HOMEAUTO", "Cancelled")})
+    pid, it = plane.item("AUTO", "03-002")
+    plane.update_item(pid, it["id"], {"state": plane.state_id("AUTO", "Cancelled")})
     s2 = Syncer(plane, cfg, gh=FakeGH(), log=lambda m: None)
     r = s2.run(initial=False)
     assert r.brief_writes == {"03-homelab-automation/03-002-ip-cleanup.md": "Cancelled"}
@@ -191,8 +191,8 @@ def test_reconcile_conflict_writes_nothing(lab_root, tmp_path):
     s = Syncer(plane, cfg, gh=FakeGH(), log=lambda m: None)
     s.run(initial=True)
     s.save()
-    pid, it = plane.item("HOMEAUTO", "03-002")
-    plane.update_item(pid, it["id"], {"state": plane.state_id("HOMEAUTO", "In Progress")})
+    pid, it = plane.item("AUTO", "03-002")
+    plane.update_item(pid, it["id"], {"state": plane.state_id("AUTO", "In Progress")})
     p = lab_root / "03-homelab-automation/03-002-ip-cleanup.md"
     p.write_text(lab.set_frontmatter_status(p.read_text(), "Done"))
     s2 = Syncer(plane, cfg, gh=FakeGH(), log=lambda m: None)

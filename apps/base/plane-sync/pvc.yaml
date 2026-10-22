@@ -1,0 +1,15 @@
+# The sync's state file: the last-synced status of every brief. The conflict
+# rule (both sides changed since the last sync) depends on it, so it must
+# survive between runs. A few KB; Retain because losing it turns every
+# Plane-side status into a "conflict" until each one is re-recorded.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: plane-sync-state
+  namespace: plane-sync
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: truenas-iscsi
+  resources:
+    requests:
+      storage: 1Gi

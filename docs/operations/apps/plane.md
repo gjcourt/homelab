@@ -203,3 +203,34 @@ invite still exists:
    instance sign-up still **off** (done this way 2026-10-21).
 3. Create the bot's API token only when its job is ready, and put it straight into a SOPS secret.
 
+
+**Forgotten bot password.** "Forgot password" needs SMTP, so reset it from the api pod. The command
+prompts twice with hidden input; run it in your own terminal so the password goes nowhere else:
+
+```bash
+kubectl -n plane-prod exec -it deploy/plane-api-wl -- python manage.py reset_password <bot-email>
+```
+
+## 9. plane-sync (lab briefs and repo plans)
+
+A CronJob in the `plane-sync` namespace (`apps/base/plane-sync/`) runs `plane-sync reconcile` every
+30 minutes against workspace `home`, as the `plane-sync` bot. Plan:
+`docs/plans/2026-10-21-plane-lab-project-sync.md`; tool: `images/plane-sync/`.
+
+- **The first run is the production import.** On an empty workspace it creates the 7 lab-category
+  projects plus HOMELAB and DOMESTIQUE, with every item's status taken from its repo.
+- **State** lives on the `plane-sync-state` PVC (`/state/plane-sync-state.json`): the last-synced
+  status of each brief, which the conflict rule needs. Don't delete it.
+- **Status changes in Plane** come back as one `chore(plane-sync): status updates` PR in gjcourt/lab,
+  which auto-merges after CI. That is the only PR anything merges without George.
+- **Run it now** instead of waiting for the schedule:
+
+  ```bash
+  kubectl -n plane-sync create job --from=cronjob/plane-sync plane-sync-manual-$(date +%s)
+  kubectl -n plane-sync logs -f job/<that-name>
+  ```
+
+  The last thing it prints is a JSON summary: items created and updated, status writes, conflicts,
+  and the lab PR number.
+- **Secret** `plane-sync` (SOPS, `apps/production/plane-sync/secret-plane-sync.yaml`): the bot's
+  Plane API token and a fine-grained GitHub PAT (lab read/write; homelab and domestique read).

@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/part-of: network-policies
 spec:
   description: >-
-    Gateway ingress to the web, space, admin, live, api and MinIO ports; bench-cloud to the api; anything within the namespace; egress DNS and the namespace (CNPG included).
+    Gateway ingress to the web, space, admin, live, api and MinIO ports; bench-cloud and plane-sync to the api; anything within the namespace; egress DNS and the namespace (CNPG included).
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: plane-ce
@@ -36,10 +36,13 @@ spec:
     # probes, which include Valkey (6379) and RabbitMQ (5672).
     - fromEntities:
         - host
-    # 03-042's agent Jobs reach the REST API and MCP server through this.
+    # 03-042's agent Jobs reach the REST API and MCP server through this, and
+    # the plane-sync CronJob mirrors lab briefs and repo plans through it.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: bench-cloud
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-sync
       toPorts:
         - ports:
             - port: "8000"

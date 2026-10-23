@@ -10,7 +10,7 @@ resources:
   - networkpolicy-plane.yaml
   # SOPS-encrypted by the operator from its .example template (agents never
   # run sops in this repo); Flux decrypts it at apply time.
-  # - secret-agent-desk.yaml   # uncomment once the operator has added it
+  - secret-agent-desk.yaml
 
 labels:
   - pairs:

@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: agent-desk
-          image: ghcr.io/gjcourt/agent-desk:PLACEHOLDER
+          image: ghcr.io/gjcourt/agent-desk:2026-10-23-6e88923
           ports:
             - name: http
               containerPort: 8080

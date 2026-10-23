@@ -19,7 +19,7 @@ class FakePlane:
         self.projs = {}
         self.writes = []
 
-    def add_project(self, pid, identifier):
+    def add_project(self, pid, identifier, member=True):
         names = [("Backlog", "backlog"), ("Todo", "unstarted"), ("In Progress", "started"),
                  ("Done", "completed"), ("Cancelled", "cancelled"), ("In review", "started"),
                  ("Blocked", "started"), ("Awaiting approval", "unstarted")]
@@ -27,7 +27,8 @@ class FakePlane:
         labels = [{"id": f"{pid}-l-{n}", "name": n} for n in
                   ("ready", "over-cap", "playbook:docs-fix", "playbook:dep-hold", "playbook:bogus")]
         self.projs[pid] = {"identifier": identifier, "states": states, "labels": labels,
-                           "items": {}, "acts": {}, "comments": {}, "links": {}}
+                           "items": {}, "acts": {}, "comments": {}, "links": {},
+                           "member": member}
         return pid
 
     def sid(self, pid, name):
@@ -73,9 +74,12 @@ class FakePlane:
         return self.members
 
     def projects(self):
-        return [{"id": k, "identifier": v["identifier"]} for k, v in self.projs.items()]
+        return [{"id": k, "identifier": v["identifier"], "is_member": v["member"]}
+                for k, v in self.projs.items()]
 
     def states(self, pid):
+        if not self.projs[pid]["member"]:
+            raise RuntimeError("403: You do not have permission to perform this action.")
         return self.projs[pid]["states"]
 
     def labels(self, pid):

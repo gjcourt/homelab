@@ -61,8 +61,9 @@ class Config:
 
 
 def _read_file(env: str) -> str:
+    """A secret mounted as a file; '' when unset or absent (an optional key)."""
     path = os.environ.get(env, "")
-    if not path:
+    if not path or not os.path.exists(path):
         return ""
     with open(path) as f:
         return f.read().strip()

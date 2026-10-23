@@ -24,6 +24,7 @@ spec:
         runAsNonRoot: true
         runAsUser: 65534
         runAsGroup: 65534
+        fsGroup: 65534  # secret files are 0440; without this they're root-group and unreadable
         seccompProfile:
           type: RuntimeDefault
       containers:

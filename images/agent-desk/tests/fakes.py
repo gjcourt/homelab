@@ -102,6 +102,13 @@ class FakePlane:
 
     def update_item(self, pid, iid, body):
         self.writes.append(("update", iid, body))
+        it = self.projs[pid]["items"][iid]
+        for lid in set(it["labels"]) - set(body.get("labels", it["labels"])):
+            self.projs[pid]["acts"][iid].append({
+                "field": "labels", "actor": BOT, "created_at": ts(),
+                "new_identifier": None, "old_identifier": lid})
+        if "labels" in body:
+            it["labels"] = list(body["labels"])
         if "state" in body:
             self.projs[pid]["items"][iid]["state"] = body["state"]
             self.projs[pid]["acts"][iid].append({"field": "state", "actor": BOT,

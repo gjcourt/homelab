@@ -151,6 +151,31 @@ def test_cap_parks_ticket_and_over_cap_by_owner_starts_it(tmp_path):
     assert len(kube.created) == 2
     assert plane.state_of("p-sb", "i2") == "In Progress"
     assert "over-cap" in plane.writes[-1][2]
+    # one approval, one start: the dispatcher takes the label off
+    assert plane.lid("p-sb", "over-cap") not in plane.projs["p-sb"]["items"]["i2"]["labels"]
+
+
+def test_over_cap_approves_one_start_not_a_resume(tmp_path):
+    # George, 2026-10-24: remove over-cap after starting. A Blocked ticket that
+    # started over the cap resumes only when a slot frees or he re-approves.
+    d, plane, kube = make(tmp_path, cap=1)
+    plane.add_item("p-sb", "i1", seq=1)
+    ready(plane, "p-sb", "i1")
+    plane.add_item("p-sb", "i2", seq=2)
+    ready(plane, "p-sb", "i2")
+    d.poll()
+    plane.label("p-sb", "i2", "over-cap", OWNER)
+    d.poll()
+    assert len(kube.created) == 2
+    plane.set_state("p-sb", "i2", "Blocked", actor=BOT)
+    plane.say("p-sb", "i2", BOT, "Which file?")
+    plane.say("p-sb", "i2", OWNER, "README.md")
+    d.poll()
+    assert len(kube.created) == 2  # i1 still holds the only slot
+    assert plane.state_of("p-sb", "i2") == "Awaiting approval"
+    plane.label("p-sb", "i2", "over-cap", OWNER)
+    d.poll()
+    assert len(kube.created) == 3
 
 
 def test_waiting_ticket_starts_when_slot_frees(tmp_path):

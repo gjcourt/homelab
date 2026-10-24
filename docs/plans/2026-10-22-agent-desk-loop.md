@@ -1,6 +1,6 @@
 ---
-status: planned
-last_modified: 2026-10-22
+status: in-progress
+last_modified: 2026-10-24
 lab: 03-042
 summary: "The agent desk loop (lab 03-042 phase 1): a stateless in-cluster dispatcher turns ready Plane tickets into bench-cloud Jobs (up to 24 pods, 6 per playbook without asking), links each PR back to its ticket, and carries questions and mid-run comments through the ticket; sandbox repo first; docs-fix, dep-hold and main-ci playbooks"
 ---
@@ -391,6 +391,59 @@ all four events. Each had the headers `X-Plane-Delivery`, `X-Plane-Event` and `X
 **Exit met:** all three answered. One follow-up for George, from finding 1: whether to make HOMELAB
 private.
 
+## Step 3a result (2026-10-23)
+
+#1651 raised the quota to 24. A throwaway Job with `parallelism: 24` (pause containers, the task
+PriorityClass) ran all 24 pods at once across three nodes; a 25th was refused with `exceeded quota:
+bench-cloud-tasks`. **Exit met.** `API_KEY_RATE_LIMIT` waits for step 5's measured rate, as planned.
+
+## Step 4 findings (staging, 2026-10-23 to 2026-10-24)
+
+The dispatcher (#1652, image `ghcr.io/gjcourt/agent-desk`) runs in `agent-desk-stage` in dry-run
+(#1653), with `collab-test` standing in for `agent-desk` and `docs-fix` capped at 1. Runbook:
+[`agent-desk.md`](../operations/apps/agent-desk.md).
+
+**Exit tests**
+
+| Test | Result |
+| --- | --- |
+| Signed delivery accepted | ✅ logged `delivery <id>: issue → queued item …` |
+| Bad or missing signature rejected | ✅ 401, `rejected delivery …: bad signature` |
+| George's `ready` → dry-run Job admitted | ✅ SANDBOX-1 and SANDBOX-2, with the "Started… Dry run" comment |
+| `ready` from the bot → nothing | ✅ `SANDBOX-4: skip — ready not applied by George` |
+| HOMELAB refused | ✅ by membership: the bot isn't a HOMELAB member, so the dispatcher never sees its tickets (finding 1). The deny list itself is covered by `test_homelab_is_refused_with_one_comment` |
+| Second `ready` on a running ticket → no second Job | ✅ `skip — already In Progress` |
+| Cap 1 → Awaiting approval, one comment; George's `over-cap` starts it, the bot's doesn't | ✅ after the fix in finding 3 |
+| Webhooks off → the poll finds the ticket within 10 minutes | ✅ SANDBOX-5, `wait — docs-fix is at 2/1 running`, no delivery before it |
+
+**Exit met.** Testing turned up four problems, all fixed:
+
+1. **A mapped project the bot can't read stopped every poll** (#1654). HOMELAB is public, so it's
+   listed to the bot (step 2, finding 1), but its states 403. The dispatcher now skips a project
+   whose `is_member` is false, logging it once. Production would have hit this too.
+2. **Skips and deliveries weren't logged** (#1661), so "the gate held" and "the webhook never
+   arrived" looked the same. Accepted deliveries are logged, and so is the decision for a ticket a
+   delivery names, skips included. The 10-minute poll still logs only actions.
+3. **Plane sends the webhook before it records who changed a label** (#1663). Measured on
+   SANDBOX-3: the `over-cap` delivery at 03:21:19.495, the dispatcher's check at 03:21:20.559, the
+   activity row at 03:21:21.947. The gate failed closed and George's label waited 8½ minutes for the
+   poll. When a delivered ticket carries `ready` or `over-cap` that the activity log doesn't yet
+   credit to George, the dispatcher now rechecks after 3, 10 and 30 s. Retested on SANDBOX-5: decided
+   11 s and started 15 s after the delivery.
+4. **Secret files unreadable** (#1653). The secret volume is 0440 and the pod runs as 65534 with no
+   `fsGroup`; added `fsGroup: 65534`.
+
+**Decision (George, 2026-10-24): `over-cap` approves one start.** The dispatcher removes it as the
+ticket starts (#1664). Left on, a ticket that later resumed from Blocked would go over the cap again
+without asking.
+
+**Noted, not fixed:** an event check takes ~10–15 s, because it re-reads every item in every mapped
+project plus the Jobs list to count what's running. Fine at this size; worth narrowing before many
+projects are mapped.
+
+**State left on staging:** the dispatcher keeps running in dry-run. SANDBOX-1 to -5 are Cancelled,
+since a dry-run start has no Job to finish them.
+
 ## Steps
 
 Staging first. There is one bench-cloud, and it's production, so staging never launches a real Job:
@@ -491,8 +544,11 @@ RBAC and the admission policy.
   already recorded in each run's `result.json`.
 - **CPU contention at full concurrency** (see Capacity): slower agents and some pressure on real
   workloads when many compile at once.
-- **Missed events.** Webhooks retry 5 times and stop. The 10-minute poll is the backstop, and step 4
-  tests it with webhooks off.
+- **Missed events.** Webhooks retry 5 times and stop. The 10-minute poll is the backstop; step 4
+  tested it with webhooks off.
+- **Webhooks arrive before Plane's activity record** (step 4, finding 3). The dispatcher rechecks
+  for 45 s, then the poll catches it. If Plane's delay ever exceeds that, George's label still acts,
+  just up to 10 minutes late; it never acts on the wrong actor.
 - **Plane rate limit.** At 24 Jobs the comment hook alone approaches the default 60/min on the Jobs'
   key. Raise `API_KEY_RATE_LIMIT` (step 3a) rather than adding keys.
 - **The actor check depends on Plane exposing it.** Step 2 found that it does (findings, item 2).

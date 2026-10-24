@@ -5,6 +5,9 @@
                       the prompt as seen
   bench-ticket hook   Claude Code PostToolUse hook: relay George's new comments
                       to the agent as added context
+  bench-ticket lint   PreToolUse hook on workitem_comment: refuse a comment whose
+                      HTML is escaped, unbalanced or empty, and say why, so the
+                      agent fixes it before anything reaches the ticket
 
 Plane comments are the only channel today (agent-desk plan, "Questions and the
 ticket as chat"). poll() is the whole interface a later channel has to provide;
@@ -26,6 +29,7 @@ import re
 import sys
 import time
 import urllib.request
+from html.parser import HTMLParser
 
 INTERVAL = 30
 STATE = os.path.join(os.environ.get("HOME", "/tmp"), ".bench-ticket.json")
@@ -69,6 +73,76 @@ class PlaneComments:
         return sorted(new, key=lambda c: c.get("created_at") or "")
 
 
+ALLOWED_TAGS = {"p", "br", "a", "code", "pre", "strong", "em", "b", "i", "ul", "ol", "li",
+                "h1", "h2", "h3", "h4", "blockquote", "hr", "span"}
+VOID_TAGS = {"br", "hr"}
+MAX_COMMENT = 20000
+
+
+class _Checker(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.problems, self.stack, self.text = [], [], ""
+
+    def handle_starttag(self, tag, attrs):
+        if tag not in ALLOWED_TAGS:
+            self.problems.append(f"<{tag}> isn't a tag Plane comments use")
+        if tag == "a" and not (dict(attrs).get("href") or "").startswith(("http://", "https://")):
+            self.problems.append("an <a> needs an http(s) href")
+        if tag not in VOID_TAGS:
+            self.stack.append(tag)
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag not in VOID_TAGS and self.stack and self.stack[-1] == tag:
+            self.stack.pop()
+
+    def handle_endtag(self, tag):
+        if tag in VOID_TAGS:
+            return
+        if not self.stack or self.stack[-1] != tag:
+            self.problems.append(f"</{tag}> doesn't close the open tag"
+                                 + (f" <{self.stack[-1]}>" if self.stack else ""))
+            if tag in self.stack:
+                del self.stack[len(self.stack) - 1 - self.stack[::-1].index(tag):]
+        else:
+            self.stack.pop()
+
+    def handle_data(self, data):
+        self.text += data
+
+
+def lint_comment(s):
+    """Problems with a comment's HTML, empty if it's fit to post."""
+    s = s or ""
+    if re.search(r"&lt;/?(p|a|code|strong|em|li|ul|ol|br|pre)\b", s, re.I):
+        return ["the HTML is escaped (&lt;p&gt;): send the tags themselves, <p>…</p>"]
+    if len(s) > MAX_COMMENT:
+        return [f"{len(s)} characters; keep a comment under {MAX_COMMENT}"]
+    c = _Checker()
+    c.feed(s)
+    c.close()
+    problems = c.problems + [f"<{t}> is never closed" for t in c.stack]
+    if not c.text.strip():
+        problems.append("the comment has no text")
+    elif not re.match(r"\s*<", s):
+        problems.append("plain text outside any tag: wrap paragraphs in <p>…</p>")
+    return problems
+
+
+def lint(event):
+    """PreToolUse on workitem_comment: refuse malformed HTML before it reaches Plane."""
+    inp = event.get("tool_input") or {}
+    if inp.get("action") not in ("create", "update") or "comment_html" not in inp:
+        return
+    problems = lint_comment(inp["comment_html"])
+    if problems:
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PreToolUse", "permissionDecision": "deny",
+            "permissionDecisionReason": "Comment not posted, its HTML needs fixing: "
+                                        + "; ".join(problems) + ". Fix it and post again."}}))
+
+
 def load(f):
     f.seek(0)
     try:
@@ -86,6 +160,9 @@ def save(f, state):
 
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "lint":
+        lint(json.loads(sys.stdin.read() or "{}"))
+        return
     if cmd == "hook":
         sys.stdin.read()  # the hook event; nothing in it is needed
     raw, key = os.environ.get("TASK_TICKET"), os.environ.get("PLANE_API_KEY")

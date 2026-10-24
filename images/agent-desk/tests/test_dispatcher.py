@@ -339,3 +339,27 @@ def test_event_logs_why_a_ticket_did_not_start(tmp_path):
     logs.clear()
     d.poll()  # the 10-minute pass stays quiet about skips
     assert not any("skip" in m for m in logs)
+
+
+def test_label_seen_before_its_activity_row_asks_for_a_recheck(tmp_path):
+    # Staging 2026-10-24: the over-cap delivery arrived 1.4s before Plane wrote
+    # the activity row, so the gate saw an unattributed label and waited.
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    plane.label("p-sb", "i1", "playbook:docs-fix", OWNER)
+    acts = plane.projs["p-sb"]["acts"]["i1"]
+    plane.label("p-sb", "i1", "ready", OWNER)
+    row = acts.pop()  # the delivery wins the race
+    assert d.on_event("p-sb", "i1") is True
+    assert kube.created == []
+    acts.append(row)  # Plane catches up
+    assert d.on_event("p-sb", "i1") is False
+    assert len(kube.created) == 1
+
+
+def test_bot_ready_rechecks_but_never_starts(tmp_path):
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1", by=BOT)
+    assert d.on_event("p-sb", "i1") is True  # bounded by server.RECHECK
+    assert kube.created == []

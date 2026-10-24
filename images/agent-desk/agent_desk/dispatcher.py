@@ -215,8 +215,10 @@ class Dispatcher:
         if self.template is None:
             self.template = jobmod.load_template(self.cfg.job_template)
         tid = jobmod.task_id(t.key)
+        # owner_id: the Job's comment hook relays only George's comments.
         ticket = {"key": t.key, "project_id": pr.id, "work_item_id": t.id,
-                  "plane_url": self.cfg.plane_url, "workspace": self.cfg.workspace}
+                  "plane_url": self.cfg.plane_url, "workspace": self.cfg.workspace,
+                  "owner_id": self.owner_id}
         job = jobmod.build_job(self.template, tid=tid, image=self.kube.console_image(),
                                repo=pr.repo, prompt=text, ticket=ticket, playbook=d.playbook,
                                deadline=pb.deadline, model=pb.model,

@@ -44,12 +44,24 @@ RUN curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar
 # through this ARG.
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" && npm cache clean --force
 
+# The Plane MCP server for ticket Jobs (agent-desk plan, "Plane access inside a
+# Job"), in its own venv, every package hash-pinned. 0.3.4 is the version tested
+# against Plane CE on staging.
+COPY images/bench-cloud/plane-mcp-requirements.txt /tmp/plane-mcp-requirements.txt
+RUN python3 -m venv /opt/plane-mcp \
+ && /opt/plane-mcp/bin/pip install --no-cache-dir --require-hashes --no-deps -r /tmp/plane-mcp-requirements.txt \
+ && rm /tmp/plane-mcp-requirements.txt
+
 # GitHub App auth: git and gh both get short-lived installation tokens.
 COPY images/bench-cloud/github-app-token /usr/local/bin/github-app-token
 COPY images/bench-cloud/gh-wrapper /usr/local/bin/gh
 COPY images/bench-cloud/entrypoint.sh /usr/local/bin/bench-entrypoint
 COPY images/bench-cloud/bench-task /usr/local/bin/bench-task
 COPY images/bench-cloud/bench-agents-sync /usr/local/bin/bench-agents-sync
+# Ticket mode: the comment hook and its settings (hooks and the Plane tool deny
+# list), passed by bench-task with --settings only when TASK_TICKET is set.
+COPY images/bench-cloud/bench-ticket /usr/local/bin/bench-ticket
+COPY images/bench-cloud/ticket-settings.json /usr/local/share/bench-cloud/ticket-settings.json
 COPY images/bench-cloud/agents-allowlist /usr/local/share/bench-cloud/agents-allowlist
 # The task CLI + Job template, so the console can start task Jobs itself
 # (bench-console ServiceAccount; task pods run as bench-agent and cannot).
@@ -61,11 +73,12 @@ COPY scripts/bench-cloud/job.yaml /usr/local/share/bench-cloud/job.yaml
 COPY images/bench-cloud/managed-settings.json /etc/claude-code/managed-settings.json
 COPY images/bench-cloud/CLAUDE.md /etc/claude-code/CLAUDE.md
 # The trailing version checks fail the BUILD, not the first task, if a tool is missing.
-RUN chmod 0755 /usr/local/bin/github-app-token /usr/local/bin/gh /usr/local/bin/bench-entrypoint /usr/local/bin/bench-task /usr/local/bin/bench-cloud /usr/local/bin/bench-agents-sync \
+RUN chmod 0755 /usr/local/bin/github-app-token /usr/local/bin/gh /usr/local/bin/bench-entrypoint /usr/local/bin/bench-task /usr/local/bin/bench-cloud /usr/local/bin/bench-agents-sync /usr/local/bin/bench-ticket \
  && git config --system credential.https://github.com.helper '!/usr/local/bin/github-app-token --git-credential' \
  && git config --system init.defaultBranch main \
  && go version && kubectl version --client=true && /usr/local/lib/gh/gh --version \
- && claude --version && python3 --version && tmux -V && rsync --version | head -1
+ && claude --version && python3 --version && tmux -V && rsync --version | head -1 \
+ && /opt/plane-mcp/bin/python -c "import plane_mcp"
 
 # node:22-bookworm ships uid/gid 1000 "node" — reuse it.
 USER 1000:1000

@@ -104,6 +104,7 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
 - Deliver your work as a pull request from a new branch. Then attach the PR URL to the ticket as a link (workitem_link create), run your babysit and critique passes, and only then set the ticket's state to \"In review\" (look the state id up with the state tool). If the playbook's outcome is findings rather than a PR, post them as a ticket comment and set \"In review\" the same way.
 - If you need George to decide or answer something, post the question as a ticket comment, set the state to \"Blocked\", and end the run. His reply starts a new task with the whole thread.
 - George may comment while you work; his comments reach you as added context after a tool call. If one asks you something, answer it with a ticket comment.
+- A comment's comment_html is raw HTML, e.g. <p>Opened <a href=\"…\">PR #3</a>.</p>. Send the tags as they are; never escape them as &lt;p&gt;, or the ticket shows the markup.
 - Touch only ticket $key. Never change its labels, and never delete anything in Plane.
 End with a short summary that includes the PR URL, or says plainly why there is no PR.")
 else

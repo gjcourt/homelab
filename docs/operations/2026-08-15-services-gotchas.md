@@ -29,17 +29,17 @@ When you see `WAL file is from different database system: WAL file database syst
 # 1. Fence the instance so CNPG/instance-manager stops fighting you
 kubectl cnpg fencing on <cluster> <id> -n <ns>
 kubectl annotate cluster -n <ns> <cluster> \
- cnpg.io/reconciliationLoop=disabled --overwrite
+  cnpg.io/reconciliationLoop=disabled --overwrite
 
 # 2. pg_resetwal inside the fenced pod
 kubectl exec -n <ns> <cluster>-<id> -c postgres -- bash -c '
- /usr/lib/postgresql/17/bin/pg_ctl stop -D /var/lib/postgresql/data/pgdata -m immediate 2>&1 || true
- sleep 2
- /usr/lib/postgresql/17/bin/pg_resetwal -f /var/lib/postgresql/data/pgdata
- rm -f /var/lib/postgresql/data/pgdata/standby.signal
- rm -f /var/lib/postgresql/data/pgdata/recovery.signal
- rm -f /var/lib/postgresql/data/pgdata/backup_label.old
- /usr/lib/postgresql/17/bin/pg_controldata /var/lib/postgresql/data/pgdata | grep -E "state|TimeLine"
+  /usr/lib/postgresql/17/bin/pg_ctl stop -D /var/lib/postgresql/data/pgdata -m immediate 2>&1 || true
+  sleep 2
+  /usr/lib/postgresql/17/bin/pg_resetwal -f /var/lib/postgresql/data/pgdata
+  rm -f /var/lib/postgresql/data/pgdata/standby.signal
+  rm -f /var/lib/postgresql/data/pgdata/recovery.signal
+  rm -f /var/lib/postgresql/data/pgdata/backup_label.old
+  /usr/lib/postgresql/17/bin/pg_controldata /var/lib/postgresql/data/pgdata | grep -E "state|TimeLine"
 '
 
 # 3. Unfence + re-enable reconciliation
@@ -48,12 +48,12 @@ kubectl annotate cluster -n <ns> <cluster> cnpg.io/reconciliationLoop-
 
 # 4. Force CNPG reconcile so the operator sees the new primary
 kubectl annotate cluster -n <ns> <cluster> \
- cnpg.io/reconciliation-trigger="$(date +%s)" --overwrite
+  cnpg.io/reconciliation-trigger="$(date +%s)" --overwrite
 ```
 
 **Cost:** Lossy at the LSN boundary. You lose any transactions written after pg_basebackup completed but before the standby's local WAL caught up. For us in linkding-stage that was ~minutes of writes; acceptable for staging.
 
-**Don't do this in prod** without first auditing the WAL archive (see see the CNPG WAL archiving entry under Known issues in `docs/STATUS.md` for which clusters are at risk) and confirming the data loss window is acceptable. For prod, prefer fixing the archive corruption and retrying the standard promote.
+**Don't do this in prod** without first auditing the WAL archive — `kubectl get clusters.postgresql.cnpg.io -A` and check `spec.plugins` for the barman-cloud archiver. Since #1045 (2026-07-04) the flashcards, golinks, linkding and memos **staging** clusters have no archiver by design, so they have no PITR at all; every prod cluster and immich-stage archive and confirming the data loss window is acceptable. For prod, prefer fixing the archive corruption and retrying the standard promote.
 
 **Direct-PVC workaround for in-pod safety checks:** Some tooling blocks this command; run it directly if so. You may need to run the kubectl-exec command yourself or explicitly re-authorize via AskUserQuestion (the answer doesn't always propagate to the classifier).
 
@@ -79,7 +79,7 @@ stdin so the token never hits the process list:
 
 ```
 printf '"%s"' "$(printf %s 'NEWVALUE' | base64 | tr -d '\n')" \
- | sops set --ignore-mac --value-stdin path/to/secret.yaml '["data"]["KEYNAME"]'
+  | sops set --ignore-mac --value-stdin path/to/secret.yaml '["data"]["KEYNAME"]'
 ```
 
 After this, plain `sops -d` verifies cleanly (drift fixed for that file going forward). `--ignore-mac`
@@ -215,11 +215,11 @@ Working Dockerfile shape:
 ```dockerfile
 FROM debian:bookworm-slim
 RUN apt-get install -y --no-install-recommends \
- python3 python3-venv \
- python3-gi python3-gi-cairo \
- gir1.2-glib-2.0 gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
- gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-tools \
- libcairo2 gettext-base
+      python3 python3-venv \
+      python3-gi python3-gi-cairo \
+      gir1.2-glib-2.0 gir1.2-gstreamer-1.0 gir1.2-gst-plugins-base-1.0 \
+      gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-tools \
+      libcairo2 gettext-base
 # Debian python3 is externally managed (PEP 668); venv with system site
 # packages so pip-installed mopidy can import the apt-provided gi/Gst.
 RUN python3 -m venv --system-site-packages /opt/mopidy-venv

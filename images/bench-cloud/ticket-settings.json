@@ -2,11 +2,11 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "mcp__plane__workitem_comment",
+        "matcher": "mcp__plane__workitem.*",
         "hooks": [
           {
             "type": "command",
-            "command": "/usr/local/bin/bench-ticket lint",
+            "command": "/usr/local/bin/bench-ticket pre",
             "timeout": 60
           }
         ]

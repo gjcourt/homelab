@@ -5,9 +5,14 @@
                       the prompt as seen
   bench-ticket hook   Claude Code PostToolUse hook: relay George's new comments
                       to the agent as added context
-  bench-ticket lint   PreToolUse hook on workitem_comment: repair a comment whose
-                      HTML is escaped, unbalanced or untagged (plain fixes, then
-                      Haiku), or refuse it with the reason; never posts garbage
+  bench-ticket pre    PreToolUse hook on the Plane work-item tools:
+                      - any call on another work item is refused;
+                      - a comment whose HTML is escaped, unbalanced or untagged
+                        is repaired (plain fixes, then Haiku) or refused with
+                        the reason, so no malformed comment is ever posted;
+                      - a PR link is titled "PR #N · <PR title>";
+                      - In review is refused until the PR is linked (or, for a
+                        findings playbook, a comment was posted)
 
 Plane comments are the only channel today (agent-desk plan, "Questions and the
 ticket as chat"). poll() is the whole interface a later channel has to provide;
@@ -29,6 +34,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 from html.parser import HTMLParser
 
@@ -49,8 +55,14 @@ class PlaneComments:
 
     def _get(self, url):
         req = urllib.request.Request(url, headers={"X-API-Key": self.key, "Accept": "application/json"})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return json.load(r)
+        for attempt in (1, 2):  # one retry: a refused connection is usually momentary
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return json.load(r)
+            except urllib.error.URLError:
+                if attempt == 2:
+                    raise
+                time.sleep(2)
 
     def all(self):
         t = self.ticket
@@ -65,6 +77,18 @@ class PlaneComments:
             cur = page.get("next_cursor") if page.get("next_page_results") else None
             url = url.split("&cursor=")[0] + f"&cursor={cur}" if cur else None
         return out
+
+    def _base(self):
+        t = self.ticket
+        return (f"{t['plane_url'].rstrip('/')}/api/v1/workspaces/{t['workspace']}/projects/"
+                f"{t['project_id']}")
+
+    def links(self):
+        page = self._get(f"{self._base()}/work-items/{self.ticket['work_item_id']}/links/")
+        return page if isinstance(page, list) else page.get("results", [])
+
+    def state_name(self, state_id):
+        return self._get(f"{self._base()}/states/{state_id}/").get("name", "")
 
     def poll(self, seen):
         """George's comments not in seen, oldest first."""
@@ -193,6 +217,74 @@ def lint(event):
                                     + "; ".join(problems) + ". Fix it and post again."}}))
 
 
+PR_URL = re.compile(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)")
+IN_REVIEW = "In review"
+
+
+def _decide(decision, reason, updated=None):
+    out = {"hookEventName": "PreToolUse", "permissionDecision": decision,
+           "permissionDecisionReason": reason}
+    if updated is not None:
+        out["updatedInput"] = updated
+    print(json.dumps({"hookSpecificOutput": out}))
+
+
+def link_title(inp):
+    """A PR link always reads 'PR #N · <PR title>', so every ticket shows it the same way."""
+    m = PR_URL.match(inp.get("url") or "")
+    if inp.get("action") != "create" or not m:
+        return
+    title = ""
+    try:
+        r = subprocess.run(["gh", "pr", "view", m[2], "--repo", m[1], "--json", "title", "-q", ".title"],
+                           capture_output=True, text=True, timeout=20)
+        title = r.stdout.strip() if r.returncode == 0 else ""
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    want = f"PR #{m[2]} · {title}" if title else f"PR #{m[2]}"
+    if inp.get("title") != want:
+        _decide("allow", "PR link titled the standard way", {**inp, "title": want})
+
+
+def gate(inp, channel, commented):
+    """No In review without the PR linked (or, for a findings playbook, a comment)."""
+    if inp.get("action") != "update" or not inp.get("state"):
+        return
+    if channel.state_name(inp["state"]) != IN_REVIEW:
+        return
+    if any(PR_URL.match(link.get("url") or "") for link in channel.links()):
+        return
+    if commented:
+        return  # a findings outcome: posted as a comment, no PR
+    _decide("deny", "Not moved to In review: the ticket has no PR link. Attach the PR first "
+            "(workitem_link create with the PR URL); if this playbook's outcome has no PR, post "
+            "the findings as a ticket comment, then set In review.")
+
+
+def pre(event):
+    """PreToolUse on the Plane work-item tools: one ticket only, then per-tool checks."""
+    tool, inp = event.get("tool_name", ""), event.get("tool_input") or {}
+    raw, key = os.environ.get("TASK_TICKET"), os.environ.get("PLANE_API_KEY")
+    ticket = json.loads(raw) if raw else {}
+    wid = inp.get("workitem_id") or inp.get("work_item_id")
+    if ticket and wid and wid != ticket.get("work_item_id"):
+        _decide("deny", f"Only ticket {ticket.get('key')} (work item {ticket.get('work_item_id')}) "
+                "is yours to change in this run.")
+        return
+    if tool == "mcp__plane__workitem_comment":
+        lint(event)
+    elif tool == "mcp__plane__workitem_link":
+        link_title(inp)
+    elif tool == "mcp__plane__workitem" and ticket and key:
+        commented = False
+        try:
+            with open(STATE) as f:
+                commented = bool(load(f).get("commented"))
+        except OSError:
+            pass
+        gate(inp, PlaneComments(ticket, key), commented)
+
+
 def load(f):
     f.seek(0)
     try:
@@ -210,11 +302,13 @@ def save(f, state):
 
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
-    if cmd == "lint":
-        lint(json.loads(sys.stdin.read() or "{}"))
+    if cmd in ("pre", "lint"):
+        pre(json.loads(sys.stdin.read() or "{}"))
         return
-    if cmd == "hook":
-        sys.stdin.read()  # the hook event; nothing in it is needed
+    event = json.loads(sys.stdin.read() or "{}") if cmd == "hook" else {}
+    # A comment posted this run: what lets a findings playbook reach In review.
+    commented = (event.get("tool_name") == "mcp__plane__workitem_comment"
+                 and "error" not in str(event.get("tool_response", ""))[:200].lower())
     raw, key = os.environ.get("TASK_TICKET"), os.environ.get("PLANE_API_KEY")
     if not raw or not key or cmd not in ("init", "hook"):
         return
@@ -226,6 +320,9 @@ def main():
         if cmd == "init":
             save(f, {"seen": [c.get("id") for c in channel.all()], "checked": time.time()})
             return
+        if commented and not state.get("commented"):
+            state["commented"] = True
+            save(f, state)
         if time.time() - state.get("checked", 0) < INTERVAL:
             return
         seen = set(state.get("seen", []))

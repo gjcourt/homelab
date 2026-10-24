@@ -11,14 +11,13 @@ metadata:
     app.kubernetes.io/part-of: network-policies
 spec:
   description: >-
-    Gateway ingress to the web, space, admin, live, api and MinIO ports; bench-cloud to the api; anything within the namespace; egress DNS and the namespace (CNPG included).
+    Gateway ingress to the web, space, admin, live, api and MinIO ports; bench-cloud and agent-desk-stage to the api; anything within the namespace; egress DNS, the namespace (CNPG included) and agent-desk-stage webhooks.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: plane-ce
       app.kubernetes.io/instance: plane
   ingress:
-    # Everything in plane-stage: app-to-app, the migrator and bucket Jobs,
-    # and the throwaway webhook receiver for the step 4 smoke test.
+    # Everything in plane-stage: app-to-app, the migrator and bucket Jobs.
     - fromEndpoints:
         - {}
     # The gateway's Envoy (seen as the remote-node / ingress identities).
@@ -45,6 +44,14 @@ spec:
         - ports:
             - port: "8000"
               protocol: TCP
+    # The agent-desk dispatcher (staging) reads and updates tickets.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: agent-desk-stage
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:
@@ -58,6 +65,16 @@ spec:
               protocol: TCP
     - toEndpoints:
         - {}
+    # Webhook deliveries to the agent-desk dispatcher, the one host in
+    # WEBHOOK_ALLOWED_HOSTS (release-patch.yaml).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: agent-desk-stage
+            app: agent-desk
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
 ---
 # The api and worker reach the internet on 443: the api's start-up version
 # check (api.github.com, which fails soft after 10 s without it) and the

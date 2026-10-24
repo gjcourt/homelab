@@ -344,3 +344,43 @@
       target:
         entity_id: timer.laundry_room_light_timer
       continue_on_error: true
+
+# ============================================================================
+# agent-desk → George's phone (agent-desk plan, "Notifications", 2026-10-24)
+# ============================================================================
+# agent-desk POSTs {title, message, url} here when an agent asks George
+# something, has a PR ready for review, or a Job fails. Plane's web app shows
+# new comments only on reload, so this is how he hears about them. A stopgap
+# until the phase 2 chat channel replaces it.
+#
+# The webhook id is the only credential a sender needs, and this repo is
+# public, so it comes from secrets.yaml (the homeassistant-secrets Secret, one
+# per environment). local_only: callers are in-cluster.
+#
+# Staging has no phone registered (no mobile_app entities), so there it only
+# leaves a persistent notification; production also pushes to the phone.
+- alias: "agent-desk — notify George"
+  description: "Relay an agent-desk notice (question, PR ready, Job failed) to George."
+  mode: queued
+  trigger:
+    - platform: webhook
+      webhook_id: !secret agent_desk_webhook_id
+      allowed_methods:
+        - POST
+      local_only: true
+  action:
+    - service: persistent_notification.create
+      data:
+        title: "{{ trigger.json.title | default('agent-desk') }}"
+        message: "{{ trigger.json.message | default('') }} {{ trigger.json.url | default('') }}"
+    - if:
+        - condition: template
+          value_template: "{{ integration_entities('mobile_app') | length > 0 }}"
+      then:
+        - service: notify.mobile_app_parthenon
+          data:
+            title: "{{ trigger.json.title | default('agent-desk') }}"
+            message: "{{ trigger.json.message | default('') }}"
+            data:
+              url: "{{ trigger.json.url | default('') }}"
+              clickAction: "{{ trigger.json.url | default('') }}"

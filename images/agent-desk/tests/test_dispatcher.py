@@ -17,6 +17,7 @@ TEMPLATE = os.path.join(HERE, "..", "..", "..", "scripts", "bench-cloud", "job.y
 
 CONFIG = """
 ownerEmail: gjcourt@gmail.com
+planeWebUrl: https://plane.example
 botEmail: gjcourt+agent-desk@gmail.com
 denyRepos: [gjcourt/homelab]
 projects:
@@ -532,3 +533,69 @@ def test_labels_set_at_creation_count_for_whoever_created_it():
                     {"field": "labels", "actor": BOT, "new_identifier": lid,
                      "old_identifier": None}]
     assert not rules.label_applied_by(later, lid, OWNER)  # a later row decides
+
+
+# -- notifications --------------------------------------------------------------
+
+def sent(d):
+    return [(n["title"], n["message"], n["url"]) for n in d.notifier.sent]
+
+
+def test_question_notifies_once_with_the_question_and_a_link(tmp_path):
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1")
+    d.poll()  # starts it; the first poll only seeds
+    plane.say("p-sb", "i1", BOT, "Which file, README or docs/about.md?")
+    plane.set_state("p-sb", "i1", "Blocked", actor=BOT)
+    d.on_event("p-sb", "i1")
+    d.on_event("p-sb", "i1")
+    d.poll()
+    assert sent(d) == [("SANDBOX-1 needs you", "Which file, README or docs/about.md?",
+                        "https://plane.example/ws/browse/SANDBOX-1/")]
+
+
+def test_in_review_notifies_with_the_pr(tmp_path):
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1")
+    d.poll()
+    plane.projs["p-sb"]["links"]["i1"].append(
+        {"url": "https://github.com/gjcourt/agent-sandbox/pull/3", "title": "PR #3 · docs: fix"})
+    plane.set_state("p-sb", "i1", "In review", actor=BOT)
+    d.poll()
+    assert sent(d) == [("SANDBOX-1 is ready for review", "PR #3 · docs: fix",
+                        "https://plane.example/ws/browse/SANDBOX-1/")]
+
+
+def test_restart_is_quiet_and_unlabelled_tickets_never_notify(tmp_path):
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1")
+    plane.set_state("p-sb", "i1", "In review", actor=BOT)
+    plane.add_item("p-sb", "i2", seq=2)  # no ready: not an agent ticket
+    d.poll()  # a fresh process: seeds, doesn't announce what was already so
+    plane.set_state("p-sb", "i2", "Blocked", actor=OWNER)
+    d.poll()
+    assert sent(d) == []
+
+
+def test_no_notice_once_george_has_answered(tmp_path):
+    d, plane, kube = make(tmp_path)
+    worked(plane)  # In review, agent's last word
+    d.poll()
+    plane.say("p-sb", "i1", BOT, "Need a decision")
+    plane.say("p-sb", "i1", OWNER, "Go with README")  # answered before agent-desk looked
+    plane.set_state("p-sb", "i1", "Blocked", actor=BOT)
+    d.on_event("p-sb", "i1")
+    assert [t for t, _, _ in sent(d)] == []
+
+
+def test_reopen_question_notifies_once(tmp_path):
+    d, plane, kube = make(tmp_path)
+    worked(plane, state="Done")
+    d.poll()
+    plane.say("p-sb", "i1", OWNER, "One more tweak")
+    d.poll()
+    d.poll()
+    assert [t for t, _, _ in sent(d)] == ["SANDBOX-1: reopen?"]

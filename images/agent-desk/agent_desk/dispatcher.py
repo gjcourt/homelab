@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from . import jobs as jobmod
 from . import prompt as promptmod
 from . import rules
+from .notify import Notifier
 from .plane import PlaneError
 from .rules import AWAITING, BLOCKED, DONE, IN_PROGRESS, IN_REVIEW, TODO, Ticket
 
@@ -39,8 +40,13 @@ def _p(text: str) -> str:
 
 
 class Dispatcher:
-    def __init__(self, cfg, plane, kube, github=None, log=print):
+    def __init__(self, cfg, plane, kube, github=None, log=print, notifier=None):
         self.cfg = cfg
+        self.notifier = notifier or Notifier("", "", log=log)
+        # Last state seen per ticket, to notice a move into Blocked or In review.
+        # Seeded by the first poll without notifying, so a restart is quiet.
+        self.seen_state: dict[str, str] = {}
+        self._seeded = False
         self.plane = plane
         self.kube = kube
         self.github = github
@@ -101,6 +107,35 @@ class Dispatcher:
                       state_name=name, state_group=group, label_names=labels,
                       external_source=item.get("external_source"),
                       created_at=item.get("created_at") or "")
+
+    # -- notifications ----------------------------------------------------------
+
+    def ticket_url(self, t: Ticket) -> str:
+        base = self.cfg.plane_web_url.rstrip("/")
+        return f"{base}/{self.cfg.workspace}/browse/{t.key}/" if base else ""
+
+    def note_state(self, pr: Project, t: Ticket) -> None:
+        """Tell George when one of his tickets reaches Blocked (a question, or a
+        Job that ended badly) or In review (a PR to look at)."""
+        prev = self.seen_state.get(t.id)
+        self.seen_state[t.id] = t.state_name
+        if prev == t.state_name or t.state_name not in (BLOCKED, IN_REVIEW):
+            return
+        if not self._seeded or "ready" not in t.label_names:
+            return
+        cmts = self.plane.comments(pr.id, t.id)
+        if rules.wake_comments(cmts, self.owner_id, self.bot_id):
+            return  # he has answered since; the next move isn't his
+        if t.state_name == BLOCKED:
+            mine = sorted((c for c in cmts if c.get("actor", c.get("created_by")) == self.bot_id),
+                          key=lambda c: c.get("created_at") or "")
+            text = promptmod.html_to_text(mine[-1].get("comment_html", "")) if mine else t.name
+            self.notifier.send(f"{t.key} needs you", text, self.ticket_url(t))
+        else:
+            prs = [link.get("title") or link.get("url", "") for link in self.plane.links(pr.id, t.id)
+                   if PR_URL.match(link.get("url", ""))]
+            self.notifier.send(f"{t.key} is ready for review", "; ".join(prs) or t.name,
+                               self.ticket_url(t))
 
     # -- counting ---------------------------------------------------------------
 
@@ -188,8 +223,16 @@ class Dispatcher:
             self.comment_once(pr, t, f"{d.reason}. Add `over-cap` to start this one now, "
                                      "or it starts when a slot frees.")
         elif d.action == "confirm":
-            self.comment_once(pr, t, f"{t.key} is {t.state_name}. Reply `{rules.REOPEN_WORD}` "
-                                     f"{rules.REOPEN_MARK} on your comment.")
+            text = (f"{t.key} is {t.state_name}. Reply `{rules.REOPEN_WORD}` "
+                    f"{rules.REOPEN_MARK} on your comment.")
+            mine = [c for c in self.plane.comments(pr.id, t.id)
+                    if c.get("actor", c.get("created_by")) == self.bot_id]
+            if not (mine and rules.REOPEN_MARK in promptmod.html_to_text(
+                    mine[-1].get("comment_html", ""))):
+                self.notifier.send(f"{t.key}: reopen?", f"You commented on a {t.state_name} "
+                                   f"ticket. Reply `{rules.REOPEN_WORD}` to wake the agent.",
+                                   self.ticket_url(t))
+            self.comment_once(pr, t, text)
         elif d.action == "start":
             self.start(pr, t, d, job_list)
         return d
@@ -247,6 +290,7 @@ class Dispatcher:
             self.comment_once(pr, t, f"agent-desk couldn't create the Job: {str(e)[:300]}")
             return
         self.in_progress[t.id] = d.playbook
+        self.seen_state[t.id] = IN_PROGRESS
         change = {"state": pr.states[IN_PROGRESS]}
         over_id = pr.labels.get("over-cap")
         if d.over_cap and over_id in (item.get("labels") or []):
@@ -281,9 +325,11 @@ class Dispatcher:
         for pid, items in by_project.items():
             for it in items:
                 try:
+                    self.note_state(self.projects[pid], self.ticket(self.projects[pid], it))
                     self.handle(self.projects[pid], it, job_list)
                 except Exception as e:  # noqa: BLE001 — one bad ticket mustn't stop the pass
                     self.log(f"error on item {it.get('id')}: {e}")
+        self._seeded = True
         self.last_tick = time.time()
 
     def on_event(self, project_id: str, item_id: str) -> bool:
@@ -300,6 +346,7 @@ class Dispatcher:
             return False
         self.unconfirmed = False
         t = self.ticket(pr, item)
+        self.note_state(pr, t)
         cheap = self.precheck(pr, t)
         if cheap.action == "skip":  # most deliveries: no `ready`, or the bot's own edit
             self.log(f"{t.key}: skip — {cheap.reason}")

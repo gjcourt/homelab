@@ -8,6 +8,7 @@ namespace: agent-desk-stage
 resources:
   - ../../base/agent-desk/
   - networkpolicy-plane.yaml
+  - networkpolicy-notify.yaml
   # SOPS-encrypted by the operator from its .example template (agents never
   # run sops in this repo); Flux decrypts it at apply time.
   - secret-agent-desk.yaml
@@ -44,6 +45,11 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/env/-
         value: {name: DRY_RUN_JOBS, value: "true"}
+      # Notices go to staging Home Assistant, which only shows them in its own
+      # UI: staging never reaches George's phone.
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: NOTIFY_URL, value: "http://homeassistant.homeassistant-stage.svc.cluster.local:8123"}
 
 # Pinned date-sha tag from build-agent-desk.yml (Flux does not auto-track).
 images:

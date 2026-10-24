@@ -105,6 +105,14 @@ spec:
             - name: config-file
               mountPath: /config/scripts.yaml
               subPath: scripts.yaml
+            # secrets.yaml for !secret references (agent_desk_webhook_id): from
+            # the per-environment homeassistant-secrets Secret, so nothing
+            # secret is in this public repo. Without it HA can't load
+            # automations.yaml, so the Secret must exist before this rolls out.
+            - name: secrets-file
+              mountPath: /config/secrets.yaml
+              subPath: secrets.yaml
+              readOnly: true
             - name: config-file
               mountPath: /config/themes/tinted.yaml
               subPath: themes_tinted.yaml
@@ -133,6 +141,9 @@ spec:
         - name: config-file
           configMap:
             name: homeassistant-config
+        - name: secrets-file
+          secret:
+            secretName: homeassistant-secrets
         - name: www-file
           configMap:
             name: homeassistant-www

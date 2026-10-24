@@ -19,11 +19,23 @@ import os
 import yaml
 
 
+class HALoader(yaml.SafeLoader):
+    """SafeLoader that accepts Home Assistant's own tags (!secret, !include, ...).
+
+    Their values come from the running instance (secrets.yaml, other files), so
+    here each just stands in as its argument: structure is what's validated.
+    """
+
+
+HALoader.add_multi_constructor("!", lambda loader, suffix, node: f"<{suffix} {loader.construct_scalar(node)}>"
+                               if isinstance(node, yaml.ScalarNode) else None)
+
+
 def load_yaml_file(path):
     """Load and parse a YAML file."""
     try:
         with open(path, 'r') as f:
-            return yaml.safe_load(f), None
+            return yaml.load(f, Loader=HALoader), None
     except yaml.YAMLError as e:
         return None, f"YAML parse error in {path}: {e}"
     except FileNotFoundError:

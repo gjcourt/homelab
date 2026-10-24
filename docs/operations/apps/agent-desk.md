@@ -58,6 +58,22 @@ Code: [`images/agent-desk/`](../../../images/agent-desk/README.md).
 off. If tickets only move on the 10-minute poll, check the webhook is still active in that
 settings page.
 
+### Phone notifications (operator)
+
+agent-desk tells George when a ticket reaches Blocked or In review, through a Home Assistant
+webhook (plan, "Notifications"). One random id per environment, in two SOPS secrets:
+
+1. `openssl rand -hex 24` → the id.
+2. `apps/<env>/homeassistant/secret-homeassistant-secrets.yaml` (from its `.example`):
+   `agent_desk_webhook_id: <id>`. **It must exist before the Home Assistant deployment that
+   mounts it**: without `secrets.yaml`, HA can't load `automations.yaml`.
+3. `notify-webhook-id: <id>` in `apps/<env>/agent-desk/secret-agent-desk.yaml`. Without it,
+   agent-desk logs `no phone notifications` at startup and carries on.
+
+To check: `kubectl -n agent-desk-<env> logs deploy/agent-desk | grep notif` shows each one sent
+(`notified: SANDBOX-8 needs you`) or failed. On staging the notice appears as a persistent
+notification in staging Home Assistant, never on the phone.
+
 ## 4. Observability
 
 ```bash

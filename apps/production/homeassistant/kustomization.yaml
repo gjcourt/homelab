@@ -4,6 +4,9 @@ namespace: homeassistant-prod
 resources:
   - ../../base/homeassistant/
   - httproute.yaml
+  # /config/secrets.yaml (agent-desk's webhook id). SOPS-encrypted by the
+  # operator from its .example; Flux decrypts it at apply time.
+  - secret-homeassistant-secrets.yaml
 
 labels:
   - pairs:

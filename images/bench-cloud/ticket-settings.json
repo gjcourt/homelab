@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "/usr/local/bin/bench-ticket lint",
-            "timeout": 10
+            "timeout": 60
           }
         ]
       }

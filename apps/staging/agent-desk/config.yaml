@@ -20,6 +20,9 @@ playbooks:
     # with two tickets. Production uses 6 (decision 5).
     maxConcurrent: 1
     deadline: 90m
+    # Simple tasks run on the cheap model (George, 2026-10-24). The others
+    # keep Claude Code's default until model routing measures them (plan).
+    model: claude-haiku-5-5
     prompt: |
       Playbook docs-fix. Make the documentation change the ticket asks for, and
       nothing else: only *.md files and docs/ may change. Run the repo's own lint.

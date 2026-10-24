@@ -5,9 +5,9 @@
                       the prompt as seen
   bench-ticket hook   Claude Code PostToolUse hook: relay George's new comments
                       to the agent as added context
-  bench-ticket lint   PreToolUse hook on workitem_comment: refuse a comment whose
-                      HTML is escaped, unbalanced or empty, and say why, so the
-                      agent fixes it before anything reaches the ticket
+  bench-ticket lint   PreToolUse hook on workitem_comment: repair a comment whose
+                      HTML is escaped, unbalanced or untagged (plain fixes, then
+                      Haiku), or refuse it with the reason; never posts garbage
 
 Plane comments are the only channel today (agent-desk plan, "Questions and the
 ticket as chat"). poll() is the whole interface a later channel has to provide;
@@ -26,6 +26,7 @@ import html
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 import urllib.request
@@ -77,6 +78,8 @@ ALLOWED_TAGS = {"p", "br", "a", "code", "pre", "strong", "em", "b", "i", "ul", "
                 "h1", "h2", "h3", "h4", "blockquote", "hr", "span"}
 VOID_TAGS = {"br", "hr"}
 MAX_COMMENT = 20000
+# Markup repair is a simple task: the cheap model (George, 2026-10-24).
+REPAIR_MODEL = os.environ.get("BENCH_REPAIR_MODEL", "claude-haiku-5-5")
 
 
 class _Checker(HTMLParser):
@@ -130,17 +133,64 @@ def lint_comment(s):
     return problems
 
 
+def _words(s):
+    return " ".join(html_to_text(s).split())
+
+
+def repair_plain(s):
+    """Fixes that need no model: unescape escaped tags, wrap bare text in <p>."""
+    if re.search(r"&lt;/?(p|a|code|strong|em|li|ul|ol|br|pre)\b", s, re.I):
+        s = html.unescape(s)
+    if not re.match(r"\s*<", s):
+        s = "".join(f"<p>{html.escape(p).replace(chr(10), '<br/>')}</p>"
+                    for p in re.split(r"\n\s*\n", s.strip()) if p.strip())
+    return s
+
+
+def repair_haiku(s, problems):
+    """A cheap model rewrites the markup only; None if it fails or changes the words."""
+    ask = ("Rewrite this Plane comment as valid HTML using only these tags: "
+           + ", ".join(sorted(ALLOWED_TAGS)) + ". Problems found: " + "; ".join(problems)
+           + ". Keep every word exactly as written; change only the markup. "
+           "Reply with the HTML alone, no code fence.\n\n" + s)
+    try:
+        r = subprocess.run(["claude", "-p", "--model", REPAIR_MODEL, "--tools", "",
+                            "--no-session-persistence", "--output-format", "text"],
+                           input=ask, capture_output=True, text=True, timeout=45)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    out = r.stdout.strip()
+    if r.returncode or lint_comment(out) or _words(out) != _words(repair_plain(s)):
+        return None
+    return out
+
+
 def lint(event):
-    """PreToolUse on workitem_comment: refuse malformed HTML before it reaches Plane."""
+    """PreToolUse on workitem_comment: fix or refuse malformed HTML before it reaches Plane.
+
+    Plain fixes first, then Haiku for the rest; the fixed comment replaces the
+    agent's (updatedInput). Only if both fail is the call refused, with the reason.
+    """
     inp = event.get("tool_input") or {}
     if inp.get("action") not in ("create", "update") or "comment_html" not in inp:
         return
-    problems = lint_comment(inp["comment_html"])
-    if problems:
+    s = inp["comment_html"]
+    problems = lint_comment(s)
+    if not problems:
+        return
+    fixed = repair_plain(s)
+    if lint_comment(fixed):
+        fixed = repair_haiku(s, problems)
+    if fixed is not None:
         print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PreToolUse", "permissionDecision": "deny",
-            "permissionDecisionReason": "Comment not posted, its HTML needs fixing: "
-                                        + "; ".join(problems) + ". Fix it and post again."}}))
+            "hookEventName": "PreToolUse", "permissionDecision": "allow",
+            "permissionDecisionReason": "comment HTML repaired: " + "; ".join(problems),
+            "updatedInput": {**inp, "comment_html": fixed}}}))
+        return
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse", "permissionDecision": "deny",
+        "permissionDecisionReason": "Comment not posted, its HTML needs fixing: "
+                                    + "; ".join(problems) + ". Fix it and post again."}}))
 
 
 def load(f):

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """bench-ticket — the ticket's comment channel for a bench-cloud ticket Job.
 
-  bench-ticket init   once, before claude starts: mark the comments already in
-                      the prompt as seen
+  bench-ticket init   once, before claude starts: mark the comments in the
+                      prompt (TASK_TICKET.seen_comments) as seen
   bench-ticket hook   Claude Code PostToolUse hook: relay George's new comments
                       to the agent as added context
   bench-ticket pre    PreToolUse hook on the Plane work-item tools:
@@ -318,7 +318,12 @@ def main():
         fcntl.flock(f, fcntl.LOCK_EX)
         state = load(f)
         if cmd == "init":
-            save(f, {"seen": [c.get("id") for c in channel.all()], "checked": time.time()})
+            # agent-desk lists the comments it put in the prompt; anything written
+            # since is news. Without the list (a hand-launched Job), all are seen.
+            ids = channel.ticket.get("seen_comments")
+            seen = ids if isinstance(ids, list) else [c.get("id") for c in channel.all()]
+            # Checked long ago: the first tool call relays what the prompt missed.
+            save(f, {"seen": seen, "checked": 0 if isinstance(ids, list) else time.time()})
             return
         if commented and not state.get("commented"):
             state["commented"] = True

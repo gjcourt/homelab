@@ -104,7 +104,8 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
       --arg ws "$(jq -r .workspace <<<"$TASK_TICKET")" \
       '{mcpServers: {plane: {command: "/opt/plane-mcp/bin/plane-mcp-server", args: ["stdio"],
         env: {PLANE_BASE_URL: $url, PLANE_API_KEY: $key, PLANE_WORKSPACE_SLUG: $ws}}}}' > "$mcp" )
-  # The comments already in the prompt aren't news to the agent.
+  # The comments in the prompt aren't news to the agent; any others the hook
+  # relays, including ones written after agent-desk built the prompt.
   bench-ticket init
   # Woken by a comment: carry on in the ticket's last session. Its transcript
   # comes back from the record; tickets/<work item id> names the last run.
@@ -142,6 +143,13 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
         '. + {resumed_from: $p, session: $s, prev_cost_usd: $c}' "$out/meta.json" \
         > "$out/meta.json.tmp" && mv "$out/meta.json.tmp" "$out/meta.json"
       echo "resume: on ${pmodel:-the default model}"
+      # The session already has the ticket: send only what's new, and keep the
+      # whole-thread prompt in the record as the fallback that wasn't needed.
+      rp=$(jq -r '.resume_prompt // empty' <<<"$TASK_TICKET")
+      if [[ -n "$rp" ]]; then
+        mv "$out/prompt.txt" "$out/prompt-full.txt"
+        printf '%s\n' "$rp" > "$out/prompt.txt"
+      fi
       # --fork-session: a new session id, so the earlier run's transcript is never rewritten.
       args+=(--resume "$sess" --fork-session)
     else

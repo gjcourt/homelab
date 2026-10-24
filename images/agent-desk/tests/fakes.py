@@ -66,7 +66,8 @@ class FakePlane:
 
     def say(self, pid, iid, actor, text):
         self.projs[pid]["comments"][iid].append(
-            {"actor": actor, "comment_html": f"<p>{text}</p>", "created_at": ts()})
+            {"id": f"c{next(_clock)}", "actor": actor, "comment_html": f"<p>{text}</p>",
+             "created_at": ts()})
 
     def state_of(self, pid, iid):
         sid = self.projs[pid]["items"][iid]["state"]
@@ -124,7 +125,7 @@ class FakePlane:
     def comment(self, pid, iid, html):
         self.writes.append(("comment", iid, html))
         self.projs[pid]["comments"][iid].append(
-            {"actor": BOT, "comment_html": html, "created_at": ts()})
+            {"id": f"c{next(_clock)}", "actor": BOT, "comment_html": html, "created_at": ts()})
 
 
 class FakeKube:

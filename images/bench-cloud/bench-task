@@ -121,14 +121,26 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
     if [[ -z "$prev" ]] && rsync -q "hestia-inbox:tickets/$wid" "$stage/prev" 2>/dev/null; then
       prev=$(tr -cd 'a-z0-9-' < "$stage/prev")
     fi
-    if [[ -n "$prev" ]] && rsync -aq "hestia-inbox:runs/$prev/transcripts/" "$HOME/.claude/projects/" 2>/dev/null; then
-      # The run's own session: the newest top-level transcript (subagents' are in subdirs).
-      # shellcheck disable=SC2012  # session files are uuid-named
-      sess=$(ls -t "$HOME/.claude/projects/-home-node-work-repo/"*.jsonl 2>/dev/null | head -1)
-      sess=$(basename "${sess:-}" .jsonl)
-    fi
+    # A run that died before claude wrote anything has no session: go back to
+    # the run it resumed from (its meta.json says), a few hops at most.
+    for _ in 1 2 3; do
+      [[ -n "$prev" ]] || break
+      if rsync -aq "hestia-inbox:runs/$prev/transcripts/" "$HOME/.claude/projects/" 2>/dev/null; then
+        # The run's own session: the newest top-level transcript (subagents' are in subdirs).
+        # shellcheck disable=SC2012  # session files are uuid-named
+        sess=$(ls -t "$HOME/.claude/projects/-home-node-work-repo/"*.jsonl 2>/dev/null | head -1)
+        sess=$(basename "${sess:-}" .jsonl)
+      fi
+      [[ -n "${sess:-}" ]] && break
+      rsync -q "hestia-inbox:runs/$prev/meta.json" "$stage/hop.json" 2>/dev/null || break
+      echo "resume: $prev has no session; trying the run it resumed"
+      prev=$(jq -r '.resumed_from // empty' "$stage/hop.json" 2>/dev/null | tr -cd 'a-z0-9-')
+    done
     if [[ -n "${sess:-}" ]]; then
       echo "resume: $prev session $sess"
+      # Recorded first, so even a run that dies next can be traced back.
+      jq --arg p "$prev" --arg s "$sess" '. + {resumed_from: $p, session: $s}' "$out/meta.json" \
+        > "$out/meta.json.tmp" && mv "$out/meta.json.tmp" "$out/meta.json"
       # Stay on the session's model (George, 2026-10-24): another model starts with
       # a cold cache and re-reads the whole session, which cost more than the
       # first run did on SANDBOX-6. Older records have no model; take it from usage.
@@ -149,8 +161,7 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
         done
         args=("${kept[@]}" --model "$pmodel")
       fi
-      jq --arg p "$prev" --arg s "$sess" --argjson c "${prev_cost:-0}" \
-        '. + {resumed_from: $p, session: $s, prev_cost_usd: $c}' "$out/meta.json" \
+      jq --argjson c "${prev_cost:-0}" '. + {prev_cost_usd: $c}' "$out/meta.json" \
         > "$out/meta.json.tmp" && mv "$out/meta.json.tmp" "$out/meta.json"
       echo "resume: on ${pmodel:-the default model}"
       # The session already has the ticket: send only what's new, and keep the

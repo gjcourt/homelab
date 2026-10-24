@@ -382,6 +382,27 @@ def test_label_seen_before_its_activity_row_asks_for_a_recheck(tmp_path):
     assert len(kube.created) == 1
 
 
+def test_event_reads_one_ticket_unless_it_might_start(tmp_path):
+    # Listing every ticket costs more as Done/Cancelled pile up. Only a ticket
+    # past the cheap rules needs the In Progress count for the cap.
+    d, plane, kube = make(tmp_path)
+    for n in range(20):
+        plane.add_item("p-sb", f"old{n}", state="Done", seq=n + 10)
+    plane.add_item("p-sb", "i1", seq=1)
+    plane.label("p-sb", "i1", "playbook:docs-fix", OWNER)  # no `ready` yet
+    d.on_event("p-sb", "i1")
+    assert plane.listed == 0 and kube.created == []
+    plane.label("p-sb", "i1", "ready", OWNER)
+    d.on_event("p-sb", "i1")
+    assert plane.listed == 2 and len(kube.created) == 1  # SANDBOX and HOMELAB
+
+
+def test_event_for_a_deleted_ticket_is_dropped(tmp_path):
+    d, plane, kube = make(tmp_path)
+    assert d.on_event("p-sb", "gone") is False
+    assert kube.created == [] and plane.writes == []
+
+
 def test_bot_ready_rechecks_but_never_starts(tmp_path):
     d, plane, kube = make(tmp_path)
     plane.add_item("p-sb", "i1")

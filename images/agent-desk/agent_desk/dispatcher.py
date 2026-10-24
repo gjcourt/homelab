@@ -223,10 +223,17 @@ class Dispatcher:
             self.comment_once(pr, t, f"agent-desk couldn't create the Job: {str(e)[:300]}")
             return
         self.in_progress[t.id] = d.playbook
-        self.plane.update_item(pr.id, t.id, {"state": pr.states[IN_PROGRESS]})
+        change = {"state": pr.states[IN_PROGRESS]}
+        over_id = pr.labels.get("over-cap")
+        if d.over_cap and over_id in (item.get("labels") or []):
+            # One approval, one start. If this ticket needs a slot again (a
+            # Blocked resume), it waits for the cap or for George to re-add it.
+            change["labels"] = [lid for lid in item["labels"] if lid != over_id]
+        self.plane.update_item(pr.id, t.id, change)
         note = (" Dry run: the API server admitted the Job, but it wasn't created."
                 if self.cfg.dry_run_jobs else "")
-        why = " Started above the playbook cap, on George's `over-cap`." if d.over_cap else ""
+        why = (" Started above the playbook cap, on George's `over-cap` (now removed: "
+               "it approves one start)." if d.over_cap else "")
         self.plane.comment(pr.id, t.id, _p(
             f"Started bench-cloud Job `{tid}` (playbook `{d.playbook}`, repo `{pr.repo}`)."
             f"{why}{note}"))

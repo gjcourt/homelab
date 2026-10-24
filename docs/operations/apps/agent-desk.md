@@ -60,11 +60,15 @@ settings page.
 ## 4. Observability
 
 ```bash
-kubectl -n agent-desk-stage logs deploy/agent-desk -f      # one line per decision: "<KEY>: <action> — <reason>"
+kubectl -n agent-desk-stage logs deploy/agent-desk -f      # "<KEY>: <action> — <reason>"
 kubectl -n bench-cloud get jobs -l agent-desk/ticket        # dispatcher Jobs (none on staging: dry run)
 ```
 
-- A rejected delivery logs `rejected delivery <id>: bad signature`.
+- Every accepted delivery logs `delivery <id>: <event> → queued item <id>`, and a rejected one logs
+  `rejected delivery <id>: bad signature`. No delivery line after a change in Plane means the
+  webhook didn't reach the dispatcher.
+- A ticket checked because of a delivery logs its decision, including why it was skipped
+  (`SANDBOX-4: skip — ready not applied by George`). The 10-minute poll logs only what it acts on.
 - Readiness fails when no poll has finished in two intervals: the worker is stuck or Plane is
   unreachable.
 

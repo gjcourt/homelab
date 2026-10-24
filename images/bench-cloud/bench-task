@@ -39,7 +39,14 @@ jq -n --arg id "$TASK_ID" --arg repo "$TASK_REPO" --arg started "$(date -u +%FT%
 finish() {
   rc=$?
   # (`end` is a jq keyword, hence $fin.)
-  jq --arg rc "$rc" --arg fin "$(date -u +%FT%TZ)" '. + {exit: ($rc|tonumber), finished: $fin}' \
+  # model: what the run ran on (a resume reads it back). cost_usd: this run's own
+  # cost, net of the earlier runs a resumed result repeats.
+  jq --arg rc "$rc" --arg fin "$(date -u +%FT%TZ)" --arg m "${TASK_MODEL:-}" \
+    --slurpfile r <(cat "$out/result.json" 2>/dev/null || echo '{}') \
+    '($r[0] // {}) as $res
+     | . + {exit: ($rc|tonumber), finished: $fin,
+            model: (if $m != "" then $m else ($res.modelUsage // {} | to_entries | max_by(.value.costUSD) | .key) end)}
+     + (if $res.total_cost_usd then {cost_usd: ($res.total_cost_usd - (.prev_cost_usd // 0))} else {} end)' \
     "$out/meta.json" > "$out/meta.json.tmp" && mv "$out/meta.json.tmp" "$out/meta.json" || true
   # Session transcripts live under ~/.claude/projects/<encoded cwd>/.
   [[ -d "$HOME/.claude/projects" ]] && cp -r "$HOME/.claude/projects" "$out/transcripts" 2>/dev/null || true
@@ -114,8 +121,27 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
     fi
     if [[ -n "${sess:-}" ]]; then
       echo "resume: $prev session $sess"
-      jq --arg p "$prev" --arg s "$sess" '. + {resumed_from: $p, session: $s}' "$out/meta.json" \
+      # Stay on the session's model (George, 2026-10-24): another model starts with
+      # a cold cache and re-reads the whole session, which cost more than the
+      # first run did on SANDBOX-6. Older records have no model; take it from usage.
+      rsync -q "hestia-inbox:runs/$prev/meta.json" "$stage/prev-meta.json" 2>/dev/null || true
+      rsync -q "hestia-inbox:runs/$prev/result.json" "$stage/prev-result.json" 2>/dev/null || true
+      pmodel=$(jq -r '.model // empty' "$stage/prev-meta.json" 2>/dev/null || true)
+      [[ -n "$pmodel" ]] || pmodel=$(jq -r '.modelUsage // {} | to_entries | max_by(.value.costUSD) | .key // empty' \
+        "$stage/prev-result.json" 2>/dev/null || true)
+      # The resumed result repeats the earlier runs' usage; finish() subtracts it.
+      prev_cost=$(jq -r '.total_cost_usd // 0' "$stage/prev-result.json" 2>/dev/null || echo 0)
+      if [[ -n "$pmodel" ]]; then
+        TASK_MODEL=$pmodel
+        for i in "${!args[@]}"; do
+          [[ ${args[i]} == --model ]] && unset 'args[i]' 'args[i+1]'
+        done
+        args=("${args[@]}" --model "$pmodel")
+      fi
+      jq --arg p "$prev" --arg s "$sess" --argjson c "${prev_cost:-0}" \
+        '. + {resumed_from: $p, session: $s, prev_cost_usd: $c}' "$out/meta.json" \
         > "$out/meta.json.tmp" && mv "$out/meta.json.tmp" "$out/meta.json"
+      echo "resume: on ${pmodel:-the default model}"
       # --fork-session: a new session id, so the earlier run's transcript is never rewritten.
       args+=(--resume "$sess" --fork-session)
     else
@@ -133,6 +159,7 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
 - If you need George to decide or answer something, post the question as a ticket comment, set the state to \"Blocked\", and end the run. His reply starts a new task with the whole thread.
 - George may comment while you work; his comments reach you as added context after a tool call. If one asks you something, answer it with a ticket comment.
 - A comment's comment_html is raw HTML, e.g. <p>Opened <a href=\"…\">PR #3</a>.</p>. Send the tags as they are; never escape them as &lt;p&gt;, or the ticket shows the markup.
+- Comment on a change only after you have made it (pushed, edited, run), never in the same step.
 - Touch only ticket $key. Never change its labels, and never delete anything in Plane.
 End with a short summary that includes the PR URL, or says plainly why there is no PR.")
 else

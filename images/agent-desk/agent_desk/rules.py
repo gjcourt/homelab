@@ -27,14 +27,23 @@ def label_applied_by(activities: list[dict], label_id: str, user_id: str) -> boo
     the user in `actor`. Matching on the id, not the name, means renaming a
     label can neither spoof nor break the gate. An unexpected format finds no
     row and fails closed.
+
+    Labels set while creating the ticket get no row of their own: Plane logs
+    only the "created" row (staging, SANDBOX-8, 2026-10-24). So a label with
+    no rows at all was set at creation, and counts as added by whoever
+    created the ticket. Any later change has a row, which then decides.
     """
-    latest = None
+    latest, created_by = None, None
     for a in activities:  # oldest first
+        if a.get("verb") == "created" and not a.get("field"):
+            created_by = a.get("actor")
         if a.get("field") != "labels":
             continue
         if label_id in (a.get("new_identifier"), a.get("old_identifier")):
             latest = a
-    return bool(latest and latest.get("new_identifier") == label_id
+    if latest is None:
+        return bool(created_by) and created_by == user_id
+    return bool(latest.get("new_identifier") == label_id
                 and latest.get("actor") == user_id)
 
 

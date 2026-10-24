@@ -517,3 +517,18 @@ def test_wake_counts_against_the_playbook_cap(tmp_path):
     d.poll()
     assert len(kube.created) == 1
     assert plane.state_of("p-sb", "i1") == "Awaiting approval"
+
+
+def test_labels_set_at_creation_count_for_whoever_created_it():
+    # Plane logs only a "created" row for labels set in the create dialog.
+    lid = "l-ready"
+    mine = [{"verb": "created", "field": None, "actor": OWNER}]
+    theirs = [{"verb": "created", "field": None, "actor": BOT}]
+    assert rules.label_applied_by(mine, lid, OWNER)
+    assert not rules.label_applied_by(theirs, lid, OWNER)
+    assert not rules.label_applied_by([], lid, OWNER)
+    later = mine + [{"field": "labels", "actor": BOT, "new_identifier": None,
+                     "old_identifier": lid},
+                    {"field": "labels", "actor": BOT, "new_identifier": lid,
+                     "old_identifier": None}]
+    assert not rules.label_applied_by(later, lid, OWNER)  # a later row decides

@@ -156,10 +156,15 @@ class Dispatcher:
             max_concurrent=playbook.max_concurrent if playbook else 0,
             blocked_answered=answered)
 
-    def handle(self, pr: Project, item: dict, job_list: list[dict]) -> rules.Decision:
+    def handle(self, pr: Project, item: dict, job_list: list[dict],
+               log_skips: bool = False) -> rules.Decision:
+        """log_skips: an event names one ticket, so say why it didn't move. The
+        10-minute poll checks every ticket and logs only what it acts on."""
         t = self.ticket(pr, item)
         d = self.evaluate(pr, item, job_list)
         if d.action == "skip":
+            if log_skips:
+                self.log(f"{t.key}: skip — {d.reason}")
             return d
         self.log(f"{t.key}: {d.action} — {d.reason}")
         if d.action == "comment":
@@ -252,7 +257,7 @@ class Dispatcher:
         job_list = self.snapshot(by_project)
         item = next((i for i in by_project.get(project_id, []) if i["id"] == item_id), None)
         if item:
-            self.handle(pr, item, job_list)
+            self.handle(pr, item, job_list, log_skips=True)
 
     def reap(self, by_project: dict[str, list[dict]], job_list: list[dict]) -> None:
         """A finished Job whose ticket is still In Progress crashed, timed out or

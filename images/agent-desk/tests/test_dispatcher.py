@@ -323,3 +323,19 @@ def test_mapped_project_bot_cannot_read_is_skipped_not_fatal(tmp_path):
     assert len(kube.created) == 1
     assert "p-hl" not in d.projects
     assert sum("HOMELAB: skipped" in m for m in logs) == 1
+
+
+def test_event_logs_why_a_ticket_did_not_start(tmp_path):
+    # Staging 2026-10-24: a bot-applied ready was silently skipped, which
+    # looked the same as a delivery that never arrived.
+    logs = []
+    d, plane, kube = make(tmp_path)
+    d.log = logs.append
+    plane.add_item("p-sb", "i1", seq=4)
+    ready(plane, "p-sb", "i1", by=BOT)
+    d.on_event("p-sb", "i1")
+    assert kube.created == []
+    assert "SANDBOX-4: skip — ready not applied by George" in logs
+    logs.clear()
+    d.poll()  # the 10-minute pass stays quiet about skips
+    assert not any("skip" in m for m in logs)

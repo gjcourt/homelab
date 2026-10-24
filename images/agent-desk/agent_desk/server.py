@@ -57,8 +57,12 @@ def make_handler(secret: str, work: queue.Queue, health, log):
                 target = event_target(json.loads(body))
             except ValueError:
                 target = None
+            delivery = self.headers.get("X-Plane-Delivery")
             if target and all(target):
+                log(f"delivery {delivery}: {self.headers.get('X-Plane-Event')} → queued item {target[1]}")
                 work.put(("item",) + target)
+            else:
+                log(f"delivery {delivery}: {self.headers.get('X-Plane-Event')} → nothing to check")
             self.send_response(200)
             self.end_headers()
 

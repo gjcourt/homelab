@@ -90,4 +90,6 @@ kubectl -n bench-cloud get jobs -l agent-desk/ticket        # dispatcher Jobs (n
   3. the project is in `projects`;
   4. the ticket isn't already In Progress or In review;
   5. its playbook isn't at its cap. A ticket over the cap shows Awaiting approval with a comment,
-     and George's `over-cap` starts it.
+     and George's `over-cap` starts it. The dispatcher removes `over-cap` once the ticket starts: it
+     approves one start. A ticket that later resumes from Blocked while the playbook is full waits
+     again, unless George re-adds it.

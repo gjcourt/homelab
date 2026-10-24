@@ -141,10 +141,13 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
       prev_cost=$(jq -r '.total_cost_usd // 0' "$stage/prev-result.json" 2>/dev/null || echo 0)
       if [[ -n "$pmodel" ]]; then
         TASK_MODEL=$pmodel
-        for i in "${!args[@]}"; do
-          [[ ${args[i]} == --model ]] && unset 'args[i]' 'args[i+1]'
+        kept=() skip=0
+        for a in "${args[@]}"; do
+          if (( skip )); then skip=0; continue; fi
+          if [[ $a == --model ]]; then skip=1; continue; fi
+          kept+=("$a")
         done
-        args=("${args[@]}" --model "$pmodel")
+        args=("${kept[@]}" --model "$pmodel")
       fi
       jq --arg p "$prev" --arg s "$sess" --argjson c "${prev_cost:-0}" \
         '. + {resumed_from: $p, session: $s, prev_cost_usd: $c}' "$out/meta.json" \

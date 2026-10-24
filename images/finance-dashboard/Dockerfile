@@ -9,7 +9,7 @@
 # runtime via the mounted `finance-dashboard-data` secret. Chart.js is vendored
 # (static/chart.min.js, pinned 4.4.1) → no runtime egress, served locally.
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 WORKDIR /app
 

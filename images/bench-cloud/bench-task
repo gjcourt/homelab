@@ -7,6 +7,9 @@
 #   TASK_REPO    owner/name to clone                 e.g. gjcourt/llmux
 #   TASK_PROMPT  the task, verbatim
 #   TASK_MODEL   optional model override (default: Claude Code's default)
+#   TASK_TICKET  optional: JSON naming the Plane ticket (agent-desk sets it).
+#                Ticket mode adds the Plane MCP server, the comment hook
+#                (bench-ticket) and the ticket workflow; needs PLANE_API_KEY.
 #   CLAUDE_CODE_OAUTH_TOKEN  inference-only subscription token (setup-token)
 #
 # Output: the record — prompt, Claude's JSON result (incl. usage), stderr, and
@@ -28,7 +31,9 @@ out="$stage/runs/$TASK_ID"
 mkdir -p "$out"
 printf '%s\n' "$TASK_PROMPT" > "$out/prompt.txt"
 jq -n --arg id "$TASK_ID" --arg repo "$TASK_REPO" --arg started "$(date -u +%FT%TZ)" \
-  '{id: $id, repo: $repo, started: $started}' > "$out/meta.json"
+  --arg ticket "$(jq -r '.key // empty' <<<"${TASK_TICKET:-null}")" \
+  '{id: $id, repo: $repo, started: $started} + (if $ticket != "" then {ticket: $ticket} else {} end)' \
+  > "$out/meta.json"
 
 # shellcheck disable=SC2329  # invoked via `trap finish EXIT`
 finish() {
@@ -56,6 +61,10 @@ cd "$WORKSPACE"
 git clone -q "https://github.com/$TASK_REPO" repo
 cd repo
 
+# Skill: the allowlisted skills bench-agents-sync installs (babysit, ci, ...);
+# without it a skill invocation that needs approval is denied here.
+tools=("Bash" "Read" "Edit" "Write" "Glob" "Grep" "WebFetch" "WebSearch" "TodoWrite" "Skill")
+
 # The prompt goes in on stdin, not argv: a prompt that starts with "-" would
 # otherwise be parsed as an option.
 args=(-p
@@ -67,12 +76,41 @@ args=(-p
   # Anything that would still prompt is denied (it would be anyway with no
   # host), and Claude is told nobody can approve it, so it doesn't retry.
   --permission-prompts none
-  # Skill: the allowlisted skills bench-agents-sync installs (babysit, ci, ...);
-  # without it a skill invocation that needs approval is denied here.
-  --allowedTools "Bash" "Read" "Edit" "Write" "Glob" "Grep" "WebFetch" "WebSearch" "TodoWrite" "Skill"
-  --append-system-prompt "You are running unattended as bench-cloud task $TASK_ID in a fresh clone of $TASK_REPO. Nobody can answer questions mid-task. Deliver your work as a pull request from a new branch, and end with a short summary that includes the PR URL, or says plainly why there is no PR."
   --name "$TASK_ID")
 [[ -n "${TASK_MODEL:-}" ]] && args+=(--model "$TASK_MODEL")
+
+if [[ -n "${TASK_TICKET:-}" ]]; then
+  : "${PLANE_API_KEY:?ticket mode needs the Jobs Plane key}"
+  key=$(jq -r .key <<<"$TASK_TICKET")
+  pid=$(jq -r .project_id <<<"$TASK_TICKET")
+  wid=$(jq -r .work_item_id <<<"$TASK_TICKET")
+  # The Plane MCP server, pinned in the image. --strict-mcp-config: a .mcp.json
+  # in the cloned repo adds nothing. The key is already in this pod's env, so
+  # writing it to a 0600 file in the throwaway $HOME exposes nothing new.
+  mcp="$HOME/.bench-mcp.json"
+  ( umask 077; jq -n --arg url "$(jq -r .plane_url <<<"$TASK_TICKET")" --arg key "$PLANE_API_KEY" \
+      --arg ws "$(jq -r .workspace <<<"$TASK_TICKET")" \
+      '{mcpServers: {plane: {command: "/opt/plane-mcp/bin/plane-mcp-server", args: ["stdio"],
+        env: {PLANE_BASE_URL: $url, PLANE_API_KEY: $key, PLANE_WORKSPACE_SLUG: $ws}}}}' > "$mcp" )
+  # The comments already in the prompt aren't news to the agent.
+  bench-ticket init
+  tools+=("mcp__plane__workitem" "mcp__plane__workitem_comment" "mcp__plane__workitem_link"
+    "mcp__plane__state" "mcp__plane__workitem_activity")
+  args+=(--mcp-config "$mcp" --strict-mcp-config
+    # Hooks and the deny list for the Plane tools a ticket doesn't need, baked
+    # into the image like the managed settings; see the file.
+    --settings /usr/local/share/bench-cloud/ticket-settings.json
+    --append-system-prompt "You are running unattended as bench-cloud task $TASK_ID in a fresh clone of $TASK_REPO, working Plane ticket $key (project_id $pid, work item id $wid) through the plane MCP server. The ticket is your channel to George:
+- Deliver your work as a pull request from a new branch. Then attach the PR URL to the ticket as a link (workitem_link create), run your babysit and critique passes, and only then set the ticket's state to \"In review\" (look the state id up with the state tool). If the playbook's outcome is findings rather than a PR, post them as a ticket comment and set \"In review\" the same way.
+- If you need George to decide or answer something, post the question as a ticket comment, set the state to \"Blocked\", and end the run. His reply starts a new task with the whole thread.
+- George may comment while you work; his comments reach you as added context after a tool call. If one asks you something, answer it with a ticket comment.
+- A comment's comment_html is raw HTML, e.g. <p>Opened <a href=\"…\">PR #3</a>.</p>. Send the tags as they are; never escape them as &lt;p&gt;, or the ticket shows the markup.
+- Touch only ticket $key. Never change its labels, and never delete anything in Plane.
+End with a short summary that includes the PR URL, or says plainly why there is no PR.")
+else
+  args+=(--append-system-prompt "You are running unattended as bench-cloud task $TASK_ID in a fresh clone of $TASK_REPO. Nobody can answer questions mid-task. Deliver your work as a pull request from a new branch, and end with a short summary that includes the PR URL, or says plainly why there is no PR.")
+fi
+args+=(--allowedTools "${tools[@]}")
 
 # In the background so a SIGTERM can be forwarded: claude then ends the run
 # (exit 143) and the EXIT trap still uploads whatever record exists.

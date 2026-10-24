@@ -186,6 +186,8 @@ On create, the ticket moves to **In Progress** with a comment naming the Job.
   **Blocked**, then exits. A new comment **by George** on a Blocked ticket re-dispatches it. The new
   Job gets the whole comment thread, so it resumes with the answer. The dispatcher ignores comments
   by `agent-desk`.
+  Step 5b widens this: any comment from George wakes the agent, the woken Job resumes the earlier
+  session, and an agent can wait in-run for an answer (see "Waking the agent").
 - **Mid-run comments.** A Claude Code `PostToolUse` hook in ticket Jobs checks the ticket for new
   comments by George and passes them to the agent as added context. That puts a comment in front of
   the agent mid-task, not only at the next dispatch.
@@ -444,6 +446,89 @@ projects are mapped.
 **State left on staging:** the dispatcher keeps running in dry-run. SANDBOX-1 to -5 are Cancelled,
 since a dry-run start has no Job to finish them.
 
+## Step 5 findings (staging, 2026-10-24)
+
+#1668 added ticket mode: `TASK_TICKET` in `bench-task`, the hash-pinned `plane-mcp-server` in
+`/opt/plane-mcp`, the `bench-ticket` comment hook, and managed settings that deny every Plane MCP
+tool but `workitem`, `workitem_comment`, `workitem_link`, `state` and `workitem_activity`. Both runs
+were hand-launched with `jobs.build_job` and agent-desk's own prompt, against the collab-test key in
+a temporary `bench-cloud-plane-jobs-token` Secret, deleted afterwards.
+
+| Run | Ticket | Result |
+| --- | --- | --- |
+| `ad-sandbox-6-20261024-91b3e4`, image `2026-10-24-4a00349` | SANDBOX-6, "Add a Contributing section to the README" | ✅ PR [agent-sandbox#2](https://github.com/gjcourt/agent-sandbox/pull/2) (README.md only, lint and tests green), linked on the ticket, a summary comment, then In review. 95 s, 24 turns, $0.39 |
+| `ad-sandbox-7-20261024-ce5aec`, image `2026-10-24-d1f043b` | SANDBOX-7, an unclear "CI lint standards across the repos" | ✅ asked its question on the ticket and set Blocked, no PR. George's comment at 21:54:09 reached the agent through the hook at 21:54:42 (`hook_additional_context` on `PostToolUse:mcp__plane__workitem_comment` in the transcript), and it answered on the ticket. 75 s |
+
+**Exit met.** Three things turned up:
+
+1. **The agent HTML-escaped its own comment** on SANDBOX-6 (`&lt;p&gt;…`), so Plane showed the
+   tags. The MCP server passes `comment_html` through unchanged; the escaping was the model's. A
+   prompt line fixed it (`d1f043b`); SANDBOX-7's comments rendered.
+2. **A comment can fall between the prompt and the hook.** `bench-ticket init` marks every comment
+   already on the ticket as seen, but the prompt was built earlier, by the dispatcher. A comment
+   George writes in that gap reaches neither. SANDBOX-7's comment landed after `init`, so it got
+   through. Fixed in step 5b.
+3. **Runs are short and end the conversation.** Both finished in under two minutes, so "comment
+   while it runs" is a narrow window, and after the run nothing listens except the Blocked loop.
+   George's expectation (2026-10-24) is Devin's: a comment wakes the agent whenever, and it carries
+   on with what it knew. That's step 5b.
+
+**Measured Plane rate.** The hook calls Plane at most once per 30 s per Job (2/min), and a run's own
+MCP calls were 4–5 in total. At 24 Jobs that is about 50/min on the Jobs' key, before 5b's waiting
+Jobs (below), which poll at 4/min each. **Production `API_KEY_RATE_LIMIT`: 180/min**, enough for 24
+Jobs all waiting at once, with room.
+
+## Waking the agent (step 5b)
+
+Decisions (George, 2026-10-24): any comment from George wakes the agent, including on a closed
+ticket, after confirming; the agent carries on in the same session, with the saved transcripts as
+the fallback; it asks when unsure and can wait for the answer; `ready` stays the gate.
+
+- **What wakes it.** George's newest comment is newer than `agent-desk`'s newest comment, on a
+  ticket that still has `ready`. The check is on the comments, not on events, so a missed webhook,
+  a comment in finding 2's gap, or a comment while the dispatcher was down all still wake it at the
+  next poll. Comments by `agent-desk` never wake anything, so the agent can't loop on itself.
+
+  | Ticket state | On a new comment from George |
+  | --- | --- |
+  | In Progress (a Job is running) | Nothing from the dispatcher; the hook relays it mid-run |
+  | Blocked, In review | A new Job, resuming the last session |
+  | Done, Cancelled | The dispatcher asks first (below); no Job and no tokens until George confirms |
+  | Todo, Awaiting approval | Unchanged: the ordinary start and cap rules |
+
+- **Closed tickets ask first.** The dispatcher, which runs no model, comments: "SANDBOX-6 is Done.
+  Reply `reopen` to reopen it and wake the agent on your comment." Only a later comment from George
+  that is exactly `reopen` moves the ticket to In Progress and starts a resumed Job, with his
+  earlier comment as the request. Anything else leaves it closed, and the dispatcher doesn't ask
+  twice for the same comment.
+- **Same PR, not a new one.** A woken Job checks out the ticket's PR branch (from its link) and
+  pushes there. It sets In review again when done. If the PR was merged in the meantime, it
+  branches fresh and opens a follow-up PR.
+- **Same session.** Every run already copies `~/.claude/projects` to
+  `hestia:agent-inbox/runs/<task-id>/transcripts/`. A woken Job finds the ticket's newest run by
+  `meta.json`'s `ticket` key, copies its session file into its own `~/.claude/projects/`, and runs
+  `claude -p --resume <session-id> --fork-session` with the new comments as the prompt. The cwd is
+  the same in every pod (`/home/node/work/repo`), so the session's paths still hold. The old
+  transcript is never modified.
+  - **Fallback, if `--resume` refuses the file:** `bench-task` builds a condensed record from the
+    old transcript (the agent's own messages, its tool calls and their results trimmed, the PR
+    branch) and puts it in the prompt. Less detail, no dependence on Claude Code's session format.
+  - **Saved as it goes.** The hook also copies the session file to the run's record after each tool
+    call, so a Job killed at its deadline or by a crash still leaves a session to resume.
+- **Asking, and waiting for the answer.**
+  - The ticket prompt gains: "If the ticket can be read more than one way, ask before you start,
+    not after a PR."
+  - New `bench-ticket wait`, allowed as a Bash command: it posts nothing itself, and blocks until
+    George comments or 15 minutes pass, polling every 15 s. The agent posts its question, sets
+    Blocked, then waits; George's answer comes back as the command's output and the agent sets In
+    Progress and carries on. On timeout it ends the run, and George's later answer wakes it as
+    above.
+  - A waiting Job uses no tokens, but it holds a pod and a slot in its playbook's cap. The 15-minute
+    limit bounds that.
+- **The finding 2 fix.** agent-desk puts the ids of the comments in the prompt into `TASK_TICKET`
+  (`seen_comments`), and `bench-ticket init` marks only those as seen. A woken Job's ids are the
+  ones up to the comment that woke it.
+
 ## Steps
 
 Staging first. There is one bench-cloud, and it's production, so staging never launches a real Job:
@@ -492,14 +577,29 @@ RBAC and the admission policy.
      and the managed settings.
    - The Jobs' Plane token goes into a SOPS secret (operator).
    - **Exit:** a hand-launched ticket Job against a staging ticket reads it, comments, attaches a
-     link and sets In review, and a comment George writes mid-run reaches the agent.
+     link and sets In review, and a comment George writes mid-run reaches the agent. **Met
+     2026-10-24** (findings above).
+
+   **5b. Waking the agent** (design above).
+   - First, alone: does `--resume` work in a new pod from a copied session file? Tested by hand on
+     staging with SANDBOX-6 ("rename the heading" on agent-sandbox#2). The answer decides whether
+     the resume or the fallback is built first.
+   - Then: the wake rule and the closed-ticket confirmation in agent-desk; finding and restoring the
+     session, the per-tool-call save and `bench-ticket wait` in bench-cloud; `seen_comments`.
+   - **Exit (staging, hand-launched Jobs for the bench-cloud half, dry-run for the dispatcher):**
+     - a comment on an In review ticket wakes a Job that pushes to the same PR and remembers the
+       earlier run;
+     - an agent question answered within 15 minutes continues in the same Job;
+     - a comment on a Done ticket draws one confirmation comment and no Job; `reopen` starts one;
+     - a comment written just before the Job starts reaches it.
 6. **Production dispatcher with `docs-fix`, on SANDBOX: first end-to-end milestone.** **Exit:**
    George labels one SANDBOX ticket `ready` → a bench-cloud Job opens a PR in
    `gjcourt/agent-sandbox` → the PR is linked on the ticket → the ticket reaches **In review**.
    George merges → the ticket reaches **Done**.
 7. **Question loop live (SANDBOX).** **Exit:**
    - an agent's question parks the ticket in Blocked;
-   - George's reply resumes it in a new Job that has the answer;
+   - George's reply resumes it in a new Job that has the answer and the earlier session;
+   - a comment on an In review ticket wakes the agent on the same PR;
    - a crashed Job's ticket lands in Blocked with the record path.
 8. **`main-ci` playbook (SANDBOX).** **Exit:**
    - breaking the sandbox's default branch opens exactly one ticket, and a second failure comments
@@ -549,6 +649,9 @@ RBAC and the admission policy.
 - **Webhooks arrive before Plane's activity record** (step 4, finding 3). The dispatcher rechecks
   for 45 s, then the poll catches it. If Plane's delay ever exceeds that, George's label still acts,
   just up to 10 minutes late; it never acts on the wrong actor.
+- **Waiting and resumed Jobs cost more.** A Job in `bench-ticket wait` holds a pod and a cap slot
+  for up to 15 minutes, and a resumed session reloads its earlier context, so each wake-up costs
+  more tokens than a fresh run. Both are bounded: the 15-minute limit, and `ready` on every ticket.
 - **Plane rate limit.** At 24 Jobs the comment hook alone approaches the default 60/min on the Jobs'
   key. Raise `API_KEY_RATE_LIMIT` (step 3a) rather than adding keys.
 - **The actor check depends on Plane exposing it.** Step 2 found that it does (findings, item 2).
@@ -563,7 +666,7 @@ RBAC and the admission policy.
 - ~~Sandbox repo name and visibility.~~ **`gjcourt/agent-sandbox`, private** (George, 2026-10-22).
   Created the same day, with a `lint-and-test` CI workflow.
 - **Make HOMELAB private in Plane?** From step 2's finding 1.
-- **Production `API_KEY_RATE_LIMIT` value.** It's set from step 5's measured rate, not guessed here.
+- ~~Production `API_KEY_RATE_LIMIT` value.~~ **180/min**, from step 5's measured rate.
 
 ## Phase 2 pointer
 

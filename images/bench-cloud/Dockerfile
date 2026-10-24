@@ -13,6 +13,10 @@ ARG KUBECTL_VERSION=v1.35.0
 ARG KUBECTL_SHA256=a2e984a18a0c063279d692533031c1eff93a262afcc0afdc517375432d060989
 ARG GH_VERSION=2.101.0
 ARG GH_SHA256=9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8
+# Repos that lint and test with uv (agent-sandbox's CI does); without it agents
+# fall back to a pip venv on a different Python (SANDBOX-8, 2026-10-24).
+ARG UV_VERSION=0.12.24
+ARG UV_SHA256=b4dfaef47d491a7296981f8374a4595f55dbf84e8937c8ecd2983574d8bb3da6
 
 ENV PATH=/usr/local/go/bin:/home/node/go/bin:$PATH \
     BENCH_CLOUD_JOB_TEMPLATE=/usr/local/share/bench-cloud/job.yaml \
@@ -27,6 +31,12 @@ RUN apt-get update \
       build-essential ca-certificates curl git jq less make openssh-client \
       openssl procps python3 python3-pip python3-venv ripgrep rsync tmux \
  && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL -o /tmp/uv.tgz "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" \
+ && echo "${UV_SHA256}  /tmp/uv.tgz" | sha256sum -c - \
+ && tar -C /tmp -xzf /tmp/uv.tgz \
+ && install -m 0755 /tmp/uv-x86_64-unknown-linux-gnu/uv /tmp/uv-x86_64-unknown-linux-gnu/uvx /usr/local/bin/ \
+ && rm -rf /tmp/uv* && uv --version
 
 RUN curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
  && echo "${GO_SHA256}  /tmp/go.tgz" | sha256sum -c - \

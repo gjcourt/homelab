@@ -529,6 +529,51 @@ the fallback; it asks when unsure and can wait for the answer; `ready` stays the
   (`seen_comments`), and `bench-ticket init` marks only those as seen. A woken Job's ids are the
   ones up to the comment that woke it.
 
+## Step 5b findings (staging, 2026-10-24)
+
+Code: `feat/agent-desk-wake`. The dispatcher half ran as agent-desk's real `Dispatcher` against
+staging Plane (as collab-test) with Kubernetes stubbed, so every decision, Plane write and Job spec
+was the real one; the Jobs it produced were then created by hand. The staging deployment was
+scaled to 0 (and `apps-staging` suspended) during the tests, so its older dry-run code couldn't
+race the harness; both were restored afterwards. The temporary Jobs key Secret was deleted.
+
+| Test | Run | Result |
+| --- | --- | --- |
+| Comment on an In review ticket wakes the agent on the same PR | SANDBOX-6, `ad-sandbox-6-20261024-6bfb5e` | ✅ resumed the earlier session on its model (Sonnet), retitled PR #2 per the repo's rules, replied, In review. Checkpoints were on hestia mid-run. $0.28 net |
+| A question answered within 15 minutes continues in the same Job | SANDBOX-8, `ad-sandbox-8-20261024-0d545a` | ✅ asked, set Blocked, ran `bench-ticket wait`; George's answer came back as its output; opened PR #3 and set In review. 3 min, $0.69 (Haiku) |
+| A comment written just before the Job starts reaches it | SANDBOX-8, same run | ✅ "fizz buzz" was written after the prompt was built and before the Job existed; the hook relayed it on the first tool call |
+| A comment on a Done ticket asks first; `reopen` starts a Job | SANDBOX-6, `ad-sandbox-6-20261024-33e24a` | ✅ one confirmation comment and no Job; a second pass asked nothing; `reopen` started a resumed Job with the comment that drew the question |
+| A Blocked ticket's answer resumes the session | SANDBOX-6, `ad-sandbox-6-20261024-80e1fb` | ✅ George's license answer woke it; MIT `LICENSE.md` and a README line pushed to PR #2; In review |
+
+**Exit met.** Found and fixed on the way:
+
+1. **The model swap crashed a resumed Job** under `set -u` (unsetting array entries mid-loop).
+2. **A Job that dies before Claude runs became the ticket's "last run"**, with no session. The
+   lookup now follows `resumed_from` back a few hops, and records it as soon as the session is
+   found.
+3. **Labels set in Plane's create dialog have no activity row** (SANDBOX-8): only the "created"
+   row. `ready` on a ticket George created with it looked unattributed, and the staging dispatcher
+   refused it too. A label with no rows now counts for the ticket's creator; any later row still
+   decides, and a bot-created ticket still fails closed.
+4. **A resumed session asked its question and ended the run** instead of waiting: its prompt said
+   only "or Blocked if you need him". The hook now tells any agent that sets Blocked to run
+   `bench-ticket wait`, and the resume prompt says so.
+5. **The agent escaped its comment HTML again** (resumed Sonnet session). The pre-hook repaired it
+   before posting, so the ticket was clean: the lint doing its job.
+6. **`uv` wasn't in the image**, so the agent ran the repo's lint in a pip venv on another Python.
+   Added, pinned by checksum.
+
+Also measured:
+
+- **Cost of a wake-up.** A resumed run on the session's model cost $0.28; the earlier cross-model
+  resume cost $0.36 for less work. Staying on the session's model (George, 2026-10-24) is right.
+- **The PR link title** is enforced: `PR #3 · docs: SANDBOX-8 improve README and about page`.
+- **Plane doesn't show new comments without a refresh.** Source of v1.4.2: comments load with the
+  work item; the full-page view re-fetches only on window focus, the peek view never; `plane-live`
+  is collaborative editing only; nothing in CE enables polling. George watched SANDBOX-8 and saw
+  nothing until he reloaded. Proposed: a push through the Home Assistant app when an agent asks a
+  question, reaches In review, or a Job fails (reverses decision 6; George's call, not built).
+
 ## Models and routing
 
 George, 2026-10-24: simple tasks run on Haiku by default; measure how well each model handles each
@@ -620,6 +665,7 @@ RBAC and the admission policy.
      - an agent question answered within 15 minutes continues in the same Job;
      - a comment on a Done ticket draws one confirmation comment and no Job; `reopen` starts one;
      - a comment written just before the Job starts reaches it.
+   - **Met 2026-10-24** (findings above).
 6. **Production dispatcher with `docs-fix`, on SANDBOX: first end-to-end milestone.** **Exit:**
    George labels one SANDBOX ticket `ready` → a bench-cloud Job opens a PR in
    `gjcourt/agent-sandbox` → the PR is linked on the ticket → the ticket reaches **In review**.

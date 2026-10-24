@@ -45,6 +45,15 @@ def make(tmp_path, cap=6, deny=None):
     return Dispatcher(cfg, plane, kube, log=lambda m: None), plane, kube
 
 
+def env_of(job, name):
+    return next(e["value"] for e in job["spec"]["template"]["spec"]["containers"][0]["env"]
+                if e["name"] == name)
+
+
+def ticket_of(job):
+    return json.loads(env_of(job, "TASK_TICKET"))
+
+
 def ready(plane, pid, iid, by=OWNER, playbook="docs-fix"):
     plane.label(pid, iid, f"playbook:{playbook}", OWNER)
     plane.label(pid, iid, "ready", by)
@@ -240,7 +249,10 @@ def test_blocked_ticket_resumes_only_on_owner_reply(tmp_path):
     assert len(kube.created) == 1
     prompt = next(e["value"] for e in kube.created[0][0]["spec"]["template"]["spec"]
                   ["containers"][0]["env"] if e["name"] == "TASK_PROMPT")
-    assert "George has replied" in prompt and "README.md" in prompt
+    assert "George has commented since" in prompt and "README.md" in prompt
+    t = ticket_of(kube.created[0][0])
+    assert t["resume"] and "README.md" in t["resume_prompt"]
+    assert "Which file?" not in t["resume_prompt"]  # the session already has it
 
 
 def test_finished_job_with_ticket_in_progress_is_reaped_to_blocked(tmp_path):
@@ -410,3 +422,113 @@ def test_bot_ready_rechecks_but_never_starts(tmp_path):
     ready(plane, "p-sb", "i1", by=BOT)
     assert d.on_event("p-sb", "i1") is True  # bounded by server.RECHECK
     assert kube.created == []
+
+
+# -- step 5b: waking the agent --------------------------------------------------
+
+def worked(plane, state="In review"):
+    """A ticket an earlier run finished: ready by George, the agent's last word."""
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1")
+    plane.say("p-sb", "i1", OWNER, "first ask")
+    plane.say("p-sb", "i1", BOT, "Opened PR #2.")
+    plane.set_state("p-sb", "i1", state, actor=BOT)
+
+
+def test_comment_on_in_review_wakes_the_agent_with_only_whats_new(tmp_path):
+    d, plane, kube = make(tmp_path)
+    worked(plane)
+    d.poll()
+    assert kube.created == []  # nothing new from George
+    plane.say("p-sb", "i1", OWNER, "Rename the heading")
+    d.poll()
+    assert len(kube.created) == 1
+    t = ticket_of(kube.created[0][0])
+    assert t["resume"] and "Rename the heading" in t["resume_prompt"]
+    assert "first ask" not in t["resume_prompt"] and "Opened PR #2" not in t["resume_prompt"]
+    assert len(t["seen_comments"]) == 3  # the three above; the Started comment comes after
+    assert plane.state_of("p-sb", "i1") == "In Progress"
+
+
+def test_bot_comments_never_wake_the_agent(tmp_path):
+    d, plane, kube = make(tmp_path)
+    worked(plane)
+    plane.say("p-sb", "i1", OTHER, "someone else")
+    plane.say("p-sb", "i1", BOT, "a later note from the agent")
+    d.poll()
+    assert kube.created == []
+
+
+def test_comment_after_the_agents_answer_is_the_only_trigger(tmp_path):
+    d, plane, kube = make(tmp_path)
+    worked(plane)
+    plane.say("p-sb", "i1", OWNER, "question")
+    plane.say("p-sb", "i1", BOT, "answer")  # answered mid-run: nothing left to wake for
+    d.poll()
+    assert kube.created == []
+
+
+def test_comment_on_done_ticket_asks_first_and_reopen_starts(tmp_path):
+    d, plane, kube = make(tmp_path)
+    worked(plane, state="Done")
+    plane.say("p-sb", "i1", OWNER, "One more tweak: fix the link")
+    d.poll()
+    d.poll()
+    assert kube.created == []
+    asks = [w for w in plane.writes if w[0] == "comment" and "reopen" in w[2]]
+    assert len(asks) == 1  # asked once, no tokens spent
+    plane.say("p-sb", "i1", OWNER, "and the typo too")
+    d.poll()
+    assert kube.created == [] and len([w for w in plane.writes
+                                       if w[0] == "comment" and "reopen" in w[2]]) == 1
+    plane.say("p-sb", "i1", OWNER, "Reopen.")
+    d.poll()
+    assert len(kube.created) == 1
+    t = ticket_of(kube.created[0][0])
+    assert "fix the link" in t["resume_prompt"] and "the typo too" in t["resume_prompt"]
+    assert "Reopen" not in t["resume_prompt"]
+    assert plane.state_of("p-sb", "i1") == "In Progress"
+
+
+def test_closed_ticket_without_ready_is_left_alone(tmp_path):
+    d, plane, kube = make(tmp_path)
+    worked(plane, state="Cancelled")
+    plane.label("p-sb", "i1", "ready", OWNER, add=False)
+    plane.say("p-sb", "i1", OWNER, "a note to self")
+    d.poll()
+    assert kube.created == [] and not [w for w in plane.writes if w[0] == "comment"]
+
+
+def test_comment_event_on_in_review_ticket_wakes_it(tmp_path):
+    d, plane, kube = make(tmp_path)
+    worked(plane)
+    plane.say("p-sb", "i1", OWNER, "Rename the heading")
+    d.on_event("p-sb", "i1")
+    assert len(kube.created) == 1
+
+
+def test_wake_counts_against_the_playbook_cap(tmp_path):
+    d, plane, kube = make(tmp_path, cap=1)
+    worked(plane)
+    plane.add_item("p-sb", "i2", seq=2)
+    ready(plane, "p-sb", "i2")
+    d.poll()  # i2 takes the slot
+    plane.say("p-sb", "i1", OWNER, "Rename the heading")
+    d.poll()
+    assert len(kube.created) == 1
+    assert plane.state_of("p-sb", "i1") == "Awaiting approval"
+
+
+def test_labels_set_at_creation_count_for_whoever_created_it():
+    # Plane logs only a "created" row for labels set in the create dialog.
+    lid = "l-ready"
+    mine = [{"verb": "created", "field": None, "actor": OWNER}]
+    theirs = [{"verb": "created", "field": None, "actor": BOT}]
+    assert rules.label_applied_by(mine, lid, OWNER)
+    assert not rules.label_applied_by(theirs, lid, OWNER)
+    assert not rules.label_applied_by([], lid, OWNER)
+    later = mine + [{"field": "labels", "actor": BOT, "new_identifier": None,
+                     "old_identifier": lid},
+                    {"field": "labels", "actor": BOT, "new_identifier": lid,
+                     "old_identifier": None}]
+    assert not rules.label_applied_by(later, lid, OWNER)  # a later row decides

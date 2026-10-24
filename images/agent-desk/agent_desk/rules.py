@@ -6,6 +6,8 @@ like the ones measured on staging (plan, "Step 2 findings").
 
 from __future__ import annotations
 
+import html
+import re
 from dataclasses import dataclass, field
 
 PLAYBOOK_PREFIX = "playbook:"
@@ -25,14 +27,23 @@ def label_applied_by(activities: list[dict], label_id: str, user_id: str) -> boo
     the user in `actor`. Matching on the id, not the name, means renaming a
     label can neither spoof nor break the gate. An unexpected format finds no
     row and fails closed.
+
+    Labels set while creating the ticket get no row of their own: Plane logs
+    only the "created" row (staging, SANDBOX-8, 2026-10-24). So a label with
+    no rows at all was set at creation, and counts as added by whoever
+    created the ticket. Any later change has a row, which then decides.
     """
-    latest = None
+    latest, created_by = None, None
     for a in activities:  # oldest first
+        if a.get("verb") == "created" and not a.get("field"):
+            created_by = a.get("actor")
         if a.get("field") != "labels":
             continue
         if label_id in (a.get("new_identifier"), a.get("old_identifier")):
             latest = a
-    return bool(latest and latest.get("new_identifier") == label_id
+    if latest is None:
+        return bool(created_by) and created_by == user_id
+    return bool(latest.get("new_identifier") == label_id
                 and latest.get("actor") == user_id)
 
 
@@ -49,6 +60,55 @@ def owner_replied_since(comments: list[dict], owner_id: str, since: str) -> bool
     """Has the owner commented after `since` (ISO timestamps compare as text)?"""
     return any(c.get("actor", c.get("created_by")) == owner_id
                and (c.get("created_at") or "") > since for c in comments)
+
+
+def _by_time(comments: list[dict]) -> list[dict]:
+    return sorted(comments, key=lambda c: c.get("created_at") or "")
+
+
+def _actor(c: dict) -> str:
+    return c.get("actor", c.get("created_by")) or ""
+
+
+def wake_comments(comments: list[dict], owner_id: str, bot_id: str) -> list[dict]:
+    """George's comments newer than agent-desk's newest one, oldest first.
+
+    The wake rule (plan, "Waking the agent"): a comment George hasn't had an
+    answer to. It reads the comments, not events, so a missed webhook or a
+    comment written while nothing was listening still counts at the next poll.
+    The bot's own comments never wake anything.
+    """
+    cs = _by_time(comments)
+    last_bot = max((i for i, c in enumerate(cs) if _actor(c) == bot_id), default=-1)
+    return [c for c in cs[last_bot + 1:] if _actor(c) == owner_id]
+
+
+# In the dispatcher's question on a closed ticket, and how it's recognised.
+REOPEN_WORD = "reopen"
+REOPEN_MARK = "to reopen it and wake the agent"
+
+
+def _text(c: dict) -> str:
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", c.get("comment_html") or "")).split())
+
+
+def reopen_state(comments: list[dict], owner_id: str, bot_id: str) -> tuple[str, list[dict]]:
+    """On a closed ticket: ("", []) nothing new; ("ask", wake) George commented,
+    ask him first; ("go", request) he replied `reopen` to the ask, and request
+    is the comments that drew the ask."""
+    cs = _by_time(comments)
+    wake = wake_comments(cs, owner_id, bot_id)
+    if not wake:
+        return "", []
+    def is_reopen(c):
+        return _text(c).lower().strip(" .!`'\"") == REOPEN_WORD
+
+    bots = [i for i, c in enumerate(cs) if _actor(c) == bot_id]
+    if bots and REOPEN_MARK in _text(cs[bots[-1]]) and any(is_reopen(c) for c in wake):
+        prev = bots[-2] if len(bots) > 1 else -1
+        request = [c for c in cs[prev + 1:bots[-1]] if _actor(c) == owner_id]
+        return "go", request + [c for c in wake if not is_reopen(c)]
+    return "ask", wake
 
 
 @dataclass
@@ -77,7 +137,7 @@ class Ticket:
 
 @dataclass
 class Decision:
-    action: str  # start | wait | comment | skip
+    action: str  # start | wait | comment | confirm | skip
     reason: str = ""
     playbook: str = ""
     over_cap: bool = False
@@ -88,7 +148,7 @@ class Decision:
 def decide(t: Ticket, *, repo: str | None, deny_repos: set[str], known_playbooks: set[str],
            ready_by_owner: bool, over_cap_by_owner: bool, has_active_job: bool,
            running_for_playbook: int, max_concurrent: int,
-           blocked_answered: bool = False) -> Decision:
+           woken: bool = False, reopen: str = "") -> Decision:
     """The plan's startable rule, in its order.
 
     `comment` decisions are the two George wants to hear about (an unusable
@@ -99,14 +159,21 @@ def decide(t: Ticket, *, repo: str | None, deny_repos: set[str], known_playbooks
         return Decision("skip", "project not allowlisted")
     if t.external_source:
         return Decision("skip", "synced item (external_source)")
-    if t.state_group in ("completed", "cancelled"):
-        return Decision("skip", "closed")
     resume = False
-    if t.state_name == BLOCKED:
-        if not blocked_answered:
-            return Decision("skip", "blocked, waiting for George")
+    if t.state_group in ("completed", "cancelled"):
+        # A comment on a closed ticket asks before it reopens (George, 2026-10-24):
+        # the question costs no tokens; only his `reopen` starts a Job.
+        if reopen == "ask" and "ready" in t.label_names:
+            return Decision("confirm", f"George commented on a {t.state_name} ticket")
+        if reopen != "go":
+            return Decision("skip", "closed")
         resume = True
-    elif t.state_name in (IN_PROGRESS, IN_REVIEW) or (
+    elif t.state_name in (BLOCKED, IN_REVIEW):
+        if not woken:
+            return Decision("skip", "blocked, waiting for George" if t.state_name == BLOCKED
+                            else f"already {t.state_name}")
+        resume = True
+    elif t.state_name == IN_PROGRESS or (
             t.state_group == "started" and t.state_name not in WAITING_STATES):
         return Decision("skip", f"already {t.state_name}")
     if "ready" not in t.label_names:

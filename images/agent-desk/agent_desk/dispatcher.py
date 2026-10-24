@@ -131,7 +131,7 @@ class Dispatcher:
                             known_playbooks=set(self.cfg.playbooks), ready_by_owner=True,
                             over_cap_by_owner=False, has_active_job=False,
                             running_for_playbook=0, max_concurrent=1,
-                            blocked_answered=True)
+                            woken=True, reopen="go")
 
     def evaluate(self, pr: Project, item: dict, job_list: list[dict]) -> rules.Decision:
         t = self.ticket(pr, item)
@@ -149,11 +149,12 @@ class Dispatcher:
         # unattributed. on_event asks the worker to look again shortly.
         self.unconfirmed = ("ready" in t.label_names and not ready_ok) or \
             ("over-cap" in t.label_names and not over_ok)
-        answered = False
-        if t.state_name == BLOCKED:
-            since = rules.last_entered(acts, pr.states.get(BLOCKED, ""))
-            answered = rules.owner_replied_since(self.plane.comments(pr.id, t.id),
-                                                 self.owner_id, since)
+        woken, reopen = False, ""
+        if t.state_name in (BLOCKED, IN_REVIEW) or t.state_group in ("completed", "cancelled"):
+            cmts = self.plane.comments(pr.id, t.id)
+            woken = bool(rules.wake_comments(cmts, self.owner_id, self.bot_id))
+            if t.state_group in ("completed", "cancelled"):
+                reopen, _ = rules.reopen_state(cmts, self.owner_id, self.bot_id)
         pb = t.playbooks[0] if len(t.playbooks) == 1 else ""
         playbook = self.cfg.playbooks.get(pb)
         if playbook and playbook.allowed_repos and pr.repo not in playbook.allowed_repos:
@@ -166,7 +167,7 @@ class Dispatcher:
             over_cap_by_owner=over_ok, has_active_job=active,
             running_for_playbook=self.running(pb, job_list) if pb else 0,
             max_concurrent=playbook.max_concurrent if playbook else 0,
-            blocked_answered=answered)
+            woken=woken, reopen=reopen)
 
     def handle(self, pr: Project, item: dict, job_list: list[dict],
                log_skips: bool = False) -> rules.Decision:
@@ -186,6 +187,9 @@ class Dispatcher:
                 self.plane.update_item(pr.id, t.id, {"state": pr.states[AWAITING]})
             self.comment_once(pr, t, f"{d.reason}. Add `over-cap` to start this one now, "
                                      "or it starts when a slot frees.")
+        elif d.action == "confirm":
+            self.comment_once(pr, t, f"{t.key} is {t.state_name}. Reply `{rules.REOPEN_WORD}` "
+                                     f"{rules.REOPEN_MARK} on your comment.")
         elif d.action == "start":
             self.start(pr, t, d, job_list)
         return d
@@ -205,10 +209,11 @@ class Dispatcher:
     def start(self, pr: Project, t: Ticket, d: rules.Decision, job_list: list[dict]) -> None:
         pb = self.cfg.playbooks[d.playbook]
         item = self.plane.item(pr.id, t.id)
+        cmts = self.plane.comments(pr.id, t.id)
         comments = [("George" if c.get("actor", c.get("created_by")) == self.owner_id
                      else "agent-desk" if c.get("actor", c.get("created_by")) == self.bot_id
                      else "someone else", c.get("comment_html", ""))
-                    for c in self.plane.comments(pr.id, t.id)]
+                    for c in cmts]
         text = promptmod.build(pb.prompt, key=t.key, title=t.name,
                                description_html=item.get("description_html", ""),
                                comments=comments, resume=d.resume)
@@ -218,7 +223,19 @@ class Dispatcher:
         # owner_id: the Job's comment hook relays only George's comments.
         ticket = {"key": t.key, "project_id": pr.id, "work_item_id": t.id,
                   "plane_url": self.cfg.plane_url, "workspace": self.cfg.workspace,
-                  "owner_id": self.owner_id}
+                  "owner_id": self.owner_id,
+                  # The comments in the prompt; the Job's hook relays any others.
+                  "seen_comments": [c["id"] for c in cmts if c.get("id")]}
+        if d.resume:
+            # Woken: the Job resumes the ticket's last session with only what's
+            # new; TASK_PROMPT (the whole thread) is its fallback.
+            if t.state_group in ("completed", "cancelled"):
+                _, request = rules.reopen_state(cmts, self.owner_id, self.bot_id)
+            else:
+                request = rules.wake_comments(cmts, self.owner_id, self.bot_id)
+            ticket["resume"] = True
+            ticket["resume_prompt"] = promptmod.build_resume(
+                key=t.key, comments=[c.get("comment_html", "") for c in request])
         job = jobmod.build_job(self.template, tid=tid, image=self.kube.console_image(),
                                repo=pr.repo, prompt=text, ticket=ticket, playbook=d.playbook,
                                deadline=pb.deadline, model=pb.model,

@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from . import jobs as jobmod
 from . import prompt as promptmod
 from . import rules
+from .plane import PlaneError
 from .rules import AWAITING, BLOCKED, DONE, IN_PROGRESS, IN_REVIEW, TODO, Ticket
 
 PR_URL = re.compile(r"^https://github\.com/([^/]+/[^/]+)/pull/(\d+)")
@@ -124,14 +125,18 @@ class Dispatcher:
 
     # -- evaluation -------------------------------------------------------------
 
+    def precheck(self, pr: Project, t: Ticket) -> rules.Decision:
+        """The rules that need only the ticket: no activity log, no Job count."""
+        return rules.decide(t, repo=pr.repo, deny_repos=self.cfg.deny_repos,
+                            known_playbooks=set(self.cfg.playbooks), ready_by_owner=True,
+                            over_cap_by_owner=False, has_active_job=False,
+                            running_for_playbook=0, max_concurrent=1,
+                            blocked_answered=True)
+
     def evaluate(self, pr: Project, item: dict, job_list: list[dict]) -> rules.Decision:
         t = self.ticket(pr, item)
         self.unconfirmed = False
-        cheap = rules.decide(t, repo=pr.repo, deny_repos=self.cfg.deny_repos,
-                             known_playbooks=set(self.cfg.playbooks), ready_by_owner=True,
-                             over_cap_by_owner=False, has_active_job=False,
-                             running_for_playbook=0, max_concurrent=1,
-                             blocked_answered=True)
+        cheap = self.precheck(pr, t)
         if cheap.action == "skip":  # fails without even asking who added what
             return cheap
         acts = self.plane.activities(pr.id, t.id)
@@ -269,12 +274,20 @@ class Dispatcher:
         pr = self.projects.get(project_id)
         if not pr:
             return False
-        by_project = self.items()
-        job_list = self.snapshot(by_project)
-        item = next((i for i in by_project.get(project_id, []) if i["id"] == item_id), None)
-        if not item:
+        try:
+            item = self.plane.item(project_id, item_id)
+        except PlaneError as e:  # deleted since the delivery, most likely
+            self.log(f"item {item_id}: can't read it ({e})")
             return False
         self.unconfirmed = False
+        t = self.ticket(pr, item)
+        cheap = self.precheck(pr, t)
+        if cheap.action == "skip":  # most deliveries: no `ready`, or the bot's own edit
+            self.log(f"{t.key}: skip — {cheap.reason}")
+            return False
+        # The cap counts In Progress tickets across every project, so only a
+        # ticket that might start pays for listing them all.
+        job_list = self.snapshot(self.items())
         self.handle(pr, item, job_list, log_skips=True)
         return self.unconfirmed
 

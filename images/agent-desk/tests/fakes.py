@@ -3,6 +3,8 @@
 
 import itertools
 
+from agent_desk.plane import PlaneError
+
 OWNER, BOT, OTHER = "u-george", "u-bot", "u-agent"
 _clock = itertools.count(1)
 
@@ -18,6 +20,7 @@ class FakePlane:
                         {"id": OTHER, "email": "other@example.com"}]
         self.projs = {}
         self.writes = []
+        self.listed = 0  # full work-item listings
 
     def add_project(self, pid, identifier, member=True):
         names = [("Backlog", "backlog"), ("Todo", "unstarted"), ("In Progress", "started"),
@@ -86,9 +89,12 @@ class FakePlane:
         return self.projs[pid]["labels"]
 
     def items(self, pid):
+        self.listed += 1
         return [dict(i) for i in self.projs[pid]["items"].values()]
 
     def item(self, pid, iid):
+        if iid not in self.projs[pid]["items"]:
+            raise PlaneError(404, {"error": "not found"}, "GET", f"/work-items/{iid}/")
         return dict(self.projs[pid]["items"][iid])
 
     def activities(self, pid, iid):

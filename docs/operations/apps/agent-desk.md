@@ -22,7 +22,8 @@ Code: [`images/agent-desk/`](../../../images/agent-desk/README.md).
   carries on.
 - **Inputs:**
   - Plane webhooks to `http://agent-desk.<ns>.svc.cluster.local/plane`, checked against
-    `X-Plane-Signature`;
+    `X-Plane-Signature`. A delivery reads only its own ticket; it lists every ticket only when
+    that one could start, since the playbook cap counts In Progress tickets in all projects;
   - a full poll every 10 minutes;
   - a read-only GitHub poll every 5 minutes, once a token is configured.
 - **Config:** `apps/<env>/agent-desk/config.yaml`, which sets:

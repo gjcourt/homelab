@@ -53,8 +53,9 @@ exist.**
    - Name `bench-cloud`; homepage `https://github.com/gjcourt/homelab`.
    - Webhook: **off** (uncheck Active).
    - Repository permissions: **Contents: Read and write · Pull requests: Read and
-     write · Issues: Read and write · Actions: Read · Commit statuses: Read ·
-     Metadata: Read**. Everything else, including **Workflows** and
+     write · Issues: Read and write · Actions: Read · Checks: Read · Commit
+     statuses: Read · Metadata: Read**. (Checks: Read added 2026-10-24: without it
+     `gh pr checks` fails with "Resource not accessible by integration".) Everything else, including **Workflows** and
      **Administration**: No access. No account permissions.
    - Where can it be installed: **Only on this account**.
 2. Generate a private key (downloads a `.pem`).

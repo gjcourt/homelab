@@ -529,6 +529,34 @@ the fallback; it asks when unsure and can wait for the answer; `ready` stays the
   (`seen_comments`), and `bench-ticket init` marks only those as seen. A woken Job's ids are the
   ones up to the comment that woke it.
 
+## Models and routing
+
+George, 2026-10-24: simple tasks run on Haiku by default; measure how well each model handles each
+kind of task, and route to the cheaper model where it does as well.
+
+- **Now (step 5b).** A playbook's `model` sets `TASK_MODEL` for its Jobs. `docs-fix` runs on
+  `claude-haiku-5-5`; `main-ci` and `dep-hold` keep Claude Code's default until measured. Comment
+  repair in `bench-ticket lint` is Haiku too: plain fixes in code first, and Haiku only for what's
+  left, its rewrite used only if the words match the original.
+- **Measure.** Every run already records cost, turns, duration and per-model usage in `result.json`.
+  agent-desk adds the outcome, which it alone sees: PR merged, closed, or still open; how many times
+  George woke the agent before the merge (a request for changes); CI green on the first push; ended
+  Blocked by a crash. It writes one row per run to `agent-inbox/scores.csv` (task id, playbook,
+  model, difficulty, cost, outcome). The scorecard is success rate and cost per success, per
+  playbook × model × difficulty.
+- **A bench, on SANDBOX only.** A set of sandbox tickets with known good outcomes, each run once per
+  model (Haiku, Sonnet, Opus) and scored the same way, plus an Opus grader comparing each diff with
+  the reference. This fills the scorecard faster than live traffic, at a cost bounded by tickets ×
+  3. Never on real repos.
+- **Route by difficulty.** At start, agent-desk asks Haiku (no tools, ticket text only, fenced like
+  the prompt) to rate the ticket `simple`, `standard` or `hard`, with one line of reason, recorded
+  on the Job as a label. The model comes from a per-playbook table, difficulty → model, set from the
+  scorecard and reviewed in this repo like any rule.
+  - **Escalation.** A woken retry after a crash, or after CI fails twice, steps up one model.
+  - **Override.** George's `model:<name>` label on the ticket wins.
+  - **Thin data keeps the stronger model.** A cheaper model replaces a stronger one for a cell only
+    once it has at least 10 scored runs there and matches its success rate.
+
 ## Steps
 
 Staging first. There is one bench-cloud, and it's production, so staging never launches a real Job:
@@ -606,6 +634,9 @@ RBAC and the admission policy.
      on it;
    - after George's `ready`, the agent's PR turns the workflow green;
    - a red-then-green branch with no `ready` ends as Cancelled.
+   **8b. Model routing** (design above). **Exit:** `scores.csv` has a row per run with its outcome;
+   the SANDBOX bench has scored each playbook on Haiku, Sonnet and Opus; the difficulty rating is on
+   every Job; and the routing table, set from those scores, is in the config.
 9. **`dep-hold` playbook, and the renovate fixer migration (decision 4).**
    - `renovate-automerge` opens `dep-hold` tickets instead of Jobs.
    - The fixer plan is updated to match: its decision 2 is superseded and `renovate-fixer-state`

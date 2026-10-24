@@ -49,6 +49,7 @@ class Dispatcher:
         self.owner_id = ""
         self.bot_id = ""
         self._refreshed = 0.0
+        self._not_member: set[str] = set()
         # Tickets this process started and believes In Progress, by playbook.
         # Re-derived from Plane on every poll; only bridges the gap in between.
         self.in_progress: dict[str, str] = {}
@@ -70,6 +71,15 @@ class Dispatcher:
             repo = self.cfg.projects.get(p["identifier"])
             if not repo:
                 continue
+            # A public project is listed to every workspace member, but its
+            # states and items 403 unless the bot is a project member. Skip it
+            # rather than fail the whole poll: no membership, no access.
+            if p.get("is_member") is False:
+                if p["identifier"] not in self._not_member:
+                    self.log(f"{p['identifier']}: skipped, {self.cfg.bot_email} isn't a project member")
+                    self._not_member.add(p["identifier"])
+                continue
+            self._not_member.discard(p["identifier"])
             pr = Project(p["id"], p["identifier"], repo)
             for s in self.plane.states(p["id"]):
                 pr.states[s["name"]] = s["id"]

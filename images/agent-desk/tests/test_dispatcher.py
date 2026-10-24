@@ -307,3 +307,19 @@ def test_config_rejects_bad_ready_rule(tmp_path):
     p.write_text("ownerEmail: a\nbotEmail: b\nplaybooks:\n  x: {ready: sometimes}\n")
     with pytest.raises(ValueError):
         config.load(str(p), env={"PLANE_URL": "u", "PLANE_WORKSPACE": "w"})
+
+
+def test_mapped_project_bot_cannot_read_is_skipped_not_fatal(tmp_path):
+    # Staging 2026-10-23: HOMELAB is public, so it's listed, but the bot isn't
+    # a member and its states 403. That must not stop SANDBOX being worked.
+    logs = []
+    d, plane, kube = make(tmp_path)
+    d.log = logs.append
+    plane.projs["p-hl"]["member"] = False
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1")
+    d.poll()
+    d.poll()
+    assert len(kube.created) == 1
+    assert "p-hl" not in d.projects
+    assert sum("HOMELAB: skipped" in m for m in logs) == 1

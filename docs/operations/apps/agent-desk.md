@@ -69,6 +69,10 @@ kubectl -n bench-cloud get jobs -l agent-desk/ticket        # dispatcher Jobs (n
   webhook didn't reach the dispatcher.
 - A ticket checked because of a delivery logs its decision, including why it was skipped
   (`SANDBOX-4: skip — ready not applied by George`). The 10-minute poll logs only what it acts on.
+- **Plane sends a webhook before it records who changed a label** (measured 1.4 s on staging,
+  2026-10-24). When a delivered ticket carries `ready` or `over-cap` that the record doesn't yet
+  credit to George, the dispatcher logs `label not attributed yet; rechecking in Ns` and looks again
+  after 3, 10 and 30 s. A label the bot added logs this too, three times, and never starts.
 - Readiness fails when no poll has finished in two intervals: the worker is stuck or Plane is
   unreachable.
 

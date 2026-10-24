@@ -21,6 +21,9 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 POLL = ("poll",)
+# Seconds before re-checking a ticket whose label isn't attributed yet. After
+# the last one the 10-minute poll still catches it.
+RECHECK = (3, 10, 30)
 GITHUB = ("github",)
 
 
@@ -102,6 +105,11 @@ def run(dispatcher, cfg, log=print) -> None:
             elif msg == GITHUB:
                 dispatcher.github_poll()
             else:
-                dispatcher.on_event(msg[1], msg[2])
+                attempt = msg[3] if len(msg) > 3 else 0
+                if dispatcher.on_event(msg[1], msg[2]) and attempt < len(RECHECK):
+                    log(f"item {msg[2]}: label not attributed yet; "
+                        f"rechecking in {RECHECK[attempt]}s")
+                    threading.Timer(RECHECK[attempt], work.put,
+                                    args=(("item", msg[1], msg[2], attempt + 1),)).start()
         except Exception as e:  # noqa: BLE001 — the worker must outlive any one message
             log(f"error handling {msg[0]}: {e}")

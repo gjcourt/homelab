@@ -50,6 +50,7 @@ class Dispatcher:
         self.bot_id = ""
         self._refreshed = 0.0
         self._not_member: set[str] = set()
+        self.unconfirmed = False
         # Tickets this process started and believes In Progress, by playbook.
         # Re-derived from Plane on every poll; only bridges the gap in between.
         self.in_progress: dict[str, str] = {}
@@ -125,6 +126,7 @@ class Dispatcher:
 
     def evaluate(self, pr: Project, item: dict, job_list: list[dict]) -> rules.Decision:
         t = self.ticket(pr, item)
+        self.unconfirmed = False
         cheap = rules.decide(t, repo=pr.repo, deny_repos=self.cfg.deny_repos,
                              known_playbooks=set(self.cfg.playbooks), ready_by_owner=True,
                              over_cap_by_owner=False, has_active_job=False,
@@ -137,6 +139,11 @@ class Dispatcher:
         ready_ok = bool(ready_id) and rules.label_applied_by(acts, ready_id, self.owner_id)
         over_ok = ("over-cap" in t.label_names and bool(over_id)
                    and rules.label_applied_by(acts, over_id, self.owner_id))
+        # Plane sends the webhook before it writes the activity row (staging
+        # 2026-10-24: 1.4s later), so a label George just added can look
+        # unattributed. on_event asks the worker to look again shortly.
+        self.unconfirmed = ("ready" in t.label_names and not ready_ok) or \
+            ("over-cap" in t.label_names and not over_ok)
         answered = False
         if t.state_name == BLOCKED:
             since = rules.last_entered(acts, pr.states.get(BLOCKED, ""))
@@ -248,16 +255,21 @@ class Dispatcher:
                     self.log(f"error on item {it.get('id')}: {e}")
         self.last_tick = time.time()
 
-    def on_event(self, project_id: str, item_id: str) -> None:
+    def on_event(self, project_id: str, item_id: str) -> bool:
+        """True when the ticket carries `ready` or `over-cap` that Plane's
+        activity log doesn't yet credit to George: worth another look soon."""
         self.refresh()
         pr = self.projects.get(project_id)
         if not pr:
-            return
+            return False
         by_project = self.items()
         job_list = self.snapshot(by_project)
         item = next((i for i in by_project.get(project_id, []) if i["id"] == item_id), None)
-        if item:
-            self.handle(pr, item, job_list, log_skips=True)
+        if not item:
+            return False
+        self.unconfirmed = False
+        self.handle(pr, item, job_list, log_skips=True)
+        return self.unconfirmed
 
     def reap(self, by_project: dict[str, list[dict]], job_list: list[dict]) -> None:
         """A finished Job whose ticket is still In Progress crashed, timed out or

@@ -11,6 +11,7 @@ import html
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import datetime
 
 from . import jobs as jobmod
 from . import prompt as promptmod
@@ -20,6 +21,9 @@ from .plane import PlaneError
 from .rules import AWAITING, BLOCKED, DONE, IN_PROGRESS, IN_REVIEW, TODO, Ticket
 
 PR_URL = re.compile(r"^https://github\.com/([^/]+/[^/]+)/pull/(\d+)")
+# A ticket that changed this long before the newest delivery, and this long
+# ago, was missed by the webhook: Plane delivers within seconds.
+WEBHOOK_SLACK = 120
 
 
 @dataclass
@@ -62,6 +66,11 @@ class Dispatcher:
         # Re-derived from Plane on every poll; only bridges the gap in between.
         self.in_progress: dict[str, str] = {}
         self.last_tick = time.time()
+        # Plane switches a webhook off after failed deliveries and tells no
+        # one (SMTP is off), leaving only the poll. Counted from start-up, so
+        # changes made while this pod was down don't count as missed.
+        self.last_delivery = time.time()
+        self.webhook_quiet = False
 
     # -- context ----------------------------------------------------------------
 
@@ -136,6 +145,32 @@ class Dispatcher:
                    if PR_URL.match(link.get("url", ""))]
             self.notifier.send(f"{t.key} is ready for review", "; ".join(prs) or t.name,
                                self.ticket_url(t))
+
+    def saw_delivery(self) -> None:
+        """A signed delivery arrived (called from the HTTP thread)."""
+        self.last_delivery = time.time()
+        if self.webhook_quiet:
+            self.webhook_quiet = False
+            self.log("webhook deliveries are arriving again")
+
+    def check_webhook(self, by_project: dict[str, list[dict]], now: float | None = None) -> None:
+        """Warn once when the poll finds a change the webhook never delivered."""
+        now = time.time() if now is None else now
+        newest = max((_epoch(it.get("updated_at")) for items in by_project.values()
+                      for it in items), default=0.0)
+        if (self.webhook_quiet or newest - self.last_delivery < WEBHOOK_SLACK
+                or now - newest < WEBHOOK_SLACK):
+            return
+        self.webhook_quiet = True
+        mins = int((now - newest) // 60)
+        self.log(f"webhook looks off: a ticket changed {mins} min ago with no delivery since")
+        base = self.cfg.plane_web_url.rstrip("/")
+        self.notifier.send(
+            "agent-desk: Plane's webhook looks off",
+            f"A ticket changed {mins} min ago and no webhook delivery has arrived since. "
+            "Check Workspace settings → Webhooks in Plane; until it's back, tickets "
+            f"only move on the {self.cfg.poll_seconds // 60}-minute poll.",
+            f"{base}/{self.cfg.workspace}/" if base else "")
 
     # -- counting ---------------------------------------------------------------
 
@@ -330,6 +365,7 @@ class Dispatcher:
                 except Exception as e:  # noqa: BLE001 — one bad ticket mustn't stop the pass
                     self.log(f"error on item {it.get('id')}: {e}")
         self._seeded = True
+        self.check_webhook(by_project)
         self.last_tick = time.time()
 
     def on_event(self, project_id: str, item_id: str) -> bool:
@@ -406,6 +442,14 @@ class Dispatcher:
                             f"{link['url']} was closed without merging; back to Todo."))
                         self.log(f"{t.key}: PR closed → Todo")
                     break
+
+
+def _epoch(stamp) -> float:
+    """Plane's ISO timestamp as epoch seconds; 0 when missing or malformed."""
+    try:
+        return datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
 
 
 def event_target(payload: dict) -> tuple[str, str] | None:

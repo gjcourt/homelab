@@ -599,3 +599,37 @@ def test_reopen_question_notifies_once(tmp_path):
     d.poll()
     d.poll()
     assert [t for t, _, _ in sent(d)] == ["SANDBOX-1: reopen?"]
+
+
+def _stamp(epoch):
+    from datetime import datetime, timezone
+    return datetime.fromtimestamp(epoch, timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def test_missed_webhook_warns_once_until_deliveries_return(tmp_path):
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    d.last_delivery = 1_000_000.0
+    plane.projs["p-sb"]["items"]["i1"]["updated_at"] = _stamp(1_000_000 + 600)
+    by_project = {"p-sb": list(plane.projs["p-sb"]["items"].values())}
+    d.check_webhook(by_project, now=1_000_000 + 900)
+    d.check_webhook(by_project, now=1_000_000 + 1500)
+    assert [t for t, _, _ in sent(d)] == ["agent-desk: Plane's webhook looks off"]
+    assert "5 min ago" in sent(d)[0][1]
+    d.saw_delivery()
+    assert not d.webhook_quiet
+
+
+def test_delivered_or_fresh_changes_dont_warn(tmp_path):
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    item = plane.projs["p-sb"]["items"]["i1"]
+    by_project = {"p-sb": [item]}
+    d.last_delivery = 1_000_000.0
+    item["updated_at"] = _stamp(1_000_000 + 30)   # delivered: within the slack
+    d.check_webhook(by_project, now=1_000_000 + 900)
+    item["updated_at"] = _stamp(1_000_000 + 850)  # too recent to judge yet
+    d.check_webhook(by_project, now=1_000_000 + 900)
+    item["updated_at"] = "not a time"             # unparseable is ignored
+    d.check_webhook(by_project, now=1_000_000 + 900)
+    assert sent(d) == []

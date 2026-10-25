@@ -34,7 +34,7 @@ def signature_ok(secret: str, body: bytes, signature: str | None) -> bool:
     return hmac.compare_digest(want, signature.strip().lower())
 
 
-def make_handler(secret: str, work: queue.Queue, health, log):
+def make_handler(secret: str, work: queue.Queue, health, log, seen=lambda: None):
     from .dispatcher import event_target
 
     class Handler(BaseHTTPRequestHandler):
@@ -56,6 +56,7 @@ def make_handler(secret: str, work: queue.Queue, health, log):
                 self.send_response(401)
                 self.end_headers()
                 return
+            seen()
             try:
                 target = event_target(json.loads(body))
             except ValueError:
@@ -81,7 +82,8 @@ def run(dispatcher, cfg, log=print) -> None:
     def health() -> bool:
         return time.time() - dispatcher.last_tick < cfg.poll_seconds * 2 + 120
 
-    srv = ThreadingHTTPServer(("", cfg.port), make_handler(cfg.webhook_secret, work, health, log))
+    srv = ThreadingHTTPServer(("", cfg.port), make_handler(cfg.webhook_secret, work, health, log,
+                                           seen=dispatcher.saw_delivery))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     log(f"listening on :{cfg.port}; poll every {cfg.poll_seconds}s; "
         f"dry_run_jobs={cfg.dry_run_jobs}")

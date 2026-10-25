@@ -586,7 +586,30 @@ Also measured:
   nothing until he reloaded. Proposed: a push through the Home Assistant app when an agent asks a
   question, reaches In review, or a Job fails (reverses decision 6; George's call, not built).
 
-## Models and routing
+## Step 6 findings (production, 2026-10-25)
+
+**Exit met.** SANDBOX-1 ("add a one-line description to the README"), labelled
+`playbook:docs-fix` and `ready` by George:
+
+- the webhook delivered at once, and agent-desk moved the ticket to In Progress and started
+  `ad-sandbox-1-20261025-46743f`; later deliveries for it were skipped as already In Progress;
+- the Job, on Haiku, opened agent-sandbox#4 in 70 s (18 turns), changing only `README.md`, linked
+  it as `PR #4 · docs: SANDBOX-1 add one-line repo summary to README` and set In review. CI passed;
+- George's phone got "SANDBOX-1 is ready for review";
+- George merged, and the next GitHub poll moved the ticket to Done.
+
+**What setup found:**
+
+1. **Plane resolves a webhook's host when it's saved.** So the webhook can't exist before
+   agent-desk's Service. The order for a new environment: the Plane change, agent-desk with a
+   placeholder `webhook-secret`, the webhook, then the real secret and a restart (runbook).
+2. **Plane switches a webhook off silently.** Staging's was off for a day after the 5b tests
+   scaled the dispatcher to 0. agent-desk now warns when the poll finds a change no delivery
+   brought (#1680).
+3. **The bot can list every public project** (Plane's `network: 2`), though it's a member of
+   SANDBOX only. The dispatcher acts only on its allowlist; HOMELAB is private and invisible to it.
+
+
 
 George, 2026-10-24: simple tasks run on Haiku by default; measure how well each model handles each
 kind of task, and route to the cheaper model where it does as well.
@@ -681,7 +704,7 @@ RBAC and the admission policy.
 6. **Production dispatcher with `docs-fix`, on SANDBOX: first end-to-end milestone.** **Exit:**
    George labels one SANDBOX ticket `ready` → a bench-cloud Job opens a PR in
    `gjcourt/agent-sandbox` → the PR is linked on the ticket → the ticket reaches **In review**.
-   George merges → the ticket reaches **Done**.
+   George merges → the ticket reaches **Done**. **Met 2026-10-25** (findings below).
 7. **Question loop live (SANDBOX).** **Exit:**
    - an agent's question parks the ticket in Blocked;
    - George's reply resumes it in a new Job that has the answer and the earlier session;

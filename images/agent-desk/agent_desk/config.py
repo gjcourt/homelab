@@ -58,6 +58,9 @@ class Config:
     jobs_token_secret: str = "bench-cloud-plane-jobs-token"
     webhook_secret: str = ""
     github_token: str = ""
+    # George's GitHub login: his "request changes" review wakes the agent.
+    # Empty turns review wakes off.
+    github_owner: str = ""
     # Phone notifications (agent_desk/notify.py): Home Assistant's base URL and
     # the webhook id. Either empty means no notifications.
     notify_url: str = ""
@@ -111,6 +114,7 @@ def load(path: str | None = None, env=os.environ) -> Config:
         notify_url=env.get("NOTIFY_URL", ""),
         notify_webhook=_read_file("NOTIFY_WEBHOOK_FILE"),
         plane_web_url=raw.get("planeWebUrl", ""),
+        github_owner=raw.get("githubOwner", "") or "",
     )
     for key in ("job_namespace", "job_template", "console_deployment", "run_record",
                 "jobs_token_secret"):

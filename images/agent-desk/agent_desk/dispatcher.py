@@ -203,7 +203,10 @@ class Dispatcher:
                             running_for_playbook=0, max_concurrent=1,
                             woken=True, reopen="go")
 
-    def evaluate(self, pr: Project, item: dict, job_list: list[dict]) -> rules.Decision:
+    def evaluate(self, pr: Project, item: dict, job_list: list[dict],
+                 review: bool = False) -> rules.Decision:
+        """review: George asked for changes on the ticket's PR, which wakes an
+        In review ticket the way his comment would."""
         t = self.ticket(pr, item)
         self.unconfirmed = False
         cheap = self.precheck(pr, t)
@@ -222,7 +225,7 @@ class Dispatcher:
         woken, reopen = False, ""
         if t.state_name in (BLOCKED, IN_REVIEW) or t.state_group in ("completed", "cancelled"):
             cmts = self.plane.comments(pr.id, t.id)
-            woken = bool(rules.wake_comments(cmts, self.owner_id, self.bot_id))
+            woken = review or bool(rules.wake_comments(cmts, self.owner_id, self.bot_id))
             if t.state_group in ("completed", "cancelled"):
                 reopen, _ = rules.reopen_state(cmts, self.owner_id, self.bot_id)
         pb = t.playbooks[0] if len(t.playbooks) == 1 else ""
@@ -284,7 +287,10 @@ class Dispatcher:
 
     # -- starting ---------------------------------------------------------------
 
-    def start(self, pr: Project, t: Ticket, d: rules.Decision, job_list: list[dict]) -> None:
+    def start(self, pr: Project, t: Ticket, d: rules.Decision, job_list: list[dict],
+              review: dict | None = None) -> bool:
+        """review: {"id", "url", "text"} when George's GitHub review woke it.
+        True when the Job was created (or admitted, on a dry run)."""
         pb = self.cfg.playbooks[d.playbook]
         item = self.plane.item(pr.id, t.id)
         cmts = self.plane.comments(pr.id, t.id)
@@ -292,6 +298,8 @@ class Dispatcher:
                      else "agent-desk" if c.get("actor", c.get("created_by")) == self.bot_id
                      else "someone else", c.get("comment_html", ""))
                     for c in cmts]
+        if review:
+            comments.append(("George, in a GitHub review", _p(review["text"])))
         text = promptmod.build(pb.prompt, key=t.key, title=t.name,
                                description_html=item.get("description_html", ""),
                                comments=comments, resume=d.resume)
@@ -307,13 +315,17 @@ class Dispatcher:
         if d.resume:
             # Woken: the Job resumes the ticket's last session with only what's
             # new; TASK_PROMPT (the whole thread) is its fallback.
-            if t.state_group in ("completed", "cancelled"):
-                _, request = rules.reopen_state(cmts, self.owner_id, self.bot_id)
-            else:
-                request = rules.wake_comments(cmts, self.owner_id, self.bot_id)
             ticket["resume"] = True
-            ticket["resume_prompt"] = promptmod.build_resume(
-                key=t.key, comments=[c.get("comment_html", "") for c in request])
+            if review:
+                ticket["resume_prompt"] = promptmod.build_review_resume(
+                    key=t.key, text=review["text"])
+            else:
+                if t.state_group in ("completed", "cancelled"):
+                    _, request = rules.reopen_state(cmts, self.owner_id, self.bot_id)
+                else:
+                    request = rules.wake_comments(cmts, self.owner_id, self.bot_id)
+                ticket["resume_prompt"] = promptmod.build_resume(
+                    key=t.key, comments=[c.get("comment_html", "") for c in request])
         job = jobmod.build_job(self.template, tid=tid, image=self.kube.console_image(),
                                repo=pr.repo, prompt=text, ticket=ticket, playbook=d.playbook,
                                deadline=pb.deadline, model=pb.model,
@@ -323,7 +335,7 @@ class Dispatcher:
         except Exception as e:  # noqa: BLE001 — admission denial, quota, API error
             self.log(f"{t.key}: Job create failed: {e}")
             self.comment_once(pr, t, f"agent-desk couldn't create the Job: {str(e)[:300]}")
-            return
+            return False
         self.in_progress[t.id] = d.playbook
         self.seen_state[t.id] = IN_PROGRESS
         change = {"state": pr.states[IN_PROGRESS]}
@@ -337,10 +349,14 @@ class Dispatcher:
                 if self.cfg.dry_run_jobs else "")
         why = (" Started above the playbook cap, on George's `over-cap` (now removed: "
                "it approves one start)." if d.over_cap else "")
+        if review:
+            # The marker github_poll looks for, so one review wakes one run.
+            why += f" Woken by {review_marker(review['id'])} on {review['url']}."
         self.plane.comment(pr.id, t.id, _p(
             f"Started bench-cloud Job `{tid}` (playbook `{d.playbook}`, repo `{pr.repo}`)."
             f"{why}{note}"))
         self.log(f"{t.key}: started {tid}{' (dry-run)' if self.cfg.dry_run_jobs else ''}")
+        return True
 
     # -- loops ------------------------------------------------------------------
 
@@ -437,30 +453,70 @@ class Dispatcher:
         return ""
 
     def github_poll(self) -> None:
-        """In review → Done when the linked PR merges; → Todo when it's closed."""
+        """In review → Done when the linked PR merges; → Todo when it's closed;
+        a new "request changes" review from George wakes the agent on it."""
         if not self.github:
             return
         self.refresh()
+        job_list = None
         for pid, items in self.items().items():
             pr = self.projects[pid]
             for it in items:
                 t = self.ticket(pr, it)
                 if t.state_name != IN_REVIEW:
                     continue
-                for link in self.plane.links(pid, t.id):
-                    m = PR_URL.match(link.get("url", ""))
-                    if not m or m.group(1).lower() != pr.repo.lower():
+                try:
+                    url = self.linked_pr(pr, t)
+                    if not url:
                         continue
-                    state = self.github.pr_state(m.group(1), int(m.group(2)))
+                    m = PR_URL.match(url)
+                    repo, number = m.group(1), int(m.group(2))
+                    state = self.github.pr_state(repo, number)
                     if state == "merged":
                         self.plane.update_item(pid, t.id, {"state": pr.states[DONE]})
                         self.log(f"{t.key}: PR merged → Done")
                     elif state == "closed":
                         self.plane.update_item(pid, t.id, {"state": pr.states[TODO]})
                         self.plane.comment(pid, t.id, _p(
-                            f"{link['url']} was closed without merging; back to Todo."))
+                            f"{url} was closed without merging; back to Todo."))
                         self.log(f"{t.key}: PR closed → Todo")
-                    break
+                    elif self.cfg.github_owner:
+                        rv = self.github.changes_requested(repo, number, self.cfg.github_owner)
+                        if rv and not self.review_handled(pr, t, rv["id"]):
+                            if job_list is None:  # only a review that might wake pays for this
+                                job_list = self.snapshot(self.items())
+                            self.wake_for_review(pr, it, t, url, rv, job_list)
+                except Exception as e:  # noqa: BLE001 — one bad repo mustn't stop the pass
+                    self.log(f"{t.key}: github check failed: {e}")
+
+    def review_handled(self, pr: Project, t: Ticket, review_id) -> bool:
+        """Has agent-desk already started a run for this review?"""
+        mark = review_marker(review_id)
+        return any(mark in promptmod.html_to_text(c.get("comment_html", ""))
+                   for c in self.plane.comments(pr.id, t.id)
+                   if c.get("actor", c.get("created_by")) == self.bot_id)
+
+    def wake_for_review(self, pr: Project, item: dict, t: Ticket, url: str, rv: dict,
+                        job_list: list[dict]) -> None:
+        """Start a resumed Job with the review as its prompt. A review that
+        can't start yet (the cap, a running Job) is tried again next pass:
+        the ticket stays In review and the review stays unhandled."""
+        d = self.evaluate(pr, item, job_list, review=True)
+        if d.action != "start":
+            self.log(f"{t.key}: review {rv['id']} not started — {d.reason}")
+            if d.action == "wait":
+                self.comment_once(pr, t, f"George requested changes on {url}. {d.reason}, "
+                                         "so the agent wakes on the review when a slot frees.")
+            return
+        self.log(f"{t.key}: review {rv['id']} requests changes — {d.reason}")
+        review = {"id": rv["id"], "url": url, "text": promptmod.review_text(url, rv)}
+        if self.start(pr, t, d, job_list, review=review):
+            job_list.append({"ticket": t.id, "playbook": d.playbook, "active": True,
+                             "name": "", "succeeded": False})
+
+
+def review_marker(review_id) -> str:
+    return f"GitHub review {review_id}"
 
 
 def _epoch(stamp) -> float:

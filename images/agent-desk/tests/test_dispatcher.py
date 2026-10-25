@@ -667,3 +667,138 @@ def test_delivered_or_fresh_changes_dont_warn(tmp_path):
     item["updated_at"] = "not a time"             # unparseable is ignored
     d.check_webhook(by_project, now=1_000_000 + 900)
     assert sent(d) == []
+
+
+# -- review wake: George's "request changes" on GitHub --------------------------
+
+PR2 = "https://github.com/gjcourt/agent-sandbox/pull/2"
+
+
+class ReviewGH:
+    """pr_state and changes_requested, as the dispatcher sees them."""
+    def __init__(self, review=None, fail=()):
+        self.review, self.fail = review, set(fail)
+
+    def pr_state(self, repo, n):
+        if repo in self.fail:
+            raise RuntimeError("HTTP Error 404: Not Found")
+        return "open"
+
+    def changes_requested(self, repo, n, login):
+        assert login == "gjcourt"
+        return self.review
+
+
+REVIEW = {"id": 9001, "body": "Close, but the heading is wrong.",
+          "comments": [{"path": "README.md", "line": 3, "body": "Say 'Install', not 'Setup'."}]}
+
+
+def reviewed(tmp_path, cap=6, review=REVIEW, owner="gjcourt"):
+    d, plane, kube = make(tmp_path, cap=cap)
+    d.cfg.github_owner = owner
+    d.github = ReviewGH(review)
+    worked(plane)
+    plane.projs["p-sb"]["links"]["i1"] = [{"url": PR2}]
+    return d, plane, kube
+
+
+def test_request_changes_wakes_the_agent_with_the_review(tmp_path):
+    d, plane, kube = reviewed(tmp_path)
+    d.github_poll()
+    assert len(kube.created) == 1
+    t = ticket_of(kube.created[0][0])
+    assert t["resume"]
+    for s in ("heading is wrong", "README.md:3", "Say 'Install'", PR2):
+        assert s in t["resume_prompt"]
+    assert "first ask" not in t["resume_prompt"]
+    assert "heading is wrong" in env_of(kube.created[0][0], "TASK_PROMPT")  # the fallback too
+    assert plane.state_of("p-sb", "i1") == "In Progress"
+    # The run finishes and sets In review again; the same review never wakes twice.
+    plane.set_state("p-sb", "i1", "In review", actor=BOT)
+    d.github_poll()
+    assert len(kube.created) == 1
+
+
+def test_a_later_review_wakes_it_again(tmp_path):
+    d, plane, kube = reviewed(tmp_path)
+    d.github_poll()
+    plane.set_state("p-sb", "i1", "In review", actor=BOT)
+    d.github.review = dict(REVIEW, id=9002, body="Still wrong.")
+    d.github_poll()
+    assert len(kube.created) == 2
+    assert "Still wrong." in ticket_of(kube.created[1][0])["resume_prompt"]
+
+
+@pytest.mark.parametrize("review,owner", [(None, "gjcourt"), (REVIEW, "")])
+def test_no_review_or_no_owner_login_wakes_nothing(tmp_path, review, owner):
+    d, plane, kube = reviewed(tmp_path, review=review, owner=owner)
+    d.github_poll()
+    assert kube.created == [] and plane.state_of("p-sb", "i1") == "In review"
+
+
+def test_review_still_needs_ready(tmp_path):
+    d, plane, kube = reviewed(tmp_path)
+    plane.label("p-sb", "i1", "ready", OWNER, add=False)
+    d.github_poll()
+    assert kube.created == [] and plane.state_of("p-sb", "i1") == "In review"
+
+
+def test_review_at_cap_waits_in_review_then_starts(tmp_path):
+    d, plane, kube = reviewed(tmp_path, cap=1)
+    plane.add_item("p-sb", "i2", seq=2)
+    ready(plane, "p-sb", "i2")
+    d.poll()  # i2 takes the slot
+    assert len(kube.created) == 1
+    d.github_poll()
+    d.github_poll()
+    assert len(kube.created) == 1 and plane.state_of("p-sb", "i1") == "In review"
+    waits = [w for w in plane.writes if w[0] == "comment" and w[1] == "i1"]
+    assert len(waits) == 1 and "slot frees" in waits[0][2]
+    plane.set_state("p-sb", "i2", "Done", actor=BOT)
+    d.github_poll()
+    assert len(kube.created) == 2
+    assert "heading is wrong" in ticket_of(kube.created[1][0])["resume_prompt"]
+
+
+def test_one_unreadable_repo_does_not_stop_the_github_pass(tmp_path):
+    d, plane, _ = make(tmp_path)
+    logs = []
+    d.log = logs.append
+
+    class GH(ReviewGH):
+        def pr_state(self, repo, n):
+            if n == 1:
+                raise RuntimeError("HTTP Error 404: Not Found")
+            return "merged"
+    d.github = GH()
+    for iid, n in (("i1", 1), ("i2", 2)):
+        plane.add_item("p-sb", iid, seq=n)
+        plane.set_state("p-sb", iid, "In review")
+        plane.projs["p-sb"]["links"][iid] = [
+            {"url": f"https://github.com/gjcourt/agent-sandbox/pull/{n}"}]
+    d.github_poll()
+    assert plane.state_of("p-sb", "i2") == "Done"
+    assert any("SANDBOX-1: github check failed" in m for m in logs)
+
+
+def test_github_client_reads_only_the_owners_deciding_reviews(monkeypatch):
+    from agent_desk.github import GitHub
+
+    def reviews(*rs):
+        return [{"id": i, "state": s, "user": {"login": u}, "body": f"r{i}"} for i, s, u in rs]
+    calls = {}
+
+    def fake_get(path):
+        if path.endswith("/comments?per_page=100"):
+            return [{"path": "a.md", "line": 2, "body": "fix"}]
+        return calls["reviews"]
+    gh = GitHub("t")
+    monkeypatch.setattr(gh, "_get", fake_get)
+    calls["reviews"] = reviews((1, "CHANGES_REQUESTED", "gjcourt"), (2, "COMMENTED", "gjcourt"),
+                               (3, "CHANGES_REQUESTED", "someone"))
+    r = gh.changes_requested("o/r", 1, "GJCourt")
+    assert r["id"] == 1 and r["comments"] == [{"path": "a.md", "line": 2, "body": "fix"}]
+    calls["reviews"] = reviews((1, "CHANGES_REQUESTED", "gjcourt"), (2, "APPROVED", "gjcourt"))
+    assert gh.changes_requested("o/r", 1, "gjcourt") is None
+    calls["reviews"] = reviews((1, "CHANGES_REQUESTED", "someone"))
+    assert gh.changes_requested("o/r", 1, "gjcourt") is None

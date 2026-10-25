@@ -1,6 +1,8 @@
 # agent-desk rules for staging (plan "Playbooks"). Reviewed here; agents can't
 # edit this repo, so nothing in it can be widened by an agent.
 ownerEmail: gjcourt@gmail.com
+# Plane in the browser, for the link in a phone notification.
+planeWebUrl: https://plane.stage.burntbytes.com
 # Staging has no agent-desk account; the workspace Member collab-test stands
 # in for it, as in the step 2 checks. Its comments are ignored as the bot's.
 botEmail: collab-test@stage.invalid

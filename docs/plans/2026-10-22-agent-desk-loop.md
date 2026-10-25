@@ -202,8 +202,20 @@ On create, the ticket moves to **In Progress** with a comment naming the Job.
 - **What the Job must change.** Today `bench-task` tells Claude "Nobody can answer questions
   mid-task" and runs with `--permission-prompts none`. In ticket mode the system prompt says instead
   that questions go on the ticket via the Blocked loop. Permission prompts stay off.
-- **Notifications:** Plane's own notifications (web and mobile app) are the only push channel in
-  phase 1 (decision 6). Nothing extra is built.
+- **Notifications:** ~~Plane's own notifications are the only push channel in phase 1 (decision
+  6).~~ **Changed 2026-10-24 (George):** Plane's web app shows new comments only on reload (step 5b
+  findings), so agent-desk now pushes to George's phone through Home Assistant, as a stopgap until
+  the phase 2 chat channel replaces it.
+  - **When:** a ticket with `ready` reaches **Blocked** (an agent's question, or a Job that ended
+    badly) or **In review** (a PR to look at), and on the reopen question for a closed ticket. Not
+    when George has commented since, and not for states a restart finds already set.
+  - **How:** agent-desk POSTs `{title, message, url}` to a Home Assistant webhook automation
+    ("agent-desk — notify George"), which calls `notify.mobile_app_parthenon` with a link to the
+    ticket. agent-desk holds only the webhook id, not a Home Assistant token. The repo is public,
+    so the id lives in SOPS: `homeassistant-secrets` (mounted as HA's `secrets.yaml`) and
+    `notify-webhook-id` in agent-desk's secret.
+  - **Staging** posts to staging Home Assistant, which has no phone: there it's a persistent
+    notification in HA's UI only.
 
 ### Playbooks
 

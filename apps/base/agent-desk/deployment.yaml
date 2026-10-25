@@ -38,6 +38,8 @@ spec:
             - {name: PLANE_API_KEY_FILE, value: /secrets/plane-api-key}
             - {name: WEBHOOK_SECRET_FILE, value: /secrets/webhook-secret}
             - {name: GITHUB_TOKEN_FILE, value: /secrets/github-token}
+            # Optional: Home Assistant's webhook id for phone notifications.
+            - {name: NOTIFY_WEBHOOK_FILE, value: /secrets/notify-webhook-id}
             # PLANE_URL, PLANE_WORKSPACE and DRY_RUN_JOBS come from the overlay.
           # Fails when the worker loop hasn't finished a poll in two intervals.
           readinessProbe:

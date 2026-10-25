@@ -3,7 +3,8 @@
 ownerEmail: gjcourt@gmail.com
 # Plane in the browser, for the link in a phone notification.
 planeWebUrl: https://plane.burntbytes.com
-# The agent-desk bot (plan, "Plane identity"): a Member of SANDBOX only.
+# The agent-desk bot (plan, "Plane identity"): a Member of each mapped project's
+# Plane project, and of no others.
 botEmail: gjcourt+agent-desk@gmail.com
 # Plane project identifier → repo. The repo always comes from here, never from
 # ticket text. Real repos join here one at a time (plan step 10), each with
@@ -16,8 +17,9 @@ denyRepos:
 pollInterval: 10m
 githubPollInterval: 5m
 playbooks:
-  # Step 6 runs docs-fix only. main-ci (step 8) and dep-hold (step 9) are added
-  # with their own steps; a ticket naming either is refused until then.
+  # Models by kind of work (George, 2026-10-25): docs on Haiku; unit tests and
+  # YAML on Sonnet (main-ci, step 8; dep-hold, step 9, each added with its step;
+  # a ticket naming either is refused until then); feature and design on Opus.
   docs-fix:
     ready: ready
     maxConcurrent: 6
@@ -30,3 +32,23 @@ playbooks:
       Open a PR from a new branch with the ticket key in its title, link the PR on
       the ticket, then move the ticket to In review. If the ticket is unclear,
       comment your question on the ticket and move it to Blocked instead.
+  # Task analysis and low-fi prototypes before production UI (UI.md). Judgement
+  # work, so Opus; capped at 2 because Jobs share George's subscription limits.
+  design:
+    ready: ready
+    maxConcurrent: 2
+    deadline: 2h
+    model: claude-opus-5-5
+    prompt: |
+      Playbook design. Before writing anything, read UI.md from gjcourt/agents: it
+      is at ~/.cache/bench-agents/UI.md, or fetch it with
+      `gh api repos/gjcourt/agents/contents/UI.md -H 'Accept: application/vnd.github.raw'`.
+      Produce what the ticket asks for, typically a task analysis and a
+      low-fidelity prototype, following UI.md. Only *.md files and docs/ may
+      change; a prototype is a single self-contained HTML file under docs/ that
+      George can open on his phone. Report against UI.md's review checklist in the
+      PR description, and label missing or uncertain data rather than inventing it.
+      Run the repo's own lint. Open a PR from a new branch with the ticket key in
+      its title, link the PR on the ticket, then move the ticket to In review. If
+      the ticket is unclear, comment your question on the ticket and move it to
+      Blocked instead.

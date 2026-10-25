@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/part-of: network-policies
 spec:
   description: >-
-    Gateway ingress to the web, space, admin, live, api and MinIO ports; bench-cloud and plane-sync to the api; anything within the namespace; egress DNS and the namespace (CNPG included).
+    Gateway ingress to the web, space, admin, live, api and MinIO ports; bench-cloud, plane-sync and agent-desk to the api; anything within the namespace; egress DNS, the namespace (CNPG included) and agent-desk webhooks.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: plane-ce
@@ -47,6 +47,14 @@ spec:
         - ports:
             - port: "8000"
               protocol: TCP
+    # The agent-desk dispatcher reads and updates tickets.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: agent-desk
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:
@@ -60,6 +68,16 @@ spec:
               protocol: TCP
     - toEndpoints:
         - {}
+    # Webhook deliveries to the agent-desk dispatcher, the one host in
+    # WEBHOOK_ALLOWED_HOSTS (release-patch.yaml).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: agent-desk
+            app: agent-desk
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
 ---
 # The api and worker reach the internet on 443: the api's start-up version
 # check (api.github.com, which fails soft after 10 s without it) and the

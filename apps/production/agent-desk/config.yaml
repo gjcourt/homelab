@@ -6,9 +6,11 @@ planeWebUrl: https://plane.burntbytes.com
 # The agent-desk bot (plan, "Plane identity"): a Member of SANDBOX only.
 botEmail: gjcourt+agent-desk@gmail.com
 # Plane project identifier → repo. The repo always comes from here, never from
-# ticket text. Step 6 is SANDBOX only; real repos are step 10.
+# ticket text. Real repos join here one at a time (plan step 10), each with
+# the bot as a Member of its project and the default-branch guard on the repo.
 projects:
   SANDBOX: gjcourt/agent-sandbox
+  PLANEMOBILE: gjcourt/plane-mobile
 denyRepos:
   - gjcourt/homelab
 pollInterval: 10m

@@ -1,0 +1,21 @@
+# agent-desk -> production Home Assistant's webhook, for notifications
+# (agent_desk/notify.py). The matching ingress is in
+# apps/production/homeassistant/kustomization.yaml.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: agent-desk-notify
+  namespace: agent-desk
+  labels:
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "agent-desk -> homeassistant-prod webhook on 8123."
+  endpointSelector: {}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homeassistant-prod
+            app: homeassistant
+      toPorts:
+        - ports:
+            - {port: "8123", protocol: TCP}

@@ -52,7 +52,8 @@ subjects:
 # The agent-desk dispatcher (03-042) starts ticket Jobs with the same Role.
 # The admission policy pins what those Jobs can be, exactly as for the
 # console. Staging's dispatcher only ever creates with dryRun=All, which
-# still needs the create right. Kept here rather than in apps/*/agent-desk so
+# still needs the create right; production's (namespace agent-desk) creates
+# real ones. Kept here rather than in apps/*/agent-desk so
 # an overlay's `namespace:` can't move it out of bench-cloud.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -67,6 +68,9 @@ subjects:
   - kind: ServiceAccount
     name: agent-desk
     namespace: agent-desk-stage
+  - kind: ServiceAccount
+    name: agent-desk
+    namespace: agent-desk
 ---
 # Ticket Jobs run the console's image, read from its Deployment as
 # `bench-cloud run` does, so there's one pin. Only that one object.
@@ -94,6 +98,9 @@ subjects:
   - kind: ServiceAccount
     name: agent-desk
     namespace: agent-desk-stage
+  - kind: ServiceAccount
+    name: agent-desk
+    namespace: agent-desk
 ---
 # Read-only Gateway API (extends plan decision 2, "read-only"). The built-in
 # `view` role doesn't aggregate these CRDs, so agents couldn't see whether a

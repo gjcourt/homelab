@@ -11,7 +11,7 @@ Code: [`images/agent-desk/`](../../../images/agent-desk/README.md).
 | Environment | Namespace | Plane | Jobs |
 | --- | --- | --- | --- |
 | Staging | `agent-desk-stage` | `plane-stage`, workspace `my-test-workspacce` | **Dry run** (`DRY_RUN_JOBS=true`): created with `dryRun=All` in `bench-cloud`, never stored |
-| Production | `agent-desk` (plan step 6) | `plane-prod`, workspace `home` | Real |
+| Production | `agent-desk` | `plane-prod`, workspace `home`, SANDBOX only | **Real**, `docs-fix` only (plan step 6) |
 
 ## 2. Architecture
 
@@ -46,12 +46,31 @@ Code: [`images/agent-desk/`](../../../images/agent-desk/README.md).
 ## 3. Webhook setup (operator)
 
 1. In Plane: **Workspace settings → Webhooks → Add webhook**.
-   - **URL:** `http://agent-desk.agent-desk-stage.svc.cluster.local/plane` on staging.
+   - **URL:** `http://agent-desk.agent-desk-stage.svc.cluster.local/plane` on staging,
+     `http://agent-desk.agent-desk.svc.cluster.local/plane` on production.
    - **Events:** Work items and Work item comments.
 2. Copy the secret Plane shows into `webhook-secret` in the SOPS secret, using the template
    `apps/<env>/agent-desk/secret-agent-desk.yaml.example`.
 3. The URL's host must be the one entry in Plane's `WEBHOOK_ALLOWED_HOSTS`
    (`apps/<env>/plane/release-patch.yaml`), or Plane refuses to save the webhook.
+4. **Plane also resolves the host when the webhook is saved**, so agent-desk's Service must already
+   exist: "Webhook not created" in the UI, and `Hostname could not be resolved` in plane-api's log,
+   until it does. The order for a new environment is therefore: the Plane change, then agent-desk
+   deployed with a placeholder `webhook-secret`, then the webhook, then the real `webhook-secret`.
+   agent-desk reads its secrets at start-up, so restart it after that last change:
+   `kubectl -n <ns> rollout restart deploy/agent-desk`. Until then it rejects every delivery
+   (`bad signature`, 401). Plane doesn't retry a 401 or switch the webhook off for one.
+
+**Production secrets** (operator, both from `.example` templates):
+
+- `apps/production/agent-desk/secret-agent-desk.yaml`:
+  - `plane-api-key`: the bot's first key;
+  - `webhook-secret`;
+  - `github-token`: a read-only fine-grained PAT, with Pull requests and Actions read on
+    `gjcourt/agent-sandbox`;
+  - `notify-webhook-id`: the production id already in Home Assistant's secret.
+- `apps/production/bench-cloud/secret-plane-jobs-token.yaml`: the bot's **second** key, for
+  ticket Jobs, so each key can be revoked on its own.
 
 **Plane retries only on connection errors**, never on a non-2xx reply. After its retries run out it
 **deactivates the webhook**, and the only notice is an email, which goes nowhere because SMTP is
@@ -78,6 +97,7 @@ notification in staging Home Assistant, never on the phone.
 
 ```bash
 kubectl -n agent-desk-stage logs deploy/agent-desk -f      # "<KEY>: <action> — <reason>"
+kubectl -n agent-desk logs deploy/agent-desk -f            # production
 kubectl -n bench-cloud get jobs -l agent-desk/ticket        # dispatcher Jobs (none on staging: dry run)
 ```
 

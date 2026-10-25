@@ -1,0 +1,30 @@
+# agent-desk rules for production (plan "Playbooks"). Reviewed here; agents
+# can't edit this repo, so nothing in it can be widened by an agent.
+ownerEmail: gjcourt@gmail.com
+# Plane in the browser, for the link in a phone notification.
+planeWebUrl: https://plane.burntbytes.com
+# The agent-desk bot (plan, "Plane identity"): a Member of SANDBOX only.
+botEmail: gjcourt+agent-desk@gmail.com
+# Plane project identifier → repo. The repo always comes from here, never from
+# ticket text. Step 6 is SANDBOX only; real repos are step 10.
+projects:
+  SANDBOX: gjcourt/agent-sandbox
+denyRepos:
+  - gjcourt/homelab
+pollInterval: 10m
+githubPollInterval: 5m
+playbooks:
+  # Step 6 runs docs-fix only. main-ci (step 8) and dep-hold (step 9) are added
+  # with their own steps; a ticket naming either is refused until then.
+  docs-fix:
+    ready: ready
+    maxConcurrent: 6
+    deadline: 90m
+    # Simple tasks run on the cheap model (George, 2026-10-24).
+    model: claude-haiku-5-5
+    prompt: |
+      Playbook docs-fix. Make the documentation change the ticket asks for, and
+      nothing else: only *.md files and docs/ may change. Run the repo's own lint.
+      Open a PR from a new branch with the ticket key in its title, link the PR on
+      the ticket, then move the ticket to In review. If the ticket is unclear,
+      comment your question on the ticket and move it to Blocked instead.

@@ -754,7 +754,10 @@ RBAC and the admission policy.
 
 - ~~Sandbox repo name and visibility.~~ **`gjcourt/agent-sandbox`, private** (George, 2026-10-22).
   Created the same day, with a `lint-and-test` CI workflow.
-- **Make HOMELAB private in Plane?** From step 2's finding 1.
+- ~~Make HOMELAB private in Plane?~~ **Private for now**, to be made public again later (George,
+  2026-10-25). Set in production Plane the same day. The bot is a **Member** of SANDBOX, not an
+  Admin: the states and labels already exist, and Admin would only add the right to change them
+  and to invite members.
 - ~~Production `API_KEY_RATE_LIMIT` value.~~ **180/min**, from step 5's measured rate.
 
 ## Phase 2 pointer

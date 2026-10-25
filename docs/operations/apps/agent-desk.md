@@ -52,8 +52,14 @@ Code: [`images/agent-desk/`](../../../images/agent-desk/README.md).
 2. Copy the secret Plane shows into `webhook-secret` in the SOPS secret, using the template
    `apps/<env>/agent-desk/secret-agent-desk.yaml.example`.
 3. The URL's host must be the one entry in Plane's `WEBHOOK_ALLOWED_HOSTS`
-   (`apps/<env>/plane/release-patch.yaml`), or Plane refuses to save the webhook. So the Plane
-   change lands first, then the webhook, then agent-desk's secret.
+   (`apps/<env>/plane/release-patch.yaml`), or Plane refuses to save the webhook.
+4. **Plane also resolves the host when the webhook is saved**, so agent-desk's Service must already
+   exist: "Webhook not created" in the UI, and `Hostname could not be resolved` in plane-api's log,
+   until it does. The order for a new environment is therefore: the Plane change, then agent-desk
+   deployed with a placeholder `webhook-secret`, then the webhook, then the real `webhook-secret`.
+   agent-desk reads its secrets at start-up, so restart it after that last change:
+   `kubectl -n <ns> rollout restart deploy/agent-desk`. Until then it rejects every delivery
+   (`bad signature`, 401). Plane doesn't retry a 401 or switch the webhook off for one.
 
 **Production secrets** (operator, both from `.example` templates):
 

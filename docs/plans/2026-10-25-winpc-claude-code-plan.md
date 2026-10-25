@@ -16,8 +16,8 @@ proposed winpc instead ("Could we run this off winpc?", 2026-10-25), and noted i
 high-quality SSD.
 
 This plan settles the questions HOMELAB-71 lists and proposes the build. It changes nothing until
-George approves it. George's answers so far are recorded as [Decisions](#decisions-george-2026-10-25);
-what is still his to decide is under [Open questions](#open-questions-for-george).
+George approves it. George answered every question on 2026-10-25; his answers are recorded as
+[Decisions](#decisions-george-2026-10-25). The network move it depends on is done in lab 03-043.
 
 ## Why winpc, not the office Pi
 
@@ -58,12 +58,10 @@ session attached (see [Keeping WSL running](#keeping-wsl-running)); real memory 
 sessions; whether `claude.ai` login works from winpc's browser (it will, almost certainly, but it
 wasn't tried).
 
-**Finding, not part of this plan:** winpc sits on the **Core VLAN** (`10.42.1.0/24`), which
+**Core VLAN.** winpc sits on the **Core VLAN** (`10.42.1.0/24`), which
 [the addressing map](../architecture/networking/addressing.md) describes as "UniFi infrastructure
-(switches, APs, gateway mgmt)" and "locked-down management plane". A desktop that will run
-agents holding admin credentials is an odd fit there. Moving it, for example to Lab, is a network
-change for George to decide; [lab 03-043](https://github.com/gjcourt/lab/blob/main/03-homelab-automation/03-043-ip-addressing-cleanup.md)
-(Plane AUTO-43) is the natural home for it. This plan works on either VLAN.
+(switches, APs, gateway mgmt)" and "locked-down management plane". George decided to move it to
+Lab (see [Dependency: the move to Lab](#dependency-the-move-to-lab)).
 
 ## Decisions (George, 2026-10-25)
 
@@ -77,6 +75,34 @@ change for George to decide; [lab 03-043](https://github.com/gjcourt/lab/blob/ma
 | Life agents and valet | Yes, all agents. So the git-crypt keys and valet's Gmail OAuth token go to winpc |
 | GitHub | Its own fine-grained PAT |
 | Cluster | The same access as the Mac: the admin kubeconfig |
+| "The laptop" | This Mac |
+| GitHub PAT scope | All `gjcourt` repos |
+| Network | Move winpc off Core to the Lab VLAN, done under lab 03-043 (below) |
+| WSL memory | Capped at 24 GB (`.wslconfig` `memory=24GB`) |
+
+## Dependency: the move to Lab
+
+George's decision (2026-10-25): winpc moves off the Core VLAN to **Lab** (`10.42.2.0/24`). The move
+itself is network work and is done in
+[lab 03-043](https://github.com/gjcourt/lab/blob/main/03-homelab-automation/03-043-ip-addressing-cleanup.md)
+(Plane AUTO-43, IP addressing cleanup), not here. This plan's build can start on Core and needs
+the move finished before its exit criteria are signed off.
+
+What winpc must still reach from Lab, for 03-043 to check before and after the move:
+
+| Need | Destination | Why |
+| --- | --- | --- |
+| Internet egress | `github.com`, `registry.npmjs.org`, `api.anthropic.com`, `claude.ai` (HTTPS) | Claude Code, Remote Control, git, npm |
+| Cluster API | `10.42.2.20:6443` | The admin kubeconfig (same VLAN after the move) |
+| hestia | SSH `:22` (and whatever else the media pipeline uses today; 03-043 records it) | Media hand-off to hestia (the transcode push scp's to hestia), and agents' hestia access |
+| Plane | `plane.burntbytes.com` (HTTPS via the gateway) | The plane MCP server and agent-desk work |
+| WireGuard in | VPN clients (`wgsrv1`, `192.168.2.0/24`) to winpc's SSH `:22` | SSH from the Mac away from home. **Untested today** |
+| From the Mac (Family VLAN) | winpc SSH `:22` | SSH on the home network, and the existing media scripts |
+
+**winpc's other roles must keep working after the move:** CD and Blu-ray ripping (local), and the
+media hand-off to hestia. 03-043 should run one rip-and-push end to end after the move, as well
+as the Claude checks above. Its address changes (it's `10.42.1.116` today), so the SSH config on
+the Mac, the `HostKeyAlias` in George's notes, and any script that names the IP need updating.
 
 ## Runtime: WSL2 Debian
 
@@ -121,7 +147,7 @@ confirmed in build step 4:
 
   ```ini
   [wsl2]
-  memory=24GB            # default is half the host (15 GiB seen); leaves 8 GB for Windows
+  memory=24GB            # George's decision; default is half the host (15 GiB seen); leaves 8 GB for Windows
   vmIdleTimeout=-1       # don't stop the VM when idle
   ```
 
@@ -138,10 +164,9 @@ George works.
 - **Internet:** works from winpc today for GitHub, npm, Plane and the Anthropic API.
 - **Laptop on the home network:** SSH to winpc works from the Mac on the Family VLAN (it's how
   this plan's checks ran).
-- **Laptop away from home:** Remote Control needs no inbound path. SSH needs WireGuard (the
-  gateway's `wgsrv1`, `192.168.2.0/24`) to reach winpc's VLAN, which is **untested**. If winpc
-  stays on Core, check whether the gateway's rules let VPN clients in; Core is meant to be locked
-  down.
+- **Laptop away from home:** "the laptop" is this Mac (George). Remote Control needs no inbound
+  path. SSH needs WireGuard (the gateway's `wgsrv1`, `192.168.2.0/24`) to reach winpc, which is
+  **untested**; it's one of the checks for the move to Lab above.
 
 ## How the laptop uses it
 
@@ -215,7 +240,7 @@ as his Windows account today.
 | Credential | Plan | Revocation |
 | --- | --- | --- |
 | Claude | `claude auth login` in WSL, completed in a browser | claude.ai → Settings → sessions, or `claude auth logout` |
-| GitHub | A **new fine-grained PAT** just for winpc (George's decision). Contents and pull requests read/write on the repos George names; no admin, no Workflows unless he adds them. Stored by `gh auth login --with-token` | Revoke the PAT on GitHub; the Mac is untouched |
+| GitHub | A **new fine-grained PAT** just for winpc (George's decision). Contents and pull requests read/write on **all `gjcourt` repos** (George's decision); no admin, no Workflows unless he adds them. Stored by `gh auth login --with-token` | Revoke the PAT on GitHub; the Mac is untouched |
 | git-crypt keys (agents, life) | `git-crypt export-key` on the Mac, streamed in as above, then `git-crypt unlock <key>` in each clone, then the exported files deleted on both ends | **A git-crypt key can't be revoked.** Anyone holding it can decrypt every past and future commit until the repo is re-keyed, which means re-encrypting under a new key and rewriting history. Losing winpc means treating the key as exposed |
 | valet (Gmail OAuth) | `credentials.json` and `token.json` streamed into `~/src/agents/valet/` (mode `600`) | Google Account → Security → third-party access → remove valet's app; then a new token on the Mac (valet's usual re-auth) |
 | kubeconfig | The **admin kubeconfig**, as on the Mac (George's decision), streamed in as above to `~/.kube/config` | **Not revocable on its own:** Kubernetes can't revoke one client certificate. Fetching a new kubeconfig doesn't invalidate the old one; only rotating the cluster CA (`talosctl rotate-ca`) does, which affects every client |
@@ -260,13 +285,12 @@ under it, becomes a compromise of all of those. That is George's decision; the p
 - [ ] `/mnt/c` doesn't exist in Debian, and Windows programs can't be started from it.
 - [ ] A memory written on winpc shows up on the Mac after a pull, and the other way round.
 - [ ] valet's read-only `list-recruiter-threads` and a life-repo decrypt both work on winpc.
+- [ ] winpc is on the Lab VLAN (03-043 done), and ripping and the hand-off to hestia still work.
 - [ ] No SOPS key on winpc. Every credential on it is listed in the private access log with how
       to revoke it.
 
 ## Open questions for George
 
-1. **"The laptop":** is it this Mac, or another machine? If it's another machine, does it need its
-   own copy of the setup at all once winpc has one?
-2. **GitHub PAT repos:** which repos should winpc's PAT cover: all of `gjcourt/*`, or a named list?
-3. **Core VLAN:** leave winpc on Core, or move it (for example to Lab) as part of lab 03-043?
-4. **WSL memory cap:** 24 GB for WSL (leaving 8 GB for Windows and ripping), or another split?
+None left: George answered all of them on 2026-10-25 (see [Decisions](#decisions-george-2026-10-25)).
+What remains unverified is listed under [What was checked on winpc](#what-was-checked-on-winpc-2026-10-25)
+and is settled by the build steps.

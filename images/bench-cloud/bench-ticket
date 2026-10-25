@@ -16,6 +16,10 @@
                       - a PR link is titled "PR #N · <PR title>";
                       - In review is refused until the PR is linked (or, for a
                         findings playbook, a comment was posted)
+  bench-ticket stop   Claude Code Stop hook: an agent that tries to end its run
+                      with the ticket still In Progress is sent back, once, to
+                      set In review or Blocked (two runs on 2026-10-25 linked
+                      their PR and ended without it)
 
 Plane comments are the only channel today (agent-desk plan, "Questions and the
 ticket as chat"). poll() is the whole interface a later channel has to provide;
@@ -92,6 +96,10 @@ class PlaneComments:
 
     def state_name(self, state_id):
         return self._get(f"{self._base()}/states/{state_id}/").get("name", "")
+
+    def current_state(self):
+        item = self._get(f"{self._base()}/work-items/{self.ticket['work_item_id']}/")
+        return self.state_name(item.get("state", "")) if item.get("state") else ""
 
     def poll(self, seen):
         """George's comments not in seen, oldest first."""
@@ -221,7 +229,12 @@ def lint(event):
 
 
 PR_URL = re.compile(r"https://github\.com/([\w.-]+/[\w.-]+)/pull/(\d+)")
-IN_REVIEW, BLOCKED = "In review", "Blocked"
+IN_REVIEW, BLOCKED, IN_PROGRESS = "In review", "Blocked", "In Progress"
+STOP_NUDGE = ("Don't end the run yet: ticket {key} is still In Progress, so George isn't told "
+              "anything. If you opened a PR, check it's linked on the ticket (workitem_link), then "
+              "set the state to \"In review\". If you need George, post the question and set "
+              "\"Blocked\", then run `bench-ticket wait`. If you couldn't finish, say why in a "
+              "ticket comment and set \"Blocked\". Then end with your summary.")
 WAIT_NUDGE = ("You set the ticket to Blocked. Don't end the run yet: run `bench-ticket wait` "
               "with the Bash tool and a timeout of 960000 ms. It returns George's answer when "
               "he comments, or after 15 minutes says he hasn't; only then end the run.")
@@ -362,10 +375,32 @@ def save(f, state):
     f.flush()
 
 
+def stop(event):
+    """Stop hook: block the first attempt to end while the ticket is In Progress.
+    stop_hook_active means this stop already follows one nudge: let it end, so
+    the hook can never hold a run open. Any error lets the run end; the
+    dispatcher's reaper still moves the ticket on."""
+    raw, key = os.environ.get("TASK_TICKET"), os.environ.get("PLANE_API_KEY")
+    if event.get("stop_hook_active") or not raw or not key:
+        return
+    ticket = json.loads(raw)
+    try:
+        state = PlaneComments(ticket, key).current_state()
+    except Exception as e:  # noqa: BLE001 — never trap a run on a Plane error
+        print(f"bench-ticket: state lookup failed ({e})", file=sys.stderr)
+        return
+    if state == IN_PROGRESS:
+        print(json.dumps({"decision": "block",
+                          "reason": STOP_NUDGE.format(key=ticket.get("key", "this ticket"))}))
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd in ("pre", "lint"):
         pre(json.loads(sys.stdin.read() or "{}"))
+        return
+    if cmd == "stop":
+        stop(json.loads(sys.stdin.read() or "{}"))
         return
     event = json.loads(sys.stdin.read() or "{}") if cmd == "hook" else {}
     # A comment posted this run: what lets a findings playbook reach In review.

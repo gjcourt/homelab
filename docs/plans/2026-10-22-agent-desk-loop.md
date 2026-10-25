@@ -260,6 +260,13 @@ Progress ticket to Blocked. Now a Job that **succeeded** and left a link to a PR
 mapped repo** sends the ticket to In review, with a comment naming the run record; everything else
 still goes to Blocked.
 
+PLANEMOBILE-4 (Opus) did the same the same day, so the reaper is the backstop, not the fix. Ticket
+Jobs now carry a Claude Code **Stop hook** (`bench-ticket stop`): the first time the agent tries to
+end with the ticket still In Progress, the hook blocks the stop and tells it to set In review (PR
+linked) or Blocked (a question, or why it couldn't finish). A second attempt always ends, so the
+hook can't hold a run open, and any Plane error lets the run end too. The run prompt also says the
+state change is the last step before the summary.
+
 **`main-ci` trigger.**
 
 - The GitHub poll reads the most recent completed workflow runs on each in-scope repo's default

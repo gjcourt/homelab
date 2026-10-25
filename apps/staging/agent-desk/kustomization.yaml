@@ -54,4 +54,4 @@ patches:
 # Pinned date-sha tag from build-agent-desk.yml (Flux does not auto-track).
 images:
   - name: ghcr.io/gjcourt/agent-desk
-    newTag: 2026-10-25-fade962
+    newTag: 2026-10-25-2919959

@@ -243,7 +243,22 @@ also reviewed here.
 | --- | --- | --- | --- | --- |
 | `docs-fix` | George writes a ticket | Docs-only changes: typos, stale commands, broken links, a README section the ticket describes | In-scope repos | The diff touches only docs paths (`*.md`, `docs/`), and the repo's own lint passes |
 | `dep-hold` | George writes a ticket, or the renovate fixer opens one (decision 4) | Investigates why a dependency update is held or stuck; opens a fix PR, or writes up the cause | In-scope repos | A PR whose CI passes, or a findings comment that names the blocking change |
+| `design` | George writes a ticket | Task analysis and a low-fidelity prototype per `UI.md` (`gjcourt/agents`), before any production UI code | In-scope repos | The diff touches only `*.md` and `docs/` (a prototype is an HTML file under `docs/`), and it follows the `UI.md` checklist |
 | `main-ci` | The dispatcher, when a default branch goes red (below) | Investigates a failing default-branch workflow; proposes a fix PR, or writes up why there isn't one | In-scope repos | A PR on which the previously failing workflow passes, citing the failed run and the root cause; or, if the cause isn't in the repo (flaky test, outage, expired secret), a findings comment saying so with evidence |
+
+`design` was added for PLANEMOBILE-2 (2026-10-25) and isn't one of the three; it runs on Opus,
+capped at 2.
+
+**`feature` (draft for George's review, not in the config).** The first playbook that changes code.
+To settle before it ships, with Domestique: which repos; what must pass (the repo's own tests and
+lint, CI green on the PR); what it must never touch (workflows, secrets, deploy config, lockfiles
+outside the change); its deadline (3h proposed); and Opus, capped at 2.
+
+**A run that skips its last step.** PLANEMOBILE-1 (2026-10-25, Haiku) opened and linked its PR, then
+ended on its critique without moving the ticket. The reaper used to send any finished Job's In
+Progress ticket to Blocked. Now a Job that **succeeded** and left a link to a PR **on the project's
+mapped repo** sends the ticket to In review, with a comment naming the run record; everything else
+still goes to Blocked.
 
 **`main-ci` trigger.**
 
@@ -615,9 +630,13 @@ George, 2026-10-24: simple tasks run on Haiku by default; measure how well each 
 kind of task, and route to the cheaper model where it does as well.
 
 - **Now (step 5b).** A playbook's `model` sets `TASK_MODEL` for its Jobs. `docs-fix` runs on
-  `claude-haiku-5-5`; `main-ci` and `dep-hold` keep Claude Code's default until measured. Comment
+  `claude-haiku-5-5`; `main-ci` and `dep-hold` follow the tiers below. Comment
   repair in `bench-ticket lint` is Haiku too: plain fixes in code first, and Haiku only for what's
   left, its rewrite used only if the words match the original.
+- **Tiers (George, 2026-10-25).** Until the scorecard says otherwise, the model follows the kind of
+  work: docs on **Haiku** (`docs-fix`); unit tests and YAML on **Sonnet** (`main-ci`, `dep-hold`,
+  set when each playbook ships); feature, dev and design work on **Opus** (`design`, `feature`).
+  Opus playbooks get a low `maxConcurrent` (2), since Jobs share George's subscription limits.
 - **Measure.** Every run already records cost, turns, duration and per-model usage in `result.json`.
   agent-desk adds the outcome, which it alone sees: PR merged, closed, or still open; how many times
   George woke the agent before the merge (a request for changes); CI green on the first push; ended

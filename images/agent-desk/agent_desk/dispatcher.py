@@ -395,7 +395,9 @@ class Dispatcher:
 
     def reap(self, by_project: dict[str, list[dict]], job_list: list[dict]) -> None:
         """A finished Job whose ticket is still In Progress crashed, timed out or
-        ended without saying anything: park the ticket in Blocked."""
+        ended without saying anything: park the ticket in Blocked. One that
+        succeeded and linked a PR on the mapped repo only skipped its last step,
+        moving the ticket on, so take it to In review instead."""
         latest: dict[str, dict] = {}
         for j in job_list:
             if j["ticket"] and (j["ticket"] not in latest
@@ -410,12 +412,29 @@ class Dispatcher:
                     continue
                 how = j.get("reason") or ("succeeded" if j["succeeded"] else "failed")
                 record = self.cfg.run_record.format(task_id=j["name"])
+                if j["succeeded"] and self.linked_pr(pr, t):
+                    self.plane.update_item(pr.id, t.id, {"state": pr.states[IN_REVIEW]})
+                    self.plane.comment(pr.id, t.id, _p(
+                        f"Job `{j['name']}` succeeded and linked a PR but left the ticket "
+                        f"In Progress, so the dispatcher moved it to In review. The run "
+                        f"record is at `{record}`."))
+                    self.in_progress.pop(t.id, None)
+                    self.log(f"{t.key}: {j['name']} succeeded with a PR → In review")
+                    continue
                 self.plane.update_item(pr.id, t.id, {"state": pr.states[BLOCKED]})
                 self.plane.comment(pr.id, t.id, _p(
                     f"Job `{j['name']}` ended ({how}) without moving the ticket to In review "
                     f"or Blocked. The run record is at `{record}`."))
                 self.in_progress.pop(t.id, None)
                 self.log(f"{t.key}: reaped {j['name']} ({how})")
+
+    def linked_pr(self, pr: Project, t: Ticket) -> str:
+        """The first link on the ticket to a PR on the project's own repo, or ""."""
+        for link in self.plane.links(pr.id, t.id):
+            m = PR_URL.match(link.get("url", ""))
+            if m and m.group(1).lower() == pr.repo.lower():
+                return link["url"]
+        return ""
 
     def github_poll(self) -> None:
         """In review → Done when the linked PR merges; → Todo when it's closed."""

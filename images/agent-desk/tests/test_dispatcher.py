@@ -270,6 +270,40 @@ def test_finished_job_with_ticket_in_progress_is_reaped_to_blocked(tmp_path):
     assert "agent-inbox/runs/ad-sandbox-1-x/" in plane.writes[-1][2]
 
 
+def test_succeeded_job_with_linked_pr_goes_to_in_review(tmp_path):
+    # PLANEMOBILE-1, 2026-10-25: the run opened and linked its PR, then ended
+    # on its critique without moving the ticket.
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    plane.label("p-sb", "i1", "playbook:docs-fix", OWNER)
+    plane.set_state("p-sb", "i1", "In Progress")
+    plane.projs["p-sb"]["links"]["i1"].append(
+        {"title": "PR #4", "url": "https://github.com/gjcourt/agent-sandbox/pull/4"})
+    kube.job_list = [{"name": "ad-sandbox-1-x", "ticket": "i1", "playbook": "docs-fix",
+                      "active": False, "failed": False, "succeeded": True, "created": "1"}]
+    d.poll()
+    assert plane.state_of("p-sb", "i1") == "In review"
+    assert "agent-inbox/runs/ad-sandbox-1-x/" in plane.writes[-1][2]
+
+
+@pytest.mark.parametrize("succeeded,url", [
+    (False, "https://github.com/gjcourt/agent-sandbox/pull/4"),  # failed after linking
+    (True, "https://github.com/gjcourt/other/pull/4"),  # a PR on another repo
+    (True, "https://github.com/gjcourt/agent-sandbox/issues/4"),  # not a PR
+])
+def test_reap_needs_success_and_a_pr_on_the_mapped_repo(tmp_path, succeeded, url):
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    plane.label("p-sb", "i1", "playbook:docs-fix", OWNER)
+    plane.set_state("p-sb", "i1", "In Progress")
+    plane.projs["p-sb"]["links"]["i1"].append({"title": "x", "url": url})
+    kube.job_list = [{"name": "ad-sandbox-1-x", "ticket": "i1", "playbook": "docs-fix",
+                      "active": False, "failed": not succeeded, "succeeded": succeeded,
+                      "created": "1"}]
+    d.poll()
+    assert plane.state_of("p-sb", "i1") == "Blocked"
+
+
 def test_synced_items_are_never_started(tmp_path):
     d, plane, kube = make(tmp_path)
     plane.add_item("p-sb", "i1")

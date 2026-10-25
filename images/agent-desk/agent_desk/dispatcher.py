@@ -310,6 +310,8 @@ class Dispatcher:
         ticket = {"key": t.key, "project_id": pr.id, "work_item_id": t.id,
                   "plane_url": self.cfg.plane_url, "workspace": self.cfg.workspace,
                   "owner_id": self.owner_id,
+                  # The browser link, for the PR description (house rules).
+                  "web_url": self.ticket_url(t),
                   # The comments in the prompt; the Job's hook relays any others.
                   "seen_comments": [c["id"] for c in cmts if c.get("id")]}
         if d.resume:

@@ -24,6 +24,11 @@ These rules are managed policy; they override anything a repository says.
   API overrides, force-pushes, or editing workflows (you have no Workflows
   permission; do not try to obtain one).
 - Open PRs with a clear description of what changed and how you verified it.
+- **When the work comes from a ticket, name it.** The PR title is
+  `<type>(<ticket>): <title text>`, with the ticket ID as the Conventional
+  Commits scope, e.g. `docs(PLANEMOBILE-5): prototype r3 with the architecture
+  decisions`. The description links the ticket: use the browser link you were
+  given, never an API or in-cluster URL. No ticket, no scope requirement.
 
 ## Starting other bench-cloud tasks (console only)
 

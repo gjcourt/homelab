@@ -89,7 +89,7 @@ see `scripts/plans-index/`).
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-10-25-office-pi-claude-code-plan.md](2026-10-25-office-pi-claude-code-plan.md) | 2026-10-25 | Claude Code on the office Pi 4 (or a spare) so the laptop can use George's agents remotely, via Remote Control |
+| [2026-10-25-winpc-claude-code-plan.md](2026-10-25-winpc-claude-code-plan.md) | 2026-10-25 | Claude Code in WSL2 on winpc so the laptop can use George's agents remotely, via Remote Control and SSH over WireGuard |
 | [2026-10-19-hestia-transcoder.md](2026-10-19-hestia-transcoder.md) | 2026-10-19 | Move x265 encoding from winpc to a hestia Custom App running 3-4 encodes in parallel; winpc only rips and hands off |
 | [2026-09-28-renovate-fixer-bench-cloud.md](2026-09-28-renovate-fixer-bench-cloud.md) | 2026-10-08 | Bench-cloud fixes stuck Renovate PRs; mechanical fixes auto-merge, risky go to George; renovate-review kept on subscription billing |
 | [2026-09-01-readonly-pvc-recovery.md](2026-09-01-readonly-pvc-recovery.md) | 2026-09-01 | read-only iSCSI remounts have recurred six times and always need an operator; detection is now solved by pvc-writeprobe, so close the remaining gap with a recovery script that encodes the runbook's traps — and deliberately do NOT build a controller that suspends Flux or restarts Postgres |

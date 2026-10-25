@@ -12,6 +12,7 @@ botEmail: gjcourt+agent-desk@gmail.com
 projects:
   SANDBOX: gjcourt/agent-sandbox
   PLANEMOBILE: gjcourt/plane-mobile
+  DOMESTIQUE: gjcourt/domestique
 denyRepos:
   - gjcourt/homelab
 pollInterval: 10m
@@ -55,3 +56,29 @@ playbooks:
       its title, link the PR on the ticket, then move the ticket to In review. If
       the ticket is unclear, comment your question on the ticket and move it to
       Blocked instead.
+  # The first playbook that changes code (George, 2026-10-25): plane-mobile and
+  # Domestique only; Opus, 3h, capped at 2 because Jobs share George's
+  # subscription limits. Workflows are out of reach anyway (the App has no
+  # Workflows permission); secrets and .env files are off-limits by rule.
+  feature:
+    ready: ready
+    maxConcurrent: 2
+    deadline: 3h
+    model: claude-opus-5-5
+    allowedRepos:
+      - gjcourt/plane-mobile
+      - gjcourt/domestique
+    prompt: |
+      Playbook feature. Build what the ticket asks for, and only that. Read the
+      repo's AGENTS.md (and any plan the ticket links) first, and follow its
+      conventions. Never commit secrets, tokens, keys or .env files; if the
+      change needs a secret, use a placeholder and say in the PR what George
+      must supply. For any user interface, read UI.md from gjcourt/agents first
+      (~/.cache/bench-agents/UI.md, or `gh api repos/gjcourt/agents/contents/UI.md
+      -H 'Accept: application/vnd.github.raw'`) and report against its review
+      checklist in the PR. Add or update tests for the behaviour you change, and
+      run the repo's own tests and lint until they pass. Open a PR from a new
+      branch with the ticket key in its title, link the PR on the ticket, wait
+      for CI on the PR and fix it until it is green, then move the ticket to In
+      review. If the ticket is unclear, or the work is bigger than one PR, comment
+      your question on the ticket and move it to Blocked instead.

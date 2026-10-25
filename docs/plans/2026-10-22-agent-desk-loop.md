@@ -249,10 +249,12 @@ also reviewed here.
 `design` was added for PLANEMOBILE-2 (2026-10-25) and isn't one of the three; it runs on Opus,
 capped at 2.
 
-**`feature` (draft for George's review, not in the config).** The first playbook that changes code.
-To settle before it ships, with Domestique: which repos; what must pass (the repo's own tests and
-lint, CI green on the PR); what it must never touch (workflows, secrets, deploy config, lockfiles
-outside the change); its deadline (3h proposed); and Opus, capped at 2.
+**`feature`** (George, 2026-10-25). The first playbook that changes code. Repos: `gjcourt/plane-mobile`
+and `gjcourt/domestique` (`allowedRepos`; DOMESTIQUE is mapped in the same change). Opus, a 3 h
+deadline, capped at 2. What must pass: the repo's own tests and lint, and CI green on the PR before
+In review. What it must never touch: secrets and `.env` files (George's choice). Workflows are out
+of reach anyway, since the bench-cloud App has no Workflows permission. Deploy config, lockfiles
+and tests aren't fenced by rule; review catches them.
 
 **A run that skips its last step.** PLANEMOBILE-1 (2026-10-25, Haiku) opened and linked its PR, then
 ended on its critique without moving the ticket. The reaper used to send any finished Job's In

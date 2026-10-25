@@ -11,7 +11,7 @@ resources:
   # Task Jobs only (never the console) — see the template.
   - secret-claude-token.yaml
   # Ticket Jobs' Plane key (agent-desk plan, step 5); uncomment once encrypted.
-  # - secret-plane-jobs-token.yaml
+  - secret-plane-jobs-token.yaml
 
 labels:
   - pairs:

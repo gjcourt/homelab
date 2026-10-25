@@ -101,6 +101,7 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
   key=$(jq -r .key <<<"$TASK_TICKET")
   pid=$(jq -r .project_id <<<"$TASK_TICKET")
   wid=$(jq -r .work_item_id <<<"$TASK_TICKET")
+  web=$(jq -r '.web_url // empty' <<<"$TASK_TICKET")   # the ticket's browser link, for the PR
   # The Plane MCP server, pinned in the image. --strict-mcp-config: a .mcp.json
   # in the cloned repo adds nothing. The key is already in this pod's env, so
   # writing it to a 0600 file in the throwaway $HOME exposes nothing new.
@@ -184,7 +185,7 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
     # into the image like the managed settings; see the file.
     --settings /usr/local/share/bench-cloud/ticket-settings.json
     --append-system-prompt "You are running unattended as bench-cloud task $TASK_ID in a fresh clone of $TASK_REPO, working Plane ticket $key (project_id $pid, work item id $wid) through the plane MCP server. The ticket is your channel to George:
-- Deliver your work as a pull request from a new branch. Then attach the PR URL to the ticket as a link (workitem_link create), run your babysit and critique passes, and only then set the ticket's state to \"In review\" (look the state id up with the state tool). That state change is your last step before the summary, and the run isn't finished without it: an In Progress ticket tells George nothing. If the playbook's outcome is findings rather than a PR, post them as a ticket comment and set \"In review\" the same way.
+- Deliver your work as a pull request from a new branch, titled \`<type>($key): <title text>\`, with the ticket linked in the description${web:+ ($web)}. Then attach the PR URL to the ticket as a link (workitem_link create), run your babysit and critique passes, and only then set the ticket's state to \"In review\" (look the state id up with the state tool). That state change is your last step before the summary, and the run isn't finished without it: an In Progress ticket tells George nothing. If the playbook's outcome is findings rather than a PR, post them as a ticket comment and set \"In review\" the same way.
 - If the ticket can be read more than one way, ask before you start, not after a PR.
 - To ask George something: post the question as a ticket comment, set the state to \"Blocked\", then run \`bench-ticket wait\` with the Bash tool and a timeout of 960000 ms. It returns his answer as soon as he comments (then set \"In Progress\" and carry on), or after 15 minutes says he hasn't; then end the run, and his reply will wake a new run in this same session.
 - George may comment while you work; his comments reach you as added context after a tool call. If one asks you something, answer it with a ticket comment.

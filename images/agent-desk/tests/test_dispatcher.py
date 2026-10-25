@@ -80,6 +80,8 @@ def test_owner_ready_starts_dry_run_job(tmp_path):
     assert env["TASK_REPO"] == "gjcourt/agent-sandbox"
     assert json.loads(env["TASK_TICKET"])["key"] == "SANDBOX-3"
     assert json.loads(env["TASK_TICKET"])["owner_id"] == OWNER
+    web = json.loads(env["TASK_TICKET"])["web_url"]
+    assert web.startswith("https://plane.example/") and web.endswith("/browse/SANDBOX-3/")
     assert '<ticket id="SANDBOX-3">' in env["TASK_PROMPT"]
     assert "Fix the typo in README." in env["TASK_PROMPT"]
     assert plane.state_of("p-sb", "i1") == "In Progress"

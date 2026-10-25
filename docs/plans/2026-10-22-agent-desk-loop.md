@@ -523,6 +523,16 @@ the fallback; it asks when unsure and can wait for the answer; `ready` stays the
   | Done, Cancelled | The dispatcher asks first (below); no Job and no tokens until George confirms |
   | Todo, Awaiting approval | Unchanged: the ordinary start and cap rules |
 
+- **A "request changes" review wakes it too** (George, 2026-10-25). On the 5-minute GitHub check,
+  an In review ticket whose linked PR is open, and whose latest deciding review by `githubOwner`
+  (approve, request changes, dismiss; plain comments don't count) requests changes, gets a resumed
+  Job. The review's summary and inline comments go to the Job directly as its prompt, not copied
+  onto the ticket: a copy would be the bot's comment, which never wakes anything. The `Started`
+  comment names the review id, so one review wakes one run; a later review wakes another. The same
+  gates apply: `ready` by George, one Job per ticket, the playbook cap. At the cap the ticket stays
+  In review with one comment saying so, and starts when a slot frees. An approval merges instead
+  (plane-mobile's `approve-to-merge`). One ticket's or repo's error is logged and the check goes on
+  to the rest.
 - **Closed tickets ask first.** The dispatcher, which runs no model, comments: "SANDBOX-6 is Done.
   Reply `reopen` to reopen it and wake the agent on your comment." Only a later comment from George
   that is exactly `reopen` moves the ticket to In Progress and starts a resumed Job, with his

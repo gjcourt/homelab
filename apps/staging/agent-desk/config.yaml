@@ -15,6 +15,9 @@ denyRepos:
   - gjcourt/homelab
 pollInterval: 10m
 githubPollInterval: 5m
+# George's GitHub login: his "request changes" review on a ticket's PR wakes
+# the agent, like a comment on the ticket (plan, "Waking the agent").
+githubOwner: gjcourt
 playbooks:
   docs-fix:
     ready: ready

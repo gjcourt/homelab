@@ -726,6 +726,11 @@ RBAC and the admission policy.
      a fix PR or writes up the cause.
 10. **Real repos (decision 1).** Add the first real repo project to the dispatcher's allowlist and
     `agent-desk`'s project memberships. **Exit:** one `docs-fix` ticket on it goes ready → PR → Done.
+    **First repo: `gjcourt/plane-mobile`** (Plane project PLANEMOBILE, George, 2026-10-25), a new
+    phone-first Plane client. Its first two tickets are docs-only, so `docs-fix` covers them; the
+    `feature` playbook comes with Domestique (DOMESTIQUE, 56 tickets drafted in Backlog). Before a
+    repo is mapped: the bot is a Member of its project, and `github-rulesets` has applied the
+    default-branch guard (run the CronJob by hand for a repo created that day).
 11. **Planner, later.** A merged plan PR → draft tickets in Triage, written as a bench-cloud skill
     (per the brief).
 12. **Pilot:** one real plan → tickets → merged PRs through the loop.

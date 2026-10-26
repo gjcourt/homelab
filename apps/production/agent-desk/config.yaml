@@ -87,13 +87,13 @@ playbooks:
       exact changes to ask for), then move the ticket to In review. If the ticket
       is unclear, comment your question and move it to Blocked instead.
   # The first playbook that changes code (George, 2026-10-25): plane-mobile and
-  # Domestique, plus toppingctl (George, 2026-10-26); Opus, 3h, capped at 2
-  # because Jobs share George's subscription limits. Workflows are out of reach
-  # anyway (the App has no Workflows permission); secrets and .env files are
-  # off-limits by rule.
+  # Domestique, plus toppingctl (George, 2026-10-26); Opus, 3h. Capped at 6
+  # (George, 2026-10-26; was 2). Jobs share George's subscription limits.
+  # Workflows are out of reach anyway (the App has no Workflows permission);
+  # secrets and .env files are off-limits by rule.
   feature:
     ready: ready
-    maxConcurrent: 2
+    maxConcurrent: 6
     deadline: 3h
     model: claude-opus-5-5
     allowedRepos:

@@ -59,8 +59,9 @@ playbooks:
       Blocked instead.
   # The first playbook that changes code (George, 2026-10-25): plane-mobile and
   # Domestique, plus toppingctl (George, 2026-10-26); Opus, 3h, capped at 2
-  # because Jobs share George's subscription limits. Workflows are out of reach anyway (the App has no
-  # Workflows permission); secrets and .env files are off-limits by rule.
+  # because Jobs share George's subscription limits. Workflows are out of reach
+  # anyway (the App has no Workflows permission); secrets and .env files are
+  # off-limits by rule.
   feature:
     ready: ready
     maxConcurrent: 2

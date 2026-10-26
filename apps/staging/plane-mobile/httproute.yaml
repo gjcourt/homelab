@@ -6,9 +6,10 @@
 #
 # /plane (the Plane webhook) is not routed: staging Plane delivers it
 # in-cluster to the Service, never through the gateway. The /plane rule has no
-# backend, so the gateway answers it with an error. If it were ever ignored
-# the request would fall through to the app, which HMAC-verifies every
-# delivery anyway.
+# backendRefs; Cilium (1.19, operator/pkg/model/ingestion/gateway.go) turns a
+# rule with no usable backend into a direct 500, and PathPrefix /plane beats /
+# as the longer match. If it were ever ignored the request would fall through
+# to the app, which HMAC-verifies every delivery anyway.
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:

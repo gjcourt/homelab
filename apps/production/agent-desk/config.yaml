@@ -13,6 +13,7 @@ projects:
   SANDBOX: gjcourt/agent-sandbox
   PLANEMOBILE: gjcourt/plane-mobile
   DOMESTIQUE: gjcourt/domestique
+  TOPPINGCTL: gjcourt/toppingctl
 denyRepos:
   - gjcourt/homelab
 pollInterval: 10m
@@ -57,8 +58,8 @@ playbooks:
       the ticket is unclear, comment your question on the ticket and move it to
       Blocked instead.
   # The first playbook that changes code (George, 2026-10-25): plane-mobile and
-  # Domestique only; Opus, 3h, capped at 2 because Jobs share George's
-  # subscription limits. Workflows are out of reach anyway (the App has no
+  # Domestique, plus toppingctl (George, 2026-10-26); Opus, 3h, capped at 2
+  # because Jobs share George's subscription limits. Workflows are out of reach anyway (the App has no
   # Workflows permission); secrets and .env files are off-limits by rule.
   feature:
     ready: ready
@@ -68,6 +69,7 @@ playbooks:
     allowedRepos:
       - gjcourt/plane-mobile
       - gjcourt/domestique
+      - gjcourt/toppingctl
     prompt: |
       Playbook feature. Build what the ticket asks for, and only that. Read the
       repo's AGENTS.md (and any plan the ticket links) first, and follow its

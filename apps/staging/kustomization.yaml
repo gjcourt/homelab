@@ -27,6 +27,7 @@ resources:
   - netscope
   - openwebui
   - plane
+  - plane-mobile
   - snapcast
   - vibrato
   - vitals

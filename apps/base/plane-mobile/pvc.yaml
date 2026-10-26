@@ -1,0 +1,16 @@
+# The Web Push subscription store (SQLite, DATA_PATH=/data/plane-mobile.db).
+# Losing it only means every device has to turn notifications on again, but
+# it is still the app's only state, so Retain (truenas-iscsi) rather than an
+# ephemeral class. RWO, hence strategy: Recreate on the Deployment.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: plane-mobile-data
+  namespace: plane-mobile
+spec:
+  storageClassName: truenas-iscsi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

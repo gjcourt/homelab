@@ -57,9 +57,9 @@ botocore==1.43.118 \
     # via
     #   boto3
     #   s3transfer
-cachetools==7.2.5 \
-    --hash=sha256:9033308cc26b678784a27b096aab1541b9e698d785c3e9918b691ccd458d88df \
-    --hash=sha256:a2223b80de434291ddf4c105354e533bbaf4d29382f5d1bc3e4b9332cb31061e
+cachetools==7.2.6 \
+    --hash=sha256:1096513bdeed468ba505df3d123e4578a5a22c955f4a9ba3912fd71f3f95363a \
+    --hash=sha256:8722e08fc36ae0838a9a0a2ab9935554720de3343a62dad7aae7c595854c8623
     # via py-key-value-aio
 caio==0.12.9 \
     --hash=sha256:0a571981c8724f69c34ed4c7619585d552d27fe38bad0daf970dca3e14d6922b \

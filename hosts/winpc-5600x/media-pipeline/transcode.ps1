@@ -233,6 +233,23 @@ foreach ($it in $runnable) {
   $expected = 0
   $srcCnt = & $FP -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of default=nw=1:nk=1 $it.Src 2>$null
   if ("$srcCnt".Trim() -match '^\d+$') { $expected = [int]"$srcCnt".Trim() }
+  # ⚠️ Field-coded (PAFF) interlaced H.264 stores each FIELD as its own packet,
+  # so the source reports twice as many packets as frames. Measured 2026-10-26
+  # on the Iron Giant Signature Edition SD extras: 6,000 source packets for a
+  # 100 s, 29.97 fps clip, a perfect 3,000-frame encode, and the gate refused it
+  # at exactly 50% - every 480i extra on the disc, while every 1080p title passed.
+  # When the packet count is ~2x what duration x rate allows, count frames, not
+  # fields. Soft telecine (above) goes the other way, so it is untouched.
+  if ($expected -gt 0) {
+    $sfps = Probe $it.Src 'stream=r_frame_rate' 'v:0'
+    $sn,$sd = ($sfps -split '/')
+    $sfpsVal = if ($sd) { [double]$sn / [double]$sd } else { [double]$sn }
+    $nominal = $it.Dur * $sfpsVal
+    if ($nominal -gt 0 -and $expected -gt 1.9 * $nominal) {
+      Log ("  field-coded source: $expected packets for ~" + [math]::Round($nominal) + " frames - expecting " + [math]::Round($expected / 2))
+      $expected = [math]::Round($expected / 2)
+    }
+  }
   if ($expected -le 0) {
     $fps = Probe $va 'stream=r_frame_rate' 'v:0'
     $num,$den = ($fps -split '/')

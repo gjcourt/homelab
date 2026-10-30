@@ -83,4 +83,4 @@ patches:
 # to gjcourt/plane-mobile; pin the YYYY-MM-DD-sha7 tag it prints here.
 images:
   - name: ghcr.io/gjcourt/plane-mobile
-    newTag: REPLACE-ME-date-sha7-from-build-yml
+    newTag: 2026-10-30-526d390

@@ -149,7 +149,7 @@ identity_providers:
       # branch until George replaces it in the same commit.
       - client_id: plane-mobile
         client_name: plane-mobile (Staging)
-        client_secret: '$pbkdf2-sha512$310000$REPLACE-ME$REPLACE-ME'
+        client_secret: '$pbkdf2-sha512$310000$DCuUHoicp/jUENLxVxNEYA$tVhKccHnn1yFOgMWDY8dxbNIxR.ufXm6hsBcEmC9Xhznq2gVEsC50JzMXwFr1WVE3YGNu8kkXyb.bR9z1a6uaQ'
         public: false
         authorization_policy: two_factor
         require_pkce: true

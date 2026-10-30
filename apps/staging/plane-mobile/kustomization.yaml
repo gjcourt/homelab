@@ -36,11 +36,11 @@ configMapGenerator:
       - OIDC_CLIENT_ID=plane-mobile
       # The one Authelia user name allowed in (matched against
       # preferred_username). Staging Authelia's users.yml is SOPS-only.
-      - ALLOWED_USER=REPLACE-ME-authelia-username
+      - ALLOWED_USER=george
       # The public half of the staging VAPID key pair (base64url); the private
       # half is the Secret's vapid-private-key. The app refuses to start if
       # they don't match.
-      - VAPID_PUBLIC_KEY=REPLACE-ME-vapid-public-key-base64url
+      - VAPID_PUBLIC_KEY=BGCcy7wGc3OlowjTVrSMnVGZjmaVdeinUIESWpGEXth5kblqHICX81MXxoTutMKl5ZUwz0dWDIOenxt_onJdp6A
       - VAPID_SUBJECT=mailto:gjcourt@gmail.com
       - DATA_PATH=/data/plane-mobile.db
       - PUSH_HOSTS=*.push.apple.com

@@ -20,6 +20,9 @@ spec:
         # Plane's egress rule selects on this label.
         app: plane-mobile
     spec:
+      # uvicorn's 10 s graceful wait, then up to 20 s for a held write already
+      # being sent (SEND_GRACE), then closing clients: 30 s is too short.
+      terminationGracePeriodSeconds: 40
       serviceAccountName: plane-mobile
       automountServiceAccountToken: false
       securityContext:

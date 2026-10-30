@@ -24,6 +24,8 @@ spec:
       # being sent (SEND_GRACE), then closing clients: 30 s is too short.
       terminationGracePeriodSeconds: 40
       serviceAccountName: plane-mobile
+      imagePullSecrets:
+        - name: ghcr-secret
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true

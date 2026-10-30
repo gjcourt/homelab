@@ -47,9 +47,9 @@ beartype==0.23.1 \
     --hash=sha256:4461b4dc57e3fdd6c8a8464b22cf118002eea107c33e9fef651c69068ab3cce3 \
     --hash=sha256:8b805f246b32931c74f2b321ea0939fe5bb2ff43c12a3eff19cc4c854b832e1d
     # via py-key-value-aio
-boto3==1.43.118 \
-    --hash=sha256:ab8f3d2c622ef039338b4f228d97ea55f1abd573d84bb9b9a5ee8cb6780c0ccd \
-    --hash=sha256:c0620f799e0f0c222ba42c337b65cdbcd3da38a3121187f634d8926cbbb28a9c
+boto3==1.43.122 \
+    --hash=sha256:c923650d09e4c445564ca14d5ce89466c3083884b6f6c189f0f445fc17f02eb5 \
+    --hash=sha256:cca51b3650080594a1df344b8a2e76007eab6d5fa50504a0b622dfdc14cdeaa1
     # via plane-mcp-server
 botocore==1.43.118 \
     --hash=sha256:7f3f9d88cc9e847587690f82a42e3c3c292c3026c92c1e60d68a9310018e003f \
@@ -57,9 +57,9 @@ botocore==1.43.118 \
     # via
     #   boto3
     #   s3transfer
-cachetools==7.2.5 \
-    --hash=sha256:9033308cc26b678784a27b096aab1541b9e698d785c3e9918b691ccd458d88df \
-    --hash=sha256:a2223b80de434291ddf4c105354e533bbaf4d29382f5d1bc3e4b9332cb31061e
+cachetools==7.2.6 \
+    --hash=sha256:1096513bdeed468ba505df3d123e4578a5a22c955f4a9ba3912fd71f3f95363a \
+    --hash=sha256:8722e08fc36ae0838a9a0a2ab9935554720de3343a62dad7aae7c595854c8623
     # via py-key-value-aio
 caio==0.12.9 \
     --hash=sha256:0a571981c8724f69c34ed4c7619585d552d27fe38bad0daf970dca3e14d6922b \

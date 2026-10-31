@@ -19,6 +19,20 @@ reproducible / restorable.
 | **Floor Plan / Map** dashboards (`lovelace.floorplan.json`, `lovelace.map.json`) | UI-only (storage-mode) → **snapshot here** |
 | **Switchboard** (`lovelace.switchboard.json`) | **retired** — superseded by the git `Lights` view; snapshot kept for history |
 
+## HACS components the git dashboards depend on
+
+Not in git: HACS downloads them into `/config/www/community/` on the PVC and
+registers them as Lovelace resources in `.storage/lovelace_resources`. A fresh
+HA, or a restore without `.storage` and `www/community/`, needs them
+reinstalled through HACS (HACS → search → Download → reload the browser).
+
+| Component | Used by | Without it |
+|---|---|---|
+| [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) (`thomasloven/lovelace-auto-entities`, tested v1.16.1) | Control → Maintenance view and its Maintenance intervals subview (HASS-2): every task list | Each list shows HA's "Custom element doesn't exist: auto-entities" card; tasks, reminders and the phone Done action still work |
+
+The vendored cards (Mushroom, card-mod, clock-weather) are different: they are
+in git (`../files/www/`) and load through `frontend.extra_module_url`.
+
 ## Refresh a snapshot
 
 ```sh

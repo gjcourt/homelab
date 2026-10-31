@@ -164,8 +164,161 @@ views:
       tap_action:
         action: navigate
         navigation_path: maintenance
-- title: Control
+- title: Auto-shutoff
   theme: Tinted
+  path: auto-shutoff
+  icon: mdi:timer-cog-outline
+  type: sections
+  max_columns: 3
+  # HASS-7. Was the "Control" view of what is now the Config dashboard (no
+  # path, so it was /home-control/1; nothing in this dashboard linked to
+  # it). George, 2026-10-31: "the timers
+  # all work the same way - it's just what they control is different",
+  # "2 are lights, and 3 are bathrooms", "really it's like the
+  # 'Auto-shutoff' page", "the nightlight is separate" (it moved to the
+  # Light schedules view). Every device here turns itself off on a timer.
+  # Mushroom template cards, matching the Maintenance view: icon, bold name,
+  # one-line status. Status templates are YAML anchors defined on first use;
+  # each names a missing or unavailable entity rather than showing a blank.
+  # The set-once Auto-off after values and the "How it works" note are on
+  # the "Auto-shutoff settings" subview below.
+  sections:
+  - type: grid
+    column_span: 3
+    cards:
+    - type: markdown
+      content: Tap a card to switch it on or off. Hold a fan or light to cancel its timer and keep it on.
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Bathrooms
+      heading_style: title
+    - type: custom:mushroom-template-card
+      entity: switch.hall_bathroom_exhaust_fan
+      primary: Hall bath fan
+      secondary: &auto_off_status >-
+        {#- device -> [its timer, its auto-off minutes]; the laundry lights share one -#}
+        {%- set cfg = {
+          'switch.hall_bathroom_exhaust_fan': ['timer.hall_bathroom_fan_timer', 'input_number.hall_bathroom_fan_minutes'],
+          'switch.master_bathroom_exhaust_fan': ['timer.master_bathroom_fan_timer', 'input_number.master_bathroom_fan_minutes'],
+          'switch.powder_bathroom_exhaust_fan': ['timer.powder_bathroom_fan_timer', 'input_number.powder_bathroom_fan_minutes'],
+          'light.laundry_room_main_lights': ['timer.laundry_room_light_timer', 'input_number.laundry_room_light_minutes'],
+          'light.laundry_room_cove': ['timer.laundry_room_light_timer', 'input_number.laundry_room_light_minutes']
+        } -%}
+        {%- set t = cfg.get(entity, ['', ''])[0] -%}
+        {%- set mins = states(cfg.get(entity, ['', ''])[1]) | int(none) -%}
+        {%- if expand(entity) | count == 0 -%}Not found
+        {%- elif states(entity) in ['unavailable', 'unknown'] -%}{{ states(entity) | capitalize }}
+        {%- elif is_state(entity, 'on') -%}On ·
+        {%- if is_state(t, 'active') and state_attr(t, 'finishes_at') %} off in {{ ((as_datetime(state_attr(t, 'finishes_at')) - now()).total_seconds() / 60) | round(0, 'ceil') | int }} min
+        {%- elif is_state(t, 'paused') %} timer paused
+        {%- else %} no timer running
+        {%- endif -%}
+        {%- else -%}Off{{ ' · auto-off after ' ~ mins ~ ' min' if mins is not none }}
+        {%- endif -%}
+      icon: mdi:fan
+      icon_color: &onoff_color >-
+        {%- if expand(entity) | count == 0 or states(entity) in ['unavailable', 'unknown'] -%}red
+        {%- elif is_state(entity, 'on') -%}amber
+        {%- else -%}disabled
+        {%- endif -%}
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: perform-action
+        perform_action: timer.cancel
+        target:
+          entity_id: timer.hall_bathroom_fan_timer
+    - type: custom:mushroom-template-card
+      entity: switch.master_bathroom_exhaust_fan
+      primary: Master bath fan
+      secondary: *auto_off_status
+      icon: mdi:fan
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: perform-action
+        perform_action: timer.cancel
+        target:
+          entity_id: timer.master_bathroom_fan_timer
+    - type: custom:mushroom-template-card
+      entity: switch.powder_bathroom_exhaust_fan
+      primary: Powder bath fan
+      secondary: *auto_off_status
+      icon: mdi:fan
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: perform-action
+        perform_action: timer.cancel
+        target:
+          entity_id: timer.powder_bathroom_fan_timer
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Lights
+      heading_style: title
+    - type: custom:mushroom-template-card
+      entity: light.laundry_room_main_lights
+      primary: Laundry main lights
+      secondary: *auto_off_status
+      icon: mdi:ceiling-light
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: perform-action
+        perform_action: timer.cancel
+        target:
+          entity_id: timer.laundry_room_light_timer
+    - type: custom:mushroom-template-card
+      entity: light.laundry_room_cove
+      primary: Laundry cove
+      secondary: *auto_off_status
+      icon: mdi:led-strip-variant
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: perform-action
+        perform_action: timer.cancel
+        target:
+          entity_id: timer.laundry_room_light_timer
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Settings
+      heading_style: title
+    - type: custom:mushroom-template-card
+      primary: Auto-shutoff settings
+      secondary: Auto-off time for each fan and light
+      icon: mdi:cog-outline
+      icon_color: blue
+      grid_options:
+        columns: full
+      tap_action:
+        action: navigate
+        navigation_path: auto-shutoff-settings
+- title: Auto-shutoff settings
+  theme: Tinted
+  path: auto-shutoff-settings
+  subview: true
+  back_path: auto-shutoff
   type: sections
   max_columns: 3
   sections:
@@ -173,174 +326,172 @@ views:
     column_span: 3
     cards:
     - type: heading
-      heading: Bathroom Fan Timers
+      heading: Auto-off after
       heading_style: title
     - type: markdown
-      content: '**How it works:** when a bathroom exhaust fan switch turns on, a timer starts using the per-bathroom **Minutes** value. When the timer expires, the switch turns off automatically. Flipping the switch off manually cancels the timer.'
-  - type: grid
-    column_span: 1
-    cards:
+      content: '**How it works:** turning on a bathroom fan or a laundry light starts its timer from the **Auto-off after** value below; when the timer runs out, it turns off. Turning it off yourself cancels the timer. The two laundry lights share one timer and one value: either light starts it, it turns both off, and it''s cancelled only when both are off.'
     - type: heading
-      heading: Hall Bathroom
-      heading_style: title
-    - type: tile
-      entity: switch.hall_bathroom_exhaust_fan
-      name: Fan
-      color: amber
-      tap_action:
-        action: toggle
-    - type: tile
-      entity: timer.hall_bathroom_fan_timer
-      name: Timer
-    - type: tile
+      heading: Bathrooms
+      heading_style: subtitle
+    - type: custom:mushroom-template-card
       entity: input_number.hall_bathroom_fan_minutes
-      name: Minutes
+      primary: Hall bath fan
+      icon: mdi:fan
+      icon_color: blue
+      tap_action:
+        action: more-info
       features_position: bottom
       features:
       - type: numeric-input
+        style: buttons
     - type: custom:mushroom-template-card
-      primary: Cancel timer
-      icon: mdi:timer-off
-      icon_color: red
-      tap_action:
-        action: perform-action
-        perform_action: timer.cancel
-        target:
-          entity_id: timer.hall_bathroom_fan_timer
-      # Only while the timer is running or paused; idle has nothing to cancel.
-      visibility:
-      - condition: state
-        entity: timer.hall_bathroom_fan_timer
-        state_not: idle
-  - type: grid
-    column_span: 1
-    cards:
-    - type: heading
-      heading: Master Bathroom
-      heading_style: title
-    - type: tile
-      entity: switch.master_bathroom_exhaust_fan
-      name: Fan
-      color: amber
-      tap_action:
-        action: toggle
-    - type: tile
-      entity: timer.master_bathroom_fan_timer
-      name: Timer
-    - type: tile
       entity: input_number.master_bathroom_fan_minutes
-      name: Minutes
+      primary: Master bath fan
+      icon: mdi:fan
+      icon_color: blue
+      tap_action:
+        action: more-info
       features_position: bottom
       features:
       - type: numeric-input
+        style: buttons
     - type: custom:mushroom-template-card
-      primary: Cancel timer
-      icon: mdi:timer-off
-      icon_color: red
+      entity: input_number.powder_bathroom_fan_minutes
+      primary: Powder bath fan
+      icon: mdi:fan
+      icon_color: blue
       tap_action:
-        action: perform-action
-        perform_action: timer.cancel
-        target:
-          entity_id: timer.master_bathroom_fan_timer
-      # Only while the timer is running or paused; idle has nothing to cancel.
-      visibility:
-      - condition: state
-        entity: timer.master_bathroom_fan_timer
-        state_not: idle
+        action: more-info
+      features_position: bottom
+      features:
+      - type: numeric-input
+        style: buttons
+    - type: heading
+      heading: Lights
+      heading_style: subtitle
+    - type: custom:mushroom-template-card
+      entity: input_number.laundry_room_light_minutes
+      primary: Laundry lights
+      icon: mdi:ceiling-light
+      icon_color: blue
+      tap_action:
+        action: more-info
+      features_position: bottom
+      features:
+      - type: numeric-input
+        style: buttons
+- title: Light schedules
+  theme: Tinted
+  path: light-schedules
+  icon: mdi:lightbulb-auto
+  type: sections
+  max_columns: 3
+  # HASS-7. George, 2026-10-31: "the nightlight is separate, and ultimately
+  # we'll have our christmas tree light there too". One section per
+  # scheduled light: to add one (e.g. the Christmas tree), add a section
+  # here with its cards and a matching section on "Light schedules
+  # settings", in the same pattern as Nightlight.
+  sections:
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Nightlight
+      heading_style: title
+    - type: custom:mushroom-template-card
+      entity: switch.dining_room_chandelier
+      primary: Master Switch
+      secondary: &switch_status >-
+        {%- if expand(entity) | count == 0 -%}Not found
+        {%- elif states(entity) in ['unavailable', 'unknown'] -%}{{ states(entity) | capitalize }}
+        {%- else -%}{{ 'On' if is_state(entity, 'on') else 'Off' }}
+        {%- endif -%}
+      icon: mdi:light-switch
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      entity: light.0xa4c138b55dac7973
+      primary: Central
+      secondary: &light_status >-
+        {%- if expand(entity) | count == 0 -%}Not found
+        {%- elif states(entity) in ['unavailable', 'unknown'] -%}{{ states(entity) | capitalize }}
+        {%- elif is_state(entity, 'on') -%}On
+        {%- set b = state_attr(entity, 'brightness') -%}
+        {%- if b is number %} · {{ (b / 2.55) | round(0) | int }}%{% endif -%}
+        {%- else -%}Off
+        {%- endif -%}
+      icon: mdi:chandelier
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      entity: light.0xa4c138a9f6011cac
+      primary: Flowers
+      secondary: *light_status
+      icon: mdi:flower
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      entity: sensor.nightlight_turn_off_time
+      primary: Off tonight
+      secondary: >-
+        {{ 'Not found' if expand(entity) | count == 0 else ('At ' ~ states(entity) if states(entity) not in ['unavailable', 'unknown'] else states(entity) | capitalize) }}
+      icon: mdi:weather-night
+      icon_color: blue
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
+      entity: input_number.nightlight_offset_today
+      primary: Jitter (today)
+      secondary: &number_status >-
+        {%- set v = states(entity) | float(none) -%}
+        {%- set u = state_attr(entity, 'unit_of_measurement') or '' -%}
+        {%- if expand(entity) | count == 0 -%}Not found
+        {%- elif v is none -%}{{ states(entity) | capitalize }}
+        {%- else -%}{{ v | int }}{{ u if u == '%' else ' ' ~ u }}
+        {%- endif -%}
+      icon: mdi:dice-multiple
+      icon_color: blue
+      tap_action:
+        action: more-info
   - type: grid
     column_span: 1
     cards:
     - type: heading
-      heading: Powder Bathroom
+      heading: Settings
       heading_style: title
-    - type: tile
-      entity: switch.powder_bathroom_exhaust_fan
-      name: Fan
-      color: amber
-      tap_action:
-        action: toggle
-    - type: tile
-      entity: timer.powder_bathroom_fan_timer
-      name: Timer
-    - type: tile
-      entity: input_number.powder_bathroom_fan_minutes
-      name: Minutes
-      features_position: bottom
-      features:
-      - type: numeric-input
     - type: custom:mushroom-template-card
-      primary: Cancel timer
-      icon: mdi:timer-off
-      icon_color: red
+      primary: Light schedules settings
+      secondary: Nightlight brightness, turn-off time, jitter
+      icon: mdi:cog-outline
+      icon_color: blue
+      grid_options:
+        columns: full
       tap_action:
-        action: perform-action
-        perform_action: timer.cancel
-        target:
-          entity_id: timer.powder_bathroom_fan_timer
-      # Only while the timer is running or paused; idle has nothing to cancel.
-      visibility:
-      - condition: state
-        entity: timer.powder_bathroom_fan_timer
-        state_not: idle
-  - type: grid
-    column_span: 3
-    cards:
-    - type: heading
-      heading: Laundry Room Lights
-      heading_style: title
-    - type: markdown
-      content: '**How it works:** when either laundry room light turns on, a timer starts using the **Minutes** value. When the timer expires, both lights turn off. Turning both lights off manually before the timer expires cancels the timer.'
-  - type: grid
-    column_span: 3
-    cards:
-    - type: heading
-      heading: Laundry Room
-      heading_style: title
-    - type: tile
-      entity: light.laundry_room_main_lights
-      name: Main Lights
-      color: amber
-      tap_action:
-        action: toggle
-    - type: tile
-      entity: light.laundry_room_cove
-      name: Cove
-      color: amber
-      tap_action:
-        action: toggle
-    - type: tile
-      entity: timer.laundry_room_light_timer
-      name: Timer
-    - type: tile
-      entity: input_number.laundry_room_light_minutes
-      name: Minutes
-      features_position: bottom
-      features:
-      - type: numeric-input
-    - type: custom:mushroom-template-card
-      primary: Cancel timer
-      icon: mdi:timer-off
-      icon_color: red
-      tap_action:
-        action: perform-action
-        perform_action: timer.cancel
-        target:
-          entity_id: timer.laundry_room_light_timer
-      # Only while the timer is running or paused; idle has nothing to cancel.
-      visibility:
-      - condition: state
-        entity: timer.laundry_room_light_timer
-        state_not: idle
-    - type: button
-      name: Turn Off Both
-      icon: mdi:lightbulb-off
-      tap_action:
-        action: call-service
-        service: light.turn_off
-        target:
-          entity_id:
-          - light.laundry_room_main_lights
-          - light.laundry_room_cove
+        action: navigate
+        navigation_path: light-schedules-settings
+- title: Light schedules settings
+  theme: Tinted
+  path: light-schedules-settings
+  subview: true
+  back_path: light-schedules
+  type: sections
+  max_columns: 3
+  sections:
   - type: grid
     column_span: 3
     cards:
@@ -349,54 +500,37 @@ views:
       heading_style: title
     - type: markdown
       content: '**How it works:** at sundown, if the master Lutron switch is off, turn it on and set both chandelier LEDs to **Preset Brightness**. If the switch is already on, only LEDs that are currently off get bumped to preset; running LEDs are left alone. At the **Turn-Off Time + today''s jitter**, the master switch turns off.'
-  - type: grid
-    column_span: 3
-    cards:
-    - type: heading
-      heading: Dining Room Chandelier
-      heading_style: title
-    - type: tile
-      entity: switch.dining_room_chandelier
-      name: Master Switch
-      color: amber
-      tap_action:
-        action: toggle
-    - type: tile
-      entity: light.0xa4c138b55dac7973
-      name: Central
-      color: amber
-    - type: tile
-      entity: light.0xa4c138a9f6011cac
-      name: Flowers
-      color: amber
-    - type: tile
-      entity: sensor.nightlight_turn_off_time
-      name: Off tonight
-      color: blue
-  - type: grid
-    column_span: 3
-    cards:
-    - type: heading
-      heading: Nightlight Settings
-      heading_style: title
-    - type: tile
+    - type: custom:mushroom-template-card
       entity: input_number.nightlight_brightness
-      name: Preset Brightness
+      primary: Preset Brightness
+      icon: mdi:brightness-6
+      icon_color: blue
+      tap_action:
+        action: more-info
       features_position: bottom
       features:
       - type: numeric-input
-    - type: tile
+        style: buttons
+    - type: custom:mushroom-template-card
       entity: input_datetime.nightlight_turnoff_time
-      name: Turn-Off Time
-    - type: tile
+      primary: Turn-Off Time
+      secondary: >-
+        {{ 'Not found' if expand(entity) | count == 0 else (states(entity)[:5] if states(entity) not in ['unavailable', 'unknown'] else states(entity) | capitalize) }}
+      icon: mdi:clock-outline
+      icon_color: blue
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-template-card
       entity: input_number.nightlight_random_offset
-      name: Jitter (max)
+      primary: Jitter (max)
+      icon: mdi:shuffle-variant
+      icon_color: blue
+      tap_action:
+        action: more-info
       features_position: bottom
       features:
       - type: numeric-input
-    - type: tile
-      entity: input_number.nightlight_offset_today
-      name: Jitter (today)
+        style: buttons
 # Maintenance reminders (HASS-2). Tasks are packages in configuration.yaml
 # ("Maintenance reminders"). Every list here is built by auto-entities
 # (custom:auto-entities, installed through HACS, not vendored in git) from the

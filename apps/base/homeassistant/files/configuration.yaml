@@ -221,6 +221,22 @@ template:
              | selectattr('attributes.default_interval_days', 'defined')
              | rejectattr('state', 'eq', 'ok')
              | list | count }}
+      # Changes whenever any maintenance last-done date or interval changes:
+      # the sum of all last-done timestamps plus all intervals. It exists only
+      # to trigger "Maintenance — save state right after a change"
+      # (automations.yaml), and finds tasks by name, so new tasks need nothing.
+      - name: "Maintenance change marker"
+        unique_id: maintenance_change_marker
+        default_entity_id: sensor.maintenance_change_marker
+        icon: mdi:content-save-cog
+        state: >
+          {% set done = states.sensor
+             | selectattr('entity_id', 'match', 'sensor\.maintenance_.*_last_done$')
+             | map(attribute='state') | map('as_timestamp', 0) | sum %}
+          {% set intervals = states.input_number
+             | selectattr('entity_id', 'match', 'input_number\.maintenance_.*_interval_days$')
+             | map(attribute='state') | map('float', 0) | sum %}
+          {{ (done + intervals) | int }}
 
 # ============================================================================
 # Maintenance reminders (HASS-2): tasks whose timer restarts when they're done
@@ -320,8 +336,13 @@ homeassistant:
               default_entity_id: sensor.maintenance_cat_pee_pad_last_done
         - sensor:
             - <<: &maintenance_status
-                device_class: enum
-                # `unknown` (no last-done date yet) is the 4th state.
+                # States: ok / due / overdue, or `unknown` (the template renders
+                # none) when never recorded. Plain text, not device_class: enum:
+                # 2026.10 template sensors reject `options:`, and an enum
+                # without its option list is a half-declared sensor.
+                # Due-date math is in local calendar dates (last-done date +
+                # N days), so a DST change or a just-after-midnight time can't
+                # shift the due date by a day.
                 state: >
                   {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
                   {% set iv = states('input_number.' ~ key ~ '_interval_days') | int(0) %}
@@ -329,7 +350,7 @@ homeassistant:
                   {% if last is none %}
                     {{ none }}
                   {% else %}
-                    {% set left = (as_local(last + timedelta(days=iv)).date() - now().date()).days %}
+                    {% set left = (as_local(last).date() + timedelta(days=iv) - now().date()).days %}
                     {{ 'overdue' if left < 0 else ('due' if left == 0 else 'ok') }}
                   {% endif %}
                 attributes:
@@ -352,18 +373,19 @@ homeassistant:
                   last_done: >
                     {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
                     {{ last.isoformat() if last is not none else none }}
+                  # A date (YYYY-MM-DD), not a time: tasks are due on a day.
                   next_due: >
                     {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
                     {% set iv = states('input_number.' ~ key ~ '_interval_days') | int(0) %}
                     {% set iv = iv if iv > 0 else default_interval_days %}
-                    {{ (last + timedelta(days=iv)).isoformat() if last is not none else none }}
+                    {{ (as_local(last).date() + timedelta(days=iv)).isoformat() if last is not none else none }}
                   # Calendar days until the due date: 0 = due today, negative =
                   # days overdue. None (not 0) when never recorded.
                   days_left: >
                     {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
                     {% set iv = states('input_number.' ~ key ~ '_interval_days') | int(0) %}
                     {% set iv = iv if iv > 0 else default_interval_days %}
-                    {{ (as_local(last + timedelta(days=iv)).date() - now().date()).days if last is not none else none }}
+                    {{ (as_local(last).date() + timedelta(days=iv) - now().date()).days if last is not none else none }}
               name: Cat pee pad
               unique_id: maintenance_cat_pee_pad
               default_entity_id: sensor.maintenance_cat_pee_pad

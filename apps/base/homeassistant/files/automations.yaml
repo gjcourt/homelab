@@ -477,6 +477,40 @@
       data:
         notification_id: "{{ key }}"
 
+# Home Assistant writes restorable state (last-done dates, intervals) to
+# .storage/core.restore_state only every 15 min and on a clean stop. After a
+# hard kill (OOM, node loss) the last 15 min of Done presses would be lost, so
+# save as soon as anything changes. Triggered by sensor.maintenance_change_marker,
+# which re-renders only after the last-done sensor itself has updated.
+#
+# Also dismisses the 09:00 persistent notification for any task that is now
+# up to date, whichever way it was marked done (dashboard, phone, script).
+- alias: "Maintenance — save state right after a change"
+  description: "Persist maintenance dates and intervals immediately, and clear reminders for tasks that are now OK."
+  mode: queued
+  trigger:
+    - platform: state
+      entity_id: sensor.maintenance_change_marker
+      not_from:
+        - unknown
+        - unavailable
+      not_to:
+        - unknown
+        - unavailable
+  action:
+    - service: homeassistant.save_persistent_states
+    - repeat:
+        for_each: >
+          {{ states.sensor
+             | selectattr('entity_id', 'match', 'sensor\.maintenance_')
+             | selectattr('attributes.default_interval_days', 'defined')
+             | selectattr('state', 'eq', 'ok')
+             | map(attribute='entity_id') | list }}
+        sequence:
+          - service: persistent_notification.dismiss
+            data:
+              notification_id: "{{ repeat.item.split('.')[1] }}"
+
 # Fresh install: each interval input_number starts at 0 ("not set", see
 # configuration.yaml). Write the task's default into it so the dashboard shows
 # the real number. Once set, a dashboard edit is restored on every restart and

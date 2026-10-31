@@ -423,46 +423,52 @@ views:
       - condition: numeric_state
         entity: sensor.maintenance_to_do
         below: 1
-    - &maintenance_card
-      type: custom:mushroom-template-card
-      # Templates read the task's status sensor, derived from the button:
-      # input_button.<key>_done -> sensor.<key>.
-      secondary: >-
-        {%- set s = 'sensor.' ~ entity.split('.')[1][:-5] -%}
-        {%- set st = states(s) -%}
-        {%- set left = state_attr(s, 'days_left') -%}
-        {%- macro day(t) -%}
-        {%- set d = as_local(as_datetime(t)) -%}
-        {{ d.strftime('%a %-d %b' ~ ('' if d.year == now().year else ' %Y')) }}
-        {%- endmacro -%}
-        {%- if st == 'overdue' -%}
-        Overdue by {{ -left }} day{{ 's' if -left != 1 }} (was due {{ day(state_attr(s, 'next_due')) }})
-        {%- elif st == 'due' -%}
-        Due today
-        {%- elif st == 'ok' -%}
-        {{ left }} day{{ 's' if left != 1 }} left · due {{ day(state_attr(s, 'next_due')) }}
-        {%- else -%}
-        Never recorded: tap when you next do it, or set the date below
-        {%- endif -%}
-        {%- if st in ['ok', 'due', 'overdue'] %} · last done {{ day(state_attr(s, 'last_done')) }}{% endif %}
-        · {{ state_attr(s, 'interval_text') or 'interval unknown' }}
-      multiline_secondary: true
-      icon: "{{ state_attr('sensor.' ~ entity.split('.')[1][:-5], 'icon') }}"
-      # red = overdue, amber = due today, green = ok, grey = never recorded.
-      icon_color: >-
-        {%- set st = states('sensor.' ~ entity.split('.')[1][:-5]) -%}
-        {{ {'overdue': 'red', 'due': 'amber', 'ok': 'green'}.get(st, 'disabled') }}
-      # Tap = Done (presses the input_button). Confirmed, because it replaces
-      # the last-done date; the old one is kept in the last-done sensor's
-      # `previous` attribute and can be put back with "Set a last-done date".
-      tap_action:
-        action: toggle
-        confirmation:
-          text: Record this task as done now? This replaces its last-done date.
-      hold_action:
-        action: more-info
+    # Shared keys only (a card's own keys must not override merged
+    # ones; HA warns on that).
+    - <<: &maintenance_card
+        type: custom:mushroom-template-card
+        # Templates read the task's status sensor, derived from the button:
+        # input_button.<key>_done -> sensor.<key>.
+        secondary: >-
+          {%- set s = 'sensor.' ~ entity.split('.')[1][:-5] -%}
+          {%- set st = states(s) -%}
+          {%- set left = state_attr(s, 'days_left') -%}
+          {%- macro day(t) -%}
+          {#- next_due is a date, last_done a timestamp -#}
+          {%- set d = as_local(as_datetime(t)) if 'T' in t else strptime(t, '%Y-%m-%d') -%}
+          {{ d.strftime('%a %-d %b' ~ ('' if d.year == now().year else ' %Y')) }}
+          {%- endmacro -%}
+          {%- if st == 'overdue' -%}
+          Overdue by {{ -left }} day{{ 's' if -left != 1 }} (was due {{ day(state_attr(s, 'next_due')) }})
+          {%- elif st == 'due' -%}
+          Due today
+          {%- elif st == 'ok' -%}
+          {{ left }} day{{ 's' if left != 1 }} left · due {{ day(state_attr(s, 'next_due')) }}
+          {%- else -%}
+          Never recorded: tap when you next do it, or set the date below
+          {%- endif -%}
+          {%- if st in ['ok', 'due', 'overdue'] %} · last done {{ day(state_attr(s, 'last_done')) }}{% endif %}
+          · {{ state_attr(s, 'interval_text') or 'interval unknown' }}
+        multiline_secondary: true
+        icon: "{{ state_attr('sensor.' ~ entity.split('.')[1][:-5], 'icon') }}"
+        # red = overdue, amber = due today, green = ok, grey = never recorded.
+        icon_color: >-
+          {%- set st = states('sensor.' ~ entity.split('.')[1][:-5]) -%}
+          {{ {'overdue': 'red', 'due': 'amber', 'ok': 'green'}.get(st, 'disabled') }}
+        hold_action:
+          action: more-info
       entity: input_button.maintenance_cat_pee_pad_done
       primary: Cat pee pad
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_cat_pee_pad_done
+        # Tap = Done. Confirmed, because it replaces the last-done date;
+        # the old one is kept in the last-done sensor's `previous`
+        # attribute and "Set a last-done date" puts it back.
+        confirmation: &maintenance_confirm
+          text: Record this task as done now? This replaces its last-done date.
       visibility:
       - condition: state
         entity: sensor.maintenance_cat_pee_pad
@@ -470,6 +476,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_under_sink_filter_done
       primary: Under-sink water filter
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_under_sink_filter_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_under_sink_filter
@@ -477,6 +489,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_fridge_filter_done
       primary: Fridge water filter
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_fridge_filter_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_fridge_filter
@@ -484,6 +502,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_espresso_filter_done
       primary: Espresso bar water filter
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_espresso_filter_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_espresso_filter
@@ -491,6 +515,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_car_oil_done
       primary: Car oil change
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_car_oil_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_car_oil
@@ -498,6 +528,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_furnace_filters_done
       primary: Furnace filters
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_furnace_filters_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_furnace_filters
@@ -505,6 +541,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_grill_cleaning_done
       primary: Grill cleaning
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_grill_cleaning_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_grill_cleaning
@@ -518,6 +560,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_cat_pee_pad_done
       primary: Cat pee pad
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_cat_pee_pad_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_cat_pee_pad
@@ -525,6 +573,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_under_sink_filter_done
       primary: Under-sink water filter
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_under_sink_filter_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_under_sink_filter
@@ -532,6 +586,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_fridge_filter_done
       primary: Fridge water filter
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_fridge_filter_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_fridge_filter
@@ -539,6 +599,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_espresso_filter_done
       primary: Espresso bar water filter
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_espresso_filter_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_espresso_filter
@@ -546,6 +612,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_car_oil_done
       primary: Car oil change
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_car_oil_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_car_oil
@@ -553,6 +625,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_furnace_filters_done
       primary: Furnace filters
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_furnace_filters_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_furnace_filters
@@ -560,6 +638,12 @@ views:
     - <<: *maintenance_card
       entity: input_button.maintenance_grill_cleaning_done
       primary: Grill cleaning
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.maintenance_grill_cleaning_done
+        confirmation: *maintenance_confirm
       visibility:
       - condition: state
         entity: sensor.maintenance_grill_cleaning

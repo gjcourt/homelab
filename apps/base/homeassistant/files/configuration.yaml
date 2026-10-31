@@ -208,3 +208,388 @@ template:
         unit_of_measurement: "playing"
         icon: mdi:play-circle
         state: "{{ states.media_player | selectattr('state', 'eq', 'playing') | list | count }}"
+      # Maintenance tasks needing attention: due, overdue, or never recorded
+      # (anything not "ok"). Finds tasks by name like the automations do.
+      - name: "Maintenance to do"
+        unique_id: maintenance_to_do_count
+        default_entity_id: sensor.maintenance_to_do
+        unit_of_measurement: "to do"
+        icon: mdi:wrench-clock
+        state: >
+          {{ states.sensor
+             | selectattr('entity_id', 'match', 'sensor\.maintenance_')
+             | selectattr('attributes.default_interval_days', 'defined')
+             | rejectattr('state', 'eq', 'ok')
+             | list | count }}
+
+# ============================================================================
+# Maintenance reminders (HASS-2): tasks whose timer restarts when they're done
+# ============================================================================
+# Each task is one package below. Pressing its Done button (dashboard card, or
+# the "Done" action on the phone notification) records "now" as the last-done
+# time, and the next due date becomes last done + interval. A task is "due" on
+# its due date, "overdue" after it, and reminders go out at 09:00 each day it
+# is due or overdue (automations.yaml, "Maintenance" section).
+#
+# Per task <key> (e.g. maintenance_cat_pee_pad), the package creates:
+#   input_button.<key>_done            — press = done now
+#   input_number.<key>_interval_days   — interval, editable on the dashboard
+#   sensor.<key>_last_done             — when it was last done (timestamp).
+#                                        Trigger-based, so it restores across
+#                                        restarts and starts `unknown` (never
+#                                        recorded) on a fresh install.
+#   sensor.<key>                       — ok / due / overdue (unknown until a
+#                                        last-done date exists), with
+#                                        last_done, next_due, days_left and
+#                                        interval_days attributes.
+#
+# Why a trigger-based sensor and not input_datetime for last-done: a fresh
+# input_datetime defaults to today 00:00 (input_datetime/__init__.py,
+# 2026.10.2), which would read as "done today" when it never was.
+#
+# Intervals: input_number has no `initial:` so a dashboard edit survives a
+# restart. A fresh input_number would start at its min, so min is 0 and 0
+# means "not set": sensor.<key> then uses default_interval_days, and the
+# "Maintenance — seed default intervals" automation writes the default into
+# the input_number on start. An interval of 0 is meaningless, so nothing real
+# is lost.
+#
+# To add a task:
+#   1. Copy one package below (not the first: it holds the shared anchors),
+#      rename the key everywhere (find/replace maintenance_<old> →
+#      maintenance_<new>), and set name, icon and default_interval_days.
+#   2. Add a row to the Maintenance view in dashboards/control.yaml (two task
+#      cards and one interval tile; see the comment there).
+#   Automations, notifications and the "correct a date" script find tasks by
+#   the sensor.maintenance_* naming, so they need no change.
+homeassistant:
+  packages:
+    maintenance_cat_pee_pad:
+      input_button:
+        maintenance_cat_pee_pad_done:
+          name: Cat pee pad done
+          icon: mdi:paw
+      input_number:
+        maintenance_cat_pee_pad_interval_days:
+          # Shared anchors hold only the keys every task has in common, so a
+          # task's own keys never override a merged one (HA warns on that).
+          <<: &maintenance_interval
+            min: 0
+            max: 3650
+            step: 1
+            unit_of_measurement: days
+            mode: box
+            icon: mdi:calendar-refresh
+          name: Cat pee pad interval
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_cat_pee_pad_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            # Fired by script.maintenance_correct_last_done.
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_cat_pee_pad_last_done
+              id: correct
+          sensor:
+            - <<: &maintenance_last_done
+                device_class: timestamp
+                icon: mdi:calendar-check
+                state: >
+                  {% if trigger.id == 'done' %}
+                    {{ now().isoformat() }}
+                  {% else %}
+                    {% set d = as_datetime(trigger.event.data.when | default(''), none) %}
+                    {% if d is none %}
+                      {# Bad date in the event: keep what we had. #}
+                      {{ this.state if this.state not in ['unknown', 'unavailable'] else none }}
+                    {% else %}
+                      {{ (d if d.tzinfo else d.replace(tzinfo=now().tzinfo)).isoformat() }}
+                    {% endif %}
+                  {% endif %}
+                attributes:
+                  # The value this press replaced, so a mis-tap loses nothing:
+                  # restore it with script.maintenance_correct_last_done.
+                  previous: "{{ this.state if this.state not in ['unknown', 'unavailable'] else none }}"
+              name: Cat pee pad last done
+              unique_id: maintenance_cat_pee_pad_last_done
+              default_entity_id: sensor.maintenance_cat_pee_pad_last_done
+        - sensor:
+            - <<: &maintenance_status
+                device_class: enum
+                # `unknown` (no last-done date yet) is the 4th state.
+                state: >
+                  {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                  {% set iv = states('input_number.' ~ key ~ '_interval_days') | int(0) %}
+                  {% set iv = iv if iv > 0 else default_interval_days %}
+                  {% if last is none %}
+                    {{ none }}
+                  {% else %}
+                    {% set left = (as_local(last + timedelta(days=iv)).date() - now().date()).days %}
+                    {{ 'overdue' if left < 0 else ('due' if left == 0 else 'ok') }}
+                  {% endif %}
+                attributes:
+                  default_interval_days: "{{ default_interval_days }}"
+                  interval_days: >
+                    {% set iv = states('input_number.' ~ key ~ '_interval_days') | int(0) %}
+                    {{ iv if iv > 0 else default_interval_days }}
+                  # The interval in words for the card and notifications:
+                  # whole years, else months when within 3 days of a whole
+                  # number of months (182 → "every 6 months"), else days.
+                  interval_text: >
+                    {% set iv = states('input_number.' ~ key ~ '_interval_days') | int(0) %}
+                    {% set iv = iv if iv > 0 else default_interval_days %}
+                    {% set months = (iv / 30.44) | round(0) | int %}
+                    {% if iv == 1 %}every day
+                    {% elif iv % 365 == 0 %}every {{ 'year' if iv == 365 else (iv // 365) ~ ' years' }}
+                    {% elif iv >= 28 and (months * 30.44 - iv) | abs <= 3 %}every {{ 'month' if months == 1 else months ~ ' months' }}
+                    {% else %}every {{ iv }} days
+                    {% endif %}
+                  last_done: >
+                    {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                    {{ last.isoformat() if last is not none else none }}
+                  next_due: >
+                    {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                    {% set iv = states('input_number.' ~ key ~ '_interval_days') | int(0) %}
+                    {% set iv = iv if iv > 0 else default_interval_days %}
+                    {{ (last + timedelta(days=iv)).isoformat() if last is not none else none }}
+                  # Calendar days until the due date: 0 = due today, negative =
+                  # days overdue. None (not 0) when never recorded.
+                  days_left: >
+                    {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                    {% set iv = states('input_number.' ~ key ~ '_interval_days') | int(0) %}
+                    {% set iv = iv if iv > 0 else default_interval_days %}
+                    {{ (as_local(last + timedelta(days=iv)).date() - now().date()).days if last is not none else none }}
+              name: Cat pee pad
+              unique_id: maintenance_cat_pee_pad
+              default_entity_id: sensor.maintenance_cat_pee_pad
+              icon: mdi:paw
+              variables:
+                key: maintenance_cat_pee_pad
+                default_interval_days: 3
+
+    maintenance_under_sink_filter:
+      input_button:
+        maintenance_under_sink_filter_done:
+          name: Under-sink water filter done
+          icon: mdi:water-pump
+      input_number:
+        maintenance_under_sink_filter_interval_days:
+          <<: *maintenance_interval
+          name: Under-sink water filter interval
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_under_sink_filter_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_under_sink_filter_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Under-sink water filter last done
+              unique_id: maintenance_under_sink_filter_last_done
+              default_entity_id: sensor.maintenance_under_sink_filter_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Under-sink water filter
+              unique_id: maintenance_under_sink_filter
+              default_entity_id: sensor.maintenance_under_sink_filter
+              icon: mdi:water-pump
+              variables:
+                key: maintenance_under_sink_filter
+                default_interval_days: 365
+
+    maintenance_espresso_filter:
+      input_button:
+        maintenance_espresso_filter_done:
+          name: Espresso bar water filter done
+          icon: mdi:coffee-maker
+      input_number:
+        maintenance_espresso_filter_interval_days:
+          <<: *maintenance_interval
+          name: Espresso bar water filter interval
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_espresso_filter_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_espresso_filter_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Espresso bar water filter last done
+              unique_id: maintenance_espresso_filter_last_done
+              default_entity_id: sensor.maintenance_espresso_filter_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Espresso bar water filter
+              unique_id: maintenance_espresso_filter
+              default_entity_id: sensor.maintenance_espresso_filter
+              icon: mdi:coffee-maker
+              variables:
+                key: maintenance_espresso_filter
+                default_interval_days: 1095
+
+    maintenance_fridge_filter:
+      input_button:
+        maintenance_fridge_filter_done:
+          name: Fridge water filter done
+          icon: mdi:fridge
+      input_number:
+        maintenance_fridge_filter_interval_days:
+          <<: *maintenance_interval
+          name: Fridge water filter interval
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_fridge_filter_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_fridge_filter_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Fridge water filter last done
+              unique_id: maintenance_fridge_filter_last_done
+              default_entity_id: sensor.maintenance_fridge_filter_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Fridge water filter
+              unique_id: maintenance_fridge_filter
+              default_entity_id: sensor.maintenance_fridge_filter
+              icon: mdi:fridge
+              variables:
+                key: maintenance_fridge_filter
+                default_interval_days: 365
+
+    maintenance_car_oil:
+      input_button:
+        maintenance_car_oil_done:
+          name: Car oil change done
+          icon: mdi:oil
+      input_number:
+        maintenance_car_oil_interval_days:
+          <<: *maintenance_interval
+          name: Car oil change interval
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_car_oil_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_car_oil_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Car oil change last done
+              unique_id: maintenance_car_oil_last_done
+              default_entity_id: sensor.maintenance_car_oil_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Car oil change
+              unique_id: maintenance_car_oil
+              default_entity_id: sensor.maintenance_car_oil
+              icon: mdi:oil
+              variables:
+                key: maintenance_car_oil
+                default_interval_days: 182
+
+    maintenance_furnace_filters:
+      input_button:
+        maintenance_furnace_filters_done:
+          name: Furnace filters done
+          icon: mdi:hvac
+      input_number:
+        maintenance_furnace_filters_interval_days:
+          <<: *maintenance_interval
+          name: Furnace filters interval
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_furnace_filters_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_furnace_filters_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Furnace filters last done
+              unique_id: maintenance_furnace_filters_last_done
+              default_entity_id: sensor.maintenance_furnace_filters_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Furnace filters
+              unique_id: maintenance_furnace_filters
+              default_entity_id: sensor.maintenance_furnace_filters
+              icon: mdi:hvac
+              variables:
+                key: maintenance_furnace_filters
+                default_interval_days: 730
+
+    maintenance_grill_cleaning:
+      input_button:
+        maintenance_grill_cleaning_done:
+          name: Grill cleaning done
+          icon: mdi:grill
+      input_number:
+        maintenance_grill_cleaning_interval_days:
+          <<: *maintenance_interval
+          name: Grill cleaning interval
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_grill_cleaning_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_grill_cleaning_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Grill cleaning last done
+              unique_id: maintenance_grill_cleaning_last_done
+              default_entity_id: sensor.maintenance_grill_cleaning_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Grill cleaning
+              unique_id: maintenance_grill_cleaning
+              default_entity_id: sensor.maintenance_grill_cleaning
+              icon: mdi:grill
+              variables:
+                key: maintenance_grill_cleaning
+                default_interval_days: 730

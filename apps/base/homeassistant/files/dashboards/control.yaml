@@ -134,7 +134,7 @@ views:
     # TODO: add `hallway_landing` area card once that Area is created in HA.
   # Summary strip — glanceable counts, tap to jump to the relevant tab.
   # Backed by template sensors in configuration.yaml (lights_on_count,
-  # media_playing_count).
+  # media_playing_count, maintenance_to_do_count).
   - type: grid
     column_span: 3
     cards:
@@ -156,6 +156,14 @@ views:
       tap_action:
         action: navigate
         navigation_path: av
+    # Due, overdue or never-recorded maintenance tasks (HASS-2).
+    - type: tile
+      entity: sensor.maintenance_to_do
+      name: Maintenance
+      icon: mdi:wrench-clock
+      tap_action:
+        action: navigate
+        navigation_path: maintenance
 - title: Control
   theme: Tinted
   type: sections
@@ -389,6 +397,240 @@ views:
     - type: tile
       entity: input_number.nightlight_offset_today
       name: Jitter (today)
+# Maintenance reminders (HASS-2). Tasks are packages in configuration.yaml
+# ("Maintenance reminders"). To add one to this view, copy one row in each of
+# the three lists below (Needs doing, Up to date, Intervals) and change the
+# entity ids and name. Each task appears in both task lists; visibility shows
+# it in exactly one, so due/overdue/never-recorded tasks sit at the top.
+# Sections can't sort or auto-list entities without a HACS card (auto-entities)
+# that isn't vendored here, so rows are listed by hand.
+- title: Maintenance
+  theme: Tinted
+  path: maintenance
+  icon: mdi:wrench-clock
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Needs doing
+      heading_style: title
+    - type: markdown
+      content: Nothing is due. Tap a task when you do it; the timer restarts from that moment.
+      visibility:
+      - condition: numeric_state
+        entity: sensor.maintenance_to_do
+        below: 1
+    - &maintenance_card
+      type: custom:mushroom-template-card
+      # Templates read the task's status sensor, derived from the button:
+      # input_button.<key>_done -> sensor.<key>.
+      secondary: >-
+        {%- set s = 'sensor.' ~ entity.split('.')[1][:-5] -%}
+        {%- set st = states(s) -%}
+        {%- set left = state_attr(s, 'days_left') -%}
+        {%- macro day(t) -%}
+        {%- set d = as_local(as_datetime(t)) -%}
+        {{ d.strftime('%a %-d %b' ~ ('' if d.year == now().year else ' %Y')) }}
+        {%- endmacro -%}
+        {%- if st == 'overdue' -%}
+        Overdue by {{ -left }} day{{ 's' if -left != 1 }} (was due {{ day(state_attr(s, 'next_due')) }})
+        {%- elif st == 'due' -%}
+        Due today
+        {%- elif st == 'ok' -%}
+        {{ left }} day{{ 's' if left != 1 }} left · due {{ day(state_attr(s, 'next_due')) }}
+        {%- else -%}
+        Never recorded: tap when you next do it, or set the date below
+        {%- endif -%}
+        {%- if st in ['ok', 'due', 'overdue'] %} · last done {{ day(state_attr(s, 'last_done')) }}{% endif %}
+        · {{ state_attr(s, 'interval_text') or 'interval unknown' }}
+      multiline_secondary: true
+      icon: "{{ state_attr('sensor.' ~ entity.split('.')[1][:-5], 'icon') }}"
+      # red = overdue, amber = due today, green = ok, grey = never recorded.
+      icon_color: >-
+        {%- set st = states('sensor.' ~ entity.split('.')[1][:-5]) -%}
+        {{ {'overdue': 'red', 'due': 'amber', 'ok': 'green'}.get(st, 'disabled') }}
+      # Tap = Done (presses the input_button). Confirmed, because it replaces
+      # the last-done date; the old one is kept in the last-done sensor's
+      # `previous` attribute and can be put back with "Set a last-done date".
+      tap_action:
+        action: toggle
+        confirmation:
+          text: Record this task as done now? This replaces its last-done date.
+      hold_action:
+        action: more-info
+      entity: input_button.maintenance_cat_pee_pad_done
+      primary: Cat pee pad
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_cat_pee_pad
+        state_not: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_under_sink_filter_done
+      primary: Under-sink water filter
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_under_sink_filter
+        state_not: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_fridge_filter_done
+      primary: Fridge water filter
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_fridge_filter
+        state_not: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_espresso_filter_done
+      primary: Espresso bar water filter
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_espresso_filter
+        state_not: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_car_oil_done
+      primary: Car oil change
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_car_oil
+        state_not: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_furnace_filters_done
+      primary: Furnace filters
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_furnace_filters
+        state_not: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_grill_cleaning_done
+      primary: Grill cleaning
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_grill_cleaning
+        state_not: "ok"
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Up to date
+      heading_style: title
+    - <<: *maintenance_card
+      entity: input_button.maintenance_cat_pee_pad_done
+      primary: Cat pee pad
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_cat_pee_pad
+        state: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_under_sink_filter_done
+      primary: Under-sink water filter
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_under_sink_filter
+        state: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_fridge_filter_done
+      primary: Fridge water filter
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_fridge_filter
+        state: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_espresso_filter_done
+      primary: Espresso bar water filter
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_espresso_filter
+        state: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_car_oil_done
+      primary: Car oil change
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_car_oil
+        state: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_furnace_filters_done
+      primary: Furnace filters
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_furnace_filters
+        state: "ok"
+    - <<: *maintenance_card
+      entity: input_button.maintenance_grill_cleaning_done
+      primary: Grill cleaning
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_grill_cleaning
+        state: "ok"
+  # Rare actions, one level down: change an interval, or fix a date.
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Intervals (days)
+      heading_style: title
+    - type: markdown
+      content: 'Days between reminders. A change applies at once: next due = last done + interval.'
+    - type: tile
+      entity: input_number.maintenance_cat_pee_pad_interval_days
+      name: Cat pee pad
+      features_position: bottom
+      features:
+      - type: numeric-input
+    - type: tile
+      entity: input_number.maintenance_under_sink_filter_interval_days
+      name: Under-sink water filter
+      features_position: bottom
+      features:
+      - type: numeric-input
+    - type: tile
+      entity: input_number.maintenance_fridge_filter_interval_days
+      name: Fridge water filter
+      features_position: bottom
+      features:
+      - type: numeric-input
+    - type: tile
+      entity: input_number.maintenance_espresso_filter_interval_days
+      name: Espresso bar water filter
+      features_position: bottom
+      features:
+      - type: numeric-input
+    - type: tile
+      entity: input_number.maintenance_car_oil_interval_days
+      name: Car oil change
+      features_position: bottom
+      features:
+      - type: numeric-input
+    - type: tile
+      entity: input_number.maintenance_furnace_filters_interval_days
+      name: Furnace filters
+      features_position: bottom
+      features:
+      - type: numeric-input
+    - type: tile
+      entity: input_number.maintenance_grill_cleaning_interval_days
+      name: Grill cleaning
+      features_position: bottom
+      features:
+      - type: numeric-input
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Fix a date
+      heading_style: title
+    - type: custom:mushroom-template-card
+      primary: Set a last-done date
+      secondary: Enter when a task was last done, or undo a mis-tapped Done.
+      icon: mdi:calendar-edit
+      icon_color: blue
+      multiline_secondary: true
+      # The script's more-info dialog is a form: task + date-time picker.
+      tap_action:
+        action: more-info
+      entity: script.maintenance_correct_last_done
 - title: Audio / Visual
   theme: Tinted
   path: av

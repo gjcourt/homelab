@@ -182,7 +182,7 @@
 - alias: "Nightlight — prime today's offset on HA start"
   description: >
     On Home Assistant startup, re-roll today's offset so the first night
-    after a restart isn't pinned to the input_number.initial value (0).
+    after a restart isn't left at a stale or fresh-install (0) value.
     Also covers the case where the user just bumped the max.
   trigger:
     - platform: homeassistant
@@ -546,3 +546,84 @@
     - event: maintenance_interval_seeded
       event_data:
         keys: "{{ todo }}"
+
+# ============================================================================
+# Helper defaults and saving (HASS-7)
+# ============================================================================
+# The auto-off minutes and nightlight settings have no `initial:` (it reset
+# George's edits on every start; see configuration.yaml). This writes each
+# default once, on a fresh install: sensor.helper_defaults_seeded remembers
+# which helpers have been written, so a restored value is never overwritten.
+# nightlight_offset_today isn't listed: "Nightlight — prime today's offset on
+# HA start" re-rolls it on every start, so seeding it would only fight that.
+#
+# The first start after this change also writes these defaults once (no
+# helper is in the seeded list yet). That matches what `initial:` did on every
+# start before, so nothing set since the previous start survived anyway.
+- alias: "Helpers — seed defaults on a fresh install"
+  description: "On start, write the default of any auto-off or nightlight setting that has never been seeded."
+  mode: single
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    - variables:
+        defaults:
+          input_number.hall_bathroom_fan_minutes: 30
+          input_number.master_bathroom_fan_minutes: 30
+          input_number.powder_bathroom_fan_minutes: 30
+          input_number.laundry_room_light_minutes: 30
+          input_number.nightlight_brightness: 6
+          input_number.nightlight_random_offset: 30
+          input_datetime.nightlight_turnoff_time: "23:00:00"
+        seeded: "{{ state_attr('sensor.helper_defaults_seeded', 'keys') or [] }}"
+        todo: "{{ defaults.keys() | reject('in', seeded) | list }}"
+    - condition: template
+      value_template: "{{ todo | count > 0 }}"
+    - repeat:
+        for_each: "{{ todo }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ repeat.item.startswith('input_number.') }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ repeat.item }}"
+                data:
+                  value: "{{ defaults[repeat.item] }}"
+            else:
+              - service: input_datetime.set_datetime
+                target:
+                  entity_id: "{{ repeat.item }}"
+                data:
+                  time: "{{ defaults[repeat.item] }}"
+    - event: helper_defaults_seeded
+      event_data:
+        keys: "{{ todo }}"
+
+# Save restorable state as soon as one of these settings changes, so an edit
+# survives a hard kill (OOM, node loss); HA otherwise saves every 15 min and
+# on a clean stop. Same reason as "Maintenance — save state right after a
+# change" above.
+- alias: "Helpers — save settings right after a change"
+  description: "Persist auto-off and nightlight settings immediately after an edit."
+  mode: queued
+  trigger:
+    - platform: state
+      entity_id:
+        - input_number.hall_bathroom_fan_minutes
+        - input_number.master_bathroom_fan_minutes
+        - input_number.powder_bathroom_fan_minutes
+        - input_number.laundry_room_light_minutes
+        - input_number.nightlight_brightness
+        - input_number.nightlight_random_offset
+        - input_datetime.nightlight_turnoff_time
+      not_from:
+        - unknown
+        - unavailable
+      not_to:
+        - unknown
+        - unavailable
+  action:
+    - service: homeassistant.save_persistent_states

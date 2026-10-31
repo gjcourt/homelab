@@ -14,7 +14,7 @@ reproducible / restorable.
 | Config | Where it lives |
 |---|---|
 | `configuration.yaml`, `automations.yaml`, `binary_sensors.yaml` | git + mounted (`../files/`) |
-| **Control dashboard** (Overview / Control / Audio-Visual / Lights) | git + mounted (`../files/dashboards/control.yaml`) — YAML-mode, authoritative |
+| **House dashboard** (was "Control"; URL `/home-control`): Overview / Auto-shutoff / Light schedules / Maintenance / Audio-Visual / Lights | git + mounted (`../files/dashboards/control.yaml`) — YAML-mode, authoritative |
 | **Areas** (`core.area_registry.json`) | UI-only → **snapshot here** |
 | **Floor Plan / Map** dashboards (`lovelace.floorplan.json`, `lovelace.map.json`) | UI-only (storage-mode) → **snapshot here** |
 | **Switchboard** (`lovelace.switchboard.json`) | **retired** — superseded by the git `Lights` view; snapshot kept for history |
@@ -28,7 +28,7 @@ reinstalled through HACS (HACS → search → Download → reload the browser).
 
 | Component | Used by | Without it |
 |---|---|---|
-| [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) (`thomasloven/lovelace-auto-entities`, tested v1.16.1) | Control → Maintenance view and its Maintenance intervals subview (HASS-2): every task list | Each list shows HA's "Custom element doesn't exist: auto-entities" card; tasks, reminders and the phone Done action still work |
+| [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) (`thomasloven/lovelace-auto-entities`, tested v1.16.1) | House → Maintenance view and its Maintenance intervals subview (HASS-2): every task list | Each list shows HA's "Custom element doesn't exist: auto-entities" card; tasks, reminders and the phone Done action still work |
 
 The vendored cards (Mushroom, card-mod, clock-weather) are different: they are
 in git (`../files/www/`) and load through `frontend.extra_module_url`.
@@ -53,6 +53,6 @@ kubectl exec -n homeassistant-prod "$POD" -- cat /config/.storage/lovelace.floor
 ## Direction
 
 Migrate these UI-managed dashboards to YAML-mode in `../files/dashboards/` over time (as
-Control already is) — e.g. Floor Plan when it's revisited. Until then, this snapshot is the
+the House dashboard already is) — e.g. Floor Plan when it's revisited. Until then, this snapshot is the
 git-tracked record. No secret-bearing `.storage` files (auth, tokens, credentials) are ever
 copied here.

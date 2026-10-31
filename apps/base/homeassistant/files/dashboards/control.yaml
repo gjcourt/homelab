@@ -170,8 +170,9 @@ views:
   icon: mdi:timer-cog-outline
   type: sections
   max_columns: 3
-  # HASS-7. Was the "Control" view (no path, so it was /home-control/1;
-  # nothing in this dashboard linked to it). George, 2026-10-31: "the timers
+  # HASS-7. Was the "Control" view of what is now the House dashboard (no
+  # path, so it was /home-control/1; nothing in this dashboard linked to
+  # it). George, 2026-10-31: "the timers
   # all work the same way - it's just what they control is different",
   # "2 are lights, and 3 are bathrooms", "really it's like the
   # 'Auto-shutoff' page", "the nightlight is separate" (it moved to the

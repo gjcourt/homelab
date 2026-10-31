@@ -15,15 +15,17 @@ frontend:
     - /local/clock-weather-card.js
 
 # Lovelace dashboards. Default + Map / Floor Plan / Switchboard stay
-# UI-managed (storage mode). Only the Control dashboard is migrated to
+# UI-managed (storage mode). Only the House dashboard (was "Control") is migrated to
 # YAML mode here — its source-of-truth lives at files/dashboards/control.yaml
 # and is bundled into the homeassistant-config ConfigMap by the
 # configMapGenerator. Edits go through PRs.
 #
 # Note: HA's lovelace.dashboards schema rejects single-word slug keys
 # (must contain a hyphen). We use `home-control` as the slug — the
-# dashboard renders with the configured `title:` ("Control") regardless
-# of the slug, only the URL path (/home-control) reflects the slug.
+# dashboard renders with the configured `title:` ("House") regardless
+# of the slug, only the URL path (/home-control) reflects the slug. The
+# slug and the file name (dashboards/control.yaml) date from when it was
+# titled "Control"; they stay so bookmarks and navigation paths keep working.
 # Storage is the default mode (the other dashboards stay UI-managed); the
 # `mode:` key is deprecated, so it isn't set.
 lovelace:
@@ -31,8 +33,8 @@ lovelace:
     home-control:
       mode: yaml
       filename: dashboards/control.yaml
-      title: Control
-      icon: mdi:view-dashboard
+      title: House
+      icon: mdi:home-variant
       show_in_sidebar: true
 
 # Auto-off helpers. Each has:
@@ -49,13 +51,21 @@ lovelace:
 #
 # The auto-off automations in automations.yaml tie them to the corresponding
 # Lutron Caseta switch/light entities.
+#
+# No `initial:` on these helpers (or on input_datetime.nightlight_turnoff_time
+# below): `initial:` resets the value on every HA start, which discarded
+# George's dashboard edits (HASS-7, 2026-10-31). The defaults are written once,
+# on a fresh install, by "Helpers — seed defaults on a fresh install"
+# (automations.yaml), which lists them; sensor.helper_defaults_seeded
+# remembers which have been written, so a restored value is never overwritten.
+# nightlight_offset_today is not seeded: the nightlight priming automation
+# re-rolls it on every start and at midnight.
 input_number:
   hall_bathroom_fan_minutes:
     name: Hall Bathroom Fan Timer
     min: 4
     max: 45
     step: 1
-    initial: 30
     unit_of_measurement: min
     mode: slider
   master_bathroom_fan_minutes:
@@ -63,7 +73,6 @@ input_number:
     min: 4
     max: 45
     step: 1
-    initial: 30
     unit_of_measurement: min
     mode: slider
   powder_bathroom_fan_minutes:
@@ -71,7 +80,6 @@ input_number:
     min: 4
     max: 45
     step: 1
-    initial: 30
     unit_of_measurement: min
     mode: slider
   nightlight_brightness:
@@ -79,7 +87,6 @@ input_number:
     min: 1
     max: 100
     step: 1
-    initial: 6
     unit_of_measurement: "%"
     mode: slider
   nightlight_random_offset:
@@ -91,7 +98,6 @@ input_number:
     min: 0
     max: 60
     step: 5
-    initial: 30
     unit_of_measurement: min
     mode: slider
   nightlight_offset_today:
@@ -103,7 +109,6 @@ input_number:
     min: 0
     max: 120
     step: 1
-    initial: 0
     unit_of_measurement: min
     mode: box
   laundry_room_light_minutes:
@@ -111,7 +116,6 @@ input_number:
     min: 4
     max: 45
     step: 1
-    initial: 30
     unit_of_measurement: min
     mode: slider
 
@@ -169,7 +173,6 @@ input_datetime:
     name: Nightlight Turn Off Time
     has_date: false
     has_time: true
-    initial: "23:00"
 
 # Nightlight template sensor — turn-off time = base time + today's offset.
 # Today's offset is held in input_number.nightlight_offset_today (single
@@ -250,6 +253,22 @@ template:
       - name: "Maintenance seeded intervals"
         unique_id: maintenance_seeded_intervals
         default_entity_id: sensor.maintenance_seeded_intervals
+        icon: mdi:sprout
+        state: "{{ ((this.attributes.get('keys') or []) + (trigger.event.data.get('keys') or [])) | unique | list | count }}"
+        attributes:
+          keys: "{{ ((this.attributes.get('keys') or []) + (trigger.event.data.get('keys') or [])) | unique | list }}"
+
+# Which helpers have had their fresh-install default written (see "No
+# `initial:`" above and "Helpers — seed defaults on a fresh install" in
+# automations.yaml). Same pattern as maintenance_seeded_intervals; a separate
+# sensor so that adding it doesn't re-seed the maintenance intervals.
+  - triggers:
+      - trigger: event
+        event_type: helper_defaults_seeded
+    sensor:
+      - name: "Helper defaults seeded"
+        unique_id: helper_defaults_seeded
+        default_entity_id: sensor.helper_defaults_seeded
         icon: mdi:sprout
         state: "{{ ((this.attributes.get('keys') or []) + (trigger.event.data.get('keys') or [])) | unique | list | count }}"
         attributes:

@@ -547,6 +547,38 @@
       event_data:
         keys: "{{ todo }}"
 
+# A restored auto-off timer that ran out while HA was down finishes during
+# start-up, before automations listen, so the turn-off automations above miss
+# its timer.finished event. sensor.auto_off_timer_deadlines still holds when
+# each timer was due (it isn't updated during start-up): for any timer whose
+# deadline has passed and which is now idle, fire timer.finished again so the
+# existing "turn off" automations run unchanged.
+- alias: "Auto-off — finish timers that ran out while HA was down"
+  description: "On start, re-fire timer.finished for auto-off timers that expired while Home Assistant was stopped."
+  mode: single
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    - repeat:
+        for_each: >
+          {% set d = states.sensor.auto_off_timer_deadlines %}
+          {% set ns = namespace(due=[]) %}
+          {% if d is not none %}
+            {% for key, when in d.attributes.items() %}
+              {% set t = 'timer.' ~ key %}
+              {% if when and t.endswith('_timer') and is_state(t, 'idle')
+                    and as_datetime(when, none) is not none and as_datetime(when) <= now() %}
+                {% set ns.due = ns.due + [t] %}
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+          {{ ns.due }}
+        sequence:
+          - event: timer.finished
+            event_data:
+              entity_id: "{{ repeat.item }}"
+
 # ============================================================================
 # Helper defaults and saving (HASS-7)
 # ============================================================================
@@ -607,7 +639,7 @@
 # on a clean stop. Same reason as "Maintenance — save state right after a
 # change" above.
 - alias: "Helpers — save settings right after a change"
-  description: "Persist auto-off and nightlight settings immediately after an edit."
+  description: "Persist auto-off and nightlight settings, and auto-off timer starts and stops, immediately."
   mode: queued
   trigger:
     - platform: state
@@ -625,5 +657,16 @@
       not_to:
         - unknown
         - unavailable
+    # The auto-off timers restore across restarts (restore: true), and the
+    # deadline sensor backs up when each is due. No to/from filter, so a
+    # restart of a running timer (same state, new finishes_at) saves too.
+    # Their attributes only change on a real start, pause, cancel or finish.
+    - platform: state
+      entity_id:
+        - timer.hall_bathroom_fan_timer
+        - timer.master_bathroom_fan_timer
+        - timer.powder_bathroom_fan_timer
+        - timer.laundry_room_light_timer
+        - sensor.auto_off_timer_deadlines
   action:
     - service: homeassistant.save_persistent_states

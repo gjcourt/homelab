@@ -170,7 +170,7 @@ views:
   icon: mdi:timer-cog-outline
   type: sections
   max_columns: 3
-  # HASS-7. Was the "Control" view of what is now the House dashboard (no
+  # HASS-7. Was the "Control" view of what is now the Config dashboard (no
   # path, so it was /home-control/1; nothing in this dashboard linked to
   # it). George, 2026-10-31: "the timers
   # all work the same way - it's just what they control is different",

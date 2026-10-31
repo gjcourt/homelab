@@ -14,15 +14,15 @@ frontend:
     - /local/mushroom.js
     - /local/clock-weather-card.js
 
-# Lovelace dashboards. Default + Map / Floor Plan / Switchboard stay
-# UI-managed (storage mode). Only the House dashboard (was "Control") is migrated to
-# YAML mode here — its source-of-truth lives at files/dashboards/control.yaml
-# and is bundled into the homeassistant-config ConfigMap by the
+# Lovelace dashboards. Default + Map / Floor Plan stay UI-managed (storage
+# mode); Switchboard was deleted 2026-10-31. Only the Config dashboard (was
+# "Control", briefly "House") is migrated to YAML mode here — its
+# source-of-truth lives at files/dashboards/control.yaml and is bundled into the homeassistant-config ConfigMap by the
 # configMapGenerator. Edits go through PRs.
 #
 # Note: HA's lovelace.dashboards schema rejects single-word slug keys
 # (must contain a hyphen). We use `home-control` as the slug — the
-# dashboard renders with the configured `title:` ("House") regardless
+# dashboard renders with the configured `title:` ("Config") regardless
 # of the slug, only the URL path (/home-control) reflects the slug. The
 # slug and the file name (dashboards/control.yaml) date from when it was
 # titled "Control"; they stay so bookmarks and navigation paths keep working.
@@ -33,8 +33,8 @@ lovelace:
     home-control:
       mode: yaml
       filename: dashboards/control.yaml
-      title: House
-      icon: mdi:home-variant
+      title: Config
+      icon: mdi:tune-variant
       show_in_sidebar: true
 
 # Auto-off helpers. Each has:
@@ -119,15 +119,22 @@ input_number:
     unit_of_measurement: min
     mode: slider
 
+# restore: true (George, 2026-10-31): a running or paused timer resumes after
+# an HA restart with the time it had left. One that ran out while HA was down
+# finishes as soon as HA starts.
 timer:
   hall_bathroom_fan_timer:
     name: Hall Bathroom Fan Timer
+    restore: true
   master_bathroom_fan_timer:
     name: Master Bathroom Fan Timer
+    restore: true
   powder_bathroom_fan_timer:
     name: Powder Bathroom Fan Timer
+    restore: true
   laundry_room_light_timer:
     name: Laundry Room Light Timer
+    restore: true
 
 automation: !include automations.yaml
 script: !include scripts.yaml
@@ -257,6 +264,38 @@ template:
         state: "{{ ((this.attributes.get('keys') or []) + (trigger.event.data.get('keys') or [])) | unique | list | count }}"
         attributes:
           keys: "{{ ((this.attributes.get('keys') or []) + (trigger.event.data.get('keys') or [])) | unique | list }}"
+
+# When each running auto-off timer is due to finish, as last seen while HA
+# was up. A timer (restore: true) that runs out while HA is down finishes
+# during start-up, before automations are listening, so its timer.finished
+# event is missed (tested on 2026-10.2: the laundry light stayed on). This
+# sensor isn't updated during start-up either, so it still holds the old
+# deadline; "Auto-off — finish timers that ran out while HA was down"
+# (automations.yaml) compares it with now and re-fires timer.finished for the
+# existing auto-off automations. State = how many were running, never
+# `unknown`, so the attributes restore.
+  - triggers:
+      - trigger: state
+        entity_id:
+          - timer.hall_bathroom_fan_timer
+          - timer.master_bathroom_fan_timer
+          - timer.powder_bathroom_fan_timer
+          - timer.laundry_room_light_timer
+      - trigger: event
+        event_type: timer.finished
+    sensor:
+      - name: "Auto-off timer deadlines"
+        unique_id: auto_off_timer_deadlines
+        default_entity_id: sensor.auto_off_timer_deadlines
+        icon: mdi:timer-sand
+        state: >
+          {{ ['timer.hall_bathroom_fan_timer', 'timer.master_bathroom_fan_timer', 'timer.powder_bathroom_fan_timer', 'timer.laundry_room_light_timer']
+             | select('is_state', 'active') | list | count }}
+        attributes:
+          hall_bathroom_fan_timer: "{{ state_attr('timer.hall_bathroom_fan_timer', 'finishes_at') if is_state('timer.hall_bathroom_fan_timer', 'active') else none }}"
+          master_bathroom_fan_timer: "{{ state_attr('timer.master_bathroom_fan_timer', 'finishes_at') if is_state('timer.master_bathroom_fan_timer', 'active') else none }}"
+          powder_bathroom_fan_timer: "{{ state_attr('timer.powder_bathroom_fan_timer', 'finishes_at') if is_state('timer.powder_bathroom_fan_timer', 'active') else none }}"
+          laundry_room_light_timer: "{{ state_attr('timer.laundry_room_light_timer', 'finishes_at') if is_state('timer.laundry_room_light_timer', 'active') else none }}"
 
 # Which helpers have had their fresh-install default written (see "No
 # `initial:`" above and "Helpers — seed defaults on a fresh install" in

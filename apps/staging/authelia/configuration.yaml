@@ -18,6 +18,13 @@ access_control:
       policy: one_factor
     - domain: "chat.stage.burntbytes.com"
       policy: one_factor
+    # plane-mobile does its own OIDC sign-in (client plane-mobile below) and
+    # enforces it on /api/*; the static shell (/, manifest.webmanifest,
+    # sw.js, /static/) is public by design (George, 2026-10-26). Explicit
+    # bypass so a later default_policy change can't put forward-auth in
+    # front of the app's own sign-in flow.
+    - domain: "desk.stage.burntbytes.com"
+      policy: bypass
     - domain: "auth.stage.burntbytes.com"
       policy: bypass
       resources:
@@ -129,6 +136,28 @@ identity_providers:
           - https://links.stage.burntbytes.com/oidc/callback/
         scopes:
           - email
+          - openid
+          - profile
+        userinfo_signed_response_alg: none
+      # plane-mobile (desk.stage.burntbytes.com). The app sends PKCE S256 and
+      # authenticates with HTTP Basic; scopes are openid + profile
+      # (preferred_username). PLACEHOLDER client_secret — George replaces it
+      # with the pbkdf2 digest whose plaintext goes in the plane-mobile Secret
+      # (apps/staging/plane-mobile/secret-plane-mobile.yaml.example). The
+      # placeholder is not a valid digest: it must not reach a running
+      # Authelia. The missing Secret file keeps this PR out of the staging
+      # branch until George replaces it in the same commit.
+      - client_id: plane-mobile
+        client_name: plane-mobile (Staging)
+        client_secret: '$pbkdf2-sha512$310000$DCuUHoicp/jUENLxVxNEYA$tVhKccHnn1yFOgMWDY8dxbNIxR.ufXm6hsBcEmC9Xhznq2gVEsC50JzMXwFr1WVE3YGNu8kkXyb.bR9z1a6uaQ'
+        public: false
+        authorization_policy: two_factor
+        require_pkce: true
+        pkce_challenge_method: S256
+        token_endpoint_auth_method: client_secret_basic
+        redirect_uris:
+          - https://desk.stage.burntbytes.com/auth/callback
+        scopes:
           - openid
           - profile
         userinfo_signed_response_alg: none

@@ -1,0 +1,15 @@
+# Two callers: the gateway (HTTPRoute in the overlay) and Plane's worker,
+# which delivers webhooks to http://plane-mobile.<namespace>.svc.cluster.local/plane.
+# That in-cluster name is the entry in Plane's WEBHOOK_ALLOWED_HOSTS.
+apiVersion: v1
+kind: Service
+metadata:
+  name: plane-mobile
+  namespace: plane-mobile
+spec:
+  selector:
+    app: plane-mobile
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

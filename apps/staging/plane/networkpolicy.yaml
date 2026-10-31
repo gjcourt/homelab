@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/part-of: network-policies
 spec:
   description: >-
-    Gateway ingress to the web, space, admin, live, api and MinIO ports; bench-cloud and agent-desk-stage to the api; anything within the namespace; egress DNS, the namespace (CNPG included) and agent-desk-stage webhooks.
+    Gateway ingress to the web, space, admin, live, api and MinIO ports; bench-cloud, agent-desk-stage and plane-mobile-stage to the api; anything within the namespace; egress DNS, the namespace (CNPG included) and agent-desk-stage / plane-mobile-stage webhooks.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: plane-ce
@@ -52,6 +52,15 @@ spec:
         - ports:
             - port: "8000"
               protocol: TCP
+    # plane-mobile (staging) reads and updates tickets for the phone client.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-mobile-stage
+            app: plane-mobile
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:
@@ -71,6 +80,16 @@ spec:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: agent-desk-stage
             app: agent-desk
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Webhook deliveries to plane-mobile-stage (POST /plane), also listed in
+    # WEBHOOK_ALLOWED_HOSTS.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-mobile-stage
+            app: plane-mobile
       toPorts:
         - ports:
             - port: "8080"

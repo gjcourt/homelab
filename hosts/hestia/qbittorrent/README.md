@@ -8,7 +8,8 @@ qBittorrent P2P client running as a TrueNAS Custom App on hestia. Used for priva
 | Web UI | `http://10.42.2.10:8080` (LAN-only) |
 | Torrenting port | `6881/tcp` + `6881/udp` |
 | Config dataset | `/mnt/main/apps/qbittorrent/config` |
-| Downloads dataset | `/mnt/main/downloads` (subdirs: `incomplete/`, `complete/`) |
+| Downloads (`/downloads` in the container) | `/mnt/main/family/media/video/movies` — the Jellyfin movies library itself (see below) |
+| Runs as | `truenas_admin` (uid/gid 950) |
 | Network | host bridge, no VPN |
 
 ## One-time bootstrap
@@ -19,10 +20,9 @@ qBittorrent P2P client running as a TrueNAS Custom App on hestia. Used for priva
    sudo zfs list main/apps 2>/dev/null || sudo zfs create main/apps
    sudo zfs create main/apps/qbittorrent
    sudo mkdir -p /mnt/main/apps/qbittorrent/config
-   sudo zfs create main/downloads
-   sudo mkdir -p /mnt/main/downloads/{incomplete,complete}
-   sudo chown -R 950:950 /mnt/main/apps/qbittorrent /mnt/main/downloads
+   sudo chown -R 950:950 /mnt/main/apps/qbittorrent
    ```
+   The downloads path is the existing movies library, not a separate dataset (see below).
 
 2. **Router port forward on UCGF** (one-time): forward inbound `WAN tcp/udp 6881` → `10.42.2.10:6881`. Without this, qBittorrent runs in passive mode (no inbound connections, no seeding, degraded download speeds).
 
@@ -42,8 +42,8 @@ qBittorrent P2P client running as a TrueNAS Custom App on hestia. Used for priva
 ## Recommended qBittorrent settings (set via Web UI on first login)
 
 - **Downloads**:
-  - Default save path: `/downloads/complete`
-  - Keep incomplete torrents in: `/downloads/incomplete` (toggle on, set path)
+  - Default save path: `/downloads` — this is the movies library itself (see below), so a
+    `complete/` or `incomplete/` subfolder here would appear inside the library
   - Append `.!qB` to incomplete files: on
 - **Connection**:
   - Port used for incoming connections: `6881`
@@ -63,13 +63,29 @@ Once the Custom App is bootstrapped, every change to `docker-compose.yml` on `ma
 
 To roll back: revert the offending commit and merge; auto-deploy applies the old compose. Or manually `midclt call app.update qbittorrent '{"custom_compose_config": "<old yaml>"}'` from a hestia shell.
 
-## Moving completed downloads to the Jellyfin library
+## Downloads land in the library, which is also the seeding set
 
-This stack intentionally does NOT mount `/mnt/main/media/` into qBittorrent. After a torrent finishes, manually move the contents:
+`/downloads` is bind-mounted to `/mnt/main/family/media/video/movies`, so completed torrents land
+directly in the Jellyfin movies library and seed from there. This layout matches the old alcatraz
+qBittorrent, which let the migrated `.fastresume` files resolve without path rewrites. (An earlier layout used a separate `main/downloads` dataset; it no longer exists on hestia.)
 
-```bash
-# On hestia
-sudo mv /mnt/main/downloads/complete/'Some.Movie.2026.mkv' /mnt/main/media/movies/
-```
+Consequences:
 
-Then Dashboard → Scheduled Tasks → "Scan Media Library" in Jellyfin (or wait for the automatic interval) to pick it up.
+- **Don't rename, dedup or transcode-and-delete files in `video/movies` on the filesystem** — it
+  breaks the torrents (missing-files, seeding stops). Use qBittorrent's own Rename, which updates
+  the torrent's file map. Jellyfin matches scene names without it.
+- **"Delete torrent and files" reaches into the library.** Don't use that right-click option
+  casually. For a staging-then-move workflow, give a category its own save path.
+- **The directory must be writable by uid 950.** Files copied in as `root:root 755` seed fine
+  (read-only) but any partial torrent fails with `file_open ... Permission denied`. Fix with
+  `sudo chown -R truenas_admin:truenas_admin` on the affected path.
+
+## Migrating qBittorrent state between hosts
+
+Stop both instances so their config is flushed, rsync the whole `config/qBittorrent/` directory
+across, `chown -R 950:950` it, make sure the downloads path exists at the same in-container path and
+is writable by 950, then start the new instance. Torrents are rediscovered from `BT_backup/`; Force
+Recheck one before Resume All.
+
+qBittorrent 5.x Web API: `/torrents/pause` and `/torrents/resume` return 404 — use
+`/torrents/stop` and `/torrents/start`. `/torrents/recheck` is unchanged.

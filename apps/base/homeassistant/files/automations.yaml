@@ -384,3 +384,165 @@
             data:
               url: "{{ trigger.json.url | default('') }}"
               clickAction: "{{ trigger.json.url | default('') }}"
+
+# ============================================================================
+# Maintenance reminders (HASS-2)
+# ============================================================================
+# Tasks are packages in configuration.yaml ("Maintenance reminders"). These
+# automations find them by name (sensor.maintenance_<task>, which carries a
+# default_interval attribute), so adding a task needs no change here.
+#
+# Reminders are day-granular: a task turns "due" at midnight on its due date,
+# so one push at 09:00 covers "it just came due", and the same 09:00 run
+# repeats once a day while it stays due or overdue. There is deliberately no
+# homeassistant-start or state trigger, so a restart never re-sends. If HA is
+# down at 09:00 that day's reminder is skipped; the next day's still goes.
+#
+# Staging has no phone registered (no mobile_app entities), so there the
+# reminder is a persistent notification only (same guard as agent-desk above).
+
+- alias: "Maintenance — daily reminder for due and overdue tasks"
+  description: "At 09:00, remind George of each maintenance task that is due or overdue, with a Done action."
+  mode: single
+  trigger:
+    - platform: time
+      at: "09:00:00"
+  action:
+    - variables:
+        tasks: >
+          {{ states.sensor
+             | selectattr('entity_id', 'match', 'sensor\.maintenance_')
+             | selectattr('attributes.default_interval', 'defined')
+             | selectattr('state', 'in', ['due', 'overdue'])
+             | map(attribute='entity_id') | list }}
+    - repeat:
+        for_each: "{{ tasks }}"
+        sequence:
+          - variables:
+              key: "{{ repeat.item.split('.')[1] }}"
+              name: "{{ state_attr(repeat.item, 'friendly_name') }}"
+              left: "{{ state_attr(repeat.item, 'days_left') | int(0) }}"
+              last: "{{ state_attr(repeat.item, 'last_done') }}"
+              title: >
+                {% if left == 0 %}{{ name }} is due today
+                {% else %}{{ name }} is overdue by {{ -left }} day{{ 's' if -left != 1 }}
+                {% endif %}
+              message: >
+                Last done {{ as_timestamp(last) | timestamp_custom('%a %-d %b %Y') }}
+                ({{ state_attr(repeat.item, 'interval_text') }}).
+          - service: persistent_notification.create
+            data:
+              notification_id: "{{ key }}"
+              title: "{{ title }}"
+              message: "{{ message }}"
+          - if:
+              - condition: template
+                value_template: "{{ integration_entities('mobile_app') | length > 0 }}"
+            then:
+              - service: notify.mobile_app_parthenon
+                data:
+                  title: "{{ title }}"
+                  message: "{{ message }} Press and hold to mark it done."
+                  data:
+                    # Same tag per task, so today's reminder replaces
+                    # yesterday's instead of stacking.
+                    tag: "{{ key }}"
+                    actions:
+                      - action: "MAINTENANCE_DONE:{{ key }}"
+                        title: "Done"
+
+# The phone's "Done" action presses the same button as the dashboard card, so
+# both paths record the time the same way (and keep the replaced date in the
+# last-done sensor's `previous` attribute).
+- alias: "Maintenance — Done from a phone notification"
+  description: "Handle the Done action on a maintenance reminder by pressing that task's Done button."
+  mode: queued
+  trigger:
+    - platform: event
+      event_type: mobile_app_notification_action
+  condition:
+    - condition: template
+      value_template: "{{ (trigger.event.data.action | default('')).startswith('MAINTENANCE_DONE:') }}"
+  action:
+    - variables:
+        key: "{{ trigger.event.data.action.split(':')[1] }}"
+    # The button must exist; its state is `unknown` until first pressed, so
+    # check existence, not state.
+    - condition: template
+      value_template: "{{ ('input_button.' ~ key ~ '_done') in states.input_button | map(attribute='entity_id') | list }}"
+    - service: input_button.press
+      target:
+        entity_id: "input_button.{{ key }}_done"
+    - service: persistent_notification.dismiss
+      data:
+        notification_id: "{{ key }}"
+
+# Home Assistant writes restorable state (last-done dates, intervals) to
+# .storage/core.restore_state only every 15 min and on a clean stop. After a
+# hard kill (OOM, node loss) the last 15 min of Done presses would be lost, so
+# save as soon as anything changes. Triggered by sensor.maintenance_change_marker,
+# which re-renders only after the last-done sensor itself has updated.
+#
+# Also dismisses the 09:00 persistent notification for any task that is now
+# up to date, whichever way it was marked done (dashboard, phone, script).
+- alias: "Maintenance — save state right after a change"
+  description: "Persist maintenance dates and intervals immediately, and clear reminders for tasks that are now OK."
+  mode: queued
+  trigger:
+    - platform: state
+      entity_id: sensor.maintenance_change_marker
+      not_from:
+        - unknown
+        - unavailable
+      not_to:
+        - unknown
+        - unavailable
+  action:
+    - service: homeassistant.save_persistent_states
+    - repeat:
+        for_each: >
+          {{ states.sensor
+             | selectattr('entity_id', 'match', 'sensor\.maintenance_')
+             | selectattr('attributes.default_interval', 'defined')
+             | selectattr('state', 'eq', 'ok')
+             | map(attribute='entity_id') | list }}
+        sequence:
+          - service: persistent_notification.dismiss
+            data:
+              notification_id: "{{ repeat.item.split('.')[1] }}"
+
+# Fresh install: each interval input_number starts at its min (0). Write the
+# task's default into it once, so the dashboard shows the intended value.
+# sensor.maintenance_seeded_intervals (configuration.yaml) remembers which
+# tasks have been seeded, so this never overwrites a value George set, 0
+# included. A task added later gets its default on the next start.
+- alias: "Maintenance — seed default intervals"
+  description: "On start, write the default interval of any maintenance task that has never been seeded."
+  mode: single
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    - variables:
+        seeded: "{{ state_attr('sensor.maintenance_seeded_intervals', 'keys') or [] }}"
+        todo: >
+          {{ states.sensor
+             | selectattr('entity_id', 'match', 'sensor\.maintenance_')
+             | selectattr('attributes.default_interval', 'defined')
+             | map(attribute='entity_id')
+             | map('replace', 'sensor.', '')
+             | reject('in', seeded)
+             | list }}
+    - condition: template
+      value_template: "{{ todo | count > 0 }}"
+    - repeat:
+        for_each: "{{ todo }}"
+        sequence:
+          - service: input_number.set_value
+            target:
+              entity_id: "input_number.{{ repeat.item }}_interval"
+            data:
+              value: "{{ state_attr('sensor.' ~ repeat.item, 'default_interval') | float }}"
+    - event: maintenance_interval_seeded
+      event_data:
+        keys: "{{ todo }}"

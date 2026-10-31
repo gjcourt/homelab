@@ -134,7 +134,7 @@ views:
     # TODO: add `hallway_landing` area card once that Area is created in HA.
   # Summary strip — glanceable counts, tap to jump to the relevant tab.
   # Backed by template sensors in configuration.yaml (lights_on_count,
-  # media_playing_count).
+  # media_playing_count, maintenance_to_do_count).
   - type: grid
     column_span: 3
     cards:
@@ -156,6 +156,14 @@ views:
       tap_action:
         action: navigate
         navigation_path: av
+    # Due, overdue or never-recorded maintenance tasks (HASS-2).
+    - type: tile
+      entity: sensor.maintenance_to_do
+      name: Maintenance
+      icon: mdi:wrench-clock
+      tap_action:
+        action: navigate
+        navigation_path: maintenance
 - title: Control
   theme: Tinted
   type: sections
@@ -389,6 +397,239 @@ views:
     - type: tile
       entity: input_number.nightlight_offset_today
       name: Jitter (today)
+# Maintenance reminders (HASS-2). Tasks are packages in configuration.yaml
+# ("Maintenance reminders"). Every list here is built by auto-entities
+# (custom:auto-entities, installed through HACS, not vendored in git) from the
+# naming convention, so a new task appears with no edit to this file:
+#   status cards    sensor.maintenance_* with a `unit` attribute
+#   interval inputs input_number.maintenance_*_interval, grouped by unit
+# Lists sort shortest to longest interval (status sensor's `interval_days`;
+# interval inputs by value within a unit). Ties keep configuration order.
+# Without auto-entities installed, each list shows HA's "Custom element
+# doesn't exist: auto-entities" card instead.
+- title: Maintenance
+  theme: Tinted
+  path: maintenance
+  icon: mdi:wrench-clock
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Needs doing — tap a card when you do it
+      heading_style: title
+    - type: custom:auto-entities
+      grid_options:
+        columns: full
+      card:
+        type: grid
+        columns: 1
+        square: false
+      card_param: cards
+      sort: &maintenance_sort
+        method: attribute
+        attribute: interval_days
+        numeric: true
+      else:
+        type: markdown
+        content: Nothing is due.
+      filter:
+        include:
+        - entity_id: "sensor.maintenance_*"
+          attributes:
+            unit: "/^(days|months|years)$/"
+          not:
+            state: "ok"
+          options: &maintenance_card
+            type: custom:mushroom-template-card
+            primary: "{{ state_attr(entity, 'friendly_name') }}"
+            # Line 1, the figure that matters: due when / overdue by how
+            # much. Line 2, smaller detail: last done and the interval.
+            secondary: >-
+              {%- set st = states(entity) -%}
+              {%- set left = state_attr(entity, 'days_left') -%}
+              {%- set every = state_attr(entity, 'interval_text') or 'interval unknown' -%}
+              {%- macro span(d) -%}
+              {%- if d <= 60 -%}{{ d }} day{{ 's' if d != 1 }}
+              {%- elif d < 365 -%}{{ (d / 30.44) | round(0) | int }} months
+              {%- else -%}{%- set y = (d / 365.25) | round(1) -%}{{ y | int if y == y | int else y }} year{{ 's' if y != 1 }}
+              {%- endif -%}
+              {%- endmacro -%}
+              {%- macro day(t) -%}
+              {#- next_due is a date, last_done a timestamp -#}
+              {%- set d = as_local(as_datetime(t)) if 'T' in t else strptime(t, '%Y-%m-%d') -%}
+              {{ d.strftime('%a %-d %b' if d.year == now().year else '%-d %b %Y') }}
+              {%- endmacro -%}
+              {%- if st not in ['ok', 'due', 'overdue'] -%}
+              Never recorded · {{ every }}
+              {%- else -%}
+              {%- if st == 'overdue' -%}Overdue by {{ span(-left) }}
+              {%- elif st == 'due' -%}Due today
+              {%- elif left == 1 -%}Due tomorrow
+              {%- elif left <= 60 -%}Due in {{ left }} days
+              {%- else -%}Due {{ strptime(state_attr(entity, 'next_due'), '%Y-%m-%d').strftime('%b %Y') }}
+              {%- endif -%}
+              {{ '\n' }}Last done {{ day(state_attr(entity, 'last_done')) }} · {{ every }}
+              {%- endif -%}
+            multiline_secondary: true
+            icon: "{{ state_attr(entity, 'icon') }}"
+            # red = overdue, amber = due today, green = ok, grey = never recorded.
+            icon_color: >-
+              {{ {'overdue': 'red', 'due': 'amber', 'ok': 'green'}.get(states(entity), 'disabled') }}
+            # Tap = Done. Confirmed, because it replaces the last-done date;
+            # the old one is kept in the last-done sensor's `previous`
+            # attribute and "Set a last-done date" puts it back.
+            tap_action:
+              action: perform-action
+              perform_action: script.maintenance_done
+              data:
+                task: this.entity_id
+              confirmation:
+                text: Record this task as done now? This replaces its last-done date.
+            hold_action:
+              action: more-info
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Up to date
+      heading_style: title
+    - type: custom:auto-entities
+      grid_options:
+        columns: full
+      card:
+        type: grid
+        columns: 1
+        square: false
+      card_param: cards
+      sort: *maintenance_sort
+      show_empty: false
+      filter:
+        include:
+        - entity_id: "sensor.maintenance_*"
+          attributes:
+            unit: "/^(days|months|years)$/"
+          state: "ok"
+          options: *maintenance_card
+  # Set-once configuration, one level down.
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Settings
+      heading_style: title
+    - type: custom:mushroom-template-card
+      primary: Edit intervals
+      secondary: How often tasks come due
+      icon: mdi:calendar-refresh
+      icon_color: blue
+      grid_options:
+        columns: full
+      tap_action:
+        action: navigate
+        navigation_path: maintenance-intervals
+    - type: custom:mushroom-template-card
+      primary: Set a last-done date
+      secondary: A past date, or undo a mis-tap
+      icon: mdi:calendar-edit
+      icon_color: blue
+      grid_options:
+        columns: full
+      # The script's more-info dialog is a form: task + date-time picker.
+      tap_action:
+        action: more-info
+      entity: script.maintenance_correct_last_done
+- title: Maintenance intervals
+  theme: Tinted
+  path: maintenance-intervals
+  subview: true
+  back_path: maintenance
+  type: sections
+  max_columns: 3
+  sections:
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Days
+      heading_style: title
+    - type: custom:auto-entities
+      grid_options:
+        columns: full
+      card:
+        type: grid
+        columns: 1
+        square: false
+      card_param: cards
+      sort:
+        method: state
+        numeric: true
+      show_empty: false
+      filter:
+        include:
+        - entity_id: "input_number.maintenance_*_interval"
+          attributes:
+            unit_of_measurement: days
+          options: &maintenance_interval_card
+            type: custom:mushroom-template-card
+            primary: "{{ state_attr(entity, 'friendly_name') | replace(' interval', '') }}"
+            # "6 months", "1¼ years": the status sensor's interval_label.
+            secondary: "{{ state_attr('sensor.' ~ entity.split('.')[1][:-9], 'interval_label') or 'unknown' }}"
+            icon: "{{ state_attr('sensor.' ~ entity.split('.')[1][:-9], 'icon') }}"
+            features_position: bottom
+            features:
+            - type: numeric-input
+              style: buttons
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Months
+      heading_style: title
+    - type: custom:auto-entities
+      grid_options:
+        columns: full
+      card:
+        type: grid
+        columns: 1
+        square: false
+      card_param: cards
+      sort:
+        method: state
+        numeric: true
+      show_empty: false
+      filter:
+        include:
+        - entity_id: "input_number.maintenance_*_interval"
+          attributes:
+            unit_of_measurement: months
+          options: *maintenance_interval_card
+  - type: grid
+    column_span: 1
+    cards:
+    - type: heading
+      heading: Years
+      heading_style: title
+    - type: custom:auto-entities
+      grid_options:
+        columns: full
+      card:
+        type: grid
+        columns: 1
+        square: false
+      card_param: cards
+      sort:
+        method: state
+        numeric: true
+      show_empty: false
+      filter:
+        include:
+        - entity_id: "input_number.maintenance_*_interval"
+          attributes:
+            unit_of_measurement: years
+          options: *maintenance_interval_card
 - title: Audio / Visual
   theme: Tinted
   path: av

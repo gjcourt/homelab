@@ -670,3 +670,128 @@
         - sensor.auto_off_timer_deadlines
   action:
     - service: homeassistant.save_persistent_states
+
+# ---------------------------------------------------------------------------
+# Daily shot (HASS-11). Helpers and sensor.daily_shot are in configuration.yaml
+# (package daily_shot).
+#
+# Phones that get the reminder: notify services, without the `notify.`
+# prefix. To add a phone, install the HA Companion app on it, then add its
+# notify name to `phones` in both automations below.
+# Staging has no phone registered (no mobile_app entities), so there the
+# reminder is a persistent notification only (same guard as Maintenance).
+
+- alias: "Daily shot — reminder"
+  description: "At 20:00, and again at 20:30 if not yet logged, say which side is next, with a Done action."
+  mode: single
+  trigger:
+    - platform: time
+      at: "20:00:00"
+    - platform: time
+      at: "20:30:00"
+  condition:
+    - condition: state
+      entity_id: sensor.daily_shot
+      state: "To do"
+  action:
+    - variables:
+        phones:
+          - mobile_app_parthenon
+        side: "{{ states('input_select.daily_shot_next_side') }}"
+        title: "Daily shot: {{ side | lower }} side"
+        message: >
+          {% set last = states('input_datetime.daily_shot_last_done') | as_datetime(none) %}
+          {% if last is none %}Not logged yet.
+          {% else %}Last one {{ as_local(last).strftime('%a %-d %b, %-I:%M %p') }}, {{ states('input_text.daily_shot_last_side') | lower }} side.
+          {% endif %}
+    - service: persistent_notification.create
+      data:
+        notification_id: daily_shot
+        title: "{{ title }}"
+        message: "{{ message }}"
+    - if:
+        - condition: template
+          value_template: "{{ integration_entities('mobile_app') | length > 0 }}"
+      then:
+        - repeat:
+            for_each: "{{ phones }}"
+            sequence:
+              - service: "notify.{{ repeat.item }}"
+                continue_on_error: true
+                data:
+                  title: "{{ title }}"
+                  message: "{{ message }} Press and hold to mark it done."
+                  data:
+                    # One tag, so the 20:30 nag replaces the 20:00 reminder.
+                    tag: daily_shot
+                    actions:
+                      - action: DAILY_SHOT_DONE
+                        title: "Done"
+
+- alias: "Daily shot — Done from a phone notification"
+  description: "Handle the Done action on the daily shot reminder by pressing the Done button."
+  mode: queued
+  trigger:
+    - platform: event
+      event_type: mobile_app_notification_action
+      event_data:
+        action: DAILY_SHOT_DONE
+  action:
+    - service: input_button.press
+      target:
+        entity_id: input_button.daily_shot_done
+
+# The one place a shot is logged, whichever way Done was pressed. A second
+# press on the same day does nothing, so a double tap can't flip the side twice.
+- alias: "Daily shot — log it"
+  description: "On Done, record the time and side, flip the next side, save state and clear the reminder."
+  mode: queued
+  trigger:
+    - platform: state
+      entity_id: input_button.daily_shot_done
+      not_to:
+        - unavailable
+        - unknown
+  condition:
+    - condition: state
+      entity_id: sensor.daily_shot
+      state: "To do"
+  action:
+    - variables:
+        phones:
+          - mobile_app_parthenon
+        side: "{{ states('input_select.daily_shot_next_side') }}"
+    - service: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.daily_shot_last_done
+      data:
+        datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+    - service: input_text.set_value
+      target:
+        entity_id: input_text.daily_shot_last_side
+      data:
+        value: "{{ side }}"
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.daily_shot_next_side
+      data:
+        option: "{{ 'Left' if side == 'Right' else 'Right' }}"
+    # Restorable state is otherwise written only every 15 min; save now so a
+    # hard kill can't lose the side (see "Maintenance — save state").
+    - service: homeassistant.save_persistent_states
+    - service: persistent_notification.dismiss
+      data:
+        notification_id: daily_shot
+    - if:
+        - condition: template
+          value_template: "{{ integration_entities('mobile_app') | length > 0 }}"
+      then:
+        - repeat:
+            for_each: "{{ phones }}"
+            sequence:
+              - service: "notify.{{ repeat.item }}"
+                continue_on_error: true
+                data:
+                  message: clear_notification
+                  data:
+                    tag: daily_shot

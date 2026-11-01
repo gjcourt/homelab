@@ -172,6 +172,38 @@ views:
       tap_action:
         action: navigate
         navigation_path: auto-shutoff
+  # Daily shot (HASS-11): today's status, the next side (pick it by hand to fix
+  # a mistake) and Done, which asks first so a stray tap can't log a shot.
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Daily shot
+      heading_style: title
+    - type: tile
+      entity: sensor.daily_shot
+      name: Today
+      icon: mdi:needle
+      state_content:
+        - state
+        - last_side
+    - type: tile
+      entity: input_select.daily_shot_next_side
+      name: Next side
+      features:
+        - type: select-options
+    - type: tile
+      entity: input_button.daily_shot_done
+      name: Done
+      icon: mdi:check-circle
+      hide_state: true
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.daily_shot_done
+        confirmation:
+          text: Log today's shot and switch the next side?
 - title: Auto-shutoff
   theme: Tinted
   path: auto-shutoff

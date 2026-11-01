@@ -123,6 +123,9 @@ spec:
             - name: config-file
               mountPath: /config/dashboards/control.yaml
               subPath: dashboards_control.yaml
+            - name: config-file
+              mountPath: /config/dashboards/home.yaml
+              subPath: dashboards_home.yaml
             # Vendored Mushroom card bundle, served at /local/mushroom.js and
             # registered via frontend.extra_module_url in configuration.yaml.
             - name: www-file

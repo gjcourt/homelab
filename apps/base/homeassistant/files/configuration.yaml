@@ -14,11 +14,11 @@ frontend:
     - /local/mushroom.js
     - /local/clock-weather-card.js
 
-# Lovelace dashboards. Default + Map / Floor Plan stay UI-managed (storage
-# mode); Switchboard was deleted 2026-10-31. Only the Config dashboard (was
-# "Control", briefly "House") is migrated to YAML mode here — its
-# source-of-truth lives at files/dashboards/control.yaml and is bundled into the homeassistant-config ConfigMap by the
-# configMapGenerator. Edits go through PRs.
+# Lovelace dashboards. Map / Floor Plan stay UI-managed (storage mode);
+# Switchboard was deleted 2026-10-31. Home (HASS-10) and the Config dashboard
+# (was "Control", briefly "House") are YAML mode here — their
+# source of truth is files/dashboards/{home,control}.yaml, bundled into the
+# homeassistant-config ConfigMap by the configMapGenerator. Edits go through PRs.
 #
 # Note: HA's lovelace.dashboards schema rejects single-word slug keys
 # (must contain a hyphen). We use `home-control` as the slug — the
@@ -30,6 +30,18 @@ frontend:
 # `mode:` key is deprecated, so it isn't set.
 lovelace:
   dashboards:
+    # Home (HASS-10): the main page. HA's built-in Overview (/home) can't be
+    # kept in YAML or given extra cards, so this rebuilds it from HA's own
+    # cards plus the Config dashboard's Overview content; see the header of
+    # dashboards/home.yaml. Made the default once in the UI (Settings →
+    # Dashboards → ⋮ → Set as default): HA has no YAML key for the default
+    # dashboard. Not admin-only, which "Set as default" requires.
+    home-page:
+      mode: yaml
+      filename: dashboards/home.yaml
+      title: Home
+      icon: mdi:home
+      show_in_sidebar: true
     home-control:
       mode: yaml
       filename: dashboards/control.yaml

@@ -231,6 +231,19 @@ template:
              | selectattr('attributes.default_interval', 'defined')
              | rejectattr('state', 'eq', 'ok')
              | list | count }}
+      # Auto-shutoff timers counting down right now (HASS-8). Finds them by the
+      # `timer.<name>_timer` convention above, so a new auto-off timer is
+      # counted without editing this. A paused timer isn't counted.
+      - name: "Auto-shutoff running"
+        unique_id: auto_shutoff_running_count
+        default_entity_id: sensor.auto_shutoff_running
+        unit_of_measurement: "running"
+        icon: mdi:timer-outline
+        state: >
+          {{ states.timer
+             | selectattr('entity_id', 'match', 'timer\..+_timer$')
+             | selectattr('state', 'eq', 'active')
+             | list | count }}
       # Changes whenever any maintenance last-done date or interval changes:
       # the sum of all last-done timestamps plus all intervals. It exists only
       # to trigger "Maintenance — save state right after a change"

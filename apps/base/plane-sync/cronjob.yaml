@@ -58,12 +58,6 @@ spec:
                   value: home
                 - name: OWNER_EMAIL
                   value: gjcourt@gmail.com
-                # Every active repo's docs/plans, each into its existing Plane
-                # project (George, 2026-11-01). plane-sync never creates these
-                # projects; the bot must be a Member of each, or it is skipped.
-                - name: REPO_PROJECTS
-                  value: >-
-                    homelab:HOMELAB:Homelab:plans,domestique:DOMESTIQUE:Domestique:plans,plane-mobile:PLANEMOBILE:Plane Mobile:plans,toppingctl:TOPPINGCTL:toppingctl:plans,modemscope:MODEMSCOPE:modemscope:plans,fax:FAX:fax:plans
                 - name: STATE_FILE
                   value: /state/plane-sync-state.json
                 - name: PLANE_API_KEY_FILE

@@ -780,3 +780,50 @@ homeassistant:
                 key: maintenance_grill_cleaning
                 unit: years
                 default: 2
+    # Daily shot (HASS-11): an 8 pm reminder that says which side is next,
+    # alternating left and right. Done (on the dashboard or the phone
+    # notification) records the time and side and flips the next side; the
+    # automations are in automations.yaml under "Daily shot".
+    # To fix a mistake, set "Daily shot next side" (and, if needed, "Daily
+    # shot last done") by hand on the dashboard.
+    daily_shot:
+      input_select:
+        daily_shot_next_side:
+          name: Daily shot next side
+          icon: mdi:swap-horizontal
+          # Right first on purpose: a new input_select starts on its first
+          # option, and the shot on 2026-10-31 was on the left. No `initial:`,
+          # so the value survives restarts.
+          options:
+            - Right
+            - Left
+      input_button:
+        daily_shot_done:
+          name: Daily shot done
+          icon: mdi:check-circle
+      input_datetime:
+        daily_shot_last_done:
+          name: Daily shot last done
+          icon: mdi:calendar-check
+          has_date: true
+          has_time: true
+      input_text:
+        daily_shot_last_side:
+          name: Daily shot last side
+          icon: mdi:history
+          max: 5
+      template:
+        - sensor:
+            # "Done" once a shot is logged today, otherwise "To do". Next side and
+            # last shot are attributes for the dashboard and the notification.
+            - name: Daily shot
+              unique_id: daily_shot_status
+              default_entity_id: sensor.daily_shot
+              icon: mdi:needle
+              state: >
+                {% set last = states('input_datetime.daily_shot_last_done') | as_datetime(none) %}
+                {{ 'Done' if last is not none and as_local(last).date() == now().date() else 'To do' }}
+              attributes:
+                next_side: "{{ states('input_select.daily_shot_next_side') }}"
+                last_side: "{{ states('input_text.daily_shot_last_side') }}"
+                last_done: "{{ states('input_datetime.daily_shot_last_done') }}"

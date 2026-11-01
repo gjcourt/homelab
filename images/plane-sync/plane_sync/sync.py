@@ -34,6 +34,7 @@ class RepoProject:
     identifier: str  # "HOMELAB"
     name: str  # "Homelab"
     plans_path: Path | None = None  # checkout with docs/plans, if the repo has plans
+    branch: str = "master"  # default branch, for plan links
 
 
 @dataclass
@@ -60,6 +61,9 @@ class Report:
     duplicates: list[str] = field(default_factory=list)
     proposed: list[str] = field(default_factory=list)
     relations: int = 0
+    skipped_projects: list[str] = field(default_factory=list)
+    tracked_by_ticket: list[str] = field(default_factory=list)
+    plans_without_status: list[str] = field(default_factory=list)
 
     def summary(self) -> dict:
         return {
@@ -74,6 +78,9 @@ class Report:
             "duplicate_external_ids": self.duplicates,
             "proposed_plans": self.proposed,
             "relations_added": self.relations,
+            "skipped_projects": self.skipped_projects,
+            "plans_tracked_by_ticket": self.tracked_by_ticket,
+            "plans_without_status": self.plans_without_status,
         }
 
 
@@ -147,10 +154,18 @@ def brief_url(cfg: Config, b: labmod.Brief) -> str:
     return f"https://github.com/{cfg.lab_owner}/{cfg.lab_repo}/blob/{cfg.lab_branch}/{b.path.as_posix()}"
 
 
-def plan_url(owner: str, p: Plan) -> str:
+def plan_url(owner: str, p: Plan, branch: str = "master") -> str:
     if p.proposed and p.pr_url:
         return p.pr_url
-    return f"https://github.com/{owner}/{p.repo}/blob/master/docs/plans/{p.filename}"
+    return f"https://github.com/{owner}/{p.repo}/blob/{branch}/docs/plans/{p.filename}"
+
+
+def norm_title(name: str) -> str:
+    """Compare a plan's H1 with a hand-made ticket's name: case, punctuation
+    and a leading "Plan:" or trailing ": plan" don't count."""
+    v = re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).strip()
+    v = re.sub(r"^plan\s+", "", v)
+    return re.sub(r"\s+plan$", "", v)
 
 
 def brief_body(cfg: Config, b: labmod.Brief, label_ids: list[str]) -> dict:
@@ -161,11 +176,11 @@ def brief_body(cfg: Config, b: labmod.Brief, label_ids: list[str]) -> dict:
     return {"name": f"{b.number} · {b.title}", "description_html": desc, "labels": sorted(label_ids)}
 
 
-def plan_body(owner: str, p: Plan) -> dict:
+def plan_body(owner: str, p: Plan, branch: str = "master") -> dict:
     parts = []
     if p.summary:
         parts.append(f"<p>{inline_md(p.summary)}</p>")
-    link = plan_url(owner, p)
+    link = plan_url(owner, p, branch)
     where = f"PR #{p.pr_number}" if p.proposed else f"docs/plans/{p.filename}"
     parts.append(f'<p><a href="{link}">{html.escape(where)}</a></p>')
     if p.lab:
@@ -195,12 +210,31 @@ class Syncer:
                     self._owner_id = m["id"]
         return self._owner_id
 
-    def ensure_project(self, name: str, identifier: str, description: str) -> str:
+    def ensure_project(self, name: str, identifier: str, description: str, *,
+                       create: bool = True) -> str | None:
+        """The project's id, or None when the bot can't work in it.
+
+        Plane lists public projects to every workspace member, but reading their
+        states or items needs project membership (403 otherwise), and a private
+        project the bot isn't in isn't listed at all. With create=False (repo
+        projects, which people create) a project the bot can't see or isn't a
+        member of is skipped and reported: creating one would duplicate a
+        private project, or fail on its taken identifier.
+        """
         name = project_name(name)
         if self._projects is None:
             self._projects = {p["identifier"]: p for p in self.plane.projects()}
         if identifier in self._projects:
-            return self._projects[identifier]["id"]
+            p = self._projects[identifier]
+            if p.get("is_member") is False:
+                self.report.skipped_projects.append(
+                    f"{identifier}: listed but plane-sync is not a member (add the bot as a Member)")
+                return None
+            return p["id"]
+        if not create:
+            self.report.skipped_projects.append(
+                f"{identifier}: not visible to plane-sync (missing, or private without the bot as a Member)")
+            return None
         p = self.plane.create_project(name, identifier, description)
         self._projects[identifier] = p
         self.report.created_projects.append(identifier)
@@ -236,7 +270,9 @@ class Syncer:
             labels[name] = self.plane.ensure_label(pid, name, color)
         return labels[name]
 
-    def items_by_external(self, pid: str, source_prefix: str) -> dict:
+    def items_by_external(self, pid: str, source_prefix: str, hand_made: list | None = None) -> dict:
+        """(source, external id) -> item. Items with no external source were
+        made in Plane; they go to `hand_made` if given."""
         out = {}
         if str(pid).startswith("dry-"):
             return out
@@ -244,6 +280,8 @@ class Syncer:
             src = it.get("external_source") or ""
             if not src:
                 self.report.plane_only.append(it.get("name", it["id"]))
+                if hand_made is not None:
+                    hand_made.append(it)
                 continue
             if src.startswith(source_prefix):
                 key = (src, it.get("external_id"))
@@ -269,6 +307,8 @@ class Syncer:
         for prefix, cat in sorted(cats.items()):
             pid = self.ensure_project(cat.name, cat.identifier,
                                       f"Lab briefs in {cat.dirname} (synced by plane-sync)")
+            if pid is None:
+                continue
             states = self.state_index(pid)
             labels = self.label_index(pid)
             existing = self.items_by_external(pid, LAB_SOURCE)
@@ -329,29 +369,42 @@ class Syncer:
         owner = self.cfg.lab_owner
         for rp in self.cfg.repo_projects:
             pid = self.ensure_project(rp.name, rp.identifier,
-                                      f"Plans and work for gjcourt/{rp.repo} (synced by plane-sync)")
-            if rp.plans_path is None:
+                                      f"Plans and work for gjcourt/{rp.repo} (synced by plane-sync)",
+                                      create=False)
+            if pid is None or rp.plans_path is None:
                 continue
-            states = self.state_index(pid, want_proposed=True)
             source = f"plan:{rp.repo}"
-            existing = self.items_by_external(pid, source)
+            hand_made: list[dict] = []
+            existing = self.items_by_external(pid, source, hand_made)
             master = plans_on_branch(rp.repo, rp.plans_path)
             names = {p.filename for p in master}
             proposed = proposed_plans(rp.repo, self.gh, owner, names) if self.gh else []
+            states = self.state_index(pid)
             seen = set()
             for p in master + proposed:
                 seen.add(p.filename)
                 if p.proposed:
                     self.report.proposed.append(f"{rp.repo}:{p.filename} (PR #{p.pr_number})")
+                key = f"{rp.repo}:{p.filename}"
+                it = existing.get((source, p.filename))
+                if it is None:
+                    ticket = self.tracking_ticket(rp.identifier, p, hand_made)
+                    if ticket:
+                        # A person or agent already made the ticket for this plan.
+                        # Leave it alone: its state belongs to whoever works it.
+                        self.report.tracked_by_ticket.append(f"{key} -> {ticket}")
+                        continue
                 try:
                     want = state_for_plan(p.status, proposed=p.proposed)
                 except ValueError:
+                    self.report.plans_without_status.append(key)
                     self.log(f"skip {p.filename}: unknown status {p.status!r}")
                     continue
+                if want not in states:
+                    # Proposed is made on first use, not in every plan project.
+                    states = self.state_index(pid, want_proposed=True)
                 want_id = states[want]["id"]
-                body = plan_body(owner, p)
-                key = f"{rp.repo}:{p.filename}"
-                it = existing.get((source, p.filename))
+                body = plan_body(owner, p, rp.branch)
                 if it is None:
                     body.update(external_id=p.filename, external_source=source, state=want_id)
                     new = self.plane.create_item(pid, body)
@@ -392,10 +445,26 @@ class Syncer:
                 if ext in seen or it.get("state") == cancelled:
                     continue
                 self.plane.update_item(pid, it["id"], {"state": cancelled})
-                self.plane.comment(pid, it["id"], "<p>plane-sync: this plan is no longer on master or "
+                self.plane.comment(pid, it["id"], f"<p>plane-sync: this plan is no longer on {rp.branch} or "
                                    "in an open PR (closed without merge, or removed). Marked Cancelled.</p>")
                 self.report.updated_items["plan"] += 1
                 self.state["plans"][f"{rp.repo}:{ext}"] = cancelled
+
+    @staticmethod
+    def tracking_ticket(identifier: str, p: Plan, hand_made: list[dict]) -> str | None:
+        """The hand-made ticket in this project that already tracks plan `p`:
+        one the plan names ("Ticket: FAX-3", or its PR's "docs(FAX-3): ..."),
+        else one whose name is the plan's title."""
+        by_seq = {str(it.get("sequence_id")): it for it in hand_made}
+        for t in p.tickets:
+            ident, _, seq = t.rpartition("-")
+            if ident == identifier and seq in by_seq:
+                return t
+        want = norm_title(p.title)
+        for it in hand_made:
+            if want and norm_title(it.get("name", "")) == want:
+                return f"{identifier}-{it.get('sequence_id')}"
+        return None
 
     # -- lab write-back -------------------------------------------------------------
 

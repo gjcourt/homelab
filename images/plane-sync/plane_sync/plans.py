@@ -11,6 +11,13 @@ from pathlib import Path
 
 PLAN_DIR = "docs/plans"
 H1_RE = re.compile(r"^# (.+?)\s*$", re.MULTILINE)
+# "Ticket: PLANEMOBILE-4", "Ticket: [TOPPINGCTL-2](https://...)": the Plane
+# ticket a plan was written for, as the agent-desk plans in other repos state it
+# (at a line start or mid-paragraph). Capital T and singular, so "Related
+# tickets: ..." doesn't count.
+TICKET_RE = re.compile(r"(?<![A-Za-z])Ticket:\s*\[?([A-Z][A-Z0-9]*-\d+)\b")
+# A conventional-commit scope naming a ticket: "docs(PLANEMOBILE-26): ...".
+PR_TICKET_RE = re.compile(r"^\w+\(([A-Z][A-Z0-9]*-\d+)\)!?:")
 
 
 @dataclass
@@ -25,6 +32,7 @@ class Plan:
     proposed: bool = False  # only in an open PR, not on the default branch yet
     pr_number: int | None = None
     pr_url: str = ""
+    tickets: list[str] = field(default_factory=list)  # Plane tickets the plan names, "FAX-3"
 
     @property
     def external_source(self) -> str:
@@ -63,12 +71,15 @@ def parse_plan(repo: str, filename: str, text: str) -> Plan:
         summary=fm.get("summary", ""),
         lab=parse_lab_refs(fm.get("lab", "")),
         superseded_by=fm.get("superseded_by", ""),
+        tickets=TICKET_RE.findall(text),
     )
 
 
 def plans_on_branch(repo: str, root: Path) -> list[Plan]:
     d = root / PLAN_DIR
     out = []
+    if not d.is_dir():  # a repo with no plans yet (modemscope)
+        return out
     for f in sorted(d.glob("*.md")):
         if f.name == "README.md":
             continue
@@ -92,5 +103,8 @@ def proposed_plans(repo: str, gh, owner: str, existing: set[str]) -> list[Plan]:
             p.proposed = True
             p.pr_number = pr["number"]
             p.pr_url = pr["html_url"]
+            m = PR_TICKET_RE.match(pr.get("title") or "")
+            if m and m.group(1) not in p.tickets:
+                p.tickets.append(m.group(1))
             out.append(p)
     return out

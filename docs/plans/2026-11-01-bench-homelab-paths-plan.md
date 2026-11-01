@@ -28,6 +28,17 @@ Plan only. Nothing changes until George approves it.
    submitted an APPROVED review on the PR's current head SHA. It passes for every other author
    (George, Renovate). It is re-evaluated when the bot pushes and when George reviews.
 
+George answered the plan's three open questions the same day:
+
+4. **Staging blast radius:** "Add the kind rule first". Before homelab is enabled, `bench-paths`
+   also fails on cluster-scoped kinds and on any object in, or targeting, the `flux-system` or
+   `kube-system` namespaces. It is part of rollout step 1, with trial tests. See
+   [Kind and namespace rules](#kind-and-namespace-rules).
+5. **bench-cloud's own manifests:** "Block it". `apps/*/bench-cloud/**` joins the denylist.
+6. **bench-watch:** "Yes, the gate replaces it". For homelab, the approval gate replaces the
+   2026-10-18 condition "homelab out of scope until bench-watch exists". bench-watch becomes a
+   nice-to-have.
+
 ## What was checked (2026-11-01)
 
 All read-only. Nothing in GitHub, Plane or the cluster was changed.
@@ -140,7 +151,8 @@ The rules file is `scripts/bench-gate/rules.yaml`. One checker,
 
 - **Allowed** only if it matches `apps/**` or `docs/**`.
 - **Denied**, whatever else matches, if any of these hold:
-  - the path matches `apps/*/agent-desk/**`, `clusters/**`, `infra/**`, `.github/**`;
+  - the path matches `apps/*/agent-desk/**`, `apps/*/bench-cloud/**` (decision 5),
+    `clusters/**`, `infra/**`, `.github/**`;
   - the path matches `**/secret*.yaml`. This is wider than `secret-*.yaml` so that
     `truenas-iscsi-monitor/secret.yaml` is covered;
   - the file, before or after the change, has a top-level `sops:` key;
@@ -152,10 +164,62 @@ The rules file is `scripts/bench-gate/rules.yaml`. One checker,
 - **Fail closed.** If the PR has more than 3000 files (the API's limit), or a file's diff can't be
   read, or a binary file is changed, `bench-paths` fails.
 
+  - the file breaks a [kind or namespace rule](#kind-and-namespace-rules) (decision 4).
+
 Paths outside `apps/**` and `docs/**` (`scripts/`, `images/`, `hosts/`, root files such as
 `AGENTS.md` and `renovate.json`) are denied because they are not allowed. That keeps
 `scripts/github-rulesets.sh`, `scripts/bench-cloud/merge-audit.sh`, the bench-cloud image and its
 managed settings out of reach.
+
+### Kind and namespace rules
+
+Decision 4. These close the worst of the staging path. `apps-staging` applies as cluster-admin
+(checked above), so an unreviewed bench PR must not be able to grant itself more than a
+namespaced app. Like the other rules, they run on the text of each changed file, before and after
+the change, and match at any indentation. That way they also catch kustomize patch targets,
+inline patches in block scalars and `List` items.
+
+A changed file is denied if it contains any of these:
+
+- **A cluster-scoped kind** (`kind:`): `Namespace`, `PersistentVolume`, `Node`, `GatewayClass`,
+  `IngressClass`, `RuntimeClass`, `PriorityClass`, `StorageClass`, `CSIDriver`,
+  `VolumeAttachment`, `CustomResourceDefinition`, `APIService`, `ValidatingWebhookConfiguration`,
+  `MutatingWebhookConfiguration`, `ValidatingAdmissionPolicy`,
+  `ValidatingAdmissionPolicyBinding`, `MutatingAdmissionPolicy`, `MutatingAdmissionPolicyBinding`,
+  `CertificateSigningRequest`, and any kind starting with `Cluster` (`ClusterRole`,
+  `ClusterRoleBinding`, cert-manager's `ClusterIssuer`).
+- **An API group that grants or bypasses control** (`apiVersion:`, or `group:` in a patch target):
+  - `rbac.authorization.k8s.io`. This also denies `Role` and `RoleBinding`. That goes beyond
+    decision 4 and is the orchestrator's judgement: RBAC is a privilege change even when
+    namespaced. Today `apps/` has 2 `Role` and 3 `RoleBinding`; George edits those.
+  - `admissionregistration.k8s.io`, `apiextensions.k8s.io`, `apiregistration.k8s.io`,
+    `storage.k8s.io`, `scheduling.k8s.io`, `node.k8s.io`, `certificates.k8s.io`.
+  - `cilium.io`, which covers `CiliumClusterwideNetworkPolicy`, LB IP pools and BGP.
+  - **Any `*.toolkit.fluxcd.io` group.** A Flux `HelmRelease`, `Kustomization` CR or
+    `GitRepository` in a bench PR would make Flux apply content the gate never saw, as
+    cluster-admin. Matching on the group is needed: `kind: Kustomization` alone would also match
+    the 116 kustomize `kustomization.yaml` files. Today only `apps/base/plane/` has Flux CRs
+    (`HelmRelease`, `HelmRepository`).
+- **A system namespace.** The words `flux-system`, `kube-system`, `kube-public` or
+  `kube-node-lease` anywhere in the file. That covers `metadata.namespace`, a kustomize
+  `namespace:` transformer, RBAC subjects, patch targets, JSON patches that set
+  `/metadata/namespace`, and selectors. Outside network-policy files, the only file in `apps/`
+  that mentions either namespace today is `apps/staging/immich/cronjob-bootstrap.yaml`, for DNS
+  egress, and it is already denied as an inline network policy. So this costs nothing today.
+- **Content kustomize would pull from outside the PR.** In a `kustomization.yaml`, an added line
+  under `resources:`, `components:` or `bases:` that is a URL or a remote git ref (`://`,
+  `github.com/`, `?ref=`), or any `helmCharts:` key. The static check can't see remote content.
+
+A file whose YAML can't be parsed (to find the `kustomization.yaml` keys above) fails closed.
+
+**What it gives up.** A bench PR can't add a new app's `Namespace`, PV or RBAC. George adds those,
+or merges them in a PR of his own first, and the bench PR fills in the rest.
+
+**Limits of a static check.** It reads files, not the rendered output. One residual risk is
+written up in the [notes](#orchestrator-notes-not-georges-decisions): privileged pods in the
+namespaces that already allow them. A rendered check (`kustomize build` at base and head, then
+diff the objects) is stronger. It is left as a follow-up, because kustomize would then process PR
+content.
 
 ### Triggers and which code runs
 
@@ -289,16 +353,16 @@ for earlier tests to pass.
 
 | # | Change | Test | Undo |
 | --- | --- | --- | --- |
-| 1 | **Gate, not required.** `scripts/bench-gate/` (rules, `check.py`, unit tests run in CI), `.github/workflows/bench-gate.yaml`, the `statuses: write` lint, and the `staging-deploy` filter line | Unit tests cover each rule, including renames, `sops:`, inline and patched NetworkPolicy, and the approval rule on fixture reviews. After merge, George runs `workflow_dispatch`. Every open PR, Renovate's included, gets `bench-paths` and `bench-approval` success. staging-deploy still merges them | Revert the PR |
-| 2 | **agent-sandbox gets the gate** (agent-sandbox PR: the same workflow, with a `rules.yaml` laid out like homelab's), then a **homelab PR adding the `agent-sandbox` `extra_rules` case** | Dry run before merge: `needs-change=1`, agent-sandbox only. After `--apply --repo agent-sandbox`: `--check` ok. Then tests T0 to T6 below, using SANDBOX tickets | Revert both PRs; `--apply --repo agent-sandbox` |
+| 1 | **Gate, not required.** `scripts/bench-gate/` (rules including the kind and namespace rules, `check.py`, unit tests run in CI), `.github/workflows/bench-gate.yaml`, the `statuses: write` lint, and the `staging-deploy` filter line that ignores `bench-approval` | Unit tests cover each rule: renames, `sops:`, inline and patched NetworkPolicy, `apps/*/bench-cloud/**`, each kind and API group (as a document, a patch target and a `List` item), the system-namespace words, remote resources, `helmCharts:`, and the approval rule on fixture reviews. After merge, George runs `workflow_dispatch`. Every open PR, Renovate's included, gets `bench-paths` and `bench-approval` success. staging-deploy still merges them | Revert the PR |
+| 2 | **agent-sandbox gets the gate** (agent-sandbox PR: the same workflow, with a `rules.yaml` laid out like homelab's), then a **homelab PR adding the `agent-sandbox` `extra_rules` case** | Dry run before merge: `needs-change=1`, agent-sandbox only. After `--apply --repo agent-sandbox`: `--check` ok. Then tests T0 to T10 below, using SANDBOX tickets | Revert both PRs; `--apply --repo agent-sandbox` |
 | 3 | **Image and agent-desk changes**: pre-push hook, `bench-task` rules copy, managed-settings denies, `repoNotes`. Bump both image tags | `bench-cloud run --repo agent-sandbox "edit infra/x"`: the push is refused locally with the rule named. A docs-only task pushes normally | Revert; pin the previous tags |
 | 4 | **homelab `extra_rules` case** | Dry run before merge: `needs-change=1`, homelab only. After `--apply --repo homelab` and `--check`: an open George PR and a Renovate PR stay mergeable, and the next Renovate automerge goes through | Revert; `--apply --repo homelab` |
 | 5 | **George: Plane membership** for HOMELAB and HASS | The bot's token can list HOMELAB and HASS issues. That is the same check as agent-desk plan step 2 | Remove the bot as a Member |
-| 6 | **Config change**: map HOMELAB and HASS, empty `denyRepos`, `feature.allowedRepos`, comments | T7 and T8 below | Put `gjcourt/homelab` back in `denyRepos` (one line) |
-| 7 | **Docs**: bench-cloud runbook (access model, monitoring), agent-desk plan (the "until bench-watch" rows), `docs/STATUS.md` | Lint | Revert |
+| 6 | **Config change**: map HOMELAB and HASS, empty `denyRepos`, `feature.allowedRepos`, comments | T11 and T12 below | Put `gjcourt/homelab` back in `denyRepos` (one line) |
+| 7 | **Docs**: bench-cloud runbook (access model, monitoring), agent-desk plan (the "until bench-watch" rows replaced by decision 6), the bench-cloud plan's bench-watch risk (now a nice-to-have), `docs/STATUS.md` | Lint | Revert |
 
-If George takes up the staging mitigation in the [notes](#orchestrator-notes-not-georges-decisions),
-it goes between steps 4 and 6.
+The kind and namespace rules ship in step 1. Their tests (T7 to T10) pass in step 2, before
+homelab is enabled in step 6.
 
 **Tests on agent-sandbox (step 2):**
 
@@ -320,71 +384,61 @@ it goes between steps 4 and 6.
   activity API shows the bot as the pusher.
 - **T6.** Bot PRs that add a `sops:` file, edit a `networkpolicy.yaml`, or drop it from
   `resources:`. Each gets `bench-paths` failure.
+- **T7.** Bot PRs under `apps/` that add a `ClusterRoleBinding`, a `Namespace`, a
+  `RoleBinding`, a `ValidatingWebhookConfiguration`, and a kustomize patch whose target is
+  `kind: ClusterRole`. Each gets `bench-paths` failure, and staging-deploy's log shows each PR
+  skipped.
+- **T8.** Bot PRs that put a `Deployment` in `flux-system`, set `namespace: kube-system` in a
+  `kustomization.yaml`, or add a JSON patch setting `/metadata/namespace` to `flux-system`. Each
+  gets `bench-paths` failure.
+- **T9.** Bot PRs that add a Flux `HelmRelease`, a Flux `GitRepository`, and a remote
+  `resources:` URL. Each gets `bench-paths` failure. A bot PR that edits a plain kustomize
+  `kustomization.yaml` (for example an `images:` tag) passes.
+- **T10.** A bot PR under `apps/*/bench-cloud/` gets `bench-paths` failure.
 
 **Tests on homelab (step 6):**
 
-- **T7.** A HOMELAB `docs-fix` ticket opens a PR. `bench-paths` is success and `bench-approval`
+- **T11.** A HOMELAB `docs-fix` ticket opens a PR. `bench-paths` is success and `bench-approval`
   is failure. The sync-staging log shows "Successfully merged PR #N". George approves and merges.
-- **T8.** A HASS ticket that needs a change outside the paths (for example under `infra/`). The
+- **T12.** A HASS ticket that needs a change outside the paths (for example under `infra/`). The
   agent's push is refused locally, or, if it gets through, the PR gets `bench-paths` failure and
   stays out of staging.
 
 ## Orchestrator notes (not George's decisions)
 
 These are risks that remain after this plan. They are the orchestrator's reading, for George to
-weigh. None of them reopens decisions 1 to 3.
+weigh. None of them reopens decisions 1 to 6.
 
-### 1. Staging applies unreviewed bench PRs as cluster-admin
+### 1. Privileged pods in namespaces that already allow them
 
-`apps-staging` applies as `kustomize-controller`, which is bound to cluster-admin (checked above).
-The staging cluster is the production cluster. Under decision 2, a bench PR that passes
-`bench-paths` reaches `staging` within about five minutes, before George reads it. `apps/**`
-includes `apps/staging/**` and `apps/base/**`. A new directory there, listed in
-`apps/staging/kustomization.yaml`, can declare any kind in any namespace. Examples:
+Decision 4 stops new cluster-scoped objects and system namespaces. It does not stop a bench PR
+adding a privileged pod to a namespace that already allows one. Live, these namespaces have
+`pod-security.kubernetes.io/enforce: privileged`: `immich-stage`, `jellyfin-stage`,
+`netscope-stage`, `immich-prod`, `jellyfin-prod`, `thermalscope`, `monitoring`, `democratic-csi`
+and `media-migrate`. The first three are staging namespaces fed from `apps/**`. In one of them, a
+bench PR could add a pod with `privileged: true` or `hostPath: /`. That pod would reach staging
+before George reads it. It would have root on a node, with the secrets of every pod scheduled
+there.
 
-- a `ClusterRoleBinding` that gives `bench-agent` cluster-admin;
-- a `Deployment` in `flux-system` that mounts `sops-agekey`. That key decrypts every SOPS file in
-  this public repo;
-- objects in a production namespace, or cluster-scoped kinds: `Namespace`, CRDs, webhooks,
-  `ValidatingAdmissionPolicy`, `PriorityClass`, `PersistentVolume`.
+The orchestrator's view: add one more line rule for bench PRs. Deny an added line that sets
+`privileged: true`, `hostPath:`, `hostNetwork: true`, `hostPID: true`, `hostIPC: true` or
+`capabilities: add:`. Today seven files under `apps/` use these (adguard's added capabilities,
+immich, jellyfin, netscope and the two thermalscope DaemonSets), so bench PRs couldn't change
+those parts. It would go into step 1 alongside decision 4.
 
-Options:
+### 2. Staging still applies as cluster-admin
 
-- **(a) A kind and namespace rule in `bench-paths`, for bench PRs only.** Deny changed YAML that
-  declares a cluster-scoped kind (the list above, plus `ClusterRole`, `StorageClass`,
-  `CiliumClusterwideNetworkPolicy`, `APIService`) or names a namespace outside the app's own.
-  The cheap version checks the files statically. A stronger version renders
-  `kustomize build apps/staging` and `apps/production` at base and head and diffs the objects.
-  That needs care, because kustomize then reads PR content (no exec plugins, no remote bases).
-  Some bench work, like adding a new app with its own `Namespace`, would then need George to do
-  that part himself.
-- **(b) A restricted ServiceAccount for `apps-staging`.** Give the staging Kustomization a
-  `serviceAccountName` bound only to the `*-stage` namespaces. That fixes the cause for every
-  author, not just the bot. It is a larger change (`clusters/**`), and today's staging apps may
-  need cluster-scoped objects of their own.
+Decision 4 limits what a bench PR can declare. The cause is still there: `apps-staging` has no
+`serviceAccountName`. Giving it one, bound only to the `*-stage` namespaces, would protect every
+author, not just the bot. It is a larger change (`clusters/**`), and some staging apps may need
+cluster-scoped objects of their own. It is a follow-up, separate from this plan.
 
-The orchestrator's view: do (a) before step 6, and plan (b) separately.
+### 3. Smaller items
 
-### 2. bench-cloud's own manifests are inside `apps/**`
-
-`apps/base/bench-cloud/` and `apps/production/bench-cloud/` hold the agent's sandbox: its RBAC, the
-`bench-cloud-task-jobs` admission policy, its network policy and its quota. George denied
-`apps/*/agent-desk/**` because agents shouldn't edit their own rules. The same reasoning covers
-`apps/*/bench-cloud/**`. The network policy is already denied; the RBAC, admission policy and
-quota are not. The orchestrator's view: add `apps/*/bench-cloud/**` to the denylist.
-
-### 3. bench-watch
-
-The merge audit (`infra/controllers/bench-merge-audit`) and its script run from homelab master,
-which the App can now open PRs against. The required checks close the path that made bench-watch
-urgent: the App can't merge a homelab PR without George's approval of its head, and
-`infra/**` and `scripts/**` are outside its paths. bench-watch is still the only fix for a quietly
-edited audit, and the only check that doesn't live where the App can write. It stays deferred.
-The agent-desk plan says homelab stays out of scope "until bench-watch exists". This plan
-replaces that condition with the gate. Step 7 updates that text once George confirms.
-
-### 4. Smaller items
-
+- **bench-watch** (decision 6: a nice-to-have). The merge audit and its script still run from
+  homelab master. The gate means the App can't merge an unapproved homelab PR, and `infra/**` and
+  `scripts/**` are outside its paths. bench-watch would still be the only check that lives outside
+  where the App can write.
 - **Strict up-to-date.** The classic protection has `strict: true`. Updating a bench PR's branch
   makes a new head SHA, so George approves after the update, not before.
 - **Approval after the fact.** Option 2 still lets the App merge a PR once George has approved it.
@@ -395,11 +449,7 @@ replaces that condition with the gate. Step 7 updates that text once George conf
 
 ## Open questions for George
 
-1. **Staging blast radius** (note 1): fix it before homelab is enabled (step 6), with the kind and
-   namespace rule, or accept it for now?
-2. **Add `apps/*/bench-cloud/**` to the denylist** (note 2)?
-3. **bench-watch** (note 3): does HOMELAB-85 replace the 2026-10-18 condition "homelab out of
-   scope until bench-watch exists"?
+1. **Privileged-pod line rule** (note 1): add it to `bench-paths` in step 1?
 
 [events]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows
 [troubleshoot]: https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/collaborating-on-repositories-with-code-quality-features/troubleshooting-required-status-checks

@@ -20,7 +20,7 @@
 # Pinned by digest for reproducibility — refresh with:
 #   docker buildx imagetools inspect debian:bookworm-slim --raw \
 #     | python3 -c 'import hashlib,sys; print("sha256:"+hashlib.sha256(sys.stdin.buffer.read()).hexdigest())'
-FROM debian:bookworm-slim@sha256:7ff6ba31527b9e336162fa061746c366c4b2032f4d2cff2078bea43f78efe3f8
+FROM debian:bookworm-slim@sha256:99c0b25c46d0214d5a2091092e7908907dcaecd6a962cde0ac700acee222b6f3
 
 ARG DEBIAN_FRONTEND=noninteractive
 

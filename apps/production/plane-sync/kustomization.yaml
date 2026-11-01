@@ -17,4 +17,4 @@ labels:
 # Pinned date-sha tag from build-plane-sync.yml (Flux does not auto-track).
 images:
   - name: ghcr.io/gjcourt/plane-sync
-    newTag: 2026-10-22-b2743d0
+    newTag: 2026-11-01-af85ba3

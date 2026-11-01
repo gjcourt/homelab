@@ -116,3 +116,69 @@ def test_paths_description():
     assert gate.paths_description([]) == "all changed paths are allowed"
     vs = [check.Violation("infra/x", "path", "d"), check.Violation("b", "kind", "d")]
     assert gate.paths_description(vs) == "infra/x: path (+1 more)"
+
+
+# --- fetch_head: private repos ---------------------------------------------
+
+
+def test_git_auth_env_without_token_adds_nothing(monkeypatch):
+    monkeypatch.delenv("GIT_CONFIG_COUNT", raising=False)
+    env = gate.git_auth_env(None)
+    assert "GIT_CONFIG_COUNT" not in env
+
+
+def test_git_auth_env_appends_after_existing_config(monkeypatch):
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
+    env = gate.git_auth_env("tok")
+    assert env["GIT_CONFIG_COUNT"] == "3"
+    assert env["GIT_CONFIG_KEY_2"] == "http.https://github.com/.extraheader"
+    assert env["GIT_CONFIG_VALUE_2"] == "AUTHORIZATION: basic eC1hY2Nlc3MtdG9rZW46dG9r"  # x-access-token:tok
+
+
+def test_fetch_head_keeps_the_token_out_of_argv(monkeypatch):
+    seen = {}
+
+    class R:
+        returncode = 0
+        stderr = ""
+
+    def run(cmd, **kw):
+        seen["cmd"], seen["env"] = cmd, kw["env"]
+        return R()
+
+    monkeypatch.setenv("GH_TOKEN", "s3cret")
+    monkeypatch.setattr(gate.subprocess, "run", run)
+    monkeypatch.setattr(gate.check, "git", lambda *a: b"abc\n")
+    assert gate.fetch_head(".", 5) == "abc"
+    assert not any("s3cret" in a or "basic" in a for a in seen["cmd"])
+    assert "AUTHORIZATION: basic" in seen["env"][f"GIT_CONFIG_VALUE_{int(seen['env']['GIT_CONFIG_COUNT']) - 1}"]
+
+
+def test_fetch_head_reports_gits_message(monkeypatch):
+    class R:
+        returncode = 128
+        stderr = "fatal: could not read Username for 'https://github.com'\n"
+
+    monkeypatch.setattr(gate.subprocess, "run", lambda cmd, **kw: R())
+    import pytest
+
+    with pytest.raises(RuntimeError, match="could not read Username"):
+        gate.fetch_head(".", 5)
+
+
+def test_fetch_head_against_a_private_style_remote(tmp_path, monkeypatch):
+    # End to end with a real git: a local "origin" with a refs/pull/N/head ref.
+    import subprocess as sp
+
+    def g(*a, cwd):
+        return sp.run(["git", *a], cwd=cwd, check=True, capture_output=True, text=True).stdout.strip()
+
+    origin, work = tmp_path / "origin", tmp_path / "work"
+    origin.mkdir()
+    g("init", "-q", "-b", "main", cwd=origin)
+    g("-c", "user.email=t@e", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "x", cwd=origin)
+    sha = g("rev-parse", "HEAD", cwd=origin)
+    g("update-ref", "refs/pull/9/head", sha, cwd=origin)
+    g("clone", "-q", str(origin), str(work), cwd=tmp_path)
+    monkeypatch.setenv("GH_TOKEN", "tok")  # harmless for a file:// remote
+    assert gate.fetch_head(str(work), 9) == sha

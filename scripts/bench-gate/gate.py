@@ -26,6 +26,7 @@ Plan: docs/plans/2026-11-01-bench-homelab-paths-plan.md
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import subprocess
@@ -119,13 +120,36 @@ def post_status(repo: str, sha: str, context: str, state: str, description: str,
     gh_api(f"repos/{repo}/statuses/{sha}", method="POST", fields=fields)
 
 
+def git_auth_env(token: str | None) -> dict:
+    """os.environ plus, when there is a token, an auth header for github.com.
+
+    The checkout uses persist-credentials: false, so .git/config holds no
+    token, and a private repo (agent-sandbox) can't be fetched without one.
+    The header goes in through GIT_CONFIG_* for this one command: never in
+    argv (a process list, or the text of a failed command) and never on disk.
+    """
+    env = dict(os.environ)
+    if not token:
+        return env
+    n = int(env.get("GIT_CONFIG_COUNT") or 0)
+    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    env["GIT_CONFIG_COUNT"] = str(n + 1)
+    env[f"GIT_CONFIG_KEY_{n}"] = "http.https://github.com/.extraheader"
+    env[f"GIT_CONFIG_VALUE_{n}"] = f"AUTHORIZATION: basic {basic}"
+    return env
+
+
 def fetch_head(repo_dir: str, number: int) -> str:
     ref = f"refs/bench-gate/pr-{number}"
-    subprocess.run(
+    r = subprocess.run(
         ["git", "-C", repo_dir, "fetch", "--quiet", "--no-tags", "origin", f"+refs/pull/{number}/head:{ref}"],
-        check=True,
         capture_output=True,
+        text=True,
+        env=git_auth_env(os.environ.get("GH_TOKEN")),
     )
+    if r.returncode != 0:
+        # git's own message (it never contains the header), not just the argv.
+        raise RuntimeError(f"git fetch of PR #{number} failed: {r.stderr.strip()[:200]}")
     return check.git(repo_dir, "rev-parse", ref).decode().strip()
 
 

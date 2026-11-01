@@ -185,13 +185,13 @@ views:
       name: Today
       icon: mdi:needle
       state_content:
-        - state
-        - last_side
+      - state
+      - last_side
     - type: tile
       entity: input_select.daily_shot_next_side
       name: Next side
       features:
-        - type: select-options
+      - type: select-options
     - type: tile
       entity: input_button.daily_shot_done
       name: Done

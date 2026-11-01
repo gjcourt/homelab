@@ -285,7 +285,8 @@ views:
         navigation_path: /home-control/area-master-bathroom
     # HA's area cards, configured as home-overview-view-strategy builds them
     # (computeAreaCard). Area ids from bootstrap/core.area_registry.json, in
-    # registry order, minus the five rooms above.
+    # registry order, minus the five rooms above and office_presence (the
+    # ESPresense area, not a room).
     - type: heading
       heading: Other areas
       heading_style: subtitle

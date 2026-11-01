@@ -83,4 +83,4 @@ patches:
 # to gjcourt/plane-mobile; pin the YYYY-MM-DD-sha7 tag it prints here.
 images:
   - name: ghcr.io/gjcourt/plane-mobile
-    newTag: 2026-10-31-842b0c6
+    newTag: 2026-11-01-321bf87

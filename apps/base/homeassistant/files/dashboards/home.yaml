@@ -1,0 +1,374 @@
+# Home — the main page (HASS-10). Registered as `home-page` in
+# configuration.yaml; set as the default dashboard once in the UI (see the
+# bootstrap README, "Default dashboard").
+#
+# George, 2026-11-01: "I want the main page to be the default overview page
+# with my config home page details added to it".
+#
+# Why a YAML copy and not HA's own Overview: since 2026.2 the default Overview
+# is the built-in `home` panel (/home). The frontend generates it on every load
+# from the `home` dashboard strategy, and its only settings (favourite
+# entities, shortcuts, hide welcome/suggestions) live in
+# .storage/frontend.system_data. It has no YAML and no way to add cards. So
+# this file rebuilds that Overview from the same built-in pieces the strategy
+# uses (frontend 20260930.5, src/panels/lovelace/strategies/home/
+# home-overview-view-strategy.ts), and adds the Config dashboard's Overview
+# content:
+#   - welcome header, Favorites (HA's `common-controls` section strategy,
+#     still generated live by HA), Areas and the Summaries sidebar: from HA's
+#     Overview
+#   - Today, Music — Room Volume, the curated room cards and the four summary
+#     tiles: from the Config dashboard's Overview (dashboards/control.yaml),
+#     with links pointing back into /home-control
+#
+# What is no longer automatic, compared with HA's Overview:
+#   - the "Other areas" list is fixed: a new area in HA needs a card here.
+#   - HA's own summaries for Lights, Media players, Weather and Maintenance
+#     are left out (George's Lights On / Media Playing / Today weather cover
+#     the first three; two cards both named "Maintenance" would mean different
+#     things). Energy is left out too: not known to be configured.
+#   - favourites starred in HA's Overview editor don't carry over; pin them
+#     with `include_entities` on the Favorites section.
+#
+# When the Config dashboard's Overview changes, change it here too.
+views:
+- title: Home
+  path: home
+  icon: mdi:home
+  theme: Tinted
+  type: sections
+  max_columns: 3
+  # HA's Overview greets the signed-in user in the view header.
+  header:
+    layout: responsive
+    card:
+      type: markdown
+      text_only: true
+      content: "## Welcome {{ user }}"
+  sections:
+  # ── Today (from Config → Overview) ─────────────────────────────────────
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Today
+      heading_style: title
+    # clock-weather-card throws "Configuration error" when its weather entity
+    # is missing (it calls hass.states[entity] and errors if undefined). Show
+    # it only when the entity has a real state; otherwise the card below says
+    # what is wrong. A missing entity reads as "unknown" to the frontend's
+    # state condition (validate-condition.ts), so both cases are covered.
+    - type: custom:clock-weather-card
+      entity: weather.forecast_home
+      forecast_rows: 3
+      hide_clock: false
+      hide_date: false
+      grid_options:
+        columns: 24
+      visibility:
+      - condition: state
+        entity: weather.forecast_home
+        state_not:
+        - unknown
+        - unavailable
+    - type: custom:mushroom-template-card
+      primary: Weather
+      secondary: "{{ 'Not found: weather.forecast_home' if expand('weather.forecast_home') | count == 0 else 'Unavailable right now (' ~ states('weather.forecast_home') ~ ')' }}"
+      icon: mdi:weather-cloudy-alert
+      icon_color: red
+      grid_options:
+        columns: 24
+      visibility:
+      - condition: state
+        entity: weather.forecast_home
+        state:
+        - unknown
+        - unavailable
+    - type: custom:mushroom-template-card
+      primary: All Lights Off
+      secondary: "{{ states('sensor.lights_on') ~ ' on' if states('sensor.lights_on') | is_number else '— (count unavailable)' }}"
+      icon: mdi:lightbulb-group-off
+      icon_color: "{{ 'amber' if states('sensor.lights_on') | int(0) > 0 else 'disabled' }}"
+      layout: vertical
+      fill_container: true
+      tap_action:
+        action: perform-action
+        perform_action: light.turn_off
+        target:
+          entity_id: all
+      grid_options:
+        columns: 12
+      card_mod:
+        style: |
+          ha-card {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+  # ── Music — Room Volume (from Config → Overview) ───────────────────────
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Music — Room Volume
+      heading_style: title
+    - type: tile
+      entity: media_player.kitchen_snapcast_client
+      name: Kitchen
+      icon: mdi:silverware-fork-knife
+      state_content:
+      - state
+      - volume_level
+      features:
+      - type: media-player-volume-slider
+    - type: tile
+      entity: media_player.living_room_snapcast_client
+      name: Living Room
+      icon: mdi:sofa
+      state_content:
+      - state
+      - volume_level
+      features:
+      - type: media-player-volume-slider
+    - type: tile
+      entity: media_player.office_snapcast_client
+      name: Office
+      icon: mdi:desk
+      state_content:
+      - state
+      - volume_level
+      features:
+      - type: media-player-volume-slider
+  # ── Favorites (HA's Overview) ──────────────────────────────────────────
+  # The same section strategy HA's Overview uses: HA picks the entities from
+  # usage_prediction (in default_config) and regenerates them on load. Pin
+  # entities first with `include_entities: [...]`; hide any with
+  # `exclude_entities`. hide_empty drops the section when HA has nothing yet.
+  - strategy:
+      type: common-controls
+      limit: 8
+      hide_empty: true
+      heading:
+        type: heading
+        heading: Favorites
+        heading_style: title
+        visibility:
+        - condition: view_columns
+          min: 2
+        grid_options:
+          rows: auto
+    column_span: 3
+  # ── Summaries, phone layout (HA's Overview puts them here on one column;
+  # on wider screens they move to the sidebar below) ──────────────────────
+  - type: grid
+    column_span: 3
+    visibility:
+    - condition: view_columns
+      max: 1
+    cards:
+    - type: heading
+      heading: Summaries
+      heading_style: title
+    # Cards are defined here (anchors) and reused full-width in the sidebar.
+    # From Config → Overview (links into the Config dashboard):
+    - &lights_on
+      type: tile
+      entity: sensor.lights_on
+      name: Lights On
+      icon: mdi:lightbulb-group
+      color: amber
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/lights
+    - &media_playing
+      type: tile
+      entity: sensor.media_playing
+      name: Media Playing
+      icon: mdi:play-circle
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/av
+    # Due, overdue or never-recorded maintenance tasks (HASS-2).
+    - &maintenance
+      type: tile
+      entity: sensor.maintenance_to_do
+      name: Maintenance
+      icon: mdi:wrench-clock
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/maintenance
+    # Auto-shutoff timers counting down now (HASS-8).
+    - &auto_shutoff
+      type: tile
+      entity: sensor.auto_shutoff_running
+      name: Auto-shutoff
+      icon: mdi:timer-outline
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/auto-shutoff
+    # From HA's Overview: admin-only, each hides itself when empty.
+    - &repairs
+      type: repairs
+      hide_empty: true
+      tap_action:
+        action: navigate
+        navigation_path: /config/repairs?historyBack=1
+    - &updates
+      type: updates
+      hide_empty: true
+      tap_action:
+        action: navigate
+        navigation_path: /config/updates?historyBack=1
+    - &discovered
+      type: discovered-devices
+      hide_empty: true
+    # HA's own summaries not already covered above (see the header note).
+    - &climate
+      type: home-summary
+      summary: climate
+      tap_action:
+        action: navigate
+        navigation_path: /climate?historyBack=1
+    - &security
+      type: home-summary
+      summary: security
+      tap_action:
+        action: navigate
+        navigation_path: /security?historyBack=1
+  # ── Areas ──────────────────────────────────────────────────────────────
+  # Curated rooms first (from Config → Overview; tap opens that room's page
+  # on the Config dashboard), then every other area as HA's Overview shows
+  # it (tap opens HA's generated area page under /home).
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Areas
+      heading_style: title
+    - type: custom:mushroom-template-card
+      primary: Kitchen
+      # Appliance glance: the one thing worth knowing from across the house.
+      secondary: "{% set off = ['Off', 'unavailable', 'unknown'] %}{% if is_state('binary_sensor.42_french_door_refrigerator_door', 'on') or is_state('binary_sensor.42_french_door_freezer_door', 'on') %}Fridge door open{% elif states('sensor.30_double_wall_oven_cooking_mode') not in off or states('sensor.30_double_wall_oven_lower_oven_cooking_mode') not in off %}Oven on{% elif states('sensor.24_dishwasher_wash_status') in ['Running', 'Drying'] %}Dishwasher running{% endif %}"
+      icon: mdi:silverware-fork-knife
+      icon_color: "{% set l = ['light.kitchen_main_lights', 'light.kitchen_under_cabinet', 'light.kitchen_island_pendants'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/area-kitchen
+    - type: custom:mushroom-template-card
+      primary: Front Foyer
+      icon: mdi:door
+      icon_color: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/area-front-foyer
+    - type: custom:mushroom-template-card
+      primary: Hallway
+      icon: mdi:door-sliding
+      icon_color: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/area-hallway
+    - type: custom:mushroom-template-card
+      primary: Master Bedroom
+      icon: mdi:bed
+      icon_color: "{% set l = ['light.master_bedroom_main_lights', 'light.master_bedroom_entry', 'light.master_bedroom_sconce_north', 'light.master_bedroom_sconce_south', 'light.master_bedroom_closet_light'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/area-master-bedroom
+    - type: custom:mushroom-template-card
+      primary: Master Bathroom
+      icon: mdi:shower
+      icon_color: "{% set l = ['light.master_bathroom_vanity', 'light.master_bathroom_ceiling'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/area-master-bathroom
+    # HA's area cards, configured as home-overview-view-strategy builds them
+    # (computeAreaCard). Area ids from bootstrap/core.area_registry.json, in
+    # registry order, minus the five rooms above and office_presence (the
+    # ESPresense area, not a room).
+    - type: heading
+      heading: Other areas
+      heading_style: subtitle
+    - &area_card
+      type: area
+      area: living_room
+      display_type: compact
+      vertical: true
+      grid_options:
+        rows: 2
+        columns: 4
+      tap_action:
+        action: navigate
+        navigation_path: /home/areas-living_room
+    - <<: *area_card
+      area: bedroom
+      tap_action: {action: navigate, navigation_path: /home/areas-bedroom}
+    - <<: *area_card
+      area: office
+      tap_action: {action: navigate, navigation_path: /home/areas-office}
+    - <<: *area_card
+      area: nursery_bedroom
+      tap_action: {action: navigate, navigation_path: /home/areas-nursery_bedroom}
+    - <<: *area_card
+      area: niccolo_bedroom
+      tap_action: {action: navigate, navigation_path: /home/areas-niccolo_bedroom}
+    - <<: *area_card
+      area: laundry_room
+      tap_action: {action: navigate, navigation_path: /home/areas-laundry_room}
+    - <<: *area_card
+      area: butler_pantry
+      tap_action: {action: navigate, navigation_path: /home/areas-butler_pantry}
+    - <<: *area_card
+      area: dining_room
+      tap_action: {action: navigate, navigation_path: /home/areas-dining_room}
+    - <<: *area_card
+      area: hall_bathroom
+      tap_action: {action: navigate, navigation_path: /home/areas-hall_bathroom}
+    - <<: *area_card
+      area: powder_bathroom
+      tap_action: {action: navigate, navigation_path: /home/areas-powder_bathroom}
+    - <<: *area_card
+      area: exterior
+      tap_action: {action: navigate, navigation_path: /home/areas-exterior}
+  # ── Summaries, sidebar (two or more columns), as on HA's Overview ──────
+  # Same cards as the phone section above, full sidebar width.
+  sidebar:
+    visibility:
+    - condition: view_columns
+      min: 2
+    sections:
+    - type: grid
+      cards:
+      - type: heading
+        heading: Summaries
+        heading_style: title
+        grid_options:
+          rows: auto
+      - <<: *lights_on
+        grid_options:
+          columns: 12
+      - <<: *media_playing
+        grid_options:
+          columns: 12
+      - <<: *maintenance
+        grid_options:
+          columns: 12
+      - <<: *auto_shutoff
+        grid_options:
+          columns: 12
+      - <<: *repairs
+        grid_options:
+          columns: 12
+      - <<: *updates
+        grid_options:
+          columns: 12
+      - <<: *discovered
+        grid_options:
+          columns: 12
+      - <<: *climate
+        grid_options:
+          columns: 12
+      - <<: *security
+        grid_options:
+          columns: 12

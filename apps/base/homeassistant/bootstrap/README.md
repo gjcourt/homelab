@@ -15,9 +15,27 @@ reproducible / restorable.
 |---|---|
 | `configuration.yaml`, `automations.yaml`, `binary_sensors.yaml` | git + mounted (`../files/`) |
 | **Config dashboard** (was "Control"; URL `/home-control`): Overview / Auto-shutoff / Light schedules / Maintenance / Audio-Visual / Lights | git + mounted (`../files/dashboards/control.yaml`) — YAML-mode, authoritative |
+| **Home dashboard** (URL `/home-page`, HASS-10): the main page — HA's Overview rebuilt from its own cards plus the Config Overview content | git + mounted (`../files/dashboards/home.yaml`) — YAML-mode, authoritative |
+| **Default dashboard** (which page opens first) | UI-only (`.storage/frontend.system_data`, key `core.default_panel`); see below |
 | **Areas** (`core.area_registry.json`) | UI-only → **snapshot here** |
 | **Floor Plan / Map** dashboards (`lovelace.floorplan.json`, `lovelace.map.json`) | UI-only (storage-mode) → **snapshot here** |
 | **Switchboard** (`lovelace.switchboard.json`) | **deleted 2026-10-31** (redundant with the Config dashboard's Lights view); snapshot kept for history |
+
+## Default dashboard (UI-only)
+
+HA has no YAML setting for the default dashboard: core's `frontend` and
+`lovelace` config schemas (2026.10.4) have no such key, and the frontend reads
+it from `frontend.system_data` → `core.default_panel`, written by the
+dashboards page. Without it HA opens its built-in Overview (`/home`). So once,
+and again after any restore without `.storage`:
+
+1. Settings → Dashboards.
+2. On the **Home** row, open the ⋮ menu → **Set as default** → OK.
+
+This sets it for every user whose Profile → Dashboard is "Auto (use system
+settings)"; a per-user choice there wins over it (frontend `getDefaultPanelUrlPath`).
+HA's built-in **Overview** stays in the sidebar; its area pages (`/home/areas-…`)
+are what the Home dashboard's "Other areas" cards open, so keep it.
 
 ## HACS components the git dashboards depend on
 

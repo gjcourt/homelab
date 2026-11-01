@@ -1,0 +1,124 @@
+# bench-gate path and content rules (HOMELAB-85).
+#
+# Read by scripts/bench-gate/check.py. The bench-gate workflow always runs
+# master's copy of this file and of check.py, never the PR's, so a PR cannot
+# loosen the rules it is judged by. This file is itself outside the allowed
+# paths below, so a bench PR cannot edit it either.
+#
+# Plan: docs/plans/2026-11-01-bench-homelab-paths-plan.md
+#
+# Globs: `**` matches any number of path segments (including none), `*` and
+# `?` match within one segment. Deny globs match case-insensitively.
+
+# A changed path must match one of these...
+allow:
+  - "apps/**"
+  - "docs/**"
+
+# ...and none of these. A deny always wins over an allow.
+deny:
+  - "apps/*/agent-desk/**"
+  - "apps/*/bench-cloud/**"
+  - "clusters/**"
+  - "infra/**"
+  - ".github/**"
+  # SOPS secrets. Wider than secret-*.yaml so that
+  # apps/production/truenas-iscsi-monitor/secret.yaml is covered.
+  - "**/secret*.yaml"
+  - "**/secret*.yml"
+  - "**/*.sops.yaml"
+  - "**/*.sops.yml"
+  # Network policies by name. Inline policies are caught by the kind rule.
+  - "**/networkpolicy*.yaml"
+  - "**/networkpolicy*.yml"
+
+# Content rules apply to changed files under these globs (the paths Flux and
+# kustomize read). docs/** is not applied to the cluster, and runbooks there
+# routinely name kube-system or `kind: Namespace`.
+manifestPaths:
+  - "apps/**"
+
+# A file whose text, before or after the change, declares one of these kinds.
+clusterScopedKinds:
+  - Namespace
+  - PersistentVolume
+  - Node
+  - GatewayClass
+  - IngressClass
+  - RuntimeClass
+  - PriorityClass
+  - StorageClass
+  - CSIDriver
+  - CSINode
+  - VolumeAttachment
+  - CustomResourceDefinition
+  - APIService
+  - ValidatingWebhookConfiguration
+  - MutatingWebhookConfiguration
+  - ValidatingAdmissionPolicy
+  - ValidatingAdmissionPolicyBinding
+  - MutatingAdmissionPolicy
+  - MutatingAdmissionPolicyBinding
+  - CertificateSigningRequest
+
+# Namespaced kinds denied anyway. Role and RoleBinding are also denied through
+# the rbac.authorization.k8s.io group below; naming them here also catches a
+# kustomize patch target that gives only `kind: Role` with no `group:`.
+deniedKinds:
+  - Role
+  - RoleBinding
+
+# Any kind starting with one of these (ClusterRole, ClusterRoleBinding,
+# ClusterIssuer, ...).
+deniedKindPrefixes:
+  - Cluster
+
+# Any kind ending with one of these (NetworkPolicy, CiliumNetworkPolicy, ...).
+deniedKindSuffixes:
+  - NetworkPolicy
+
+# API groups, in `apiVersion: <group>/<version>` or `group: <group>`.
+deniedApiGroups:
+  - rbac.authorization.k8s.io
+  - admissionregistration.k8s.io
+  - apiextensions.k8s.io
+  - apiregistration.k8s.io
+  - storage.k8s.io
+  - scheduling.k8s.io
+  - node.k8s.io
+  - certificates.k8s.io
+  - cilium.io
+
+# Any API group ending with one of these.
+deniedApiGroupSuffixes:
+  - .cilium.io
+  - .toolkit.fluxcd.io
+
+# Words that may not appear anywhere in a manifest file, before or after.
+systemNamespaces:
+  - flux-system
+  - kube-system
+  - kube-public
+  - kube-node-lease
+
+# kustomization.yaml list keys whose entries may not point outside the repo.
+kustomizeResourceKeys:
+  - resources
+  - components
+  - bases
+
+# An entry under those keys containing any of these is remote.
+remoteMarkers:
+  - "://"
+  - "github.com/"
+  - "?ref="
+  - "git@"
+  - "github.com:"
+
+# Top-level kustomization.yaml keys that are denied outright.
+deniedKustomizeKeys:
+  - helmCharts
+  - helmChartInflationGenerator
+
+# The PR API lists at most this many files; above it, fail closed.
+maxFiles: 3000

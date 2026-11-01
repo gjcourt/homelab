@@ -78,6 +78,12 @@ def write_back(syncer: Syncer, cfg: Config, gh, token: str | None, workdir: Path
         # Keep the branch current with a normal merge (never a force-push).
         ghmod.git("merge", "--quiet", "--no-edit", "origin/main", cwd=root, check=False)
     else:
+        # No open PR, but the branch can still exist: lab doesn't delete head
+        # branches on merge, so a merged sync PR leaves its branch behind and a
+        # fresh branch from main can't push over it. With no open PR nothing
+        # depends on that branch, so delete it before starting again.
+        if ghmod.git("ls-remote", "--heads", "origin", SYNC_BRANCH, cwd=root).strip():
+            ghmod.git("push", "--quiet", "origin", "--delete", SYNC_BRANCH, cwd=root)
         ghmod.git("checkout", "--quiet", "-b", SYNC_BRANCH, cwd=root)
     files = syncer.apply_brief_writes(root)
     if not ghmod.git("status", "--porcelain", cwd=root).strip():

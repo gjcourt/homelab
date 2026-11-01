@@ -2,7 +2,7 @@ name: Deploy to Staging
 
 # Rebuilds the staging branch by merging master + all passing PRs.
 # Triggers:
-#   - workflow_run — fires AFTER Lint / Flux-test finish, avoiding the
+#   - workflow_run — fires AFTER Lint / Flux-test / Bench gate finish, avoiding the
 #     race where staging-deploy ran before CI completed and skipped the PR.
 #   - pull_request:closed — immediately rebuild when a PR is merged/closed
 #     (no pending-check race since we are removing, not adding).
@@ -10,7 +10,9 @@ name: Deploy to Staging
 #   - Manual dispatch — for ad-hoc rebuilds.
 on:
   workflow_run:
-    workflows: ["Lint", "Test Flux Reconciliation"]
+    # Bench gate: a bench PR is held until bench-paths is posted, so rebuild
+    # as soon as the gate has run rather than at the next 5-minute cron.
+    workflows: ["Lint", "Test Flux Reconciliation", "Bench gate"]
     types: [completed]
   pull_request:
     types: [closed]
@@ -27,9 +29,12 @@ jobs:
   sync-staging:
     runs-on: ubuntu-latest
     # For workflow_run events, only rebuild staging when the completed
-    # workflow was triggered by a pull_request (skip master-push CI runs).
+    # workflow was triggered by a pull request (skip master-push CI runs and
+    # the gate's hourly sweep). Bench gate runs on pull_request_target.
     if: >-
-      github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request'
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.event == 'pull_request' ||
+      github.event.workflow_run.event == 'pull_request_target'
     permissions:
       contents: write
       pull-requests: read
@@ -48,6 +53,15 @@ jobs:
         with:
           go-version: "1.22"
 
+      # For scripts/bench-gate/staging_ready.py (see Merge Passing PRs).
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyYAML
+        run: pip install pyyaml
+
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
@@ -64,6 +78,12 @@ jobs:
         run: |
           MERGED=0
           SKIPPED=0
+
+          # HOMELAB-85: master's readiness check, copied out of the tree first.
+          # Each PR merged below changes the working tree, so running the
+          # script in place would run PR code for every PR after it.
+          GATE_DIR=$(mktemp -d)
+          cp scripts/bench-gate/*.py "$GATE_DIR/"
 
           # docs/plans/README.md holds an index generated from every plan's
           # frontmatter, so any two PRs that add or edit a plan conflict there.
@@ -95,30 +115,25 @@ jobs:
             echo "::group::PR #$PR_NUM"
             echo "Checking PR #$PR_NUM..."
 
-            # Get check results, excluding this workflow's own check to avoid
-            # chicken-and-egg problem where staging-deploy is always "pending"
-            CHECKS_JSON=$(gh pr checks "$PR_NUM" --json name,state,bucket 2>/dev/null || echo "[]")
-
-            # Filter out the staging-deploy check itself, and bench-approval:
-            # an unapproved bench-cloud PR still previews in staging
-            # (HOMELAB-85 decision 2). bench-paths is NOT filtered, so a bench
-            # PR outside its paths stays out of staging.
-            FILTERED=$(echo "$CHECKS_JSON" | jq '[.[] | select(.name != "sync-staging" and .name != "bench-approval")]')
-
-            CHECKS_COUNT=$(echo "$FILTERED" | jq 'length')
-            CHECKS_FAIL=$(echo "$FILTERED" | jq '[.[] | select(.bucket == "fail")] | length')
-            CHECKS_PENDING=$(echo "$FILTERED" | jq '[.[] | select(.bucket == "pending")] | length')
-
-            echo "  Checks: total=$CHECKS_COUNT fail=$CHECKS_FAIL pending=$CHECKS_PENDING"
-
-            # Merge if: all checks passed (none failing/pending), OR no checks exist
-            # PRs with no checks are safe to preview in staging (they still need
-            # PR review before merging to master)
-            if [ "$CHECKS_FAIL" -eq 0 ] && [ "$CHECKS_PENDING" -eq 0 ]; then
-              echo "  PR #$PR_NUM is ready. Attempting merge into staging..."
+            # Ready means: no check failing or pending (ignoring sync-staging,
+            # this workflow's own job, and bench-approval: an unapproved bench
+            # PR still previews, HOMELAB-85 decision 2). A bench-cloud PR
+            # (opened or pushed to by the bot, gate.py's rule) must also HAVE a
+            # bench-paths success from GitHub Actions on its head: until the
+            # gate posts it, it is missing, not failing, and the PR used to go
+            # in unchecked. PRs with no checks at all still preview. The script
+            # prints the head SHA it judged; merge exactly that commit, so a
+            # push landing mid-run can't bring in an unjudged one.
+            if HEAD_SHA=$(python3 "$GATE_DIR/staging_ready.py" --pr "$PR_NUM"); then
+              echo "  PR #$PR_NUM is ready at ${HEAD_SHA:0:7}. Attempting merge into staging..."
 
               git fetch origin "pull/$PR_NUM/head:pr-$PR_NUM"
-              if git merge "pr-$PR_NUM" --no-edit -m "Merge PR #$PR_NUM into staging"; then
+              if ! git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null; then
+                # Force-pushed while it was judged: the judged commit is gone.
+                # The push re-runs Lint, and that run picks up the new head.
+                echo "::warning::PR #$PR_NUM head ${HEAD_SHA:0:7} is no longer fetchable (force-push?); left out of this staging build."
+                SKIPPED=$((SKIPPED + 1))
+              elif git merge "$HEAD_SHA" --no-edit -m "Merge PR #$PR_NUM into staging"; then
                 echo "  Successfully merged PR #$PR_NUM"
                 MERGED=$((MERGED + 1))
               elif resolve_plans_index; then
@@ -130,7 +145,7 @@ jobs:
                 SKIPPED=$((SKIPPED + 1))
               fi
             else
-              echo "  PR #$PR_NUM not ready (fail=$CHECKS_FAIL, pending=$CHECKS_PENDING) — skipping."
+              echo "  PR #$PR_NUM not ready — skipping."
               SKIPPED=$((SKIPPED + 1))
             fi
             echo "::endgroup::"

@@ -116,6 +116,15 @@ drops `sync-staging` also drops `bench-approval`:
 FILTERED=$(echo "$CHECKS_JSON" | jq '[.[] | select(.name != "sync-staging" and .name != "bench-approval")]')
 ```
 
+**Missing is not failing (found in the step 1 review).** staging-deploy runs when Lint and Flux
+tests finish. If the gate hasn't posted `bench-paths` yet, nothing is failing or pending, so with
+the filter alone a bench PR went into staging unchecked. The fix moves the readiness decision into
+`scripts/bench-gate/staging_ready.py` (unit tested). It keeps the filter, and it also requires a
+bench PR (gate.py's rule) to have a `bench-paths` success from GitHub Actions on the exact head SHA
+it judged. staging-deploy then merges that SHA, not the branch tip. It runs master's copy of the
+script, copied out of the tree before any PR is merged in, and it also rebuilds when the gate
+finishes.
+
 **Why statuses, not the job's own check run.** The gate runs on two events (a push and a review).
 Each run of a job creates a new check run with the same name, and GitHub's docs don't say which
 one a required check uses. A commit status is posted to an explicit SHA, and the latest one per

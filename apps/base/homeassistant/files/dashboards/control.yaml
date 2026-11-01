@@ -28,6 +28,28 @@ views:
       hide_date: false
       grid_options:
         columns: 24
+      # Hidden when the entity is missing or unavailable: the card throws
+      # "Configuration error" for a missing entity. The card below says what
+      # is wrong instead (HASS-10; same pair in dashboards/home.yaml).
+      visibility:
+      - condition: state
+        entity: weather.forecast_home
+        state_not:
+        - unknown
+        - unavailable
+    - type: custom:mushroom-template-card
+      primary: Weather
+      secondary: "{{ 'Not found: weather.forecast_home' if expand('weather.forecast_home') | count == 0 else 'Unavailable right now (' ~ states('weather.forecast_home') ~ ')' }}"
+      icon: mdi:weather-cloudy-alert
+      icon_color: red
+      grid_options:
+        columns: 24
+      visibility:
+      - condition: state
+        entity: weather.forecast_home
+        state:
+        - unknown
+        - unavailable
     - type: custom:mushroom-template-card
       primary: All Lights Off
       secondary: "{{ states('sensor.lights_on') ~ ' on' if states('sensor.lights_on') | is_number else '— (count unavailable)' }}"

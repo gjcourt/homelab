@@ -15,7 +15,10 @@ Configuration comes from the environment (the CronJob's env and Secrets):
     LAB_PATH            use an existing lab checkout instead of cloning
     REPO_PROJECTS       repo:IDENT:Name[:plans], comma-separated
                         default "homelab:HOMELAB:Homelab:plans,domestique:DOMESTIQUE:Domestique"
-    PLAN_PATH_<REPO>    use an existing checkout for that repo's plans (e.g. PLAN_PATH_HOMELAB)
+                        The projects must already exist with the bot as a Member; plane-sync
+                        skips and reports one it can't work in rather than creating it.
+    PLAN_PATH_<REPO>    use an existing checkout for that repo's plans, read as checked out;
+                        REPO upper-cased with "-" as "_" (PLAN_PATH_PLANE_MOBILE)
     GIT_AUTHOR_NAME / GIT_AUTHOR_EMAIL   identity for the status-sync commit
 """
 
@@ -43,17 +46,25 @@ def secret(name: str) -> str | None:
     return Path(f).read_text().strip() if f else None
 
 
-def parse_repo_projects(spec: str, workdir: Path, token: str | None, owner: str) -> list[RepoProject]:
+def plan_path_var(repo: str) -> str:
+    return "PLAN_PATH_" + repo.upper().replace("-", "_")
+
+
+def parse_repo_projects(spec: str, workdir: Path, token: str | None, owner: str,
+                        gh=None) -> list[RepoProject]:
     out = []
     for part in filter(None, (s.strip() for s in spec.split(","))):
         bits = part.split(":")
         repo, ident, name = bits[0], bits[1], bits[2]
         plans = len(bits) > 3 and bits[3] == "plans"
         path = None
+        branch = "master"
         if plans:
-            local = os.environ.get(f"PLAN_PATH_{repo.upper()}")
+            local = os.environ.get(plan_path_var(repo))
             path = Path(local) if local else ghmod.clone(owner, repo, workdir / repo, token)
-        out.append(RepoProject(repo, ident, name, path))
+            if gh is not None:
+                branch = gh.default_branch(owner, repo) or branch
+        out.append(RepoProject(repo, ident, name, path, branch))
     return out
 
 
@@ -138,7 +149,7 @@ def main(argv=None) -> int:
             repo_projects=parse_repo_projects(
                 os.environ.get("REPO_PROJECTS",
                                "homelab:HOMELAB:Homelab:plans,domestique:DOMESTIQUE:Domestique"),
-                work, gh_token, lab_owner),
+                work, gh_token, lab_owner, gh),
             owner_email=os.environ.get("OWNER_EMAIL", ""),
             state_file=Path(os.environ.get("STATE_FILE", "plane-sync-state.json")),
         )

@@ -24,6 +24,18 @@ top of [`plane_sync/cli.py`](plane_sync/cli.py).
 
 - **Matching** is on `external_source` + `external_id`, never titles. Briefs use `lab` + the brief
   number. Plans use `plan:<repo>` + the filename.
+- **Repo projects are never created by plane-sync.** Each repo in `REPO_PROJECTS` maps to a Plane
+  project a person made, and the bot must be a Member of it. A project the bot can't see, or is
+  listed but not a member of (Plane lists public projects to everyone but answers 403 on their
+  items), is skipped and reported in `skipped_projects`. Lab category projects are still created.
+- **Plans that already have a ticket are left alone.** Before creating a plan item, plane-sync
+  looks for a hand-made item (no `external_source`) in the same project that tracks the plan: one
+  the plan names (`Ticket: FAX-3` in its text, or its PR's title `docs(FAX-3): ...`), or one whose
+  name equals the plan's title, ignoring case, punctuation and a `Plan:` prefix. If found, no
+  mirror item is made and the pair is reported in `plans_tracked_by_ticket`. That ticket's state
+  stays with whoever works it.
+- **Plans with no frontmatter `status:`** are not mirrored (there is no status to mirror) and are
+  listed in `plans_without_status`. A repo with no `docs/plans/` syncs nothing.
 - **Statuses.** Brief statuses are Not Started → Backlog, In Progress → In Progress, Done → Done,
   and Cancelled → Cancelled. Plane → lab maps on the state *group*, so Todo also reads as Not
   Started. Plan statuses are planned → Todo, in-progress → In Progress, complete → Done, and

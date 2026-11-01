@@ -85,10 +85,11 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (21)
+### Planned (22)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-11-01-bench-homelab-paths-plan.md](2026-11-01-bench-homelab-paths-plan.md) | 2026-11-01 | agent-desk Jobs may open homelab PRs in apps/** and docs/**; a required check holds them until George approves the head |
 | [2026-10-25-winpc-claude-code-plan.md](2026-10-25-winpc-claude-code-plan.md) | 2026-10-25 | Claude Code in WSL2 on winpc so the laptop can use George's agents remotely, via Remote Control and SSH over WireGuard |
 | [2026-10-19-hestia-transcoder.md](2026-10-19-hestia-transcoder.md) | 2026-10-19 | Move x265 encoding from winpc to a hestia Custom App running 3-4 encodes in parallel; winpc only rips and hands off |
 | [2026-09-28-renovate-fixer-bench-cloud.md](2026-09-28-renovate-fixer-bench-cloud.md) | 2026-10-08 | Bench-cloud fixes stuck Renovate PRs; mechanical fixes auto-merge, risky go to George; renovate-review kept on subscription billing |

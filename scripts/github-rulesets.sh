@@ -120,8 +120,22 @@ RULESETS=("$BODY" "$BODY_RENOVATE")
 #        no required check, GitHub auto-merge merges at once (lab#111 merged
 #        while lint-and-format was still running, 2026-10-22). integration_id
 #        15368 is GitHub Actions.
+#   agent-sandbox: HOMELAB-85 trial (rollout step 2). bench-paths and
+#        bench-approval, posted by agent-sandbox's bench-gate workflow, must
+#        pass before a PR merges; pinned to GitHub Actions so a same-name
+#        status from anyone else (the App, George's PAT) doesn't count.
+#        homelab gets the same case in rollout step 4, after the trial passes.
+#        Plan: docs/plans/2026-11-01-bench-homelab-paths-plan.md.
 extra_rules() {
   case "$1" in
+    agent-sandbox) cat <<'JSON' ;;
+[{"type": "required_status_checks", "parameters": {
+  "strict_required_status_checks_policy": false,
+  "do_not_enforce_on_create": false,
+  "required_status_checks": [
+    {"context": "bench-paths", "integration_id": 15368},
+    {"context": "bench-approval", "integration_id": 15368}]}}]
+JSON
     lab) cat <<'JSON' ;;
 [{"type": "required_status_checks", "parameters": {
   "strict_required_status_checks_policy": false,

@@ -144,7 +144,7 @@ class Plane:
     def items(self, pid: str) -> list[dict]:
         return list(self.paged(
             f"/projects/{pid}/work-items/?fields=id,name,state,labels,external_id,"
-            "external_source,description_html"))
+            "external_source,description_html,sequence_id"))
 
     def create_item(self, pid: str, body: dict) -> dict:
         return self.write("POST", f"/projects/{pid}/work-items/", body, ok_conflict=True)

@@ -25,8 +25,8 @@ class FakePlane:
     def projects(self):
         return list(self.proj.values())
 
-    def create_project(self, name, identifier, description):
-        p = {"id": self._id(), "name": name, "identifier": identifier}
+    def create_project(self, name, identifier, description, is_member=True):
+        p = {"id": self._id(), "name": name, "identifier": identifier, "is_member": is_member}
         self.proj[identifier] = p
         self.st[p["id"]] = [{"id": self._id(), "name": n, "group": g} for n, g in GROUPS]
         self.lab[p["id"]], self.its[p["id"]], self.members[p["id"]] = {}, {}, ["creator"]
@@ -41,7 +41,12 @@ class FakePlane:
     def add_member(self, pid, uid, role):
         self.members[pid].append(uid)
 
+    def _member(self, pid):
+        if not next(p for p in self.proj.values() if p["id"] == pid)["is_member"]:
+            raise AssertionError(f"403: not a member of {pid}")
+
     def states(self, pid):
+        self._member(pid)
         return self.st[pid]
 
     def create_state(self, pid, name, group, color):
@@ -56,13 +61,14 @@ class FakePlane:
         return self.lab[pid].setdefault(name, self._id())
 
     def items(self, pid):
+        self._member(pid)
         return list(self.its[pid].values())
 
     def create_item(self, pid, body):
         for it in self.its[pid].values():
             if (it.get("external_source"), it.get("external_id")) == (body.get("external_source"), body.get("external_id")):
                 return {"id": it["id"], "_existing": True}
-        it = dict(body, id=self._id())
+        it = dict(body, id=self._id(), sequence_id=len(self.its[pid]) + 1)
         self.its[pid][it["id"]] = it
         return it
 
@@ -134,26 +140,34 @@ def homelab(tmp: Path, plans: dict) -> Path:
     return tmp / "homelab"
 
 
-def make(lab_root, tmp_path, gh=None, plans=None):
+def make(lab_root, tmp_path, gh=None, plans=None, plane=None):
     hl = homelab(tmp_path, plans or {"2026-01-01-ip.md": ("planned", "IP plan", "lab: 03-002\n")})
     cfg = Config(lab_root=lab_root, owner_email="g@example.com", state_file=tmp_path / "state.json",
                  repo_projects=[RepoProject("homelab", "HOMELAB", "Homelab", hl),
                                 RepoProject("domestique", "DOMESTIQUE", "Domestique", None)])
+    if plane is not None:  # repo projects are made by people, not by plane-sync
+        for rp in cfg.repo_projects:
+            plane.create_project(rp.name, rp.identifier, "")
     return cfg
 
 
-def test_import_creates_everything_and_is_idempotent(lab_root, tmp_path):
+def fresh(lab_root, tmp_path, **kw):
     plane = FakePlane()
-    cfg = make(lab_root, tmp_path)
+    return plane, make(lab_root, tmp_path, plane=plane, **kw)
+
+
+def test_import_creates_everything_and_is_idempotent(lab_root, tmp_path):
+    plane, cfg = fresh(lab_root, tmp_path)
     s = Syncer(plane, cfg, gh=FakeGH(), log=lambda m: None)
     r = s.run(initial=True)
     s.save()
-    assert sorted(r.created_projects) == ["AUTO", "COFFEE", "DOMESTIQUE", "HOMELAB"]
+    assert sorted(r.created_projects) == ["AUTO", "COFFEE"]
     assert r.created_items == {"brief": 3, "plan": 1}
     pid, it = plane.item("AUTO", "03-002")
     assert it["state"] == plane.state_id("AUTO", "Backlog")
     assert it["name"] == "03-002 · IP Cleanup"
     assert "george" in plane.members[pid]
+    assert r.skipped_projects == []
     _, done = plane.item("AUTO", "03-001")
     assert done["state"] == plane.state_id("AUTO", "Done")
     # plan relates to its brief (cross-project)
@@ -168,8 +182,7 @@ def test_import_creates_everything_and_is_idempotent(lab_root, tmp_path):
 
 
 def test_reconcile_plane_status_writes_back(lab_root, tmp_path):
-    plane = FakePlane()
-    cfg = make(lab_root, tmp_path)
+    plane, cfg = fresh(lab_root, tmp_path)
     s = Syncer(plane, cfg, gh=FakeGH(), log=lambda m: None)
     s.run(initial=True)
     s.save()
@@ -186,8 +199,7 @@ def test_reconcile_plane_status_writes_back(lab_root, tmp_path):
 
 
 def test_reconcile_conflict_writes_nothing(lab_root, tmp_path):
-    plane = FakePlane()
-    cfg = make(lab_root, tmp_path)
+    plane, cfg = fresh(lab_root, tmp_path)
     s = Syncer(plane, cfg, gh=FakeGH(), log=lambda m: None)
     s.run(initial=True)
     s.save()
@@ -213,7 +225,7 @@ def test_open_pr_plan_is_proposed_then_follows_frontmatter(lab_root, tmp_path):
           "head": {"sha": "abc"}, "files": [{
               "filename": "docs/plans/2026-10-12-music-assistant.md", "status": "added",
               "text": PLAN.format(status="planned", summary="MA", title="Music Assistant", extra="")}]}
-    cfg = make(lab_root, tmp_path)
+    cfg = make(lab_root, tmp_path, plane=plane)
     s = Syncer(plane, cfg, gh=FakeGH([pr]), log=lambda m: None)
     r = s.run(initial=True)
     s.save()
@@ -234,7 +246,7 @@ def test_pr_closed_unmerged_cancels(lab_root, tmp_path):
     pr = {"repo": "homelab", "number": 9, "html_url": "u", "head": {"sha": "s"}, "files": [{
         "filename": "docs/plans/2026-02-02-x.md", "status": "added",
         "text": PLAN.format(status="planned", summary="x", title="X", extra="")}]}
-    cfg = make(lab_root, tmp_path)
+    cfg = make(lab_root, tmp_path, plane=plane)
     Syncer(plane, cfg, gh=FakeGH([pr]), log=lambda m: None).run(initial=True)
     Syncer(plane, cfg, gh=FakeGH([]), log=lambda m: None).run(initial=False)
     pid, it = plane.item("HOMELAB", "2026-02-02-x.md")
@@ -243,8 +255,7 @@ def test_pr_closed_unmerged_cancels(lab_root, tmp_path):
 
 
 def test_plane_side_plan_edit_is_reverted(lab_root, tmp_path):
-    plane = FakePlane()
-    cfg = make(lab_root, tmp_path)
+    plane, cfg = fresh(lab_root, tmp_path)
     s = Syncer(plane, cfg, gh=FakeGH(), log=lambda m: None)
     s.run(initial=True)
     s.save()

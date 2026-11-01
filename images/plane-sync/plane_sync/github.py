@@ -49,6 +49,12 @@ class GitHub:
                 return
             page += 1
 
+    def default_branch(self, owner: str, repo: str) -> str | None:
+        try:
+            return self._req("GET", f"/repos/{owner}/{repo}").get("default_branch")
+        except RuntimeError:
+            return None
+
     def open_pulls(self, owner: str, repo: str):
         return list(self._paged(f"/repos/{owner}/{repo}/pulls?state=open"))
 

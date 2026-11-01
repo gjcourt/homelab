@@ -302,7 +302,8 @@ class Dispatcher:
             comments.append(("George, in a GitHub review", _p(review["text"])))
         text = promptmod.build(pb.prompt, key=t.key, title=t.name,
                                description_html=item.get("description_html", ""),
-                               comments=comments, resume=d.resume)
+                               comments=comments, resume=d.resume, repo=pr.repo,
+                               repo_note=self.cfg.repo_notes.get(pr.repo, ""))
         if self.template is None:
             self.template = jobmod.load_template(self.cfg.job_template)
         tid = jobmod.task_id(t.key)

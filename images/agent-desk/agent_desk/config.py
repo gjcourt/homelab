@@ -1,8 +1,9 @@
 """Dispatcher config: the reviewed rules (a ConfigMap in homelab) plus env.
 
-Agents can't edit gjcourt/homelab, so nothing here can be widened by an agent:
-the project → repo map, the deny list and the playbooks all come from this
-file, never from ticket text.
+The ConfigMap lives in apps/*/agent-desk/, which is outside bench-cloud's
+paths in homelab (scripts/bench-gate/rules.yaml), so nothing here can be
+widened by an agent: the project → repo map, the deny list, the playbooks and
+the repo notes all come from this file, never from ticket text.
 """
 
 from __future__ import annotations
@@ -47,6 +48,9 @@ class Config:
     deny_repos: set[str]
     playbooks: dict[str, Playbook]
     dry_run_jobs: bool
+    # owner/repo → text appended to every playbook prompt for that repo, e.g.
+    # the paths a bench PR may change there (HOMELAB-85).
+    repo_notes: dict[str, str] = field(default_factory=dict)
     job_namespace: str = "bench-cloud"
     job_template: str = "/app/job.yaml"
     console_deployment: str = "bench-console"
@@ -105,6 +109,7 @@ def load(path: str | None = None, env=os.environ) -> Config:
         deny_repos=set(raw.get("denyRepos") or []),
         playbooks=playbooks,
         dry_run_jobs=str(env.get("DRY_RUN_JOBS", "false")).lower() == "true",
+        repo_notes={str(k): str(v or "") for k, v in (raw.get("repoNotes") or {}).items()},
         poll_seconds=seconds(raw.get("pollInterval", "10m")),
         github_poll_seconds=seconds(raw.get("githubPollInterval", "5m")),
         port=int(env.get("PORT", "8080")),

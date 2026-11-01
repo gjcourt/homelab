@@ -41,6 +41,12 @@ With `DRY_RUN_JOBS=true`, Jobs are created with `dryRun=All`: the API server
 runs RBAC, admission and quota checks but stores nothing. Plane writes are
 still real.
 
+`repoNotes` (optional) maps `owner/repo` to text that is appended to every
+playbook prompt for that repo, ahead of the ticket. homelab uses it to tell
+the agent which paths a bench PR may change there (HOMELAB-85,
+`scripts/bench-gate/rules.yaml`), so a playbook such as `docs-fix` doesn't try
+a file the gate would refuse.
+
 ## Develop
 
 ```bash

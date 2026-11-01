@@ -134,7 +134,7 @@ views:
     # TODO: add `hallway_landing` area card once that Area is created in HA.
   # Summary strip — glanceable counts, tap to jump to the relevant tab.
   # Backed by template sensors in configuration.yaml (lights_on_count,
-  # media_playing_count, maintenance_to_do_count).
+  # media_playing_count, maintenance_to_do_count, auto_shutoff_running_count).
   - type: grid
     column_span: 3
     cards:
@@ -164,6 +164,14 @@ views:
       tap_action:
         action: navigate
         navigation_path: maintenance
+    # Auto-shutoff timers counting down now (HASS-8).
+    - type: tile
+      entity: sensor.auto_shutoff_running
+      name: Auto-shutoff
+      icon: mdi:timer-outline
+      tap_action:
+        action: navigate
+        navigation_path: auto-shutoff
 - title: Auto-shutoff
   theme: Tinted
   path: auto-shutoff

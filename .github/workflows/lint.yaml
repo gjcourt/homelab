@@ -34,3 +34,25 @@ jobs:
       - name: Check plans frontmatter and index
         run: go run . -check
         working-directory: scripts/plans-index
+
+  # HOMELAB-85: unit tests for the bench-cloud path and approval gate, and the
+  # rule that only bench-gate.yaml may hold `statuses: write`.
+  bench-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pyyaml pytest
+
+      - name: Unit tests
+        run: python -m pytest -q scripts/bench-gate/tests
+
+      - name: Only bench-gate.yaml may write commit statuses
+        run: python3 scripts/bench-gate/lint_workflows.py .github/workflows

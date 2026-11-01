@@ -99,8 +99,11 @@ jobs:
             # chicken-and-egg problem where staging-deploy is always "pending"
             CHECKS_JSON=$(gh pr checks "$PR_NUM" --json name,state,bucket 2>/dev/null || echo "[]")
 
-            # Filter out the staging-deploy check itself
-            FILTERED=$(echo "$CHECKS_JSON" | jq '[.[] | select(.name != "sync-staging")]')
+            # Filter out the staging-deploy check itself, and bench-approval:
+            # an unapproved bench-cloud PR still previews in staging
+            # (HOMELAB-85 decision 2). bench-paths is NOT filtered, so a bench
+            # PR outside its paths stays out of staging.
+            FILTERED=$(echo "$CHECKS_JSON" | jq '[.[] | select(.name != "sync-staging" and .name != "bench-approval")]')
 
             CHECKS_COUNT=$(echo "$FILTERED" | jq 'length')
             CHECKS_FAIL=$(echo "$FILTERED" | jq '[.[] | select(.bucket == "fail")] | length')

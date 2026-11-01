@@ -1,5 +1,7 @@
-# agent-desk rules for production (plan "Playbooks"). Reviewed here; agents
-# can't edit this repo, so nothing in it can be widened by an agent.
+# agent-desk rules for production (plan "Playbooks"). Reviewed here. Agents
+# may open homelab PRs, but this directory (apps/*/agent-desk/**) is outside
+# their paths (scripts/bench-gate/rules.yaml), so nothing here can be widened
+# by an agent.
 ownerEmail: gjcourt@gmail.com
 # Plane in the browser, for the link in a phone notification.
 planeWebUrl: https://plane.burntbytes.com
@@ -9,14 +11,40 @@ botEmail: gjcourt+agent-desk@gmail.com
 # Plane project identifier → repo. The repo always comes from here, never from
 # ticket text. Real repos join here one at a time (plan step 10), each with
 # the bot as a Member of its project and the default-branch guard on the repo.
+# homelab also needs the bench-paths and bench-approval required checks
+# (HOMELAB-85, docs/plans/2026-11-01-bench-homelab-paths-plan.md), and the
+# github-token in secret-agent-desk.yaml must list it.
 projects:
   SANDBOX: gjcourt/agent-sandbox
   PLANEMOBILE: gjcourt/plane-mobile
   DOMESTIQUE: gjcourt/domestique
   TOPPINGCTL: gjcourt/toppingctl
   MODEMSCOPE: gjcourt/modemscope
-denyRepos:
-  - gjcourt/homelab
+  # HOMELAB-85: both Plane projects work in homelab, inside the gate's paths.
+  HOMELAB: gjcourt/homelab
+  HASS: gjcourt/homelab
+denyRepos: []
+# Appended to every playbook prompt for the repo, ahead of the ticket.
+repoNotes:
+  gjcourt/homelab: |
+    This repo has a bench gate (scripts/bench-gate/rules.yaml on master). A
+    bench PR may change only files under apps/** and docs/**, and never:
+    apps/*/agent-desk/**, apps/*/bench-cloud/**, clusters/**, infra/**,
+    .github/**, scripts/**, images/**, hosts/**, root files, SOPS secrets
+    (secret*.yaml or any file with a top-level sops: key), or network
+    policies (networkpolicy*.yaml, any NetworkPolicy kind, or a line that
+    mentions one). Under apps/**, a change also may not add or touch a
+    cluster-scoped kind (Namespace, PersistentVolume, any Cluster* kind such
+    as a CNPG Cluster or ClusterRole, ...), Role or RoleBinding, an RBAC,
+    admission, storage, cilium.io or Flux (*.toolkit.fluxcd.io) API group,
+    the words flux-system, kube-system, kube-public or kube-node-lease,
+    remote kustomize resources or helmCharts, or added lines that set
+    privileged/hostNetwork/hostPID/hostIPC true, hostPath, or capabilities
+    add. A pre-push hook refuses such a push, and the PR's bench-paths
+    status would fail. If the ticket needs any of that, make the part you
+    may make, and say in the PR and on the ticket what George must change.
+    Every PR waits for George's approval of its head (bench-approval); never
+    try to get around it.
 pollInterval: 10m
 githubPollInterval: 5m
 # George's GitHub login: his "request changes" review on a ticket's PR wakes
@@ -100,6 +128,8 @@ playbooks:
       - gjcourt/plane-mobile
       - gjcourt/domestique
       - gjcourt/toppingctl
+      # HOMELAB-85: within the bench gate's paths (repoNotes above).
+      - gjcourt/homelab
     prompt: |
       Playbook feature. Build what the ticket asks for, and only that. Read the
       repo's AGENTS.md (and any plan the ticket links) first, and follow its

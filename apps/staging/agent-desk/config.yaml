@@ -1,5 +1,7 @@
-# agent-desk rules for staging (plan "Playbooks"). Reviewed here; agents can't
-# edit this repo, so nothing in it can be widened by an agent.
+# agent-desk rules for staging (plan "Playbooks"). Reviewed here. Agents may
+# open homelab PRs, but this directory (apps/*/agent-desk/**) is outside their
+# paths (scripts/bench-gate/rules.yaml), so nothing here can be widened by an
+# agent.
 ownerEmail: gjcourt@gmail.com
 # Plane in the browser, for the link in a phone notification.
 planeWebUrl: https://plane.stage.burntbytes.com

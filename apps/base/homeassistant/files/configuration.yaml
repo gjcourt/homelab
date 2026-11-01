@@ -792,7 +792,7 @@ homeassistant:
                 key: maintenance_grill_cleaning
                 unit: years
                 default: 2
-    # Daily shot (HASS-11): an 8 pm reminder that says which side is next,
+    # Daily shot (HASS-11): a 7 pm reminder that says which side is next,
     # alternating left and right. Done (on the dashboard or the phone
     # notification) records the time and side and flips the next side; the
     # automations are in automations.yaml under "Daily shot".

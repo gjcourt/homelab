@@ -682,13 +682,13 @@
 # reminder is a persistent notification only (same guard as Maintenance).
 
 - alias: "Daily shot — reminder"
-  description: "At 20:00, and again at 20:30 if not yet logged, say which side is next, with a Done action."
+  description: "At 19:00, and again at 19:30 if not yet logged, say which side is next, with a Done action."
   mode: single
   trigger:
     - platform: time
-      at: "20:00:00"
+      at: "19:00:00"
     - platform: time
-      at: "20:30:00"
+      at: "19:30:00"
   condition:
     - condition: state
       entity_id: sensor.daily_shot
@@ -722,7 +722,7 @@
                   title: "{{ title }}"
                   message: "{{ message }} Press and hold to mark it done."
                   data:
-                    # One tag, so the 20:30 nag replaces the 20:00 reminder.
+                    # One tag, so the 19:30 nag replaces the 19:00 reminder.
                     tag: daily_shot
                     actions:
                       - action: DAILY_SHOT_DONE

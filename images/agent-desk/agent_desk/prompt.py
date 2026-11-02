@@ -25,13 +25,18 @@ def _defang(s: str) -> str:
 
 
 def build(playbook_prompt: str, *, key: str, title: str, description_html: str,
-          comments: list[tuple[str, str]], resume: bool) -> str:
-    """comments: (author label, html) oldest first."""
+          comments: list[tuple[str, str]], resume: bool, repo: str = "",
+          repo_note: str = "") -> str:
+    """comments: (author label, html) oldest first. repo_note: the config's
+    repoNotes entry for the ticket's repo, appended to the playbook's
+    instructions (it is reviewed config, not ticket text)."""
     lines = [f"Title: {title}", "", html_to_text(description_html) or "(no description)"]
     for who, body in comments:
         lines += ["", f"--- comment by {who} ---", html_to_text(body)]
     ticket = _defang("\n".join(lines))
     head = playbook_prompt.strip()
+    if repo_note.strip():
+        head += f"\n\nNotes for {repo or 'this repo'}:\n{repo_note.strip()}"
     if resume:
         head += ("\n\nAn earlier run worked this ticket, and George has commented since "
                  "(the newest comments below). Carry on from there: if it has a PR, push to "

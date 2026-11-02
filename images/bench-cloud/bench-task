@@ -78,6 +78,20 @@ cd "$WORKSPACE"
 git clone -q "https://github.com/$TASK_REPO" repo
 cd repo
 
+# HOMELAB-85 defence in depth: a repo with a bench gate (scripts/bench-gate/
+# rules.yaml on its default branch) gets a pre-push hook that runs the gate's
+# path check before anything leaves the pod. The rules are copied out of the
+# clone, from the default branch, so edits on the agent's branch don't change
+# them. Set per clone, so other repos keep their own hooks. Not a security
+# boundary (the agent can edit its environment); the bench-paths status is.
+default=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)
+if [[ -n "$default" ]] && git cat-file -e "$default:scripts/bench-gate/rules.yaml" 2>/dev/null; then
+  mkdir -p "$HOME/.bench-gate"
+  git show "$default:scripts/bench-gate/rules.yaml" > "$HOME/.bench-gate/rules.yaml"
+  git config core.hooksPath /usr/local/share/bench-cloud/git-hooks
+  echo "bench-gate: pushes from this clone are checked against $TASK_REPO's rules ($default)"
+fi
+
 # Skill: the allowlisted skills bench-agents-sync installs (babysit, ci, ...);
 # without it a skill invocation that needs approval is denied here.
 tools=("Bash" "Read" "Edit" "Write" "Glob" "Grep" "WebFetch" "WebSearch" "TodoWrite" "Skill")

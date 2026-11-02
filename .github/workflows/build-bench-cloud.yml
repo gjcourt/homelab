@@ -6,6 +6,7 @@ on:
     paths:
       - 'images/bench-cloud/**'
       - 'scripts/bench-cloud/**'
+      - 'scripts/bench-gate/check.py'
       - '.github/workflows/build-bench-cloud.yml'
   workflow_dispatch:
 

@@ -1,12 +1,41 @@
 ---
-status: planned
-last_modified: 2026-11-01
+status: in-progress
+last_modified: 2026-11-02
 summary: "agent-desk Jobs may open homelab PRs in apps/** and docs/**; a required check holds them until George approves the head"
 ---
 
 # bench-cloud PRs in homelab, limited by paths
 
 Plane: HOMELAB-85.
+
+## Status (2026-11-02)
+
+Rollout steps 1 to 6 are done, and step 7 (docs) lands with this update. Tests T0 to T11 passed on agent-sandbox. T12 and T13 have not run:
+no HOMELAB or HASS ticket has gone through a Job yet.
+
+Live:
+
+- **Gate** (step 1, #1747): `bench-gate.yaml` posts `bench-paths` and `bench-approval`.
+  Follow-ups: #1751 (staging hold) and #1753 with agent-sandbox#31 (the gate's fetch for private
+  repos).
+- **agent-sandbox** (step 2, agent-sandbox#5 and #1750): ruleset applied, T0 to T11 passed.
+- **Job checks** (step 3, agent-sandbox#8 and #1755; step 3b, #1766): pre-push hook,
+  managed-settings denies, `repoNotes`. bench-cloud and agent-desk are pinned to
+  `2026-11-02-4f7040e`.
+- **homelab ruleset** (step 4, #1756): `default-branch-guard` requires `bench-paths` and
+  `bench-approval`. Applied with `scripts/github-rulesets.sh --apply --repo homelab`; `--check`
+  is clean.
+- **Plane** (step 5): the agent-desk bot is a Member of HOMELAB and HASS.
+- **agent-desk config** (step 6, #1757): HOMELAB and HASS map to `gjcourt/homelab`, `denyRepos`
+  is empty, and homelab is in `feature.allowedRepos`.
+
+Left:
+
+- **T12.** A HOMELAB `docs-fix` ticket through a Job.
+- **T13.** A HASS ticket that needs a change outside the paths.
+
+Related changes the same day: #1764 leaves PRs that change `.github/workflows` out of the staging
+build (GITHUB_TOKEN can't push workflow changes), and #1765 gave agent-desk its own `github-token`.
 
 ## Goal
 
@@ -15,7 +44,7 @@ agent-desk turns `ready` Plane tickets into bench-cloud Jobs. Today `gjcourt/hom
 Plane projects HOMELAB and HASS, within a fixed set of paths. A merge to master still needs
 George's approval of the exact commit that merges.
 
-Plan only. Nothing changes until George approves it.
+Rollout is under way. See [Status](#status-2026-11-02).
 
 ## Decisions (George, 2026-11-01)
 

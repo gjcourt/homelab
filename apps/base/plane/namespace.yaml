@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: plane
+  labels:
+    http-ingress: "true"
+    # The target is `restricted`. Plane's images all run as root today
+    # (makeplane/helm-charts#339): the web and admin images are nginx, which
+    # needs root to start as built, and the chart-local Valkey, RabbitMQ and
+    # MinIO entrypoints chown their data dirs. So enforce `baseline` and warn
+    # and audit at `restricted`, which keeps the gap visible. The HelmRelease's
+    # post-render patches run every workload that can as non-root.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

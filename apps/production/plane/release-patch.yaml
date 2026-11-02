@@ -1,0 +1,100 @@
+# Production's own post-render patches, appended after the base ones.
+#
+# DATABASE_URL: from the `fqdn-uri` key of the Secret CNPG generates for the
+# cluster's owner. `env` beats the chart's envFrom, whose DATABASE_URL is
+# empty with postgres.local_setup false. `fqdn-uri`, not `uri`: its host is
+# `<cluster>-rw.<ns>.svc.cluster.local`, which with the base's ndots:1 is
+# looked up once, as written. `uri`'s host (`<cluster>-rw.<ns>`) would be
+# tried as an absolute name first and forwarded upstream before the search
+# list found it (see docs/operations/apps/plane.md, "DNS lookups").
+#
+# WEBHOOK_ALLOWED_HOSTS: Plane's SSRF guard refuses webhooks to private
+# addresses unless the host is listed here. It checks when a webhook is saved
+# (api) and again at delivery (worker), so both need it. One exact name, never
+# a CIDR: the agent-desk dispatcher (03-042, agent desk plan step 6).
+#
+# API_KEY_RATE_LIMIT: per API key, on the api only (default 60/minute). 180
+# covers 24 ticket Jobs on the Jobs' key: the comment hook at 2/min each plus
+# `bench-ticket wait` polling (agent desk plan, "Measured Plane rate").
+- op: add
+  path: /spec/postRenderers/-
+  value:
+    kustomize:
+      patches:
+        - target:
+            kind: Deployment
+            name: plane-api-wl
+          patch: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: plane-api-wl
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: plane-api
+                      env:
+                        - name: DATABASE_URL
+                          valueFrom:
+                            secretKeyRef:
+                              name: plane-db-production-cnpg-v1-app
+                              key: fqdn-uri
+                        - name: WEBHOOK_ALLOWED_HOSTS
+                          value: agent-desk.agent-desk.svc.cluster.local
+                        - name: API_KEY_RATE_LIMIT
+                          value: 180/minute
+        - target:
+            kind: Deployment
+            name: plane-worker-wl
+          patch: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: plane-worker-wl
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: plane-worker
+                      env:
+                        - name: DATABASE_URL
+                          valueFrom:
+                            secretKeyRef:
+                              name: plane-db-production-cnpg-v1-app
+                              key: fqdn-uri
+                        - name: WEBHOOK_ALLOWED_HOSTS
+                          value: agent-desk.agent-desk.svc.cluster.local
+        - target:
+            kind: Deployment
+            name: plane-beat-worker-wl
+          patch: |
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: plane-beat-worker-wl
+            spec:
+              template:
+                spec:
+                  containers:
+                    - name: plane-beat-worker
+                      env:
+                        - name: DATABASE_URL
+                          valueFrom:
+                            secretKeyRef:
+                              name: plane-db-production-cnpg-v1-app
+                              key: fqdn-uri
+        # The migrator's name carries the Helm revision; the chart gives its
+        # container no env list, so this creates one.
+        - target:
+            kind: Job
+            name: plane-api-migrate-.*
+          patch: |
+            - op: add
+              path: /spec/template/spec/containers/0/env
+              value:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: plane-db-production-cnpg-v1-app
+                      key: fqdn-uri

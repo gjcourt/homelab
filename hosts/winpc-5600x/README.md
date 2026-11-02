@@ -1,12 +1,16 @@
 # winpc-5600x
 
-Windows 11 Pro desktop. **Hostname `DESKTOP-T91IG8F`**, `10.42.4.195`,
-SSH as `george` with an installed ed25519 key.
+Windows 11 Pro desktop. **Hostname `daedalus`** (renamed from `DESKTOP-T91IG8F`
+on 2026-10-25), `10.42.1.116` on wired Ethernet, SSH as `george` with an installed
+ed25519 key. The SSH host key was first recorded under the old Wi-Fi address, so
+connect with `ssh -o HostKeyAlias=10.42.4.195 george@10.42.1.116`.
 
 | | |
 | :--- | :--- |
 | CPU | AMD Ryzen 5 5600X, 6 cores / 12 threads |
-| Roles | CD ripping (EAC + MusicBrainz Picard), Blu-ray ripping (MakeMKV), x265 transcoding |
+| Board / RAM / GPU | ASRock B550M-ITX/ac (BIOS P1.80) · 2 × 16 GB DDR4-3200 (both slots) · Radeon RX 580 |
+| Disk | Samsung 860 EVO 1 TB (SATA) |
+| Roles | CD ripping (EAC + MusicBrainz Picard), Blu-ray ripping (MakeMKV), x265 transcoding, Claude Code host (WSL2, below) |
 | Rip outputs | audio `C:\Rips` (flat, tagged FLAC) · video `C:\Video\<Title>\` |
 | Work dir | `C:\media-work` (one in-progress encode + logs) |
 | Scripts | **deployed from git** — the box clones this repo to `C:\Users\george\src\homelab` and runs from the checkout |
@@ -34,8 +38,9 @@ GitHub identity. Cloned with `--filter=blob:none` and a sparse cone on
 on this machine**.
 
 Deliberately *not* a self-hosted GHA runner like hestia and alcatraz: this is a
-desktop that sleeps (S3) and reboots, and a push-deploy to a sleeping machine
-fails silently rather than loudly.
+desktop that reboots, and a push-deploy to a machine that is down fails silently
+rather than loudly. (Sleep and hibernate are off on AC power, checked 2026-10-25,
+because the Claude Code host below must stay up.)
 
 **Why the queue is not in git:** it changes every batch. Committing before each
 run is friction that gets bypassed, and bypassed conventions are exactly how the
@@ -45,6 +50,10 @@ previous five scripts drifted. Only `queue.example.tsv` is tracked.
 
 **`winpc-5600x` is the machine id** — settled 2026-08-29. The CPU is a Ryzen 5
 5600X, verified on the box.
+
+**`daedalus` is the hostname**, chosen 2026-10-25. The machine id stays
+`winpc-5600x`, the directory name here and in hestia's `archive/`, because the box's
+sparse checkout and the transcode pipeline are pinned to `hosts/winpc-5600x`.
 
 The hestia archive directory was renamed `archive/winpc-5800x` → `archive/winpc-5600x`
 on 2026-08-29 (metadata-only `mv` — it is a plain directory inside `main/archive`, not
@@ -58,6 +67,34 @@ a `gauss-transcode` comment purely because it was copied from that laptop — it
 name for this machine, and it is dead on the GitHub account.
 
 Note `gauss` refers to an **old MacBook** in `archive/`, not this box.
+
+## Claude Code host (WSL2)
+
+Built 2026-10-25 from
+[`docs/plans/2026-10-25-winpc-claude-code-plan.md`](../../docs/plans/2026-10-25-winpc-claude-code-plan.md)
+(HOMELAB-74 to HOMELAB-81). The agents run in WSL2 Debian 12, never on Windows.
+
+| | |
+| :--- | :--- |
+| Distro | `Debian`, user `george`, hostname follows Windows (`daedalus`) |
+| `/etc/wsl.conf` | automount off, interop off, `appendWindowsPath = false`, systemd on |
+| `%UserProfile%\.wslconfig` | `memory=24GB`, `vmIdleTimeout=-1` |
+| Keepalive | Windows scheduled task *WSL Debian keepalive (Claude Remote Control)*: at startup, S4U as `george`, runs `wsl.exe -d Debian --exec /bin/sleep infinity` |
+| Remote Control | user unit `~/.config/systemd/user/claude-remote.service` (linger on) runs `claude remote-control --name daedalus` in tmux session `remote`, working dir `~/src` |
+
+Look at it with `wsl -d Debian -- tmux attach -t remote`; detach with Ctrl-B D,
+never Ctrl-C.
+
+**Reboot test passed 2026-10-25:** after a restart with nobody logged in, the
+keepalive task ran 9 s after boot and Remote Control was connected 17 s after boot.
+
+**No Windows drives in Debian.** `/mnt/c` still exists as an empty directory that
+WSL recreates as a mount point, but nothing is mounted on it. A terminal opened from
+Windows starts in the translated Windows path, which doesn't exist; use
+`wsl -d Debian --cd ~`.
+
+Credentials on this box, and how to revoke each, are in the private infra access
+log, not here.
 
 ## Gotchas
 

@@ -4,6 +4,9 @@ namespace: homeassistant-prod
 resources:
   - ../../base/homeassistant/
   - httproute.yaml
+  # /config/secrets.yaml (agent-desk's webhook id). SOPS-encrypted by the
+  # operator from its .example; Flux decrypts it at apply time.
+  - secret-homeassistant-secrets.yaml
 
 labels:
   - pairs:
@@ -55,4 +58,20 @@ patches:
           toPorts:
             - ports:
                 - port: "8880"
+                  protocol: TCP
+  # agent-desk posts its notices to the webhook (agent-desk plan,
+  # "Notifications"). Per overlay so each dispatcher reaches only its own HA.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: homeassistant
+    patch: |
+      - op: add
+        path: /spec/ingress/-
+        value:
+          fromEndpoints:
+            - matchLabels:
+                k8s:io.kubernetes.pod.namespace: agent-desk
+          toPorts:
+            - ports:
+                - port: "8123"
                   protocol: TCP

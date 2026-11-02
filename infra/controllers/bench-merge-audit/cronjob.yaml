@@ -60,7 +60,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: audit
-              image: ghcr.io/gjcourt/bench-cloud:2026-09-26-6ced067
+              image: ghcr.io/gjcourt/bench-cloud:2026-10-01-60e3604
               command:
                 - bash
                 - -euo

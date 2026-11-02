@@ -24,7 +24,7 @@ spec:
       terminationGracePeriodSeconds: 60
       initContainers:
         - name: init-config
-          image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+          image: busybox@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           # Guard against a stale/read-only iSCSI data mount (issue #1080): a hestia
           # iSCSI target flap remounts the ext4 volume read-only, and z2m otherwise
           # starts and burns hundreds of restarts on a confusing `ENOENT mkdir` deep
@@ -69,9 +69,15 @@ spec:
               if [ ! -s /app/data/configuration.yaml ]; then
                 cp -L /tmp/config/configuration.yaml /app/data/configuration.yaml
               fi
+              # External converters live in git, not on the PVC: overwrite on every
+              # start so the PVC copy always matches the ConfigMap.
+              mkdir -p /app/data/external_converters
+              cp -L /tmp/external_converters/*.mjs /app/data/external_converters/
           volumeMounts:
             - name: config
               mountPath: /tmp/config
+            - name: external-converters
+              mountPath: /tmp/external_converters
             - name: data
               mountPath: /app/data
       containers:
@@ -112,6 +118,9 @@ spec:
         - name: config
           configMap:
             name: zigbee2mqtt-config
+        - name: external-converters
+          configMap:
+            name: zigbee2mqtt-external-converters
         - name: data
           persistentVolumeClaim:
             claimName: zigbee2mqtt-data-pvc

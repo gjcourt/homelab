@@ -3,8 +3,9 @@
 # refine it.
 #
 # EXCEPTION: the Tools order is set explicitly by George (2026-08-04) and is
-# NOT a heuristic. A data-driven pass must confirm with him before reshuffling
-# Tools; see docs/operations/apps/homepage.md.
+# NOT a heuristic. Tools is now Home & Life plus Notes & Learning, which keep
+# that order. A data-driven pass must confirm with him before reshuffling
+# either; see docs/operations/apps/homepage.md.
 #
 # There are NO tabs: every group renders on one page as a column (see
 # settings.yaml). Prometheus, Alertmanager and Logs are first-class tiles in
@@ -43,39 +44,27 @@
         description: Play Navidrome to the speakers (Mopidy / Iris)
         siteMonitor: https://cast.burntbytes.com/iris/
 
-- Tools:
+# Tools was split in two on 2026-10-19 (it had grown to 12 tiles against 5-6
+# in the other columns). Each half keeps George's explicit Tools order (#1273).
+- Home & Life:
+    # Moved Infrastructure -> Home & Life 2026-10-19 at George's request; its
+    # click series forks at that date (see the GoLinks note in Infrastructure).
+    - Home Assistant:
+        icon: home-assistant.png
+        href: https://hass.burntbytes.com
+        description: Home automation platform
+        siteMonitor: https://hass.burntbytes.com
     - Vibrato:
         icon: mdi-coffee-maker
         href: https://vibrato.burntbytes.com
         description: Espresso machine monitor & control (ito + leva!)
         # Root path is a SPA (tabbed UI); /healthz returns {"status":"ok"} in one hop.
         siteMonitor: https://vibrato.burntbytes.com/healthz
-    - Memos:
-        icon: memos.png
-        href: https://memos.burntbytes.com
-        description: Lightweight note-taking service
-        siteMonitor: https://memos.burntbytes.com
-    - Linkding:
-        icon: linkding.png
-        href: https://links.burntbytes.com
-        description: Bookmark manager
-        siteMonitor: https://links.burntbytes.com
     - Mealie:
         icon: mealie.png
         href: https://food.burntbytes.com
         description: Recipe management
         siteMonitor: https://food.burntbytes.com
-    - Excalidraw:
-        icon: excalidraw.png
-        href: https://excalidraw.burntbytes.com
-        description: Virtual whiteboard for sketching
-        siteMonitor: https://excalidraw.burntbytes.com
-    - Flashcards:
-        icon: mdi-cards
-        href: https://flashcards.burntbytes.com
-        description: Spaced-repetition flashcards (FSRS)
-        # nginx /healthz returns 200 "ok"; root path is a SPA so probe the healthz endpoint.
-        siteMonitor: https://flashcards.burntbytes.com/healthz
     - Vitals:
         icon: mdi-heart-pulse
         href: https://vitals.burntbytes.com
@@ -93,10 +82,33 @@
         href: https://finance.burntbytes.com
         description: Net worth + IPS allocation dashboard
         siteMonitor: https://finance.burntbytes.com
+
+- Notes & Learning:
+    - Memos:
+        icon: memos.png
+        href: https://memos.burntbytes.com
+        description: Lightweight note-taking service
+        siteMonitor: https://memos.burntbytes.com
+    - Linkding:
+        icon: linkding.png
+        href: https://links.burntbytes.com
+        description: Bookmark manager
+        siteMonitor: https://links.burntbytes.com
+    - Excalidraw:
+        icon: excalidraw.png
+        href: https://excalidraw.burntbytes.com
+        description: Virtual whiteboard for sketching
+        siteMonitor: https://excalidraw.burntbytes.com
+    - Flashcards:
+        icon: mdi-cards
+        href: https://flashcards.burntbytes.com
+        description: Spaced-repetition flashcards (FSRS)
+        # nginx /healthz returns 200 "ok"; root path is a SPA so probe the healthz endpoint.
+        siteMonitor: https://flashcards.burntbytes.com/healthz
     # Open WebUI, Changes and Kokoro are appended after George's explicit
-    # Tools order (#1273) rather than slotted into it — where they sit within
-    # Tools is his call. All three probe the same health path as their
-    # readinessProbe; the HTTPRoutes forward every path unchanged.
+    # Tools order (#1273) rather than slotted into it — where they sit is his
+    # call. All three probe the same health path as their readinessProbe; the
+    # HTTPRoutes forward every path unchanged.
     - Open WebUI:
         icon: open-webui.png
         href: https://chat.burntbytes.com
@@ -117,11 +129,6 @@
         siteMonitor: https://voice.burntbytes.com/health
 
 - Infrastructure:
-    - Home Assistant:
-        icon: home-assistant.png
-        href: https://hass.burntbytes.com
-        description: Home automation platform
-        siteMonitor: https://hass.burntbytes.com
     # Moved Tools -> Infrastructure 2026-08-04. NOTE for anyone reading the
     # "Clicks by Tile + Group (least used first)" panel: homepage_tile_clicks_total
     # is labelled {service, group}, so this move minted a NEW series and stranded

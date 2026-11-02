@@ -182,7 +182,7 @@
 - alias: "Nightlight — prime today's offset on HA start"
   description: >
     On Home Assistant startup, re-roll today's offset so the first night
-    after a restart isn't pinned to the input_number.initial value (0).
+    after a restart isn't left at a stale or fresh-install (0) value.
     Also covers the case where the user just bumped the max.
   trigger:
     - platform: homeassistant
@@ -344,3 +344,454 @@
       target:
         entity_id: timer.laundry_room_light_timer
       continue_on_error: true
+
+# ============================================================================
+# agent-desk → George's phone (agent-desk plan, "Notifications", 2026-10-24)
+# ============================================================================
+# agent-desk POSTs {title, message, url} here when an agent asks George
+# something, has a PR ready for review, or a Job fails. Plane's web app shows
+# new comments only on reload, so this is how he hears about them. A stopgap
+# until the phase 2 chat channel replaces it.
+#
+# The webhook id is the only credential a sender needs, and this repo is
+# public, so it comes from secrets.yaml (the homeassistant-secrets Secret, one
+# per environment). local_only: callers are in-cluster.
+#
+# Staging has no phone registered (no mobile_app entities), so there it only
+# leaves a persistent notification; production also pushes to the phone.
+- alias: "agent-desk — notify George"
+  description: "Relay an agent-desk notice (question, PR ready, Job failed) to George."
+  mode: queued
+  trigger:
+    - platform: webhook
+      webhook_id: !secret agent_desk_webhook_id
+      allowed_methods:
+        - POST
+      local_only: true
+  action:
+    - service: persistent_notification.create
+      data:
+        title: "{{ trigger.json.title | default('agent-desk') }}"
+        message: "{{ trigger.json.message | default('') }} {{ trigger.json.url | default('') }}"
+    - if:
+        - condition: template
+          value_template: "{{ integration_entities('mobile_app') | length > 0 }}"
+      then:
+        - service: notify.mobile_app_parthenon
+          data:
+            title: "{{ trigger.json.title | default('agent-desk') }}"
+            message: "{{ trigger.json.message | default('') }}"
+            data:
+              url: "{{ trigger.json.url | default('') }}"
+              clickAction: "{{ trigger.json.url | default('') }}"
+
+# ============================================================================
+# Maintenance reminders (HASS-2)
+# ============================================================================
+# Tasks are packages in configuration.yaml ("Maintenance reminders"). These
+# automations find them by name (sensor.maintenance_<task>, which carries a
+# default_interval attribute), so adding a task needs no change here.
+#
+# Reminders are day-granular: a task turns "due" at midnight on its due date,
+# so one push at 09:00 covers "it just came due", and the same 09:00 run
+# repeats once a day while it stays due or overdue. There is deliberately no
+# homeassistant-start or state trigger, so a restart never re-sends. If HA is
+# down at 09:00 that day's reminder is skipped; the next day's still goes.
+#
+# Staging has no phone registered (no mobile_app entities), so there the
+# reminder is a persistent notification only (same guard as agent-desk above).
+
+- alias: "Maintenance — daily reminder for due and overdue tasks"
+  description: "At 09:00, remind George of each maintenance task that is due or overdue, with a Done action."
+  mode: single
+  trigger:
+    - platform: time
+      at: "09:00:00"
+  action:
+    - variables:
+        tasks: >
+          {{ states.sensor
+             | selectattr('entity_id', 'match', 'sensor\.maintenance_')
+             | selectattr('attributes.default_interval', 'defined')
+             | selectattr('state', 'in', ['due', 'overdue'])
+             | map(attribute='entity_id') | list }}
+    - repeat:
+        for_each: "{{ tasks }}"
+        sequence:
+          - variables:
+              key: "{{ repeat.item.split('.')[1] }}"
+              name: "{{ state_attr(repeat.item, 'friendly_name') }}"
+              left: "{{ state_attr(repeat.item, 'days_left') | int(0) }}"
+              last: "{{ state_attr(repeat.item, 'last_done') }}"
+              title: >
+                {% if left == 0 %}{{ name }} is due today
+                {% else %}{{ name }} is overdue by {{ -left }} day{{ 's' if -left != 1 }}
+                {% endif %}
+              message: >
+                Last done {{ as_timestamp(last) | timestamp_custom('%a %-d %b %Y') }}
+                ({{ state_attr(repeat.item, 'interval_text') }}).
+          - service: persistent_notification.create
+            data:
+              notification_id: "{{ key }}"
+              title: "{{ title }}"
+              message: "{{ message }}"
+          - if:
+              - condition: template
+                value_template: "{{ integration_entities('mobile_app') | length > 0 }}"
+            then:
+              - service: notify.mobile_app_parthenon
+                data:
+                  title: "{{ title }}"
+                  message: "{{ message }} Press and hold to mark it done."
+                  data:
+                    # Same tag per task, so today's reminder replaces
+                    # yesterday's instead of stacking.
+                    tag: "{{ key }}"
+                    actions:
+                      - action: "MAINTENANCE_DONE:{{ key }}"
+                        title: "Done"
+
+# The phone's "Done" action presses the same button as the dashboard card, so
+# both paths record the time the same way (and keep the replaced date in the
+# last-done sensor's `previous` attribute).
+- alias: "Maintenance — Done from a phone notification"
+  description: "Handle the Done action on a maintenance reminder by pressing that task's Done button."
+  mode: queued
+  trigger:
+    - platform: event
+      event_type: mobile_app_notification_action
+  condition:
+    - condition: template
+      value_template: "{{ (trigger.event.data.action | default('')).startswith('MAINTENANCE_DONE:') }}"
+  action:
+    - variables:
+        key: "{{ trigger.event.data.action.split(':')[1] }}"
+    # The button must exist; its state is `unknown` until first pressed, so
+    # check existence, not state.
+    - condition: template
+      value_template: "{{ ('input_button.' ~ key ~ '_done') in states.input_button | map(attribute='entity_id') | list }}"
+    - service: input_button.press
+      target:
+        entity_id: "input_button.{{ key }}_done"
+    - service: persistent_notification.dismiss
+      data:
+        notification_id: "{{ key }}"
+
+# Home Assistant writes restorable state (last-done dates, intervals) to
+# .storage/core.restore_state only every 15 min and on a clean stop. After a
+# hard kill (OOM, node loss) the last 15 min of Done presses would be lost, so
+# save as soon as anything changes. Triggered by sensor.maintenance_change_marker,
+# which re-renders only after the last-done sensor itself has updated.
+#
+# Also dismisses the 09:00 persistent notification for any task that is now
+# up to date, whichever way it was marked done (dashboard, phone, script).
+- alias: "Maintenance — save state right after a change"
+  description: "Persist maintenance dates and intervals immediately, and clear reminders for tasks that are now OK."
+  mode: queued
+  trigger:
+    - platform: state
+      entity_id: sensor.maintenance_change_marker
+      not_from:
+        - unknown
+        - unavailable
+      not_to:
+        - unknown
+        - unavailable
+  action:
+    - service: homeassistant.save_persistent_states
+    - repeat:
+        for_each: >
+          {{ states.sensor
+             | selectattr('entity_id', 'match', 'sensor\.maintenance_')
+             | selectattr('attributes.default_interval', 'defined')
+             | selectattr('state', 'eq', 'ok')
+             | map(attribute='entity_id') | list }}
+        sequence:
+          - service: persistent_notification.dismiss
+            data:
+              notification_id: "{{ repeat.item.split('.')[1] }}"
+
+# Fresh install: each interval input_number starts at its min (0). Write the
+# task's default into it once, so the dashboard shows the intended value.
+# sensor.maintenance_seeded_intervals (configuration.yaml) remembers which
+# tasks have been seeded, so this never overwrites a value George set, 0
+# included. A task added later gets its default on the next start.
+- alias: "Maintenance — seed default intervals"
+  description: "On start, write the default interval of any maintenance task that has never been seeded."
+  mode: single
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    - variables:
+        seeded: "{{ state_attr('sensor.maintenance_seeded_intervals', 'keys') or [] }}"
+        todo: >
+          {{ states.sensor
+             | selectattr('entity_id', 'match', 'sensor\.maintenance_')
+             | selectattr('attributes.default_interval', 'defined')
+             | map(attribute='entity_id')
+             | map('replace', 'sensor.', '')
+             | reject('in', seeded)
+             | list }}
+    - condition: template
+      value_template: "{{ todo | count > 0 }}"
+    - repeat:
+        for_each: "{{ todo }}"
+        sequence:
+          - service: input_number.set_value
+            target:
+              entity_id: "input_number.{{ repeat.item }}_interval"
+            data:
+              value: "{{ state_attr('sensor.' ~ repeat.item, 'default_interval') | float }}"
+    - event: maintenance_interval_seeded
+      event_data:
+        keys: "{{ todo }}"
+
+# A restored auto-off timer that ran out while HA was down finishes during
+# start-up, before automations listen, so the turn-off automations above miss
+# its timer.finished event. sensor.auto_off_timer_deadlines still holds when
+# each timer was due (it isn't updated during start-up): for any timer whose
+# deadline has passed and which is now idle, fire timer.finished again so the
+# existing "turn off" automations run unchanged.
+- alias: "Auto-off — finish timers that ran out while HA was down"
+  description: "On start, re-fire timer.finished for auto-off timers that expired while Home Assistant was stopped."
+  mode: single
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    - repeat:
+        for_each: >
+          {% set d = states.sensor.auto_off_timer_deadlines %}
+          {% set ns = namespace(due=[]) %}
+          {% if d is not none %}
+            {% for key, when in d.attributes.items() %}
+              {% set t = 'timer.' ~ key %}
+              {% if when and t.endswith('_timer') and is_state(t, 'idle')
+                    and as_datetime(when, none) is not none and as_datetime(when) <= now() %}
+                {% set ns.due = ns.due + [t] %}
+              {% endif %}
+            {% endfor %}
+          {% endif %}
+          {{ ns.due }}
+        sequence:
+          - event: timer.finished
+            event_data:
+              entity_id: "{{ repeat.item }}"
+
+# ============================================================================
+# Helper defaults and saving (HASS-7)
+# ============================================================================
+# The auto-off minutes and nightlight settings have no `initial:` (it reset
+# George's edits on every start; see configuration.yaml). This writes each
+# default once, on a fresh install: sensor.helper_defaults_seeded remembers
+# which helpers have been written, so a restored value is never overwritten.
+# nightlight_offset_today isn't listed: "Nightlight — prime today's offset on
+# HA start" re-rolls it on every start, so seeding it would only fight that.
+#
+# The first start after this change also writes these defaults once (no
+# helper is in the seeded list yet). That matches what `initial:` did on every
+# start before, so nothing set since the previous start survived anyway.
+- alias: "Helpers — seed defaults on a fresh install"
+  description: "On start, write the default of any auto-off or nightlight setting that has never been seeded."
+  mode: single
+  trigger:
+    - platform: homeassistant
+      event: start
+  action:
+    - variables:
+        defaults:
+          input_number.hall_bathroom_fan_minutes: 30
+          input_number.master_bathroom_fan_minutes: 30
+          input_number.powder_bathroom_fan_minutes: 30
+          input_number.laundry_room_light_minutes: 30
+          input_number.nightlight_brightness: 6
+          input_number.nightlight_random_offset: 30
+          input_datetime.nightlight_turnoff_time: "23:00:00"
+        seeded: "{{ state_attr('sensor.helper_defaults_seeded', 'keys') or [] }}"
+        todo: "{{ defaults.keys() | reject('in', seeded) | list }}"
+    - condition: template
+      value_template: "{{ todo | count > 0 }}"
+    - repeat:
+        for_each: "{{ todo }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ repeat.item.startswith('input_number.') }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ repeat.item }}"
+                data:
+                  value: "{{ defaults[repeat.item] }}"
+            else:
+              - service: input_datetime.set_datetime
+                target:
+                  entity_id: "{{ repeat.item }}"
+                data:
+                  time: "{{ defaults[repeat.item] }}"
+    - event: helper_defaults_seeded
+      event_data:
+        keys: "{{ todo }}"
+
+# Save restorable state as soon as one of these settings changes, so an edit
+# survives a hard kill (OOM, node loss); HA otherwise saves every 15 min and
+# on a clean stop. Same reason as "Maintenance — save state right after a
+# change" above.
+- alias: "Helpers — save settings right after a change"
+  description: "Persist auto-off and nightlight settings, and auto-off timer starts and stops, immediately."
+  mode: queued
+  trigger:
+    - platform: state
+      entity_id:
+        - input_number.hall_bathroom_fan_minutes
+        - input_number.master_bathroom_fan_minutes
+        - input_number.powder_bathroom_fan_minutes
+        - input_number.laundry_room_light_minutes
+        - input_number.nightlight_brightness
+        - input_number.nightlight_random_offset
+        - input_datetime.nightlight_turnoff_time
+      not_from:
+        - unknown
+        - unavailable
+      not_to:
+        - unknown
+        - unavailable
+    # The auto-off timers restore across restarts (restore: true), and the
+    # deadline sensor backs up when each is due. No to/from filter, so a
+    # restart of a running timer (same state, new finishes_at) saves too.
+    # Their attributes only change on a real start, pause, cancel or finish.
+    - platform: state
+      entity_id:
+        - timer.hall_bathroom_fan_timer
+        - timer.master_bathroom_fan_timer
+        - timer.powder_bathroom_fan_timer
+        - timer.laundry_room_light_timer
+        - sensor.auto_off_timer_deadlines
+  action:
+    - service: homeassistant.save_persistent_states
+
+# ---------------------------------------------------------------------------
+# Daily shot (HASS-11). Helpers and sensor.daily_shot are in configuration.yaml
+# (package daily_shot).
+#
+# Phones that get the reminder: notify services, without the `notify.`
+# prefix. To add a phone, install the HA Companion app on it, then add its
+# notify name to `phones` in both automations below.
+# Staging has no phone registered (no mobile_app entities), so there the
+# reminder is a persistent notification only (same guard as Maintenance).
+
+- alias: "Daily shot — reminder"
+  description: "At 19:00, and again at 19:30 if not yet logged, say which side is next, with a Done action."
+  mode: single
+  trigger:
+    - platform: time
+      at: "19:00:00"
+    - platform: time
+      at: "19:30:00"
+  condition:
+    - condition: state
+      entity_id: sensor.daily_shot
+      state: "To do"
+  action:
+    - variables:
+        phones:
+          - mobile_app_parthenon
+        side: "{{ states('input_select.daily_shot_next_side') }}"
+        title: "Daily shot: {{ side | lower }} side"
+        message: >
+          {% set last = states('input_datetime.daily_shot_last_done') | as_datetime(none) %}
+          {% if last is none %}Not logged yet.
+          {% else %}Last one {{ as_local(last).strftime('%a %-d %b, %-I:%M %p') }}, {{ states('input_text.daily_shot_last_side') | lower }} side.
+          {% endif %}
+    - service: persistent_notification.create
+      data:
+        notification_id: daily_shot
+        title: "{{ title }}"
+        message: "{{ message }}"
+    - if:
+        - condition: template
+          value_template: "{{ integration_entities('mobile_app') | length > 0 }}"
+      then:
+        - repeat:
+            for_each: "{{ phones }}"
+            sequence:
+              - service: "notify.{{ repeat.item }}"
+                continue_on_error: true
+                data:
+                  title: "{{ title }}"
+                  message: "{{ message }} Press and hold to mark it done."
+                  data:
+                    # One tag, so the 19:30 nag replaces the 19:00 reminder.
+                    tag: daily_shot
+                    actions:
+                      - action: DAILY_SHOT_DONE
+                        title: "Done"
+
+- alias: "Daily shot — Done from a phone notification"
+  description: "Handle the Done action on the daily shot reminder by pressing the Done button."
+  mode: queued
+  trigger:
+    - platform: event
+      event_type: mobile_app_notification_action
+      event_data:
+        action: DAILY_SHOT_DONE
+  action:
+    - service: input_button.press
+      target:
+        entity_id: input_button.daily_shot_done
+
+# The one place a shot is logged, whichever way Done was pressed. A second
+# press on the same day does nothing, so a double tap can't flip the side twice.
+- alias: "Daily shot — log it"
+  description: "On Done, record the time and side, flip the next side, save state and clear the reminder."
+  mode: queued
+  trigger:
+    - platform: state
+      entity_id: input_button.daily_shot_done
+      not_to:
+        - unavailable
+        - unknown
+  condition:
+    - condition: state
+      entity_id: sensor.daily_shot
+      state: "To do"
+  action:
+    - variables:
+        phones:
+          - mobile_app_parthenon
+        side: "{{ states('input_select.daily_shot_next_side') }}"
+    - service: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.daily_shot_last_done
+      data:
+        datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+    - service: input_text.set_value
+      target:
+        entity_id: input_text.daily_shot_last_side
+      data:
+        value: "{{ side }}"
+    - service: input_select.select_option
+      target:
+        entity_id: input_select.daily_shot_next_side
+      data:
+        option: "{{ 'Left' if side == 'Right' else 'Right' }}"
+    # Restorable state is otherwise written only every 15 min; save now so a
+    # hard kill can't lose the side (see "Maintenance — save state").
+    - service: homeassistant.save_persistent_states
+    - service: persistent_notification.dismiss
+      data:
+        notification_id: daily_shot
+    - if:
+        - condition: template
+          value_template: "{{ integration_entities('mobile_app') | length > 0 }}"
+      then:
+        - repeat:
+            for_each: "{{ phones }}"
+            sequence:
+              - service: "notify.{{ repeat.item }}"
+                continue_on_error: true
+                data:
+                  message: clear_notification
+                  data:
+                    tag: daily_shot

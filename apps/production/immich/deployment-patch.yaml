@@ -25,7 +25,7 @@ spec:
       initContainers:
         - name: oauth-config
           # busybox 1.37
-          image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+          image: busybox@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           command:
             - sh
             - -c
@@ -161,7 +161,7 @@ spec:
       initContainers:
         - name: oauth-config
           # busybox 1.37
-          image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+          image: busybox@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           command:
             - sh
             - -c
@@ -323,7 +323,7 @@ spec:
           # v3.0.1). When bumping, keep this and the base in step: take the
           # top-level `Digest:` from
           # `docker buildx imagetools inspect ghcr.io/immich-app/immich-machine-learning:vX.Y.Z`.
-          image: ghcr.io/immich-app/immich-machine-learning:v3.2.4@sha256:e16c2f166a8174901959fdf85e2e4c7bd1ebc4b37e0b6655de97c41408a260c4
+          image: ghcr.io/immich-app/immich-machine-learning:v3.3.4@sha256:1ab8674e7cec41009abb3812de62a16cc1917e73d486233a5471b048d26fc14d
           securityContext:
             privileged: true
           env:

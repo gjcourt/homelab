@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-10-12
+last_modified: 2026-11-02
 summary: "Music Assistant replaces the Mopidy/Iris sidecar: play Navidrome to chosen speakers, and per-speaker TTS announcements from HA"
 ---
 
@@ -55,7 +55,7 @@ MA's documented requirements for an external server, checked against ours:
 Pieces:
 
 - `music-assistant` container, image `ghcr.io/music-assistant/server` pinned to the
-  latest **stable** release at implementation time (2.10.6 on 2026-10-12; no nightlies).
+  latest **stable** release at implementation time (2.10.9 on 2026-11-02; no nightlies).
 - PVC `snapcast-music-assistant-data` (`truenas-iscsi`, 1Gi) mounted at `/data`.
 - Service: add port 8095 (MA web UI + HA websocket API). Remove 6600/6680 with Mopidy (step 5).
 - HTTPRoute: `cast.burntbytes.com` → 8095 at cutover (step 4). Until then MA gets a

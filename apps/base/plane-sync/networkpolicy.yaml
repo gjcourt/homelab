@@ -1,0 +1,49 @@
+# plane-sync talks to two things: Plane's api in plane-prod, and GitHub
+# (clone, push the status branch, open the PR) on 443. Like bench-cloud, the
+# internet rule is 0.0.0.0/0 minus private ranges, not `toEntities: world`,
+# which would also cover the home LAN. Plane's own policy in plane-prod admits
+# this namespace on the same port. No ingress.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: plane-sync
+  namespace: plane-sync
+  labels:
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "plane-sync: no ingress; egress to DNS, Plane api 8000, public internet 443."
+  endpointSelector: {}
+  enableDefaultDeny:
+    ingress: true
+    egress: true
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-prod
+            app.name: plane-prod-plane-api
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            - 100.64.0.0/10
+            - 169.254.0.0/16
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

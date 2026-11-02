@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - adguard
+  - agent-desk
   - audiobookshelf
   - authelia
   - bench-cloud
@@ -31,6 +32,8 @@ resources:
   - mqttscope
   - navidrome
   - openwebui
+  - plane
+  - plane-sync
   - snapcast
   - thermalscope
   - thermalscope-smart

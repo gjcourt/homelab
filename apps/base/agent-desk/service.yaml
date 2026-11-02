@@ -1,0 +1,14 @@
+# The webhook target Plane delivers to. Its in-cluster name is the one entry in
+# Plane's WEBHOOK_ALLOWED_HOSTS (never a CIDR).
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-desk
+  namespace: agent-desk
+spec:
+  selector:
+    app: agent-desk
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

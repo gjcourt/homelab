@@ -1,0 +1,57 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Staging dispatcher: talks to staging Plane, creates Jobs in bench-cloud with
+# dryRun=All only (DRY_RUN_JOBS). There is one bench-cloud and it's
+# production, so staging exercises RBAC, admission and the quota without
+# launching anything (plan step 4).
+namespace: agent-desk-stage
+resources:
+  - ../../base/agent-desk/
+  - networkpolicy-plane.yaml
+  - networkpolicy-notify.yaml
+  # SOPS-encrypted by the operator from its .example template (agents never
+  # run sops in this repo); Flux decrypts it at apply time.
+  - secret-agent-desk.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+
+configMapGenerator:
+  - name: agent-desk-config
+    files:
+      - config.yaml
+
+patches:
+  - target:
+      kind: Namespace
+      name: agent-desk
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: agent-desk-stage
+  - target:
+      kind: Deployment
+      name: agent-desk
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: PLANE_URL, value: "http://plane-api.plane-stage.svc.cluster.local:8000"}
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: PLANE_WORKSPACE, value: my-test-workspacce}
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: DRY_RUN_JOBS, value: "true"}
+      # Notices go to staging Home Assistant, which only shows them in its own
+      # UI: staging never reaches George's phone.
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: NOTIFY_URL, value: "http://homeassistant.homeassistant-stage.svc.cluster.local:8123"}
+
+# Pinned date-sha tag from build-agent-desk.yml (Flux does not auto-track).
+images:
+  - name: ghcr.io/gjcourt/agent-desk
+    newTag: 2026-10-25-2919959

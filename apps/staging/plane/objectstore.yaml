@@ -1,0 +1,22 @@
+# WAL archive and base backups for Plane staging (Barman Cloud Plugin).
+# Referenced by database.yaml's plugins[].parameters.barmanObjectName.
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: plane-db-staging-cnpg-v1-backup
+  namespace: plane-stage
+spec:
+  configuration:
+    destinationPath: s3://gjcourt-homelab-backup/staging/plane/v1
+    s3Credentials:
+      accessKeyId:
+        name: plane-aws-creds-secret
+        key: ACCESS_KEY_ID
+      secretAccessKey:
+        name: plane-aws-creds-secret
+        key: ACCESS_SECRET_KEY
+    wal:
+      compression: gzip
+    data:
+      compression: gzip
+  retentionPolicy: 14d

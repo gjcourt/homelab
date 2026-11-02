@@ -1,5 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "prHourlyLimit": 0,
+  "dependencyDashboard": true,
   "kubernetes": {
     "fileMatch": [
       "\\.yaml$"
@@ -45,6 +47,13 @@
       ],
       "automerge": false,
       "rebaseWhen": "behind-base-branch"
+    },
+    {
+      "description": "Home Assistant is never automerged. Its monthly release is a 'minor' to Renovate (2026.9 -> 2026.10), so the automerge rule above would ship it unreviewed, and HA minors carry breaking changes and one-way config migrations (e.g. 2026.8 imports http: into .storage/http once). Upgrade it in a reviewed PR, staging first, after a config-PVC snapshot. Why prHourlyLimit is 0: Renovate's default of 2 new PRs per hour was used up on every daily run by the same two digest bumps (myoung34/github-runner, renovate/renovate), which automerge and come back the next day. So no other update branch was ever created: the last Home Assistant bump was 2026.5.4 (#757, 2026-05-22) while 2026.10.2 was out, and the last tag bump of any kind was 2026-07-31 (inferred from the 2026-10-17..19 run logs; 'Reached PR limit' only logs at debug). The dependency dashboard is on so skipped or rate-limited updates are visible again. The renovate-automerge CronJob holds it too (HELD_DEPS).",
+      "matchPackageNames": [
+        "ghcr.io/home-assistant/home-assistant"
+      ],
+      "automerge": false
     },
     {
       "description": "George's own images (ghcr.io/gjcourt/*) pinned to YYYY-MM-DD-<sha7>. Renovate's default docker versioning reads 2026-07-26-c14b782 as version 2026 with suffix -07-26-c14b782 and only offers tags with the SAME suffix, so it never proposed a newer build (homelab has never had a Renovate bump of one). This regex orders the date as major.minor.patch and REQUIRES the sha (unnamed group: matched, never compared), so the floating bare-date tag (YYYY-MM-DD, re-pointed on every build that day) is not a valid version and a pin can never move to it. Builds from the same day compare equal; the next day's build supersedes them. Automerged like any other minor/patch update (George, 2026-10-01: \"this is my homelab, not a production environment\"), by Renovate and by the renovate-automerge CronJob once CI is green.",

@@ -10,6 +10,8 @@ resources:
   - secret-hestia-ssh.yaml
   # Task Jobs only (never the console) — see the template.
   - secret-claude-token.yaml
+  # Ticket Jobs' Plane key (agent-desk plan, step 5); uncomment once encrypted.
+  - secret-plane-jobs-token.yaml
 
 labels:
   - pairs:
@@ -20,4 +22,4 @@ labels:
 # Pinned date-sha tag from build-bench-cloud.yml (Flux does not auto-track).
 images:
   - name: ghcr.io/gjcourt/bench-cloud
-    newTag: 2026-10-01-60e3604
+    newTag: 2026-11-02-4f7040e

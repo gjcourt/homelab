@@ -25,12 +25,31 @@
         description: Audiobook and podcast server
         siteMonitor: https://audiobooks.stage.burntbytes.com
 
-- Tools:
+- Home & Life:
+    # Moved Infrastructure -> Home & Life 2026-10-19 at George's request; its
+    # click series forks at that date (see the GoLinks note in Infrastructure).
+    - Home Assistant:
+        icon: home-assistant.png
+        href: https://hass.stage.burntbytes.com
+        description: Home automation platform
+        siteMonitor: https://hass.stage.burntbytes.com
     - Vibrato:
         icon: mdi-coffee-maker
         href: https://vibrato.stage.burntbytes.com
         description: Espresso machine monitor & control (ito + leva!)
         siteMonitor: https://vibrato.stage.burntbytes.com/healthz
+    - Mealie:
+        icon: mealie.png
+        href: https://mealie.stage.burntbytes.com
+        description: Recipe management
+        siteMonitor: https://mealie.stage.burntbytes.com
+    - Vitals:
+        icon: mdi-heart-pulse
+        href: https://vitals.stage.burntbytes.com
+        description: Health and fitness tracker
+        siteMonitor: https://vitals.stage.burntbytes.com
+
+- Notes & Learning:
     - Memos:
         icon: memos.png
         href: https://memos.stage.burntbytes.com
@@ -41,11 +60,6 @@
         href: https://links.stage.burntbytes.com
         description: Bookmark manager
         siteMonitor: https://links.stage.burntbytes.com
-    - Mealie:
-        icon: mealie.png
-        href: https://mealie.stage.burntbytes.com
-        description: Recipe management
-        siteMonitor: https://mealie.stage.burntbytes.com
     - Excalidraw:
         icon: excalidraw.png
         href: https://excalidraw.stage.burntbytes.com
@@ -56,11 +70,6 @@
         href: https://flashcards.stage.burntbytes.com
         description: Spaced-repetition flashcards (FSRS)
         siteMonitor: https://flashcards.stage.burntbytes.com/healthz
-    - Vitals:
-        icon: mdi-heart-pulse
-        href: https://vitals.stage.burntbytes.com
-        description: Health and fitness tracker
-        siteMonitor: https://vitals.stage.burntbytes.com
     - Open WebUI:
         icon: open-webui.png
         href: https://chat.stage.burntbytes.com
@@ -87,11 +96,6 @@
           url: https://10.42.2.11:5001
           username: "{{HOMEPAGE_VAR_SYNOLOGY_USER}}"
           password: "{{HOMEPAGE_VAR_SYNOLOGY_PASS}}"
-    - Home Assistant:
-        icon: home-assistant.png
-        href: https://hass.stage.burntbytes.com
-        description: Home automation platform
-        siteMonitor: https://hass.stage.burntbytes.com
     - GoLinks:
         icon: mdi-link-variant
         href: https://go.stage.burntbytes.com

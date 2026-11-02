@@ -1,0 +1,29 @@
+# The Plane half of agent-desk's network, for production: webhook deliveries
+# in from plane-prod's worker, REST calls out to plane-prod's api. Plane's own
+# policy (apps/production/plane/networkpolicy.yaml) has the matching rules.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: agent-desk-plane
+  namespace: agent-desk
+  labels:
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "agent-desk <-> plane-prod: worker webhooks in on 8080, api out on 8000."
+  endpointSelector: {}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-prod
+            app.name: plane-prod-plane-worker
+      toPorts:
+        - ports:
+            - {port: "8080", protocol: TCP}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-prod
+            app.name: plane-prod-plane-api
+      toPorts:
+        - ports:
+            - {port: "8000", protocol: TCP}

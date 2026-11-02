@@ -37,7 +37,7 @@ through llmux (llmux gateway plan, phase 2).
 | 1 | hestia scope | Read-write to a new `agent-inbox` dataset; read-only to media. Nothing else. |
 | 2 | Cluster access | Read-only to start. |
 | 3 | GitHub scope | All of George's repos. |
-| 4 | Parallelism | Multiple agents. Cap **5** concurrent (George rarely runs more), raisable to a hard ceiling of **10**. |
+| 4 | Parallelism | Multiple agents. Cap **5** concurrent (George rarely runs more), raisable to a hard ceiling of **10**. **Superseded 2026-10-22:** the quota is 24, by George's decision in the [agent desk plan](2026-10-22-agent-desk-loop.md) (decision 5). |
 
 ## Design
 

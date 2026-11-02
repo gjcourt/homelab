@@ -57,6 +57,9 @@ spec:
             - name: tvanime
               mountPath: /media/tv-anime
               readOnly: true
+            - name: musicvideos
+              mountPath: /media/music-videos
+              readOnly: true
 
           securityContext:
             privileged: true # Required for GPU access
@@ -127,7 +130,7 @@ spec:
         #      4194304 = 4GiB. No probe by design: the janitor's health must
         #      not gate Jellyfin's pod readiness.
         - name: transcode-janitor
-          image: busybox:1.37.0
+          image: busybox:1.38.0
           command:
             - /bin/sh
             - -c
@@ -179,3 +182,6 @@ spec:
         - name: tvanime
           persistentVolumeClaim:
             claimName: jellyfin-tvanime-pvc
+        - name: musicvideos
+          persistentVolumeClaim:
+            claimName: jellyfin-musicvideos-pvc

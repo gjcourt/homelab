@@ -55,7 +55,7 @@ spec:
               # The immich-server image, for its Node runtime only (no Immich code
               # runs). Keep this pin in step with apps/base/immich/deployment.yaml
               # when bumping Immich, so the script talks to the same API version.
-              image: ghcr.io/immich-app/immich-server:v3.2.4@sha256:d317916b28090c33eb36b308464ea391f8b7df1d850fcfea227a39ec879718c2
+              image: ghcr.io/immich-app/immich-server:v3.3.4@sha256:f6475c58b07a8d89ec845aa8782731d36656c3c17d943e0a101dc6ed99a2e53f
               command: ["node", "/bootstrap/bootstrap.mjs"]
               env:
                 - name: IMMICH_API_URL

@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Production-only app: plain `plane-sync` namespace (see AGENTS.md namespace
+# convention for apps without a staging variant).
+resources:
+  - ../../base/plane-sync/
+  # SOPS-encrypted by the operator from its .example template (agents never
+  # run sops in this repo); Flux decrypts it at apply time.
+  - secret-plane-sync.yaml
+
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false
+
+# Pinned date-sha tag from build-plane-sync.yml (Flux does not auto-track).
+images:
+  - name: ghcr.io/gjcourt/plane-sync
+    newTag: 2026-11-01-5bf8362

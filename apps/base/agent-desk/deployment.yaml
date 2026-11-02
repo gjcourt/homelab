@@ -1,0 +1,69 @@
+# One replica, Recreate: the dispatcher makes every decision on a single worker
+# thread, which is what stops two events for one ticket from both starting a
+# Job. Two pods would each have their own worker. Stateless: Plane and the
+# Jobs' labels are the record, so a restart just runs a full poll.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-desk
+  namespace: agent-desk
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: agent-desk
+  template:
+    metadata:
+      labels:
+        app: agent-desk
+    spec:
+      serviceAccountName: agent-desk
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534  # secret files are 0440; without this they're root-group and unreadable
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agent-desk
+          image: ghcr.io/gjcourt/agent-desk:2026-10-25-2919959
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - {name: AGENT_DESK_CONFIG, value: /config/config.yaml}
+            - {name: PLANE_API_KEY_FILE, value: /secrets/plane-api-key}
+            - {name: WEBHOOK_SECRET_FILE, value: /secrets/webhook-secret}
+            - {name: GITHUB_TOKEN_FILE, value: /secrets/github-token}
+            # Optional: Home Assistant's webhook id for phone notifications.
+            - {name: NOTIFY_WEBHOOK_FILE, value: /secrets/notify-webhook-id}
+            # PLANE_URL, PLANE_WORKSPACE and DRY_RUN_JOBS come from the overlay.
+          # Fails when the worker loop hasn't finished a poll in two intervals.
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 10m, memory: 96Mi}
+            limits: {memory: 256Mi}
+          volumeMounts:
+            - {name: config, mountPath: /config, readOnly: true}
+            - {name: secrets, mountPath: /secrets, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: config
+          configMap:
+            name: agent-desk-config
+        - name: secrets
+          secret:
+            secretName: agent-desk
+            defaultMode: 0440
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}

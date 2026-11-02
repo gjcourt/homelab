@@ -14,24 +14,39 @@ frontend:
     - /local/mushroom.js
     - /local/clock-weather-card.js
 
-# Lovelace dashboards. Default + Map / Floor Plan / Switchboard stay
-# UI-managed (storage mode). Only the Control dashboard is migrated to
-# YAML mode here — its source-of-truth lives at files/dashboards/control.yaml
-# and is bundled into the homeassistant-config ConfigMap by the
-# configMapGenerator. Edits go through PRs.
+# Lovelace dashboards. Map / Floor Plan stay UI-managed (storage mode);
+# Switchboard was deleted 2026-10-31. Home (HASS-10) and the Config dashboard
+# (was "Control", briefly "House") are YAML mode here — their
+# source of truth is files/dashboards/{home,control}.yaml, bundled into the
+# homeassistant-config ConfigMap by the configMapGenerator. Edits go through PRs.
 #
 # Note: HA's lovelace.dashboards schema rejects single-word slug keys
 # (must contain a hyphen). We use `home-control` as the slug — the
-# dashboard renders with the configured `title:` ("Control") regardless
-# of the slug, only the URL path (/home-control) reflects the slug.
+# dashboard renders with the configured `title:` ("Config") regardless
+# of the slug, only the URL path (/home-control) reflects the slug. The
+# slug and the file name (dashboards/control.yaml) date from when it was
+# titled "Control"; they stay so bookmarks and navigation paths keep working.
+# Storage is the default mode (the other dashboards stay UI-managed); the
+# `mode:` key is deprecated, so it isn't set.
 lovelace:
-  mode: storage           # default + other dashboards stay UI-managed
   dashboards:
+    # Home (HASS-10): the main page. HA's built-in Overview (/home) can't be
+    # kept in YAML or given extra cards, so this rebuilds it from HA's own
+    # cards plus the Config dashboard's Overview content; see the header of
+    # dashboards/home.yaml. Made the default once in the UI (Settings →
+    # Dashboards → ⋮ → Set as default): HA has no YAML key for the default
+    # dashboard. Not admin-only, which "Set as default" requires.
+    home-page:
+      mode: yaml
+      filename: dashboards/home.yaml
+      title: Home
+      icon: mdi:home
+      show_in_sidebar: true
     home-control:
       mode: yaml
       filename: dashboards/control.yaml
-      title: Control
-      icon: mdi:view-dashboard
+      title: Config
+      icon: mdi:tune-variant
       show_in_sidebar: true
 
 # Auto-off helpers. Each has:
@@ -48,13 +63,21 @@ lovelace:
 #
 # The auto-off automations in automations.yaml tie them to the corresponding
 # Lutron Caseta switch/light entities.
+#
+# No `initial:` on these helpers (or on input_datetime.nightlight_turnoff_time
+# below): `initial:` resets the value on every HA start, which discarded
+# George's dashboard edits (HASS-7, 2026-10-31). The defaults are written once,
+# on a fresh install, by "Helpers — seed defaults on a fresh install"
+# (automations.yaml), which lists them; sensor.helper_defaults_seeded
+# remembers which have been written, so a restored value is never overwritten.
+# nightlight_offset_today is not seeded: the nightlight priming automation
+# re-rolls it on every start and at midnight.
 input_number:
   hall_bathroom_fan_minutes:
     name: Hall Bathroom Fan Timer
     min: 4
     max: 45
     step: 1
-    initial: 30
     unit_of_measurement: min
     mode: slider
   master_bathroom_fan_minutes:
@@ -62,7 +85,6 @@ input_number:
     min: 4
     max: 45
     step: 1
-    initial: 30
     unit_of_measurement: min
     mode: slider
   powder_bathroom_fan_minutes:
@@ -70,7 +92,6 @@ input_number:
     min: 4
     max: 45
     step: 1
-    initial: 30
     unit_of_measurement: min
     mode: slider
   nightlight_brightness:
@@ -78,7 +99,6 @@ input_number:
     min: 1
     max: 100
     step: 1
-    initial: 6
     unit_of_measurement: "%"
     mode: slider
   nightlight_random_offset:
@@ -90,7 +110,6 @@ input_number:
     min: 0
     max: 60
     step: 5
-    initial: 30
     unit_of_measurement: min
     mode: slider
   nightlight_offset_today:
@@ -102,7 +121,6 @@ input_number:
     min: 0
     max: 120
     step: 1
-    initial: 0
     unit_of_measurement: min
     mode: box
   laundry_room_light_minutes:
@@ -110,19 +128,25 @@ input_number:
     min: 4
     max: 45
     step: 1
-    initial: 30
     unit_of_measurement: min
     mode: slider
 
+# restore: true (George, 2026-10-31): a running or paused timer resumes after
+# an HA restart with the time it had left. One that ran out while HA was down
+# finishes as soon as HA starts.
 timer:
   hall_bathroom_fan_timer:
     name: Hall Bathroom Fan Timer
+    restore: true
   master_bathroom_fan_timer:
     name: Master Bathroom Fan Timer
+    restore: true
   powder_bathroom_fan_timer:
     name: Powder Bathroom Fan Timer
+    restore: true
   laundry_room_light_timer:
     name: Laundry Room Light Timer
+    restore: true
 
 automation: !include automations.yaml
 script: !include scripts.yaml
@@ -151,6 +175,11 @@ sensor:
     timeout: 5
     away_timeout: 180
 
+# Since 2026.8, HA imports this block into .storage/http on first boot and
+# ignores the YAML after that: change proxies in Settings → System → Network.
+# Kept so a fresh /config (restore drill, new PVC) imports the right values.
+# 2026.7.1 and earlier stored these without their masks; 2026.10 restores them
+# on import (http/config.py, _stable_differs_only_by_lost_proxy_masks).
 http:
   use_x_forwarded_for: true
   trusted_proxies:
@@ -163,7 +192,6 @@ input_datetime:
     name: Nightlight Turn Off Time
     has_date: false
     has_time: true
-    initial: "23:00"
 
 # Nightlight template sensor — turn-off time = base time + today's offset.
 # Today's offset is held in input_number.nightlight_offset_today (single
@@ -202,3 +230,612 @@ template:
         unit_of_measurement: "playing"
         icon: mdi:play-circle
         state: "{{ states.media_player | selectattr('state', 'eq', 'playing') | list | count }}"
+      # Maintenance tasks needing attention: due, overdue, or never recorded
+      # (anything not "ok"). Finds tasks by name like the automations do.
+      - name: "Maintenance to do"
+        unique_id: maintenance_to_do_count
+        default_entity_id: sensor.maintenance_to_do
+        unit_of_measurement: "to do"
+        icon: mdi:wrench-clock
+        state: >
+          {{ states.sensor
+             | selectattr('entity_id', 'match', 'sensor\.maintenance_')
+             | selectattr('attributes.default_interval', 'defined')
+             | rejectattr('state', 'eq', 'ok')
+             | list | count }}
+      # Auto-shutoff timers counting down right now (HASS-8). Finds them by the
+      # `timer.<name>_timer` convention above, so a new auto-off timer is
+      # counted without editing this. A paused timer isn't counted.
+      - name: "Auto-shutoff running"
+        unique_id: auto_shutoff_running_count
+        default_entity_id: sensor.auto_shutoff_running
+        unit_of_measurement: "running"
+        icon: mdi:timer-outline
+        state: >
+          {{ states.timer
+             | selectattr('entity_id', 'match', 'timer\..+_timer$')
+             | selectattr('state', 'eq', 'active')
+             | list | count }}
+      # Changes whenever any maintenance last-done date or interval changes:
+      # the sum of all last-done timestamps plus all intervals. It exists only
+      # to trigger "Maintenance — save state right after a change"
+      # (automations.yaml), and finds tasks by name, so new tasks need nothing.
+      - name: "Maintenance change marker"
+        unique_id: maintenance_change_marker
+        default_entity_id: sensor.maintenance_change_marker
+        icon: mdi:content-save-cog
+        state: >
+          {% set done = states.sensor
+             | selectattr('entity_id', 'match', 'sensor\.maintenance_.*_last_done$')
+             | map(attribute='state') | map('as_timestamp', 0) | sum %}
+          {% set intervals = states.input_number
+             | selectattr('entity_id', 'match', 'input_number\.maintenance_.*_interval$')
+             | map(attribute='state') | map('float', 0) | sum %}
+          {# Intervals can be quarter years, so scale before rounding. #}
+          {{ done | int }}-{{ (intervals * 100) | round(0) | int }}
+
+# Which maintenance tasks have had their default interval written (see the
+# "Maintenance reminders" block below). State = how many; `keys` = which.
+# Trigger-based, so it restores across restarts; its state is a number, never
+# `unknown`, so the `keys` attribute restores too.
+  - triggers:
+      - trigger: event
+        event_type: maintenance_interval_seeded
+    sensor:
+      - name: "Maintenance seeded intervals"
+        unique_id: maintenance_seeded_intervals
+        default_entity_id: sensor.maintenance_seeded_intervals
+        icon: mdi:sprout
+        state: "{{ ((this.attributes.get('keys') or []) + (trigger.event.data.get('keys') or [])) | unique | list | count }}"
+        attributes:
+          keys: "{{ ((this.attributes.get('keys') or []) + (trigger.event.data.get('keys') or [])) | unique | list }}"
+
+# When each running auto-off timer is due to finish, as last seen while HA
+# was up. A timer (restore: true) that runs out while HA is down finishes
+# during start-up, before automations are listening, so its timer.finished
+# event is missed (tested on 2026-10.2: the laundry light stayed on). This
+# sensor isn't updated during start-up either, so it still holds the old
+# deadline; "Auto-off — finish timers that ran out while HA was down"
+# (automations.yaml) compares it with now and re-fires timer.finished for the
+# existing auto-off automations. State = how many were running, never
+# `unknown`, so the attributes restore.
+  - triggers:
+      - trigger: state
+        entity_id:
+          - timer.hall_bathroom_fan_timer
+          - timer.master_bathroom_fan_timer
+          - timer.powder_bathroom_fan_timer
+          - timer.laundry_room_light_timer
+      - trigger: event
+        event_type: timer.finished
+    sensor:
+      - name: "Auto-off timer deadlines"
+        unique_id: auto_off_timer_deadlines
+        default_entity_id: sensor.auto_off_timer_deadlines
+        icon: mdi:timer-sand
+        state: >
+          {{ ['timer.hall_bathroom_fan_timer', 'timer.master_bathroom_fan_timer', 'timer.powder_bathroom_fan_timer', 'timer.laundry_room_light_timer']
+             | select('is_state', 'active') | list | count }}
+        attributes:
+          hall_bathroom_fan_timer: "{{ state_attr('timer.hall_bathroom_fan_timer', 'finishes_at') if is_state('timer.hall_bathroom_fan_timer', 'active') else none }}"
+          master_bathroom_fan_timer: "{{ state_attr('timer.master_bathroom_fan_timer', 'finishes_at') if is_state('timer.master_bathroom_fan_timer', 'active') else none }}"
+          powder_bathroom_fan_timer: "{{ state_attr('timer.powder_bathroom_fan_timer', 'finishes_at') if is_state('timer.powder_bathroom_fan_timer', 'active') else none }}"
+          laundry_room_light_timer: "{{ state_attr('timer.laundry_room_light_timer', 'finishes_at') if is_state('timer.laundry_room_light_timer', 'active') else none }}"
+
+# Which helpers have had their fresh-install default written (see "No
+# `initial:`" above and "Helpers — seed defaults on a fresh install" in
+# automations.yaml). Same pattern as maintenance_seeded_intervals; a separate
+# sensor so that adding it doesn't re-seed the maintenance intervals.
+  - triggers:
+      - trigger: event
+        event_type: helper_defaults_seeded
+    sensor:
+      - name: "Helper defaults seeded"
+        unique_id: helper_defaults_seeded
+        default_entity_id: sensor.helper_defaults_seeded
+        icon: mdi:sprout
+        state: "{{ ((this.attributes.get('keys') or []) + (trigger.event.data.get('keys') or [])) | unique | list | count }}"
+        attributes:
+          keys: "{{ ((this.attributes.get('keys') or []) + (trigger.event.data.get('keys') or [])) | unique | list }}"
+
+# ============================================================================
+# Maintenance reminders (HASS-2): tasks whose timer restarts when they're done
+# ============================================================================
+# Each task is one package below. Pressing its Done button (dashboard card, or
+# the "Done" action on the phone notification) records "now" as the last-done
+# time, and the next due date becomes last done + interval. A task is "due" on
+# its due date, "overdue" after it, and reminders go out at 09:00 each day it
+# is due or overdue (automations.yaml, "Maintenance" section).
+#
+# Per task <key> (e.g. maintenance_cat_pee_pad), the package creates:
+#   input_button.<key>_done      — press = done now
+#   input_number.<key>_interval  — interval in the task's own unit (days,
+#                                  months or years), editable on the dashboard
+#   sensor.<key>_last_done       — when it was last done (timestamp).
+#                                  Trigger-based, so it restores across
+#                                  restarts and starts `unknown` (never
+#                                  recorded) on a fresh install.
+#   sensor.<key>                 — ok / due / overdue (unknown until a
+#                                  last-done date exists), with last_done,
+#                                  next_due, days_left, interval, unit,
+#                                  interval_days and interval_text attributes.
+#
+# Why a trigger-based sensor and not input_datetime for last-done: a fresh
+# input_datetime defaults to today 00:00 (input_datetime/__init__.py,
+# 2026.10.2), which would read as "done today" when it never was.
+#
+# Intervals: input_number has no `initial:` (that would reset George's edits
+# on every restart). The due math converts to whole days: months × 30.44,
+# years × 365.25, rounded. 0 is a real value: the task is due again right
+# after it's done. A fresh input_number starts at its min (0), so the
+# "Maintenance — seed default intervals" automation writes the task's
+# `default` once, on a fresh install only. sensor.maintenance_seeded_intervals
+# (below) remembers which tasks have been seeded; once a task is in it, the
+# seed never touches that interval again, whatever George sets it to (0
+# included). It's a separate sensor because a trigger-based sensor whose
+# state is `unknown` (a never-recorded last-done) doesn't restore its
+# attributes, so a flag there would be lost on restart.
+#
+# To add a task:
+#   1. Copy one package below (not the first: it holds the shared anchors),
+#      rename the key everywhere (find/replace maintenance_<old> →
+#      maintenance_<new>), and set the name, icon, the input_number's
+#      unit_of_measurement / min / max / step, and the status sensor's
+#      `unit` (days, months or years — same as unit_of_measurement) and
+#      `default` (in that unit).
+#   That's all. The dashboard (auto-entities), automations, notifications and
+#   scripts find tasks by the sensor.maintenance_* / input_number.
+#   maintenance_*_interval naming, so they need no change. Restart HA once:
+#   the seed automation writes the new task's default interval on start.
+homeassistant:
+  packages:
+    maintenance_cat_pee_pad:
+      input_button:
+        maintenance_cat_pee_pad_done:
+          name: Cat pad done
+          icon: mdi:paw
+      input_number:
+        maintenance_cat_pee_pad_interval:
+          # Shared anchors hold only the keys every task has in common, so a
+          # task's own keys never override a merged one (HA warns on that).
+          <<: &maintenance_interval
+            mode: box
+            icon: mdi:calendar-refresh
+          name: Cat pad interval
+          unit_of_measurement: days
+          min: 0
+          max: 7
+          step: 1
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_cat_pee_pad_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            # Fired by script.maintenance_correct_last_done.
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_cat_pee_pad_last_done
+              id: correct
+          sensor:
+            - <<: &maintenance_last_done
+                device_class: timestamp
+                icon: mdi:calendar-check
+                state: >
+                  {% set keep = this.state if this.state not in ['unknown', 'unavailable'] else none %}
+                  {% if trigger.id == 'done' %}
+                    {{ now().isoformat() }}
+                  {% elif trigger.id == 'correct' %}
+                    {% set d = as_datetime(trigger.event.data.when | default(''), none) %}
+                    {# A bad date in the event keeps what we had. #}
+                    {{ keep if d is none else (d if d.tzinfo else d.replace(tzinfo=now().tzinfo)).isoformat() }}
+                  {% endif %}
+                attributes:
+                  # The value this press replaced, so a mis-tap loses nothing: restore it
+                  # with script.maintenance_correct_last_done.
+                  previous: "{{ this.state if this.state not in ['unknown', 'unavailable'] else none }}"
+              name: Cat pad last done
+              unique_id: maintenance_cat_pee_pad_last_done
+              default_entity_id: sensor.maintenance_cat_pee_pad_last_done
+        - sensor:
+            - <<: &maintenance_status
+                # States: ok / due / overdue, or `unknown` (the template renders none)
+                # when never recorded. Plain text, not device_class: enum: 2026.10
+                # template sensors reject `options:`.
+                # Due-date math is in local calendar dates (last-done date + N days), so
+                # a DST change or a just-after-midnight time can't shift it by a day.
+                state: >
+                  {% set raw = states('input_number.' ~ key ~ '_interval') | float(none) %}
+                  {% set value = raw if raw is not none else default | float %}
+                  {% set iv = (value * {'days': 1, 'months': 30.44, 'years': 365.25}[unit]) | round(0) | int %}
+                  {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                  {% if last is none %}
+                    {{ none }}
+                  {% else %}
+                    {% set left = (as_local(last).date() + timedelta(days=iv) - now().date()).days %}
+                    {{ 'overdue' if left < 0 else ('due' if left == 0 else 'ok') }}
+                  {% endif %}
+                attributes:
+                  unit: "{{ unit }}"
+                  default_interval: "{{ default }}"
+                  interval: >
+                    {% set raw = states('input_number.' ~ key ~ '_interval') | float(none) %}
+                    {% set value = raw if raw is not none else default | float %}
+                    {% set iv = (value * {'days': 1, 'months': 30.44, 'years': 365.25}[unit]) | round(0) | int %}
+                    {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                    {{ value }}
+                  interval_days: >
+                    {% set raw = states('input_number.' ~ key ~ '_interval') | float(none) %}
+                    {% set value = raw if raw is not none else default | float %}
+                    {% set iv = (value * {'days': 1, 'months': 30.44, 'years': 365.25}[unit]) | round(0) | int %}
+                    {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                    {{ iv }}
+                  # The interval in words, in the task's unit: "3 days", "6 months",
+                  # "3 months" (¼ year), "1¼ years", "2 years".
+                  interval_label: >
+                    {% set raw = states('input_number.' ~ key ~ '_interval') | float(none) %}
+                    {% set value = raw if raw is not none else default | float %}
+                    {% set iv = (value * {'days': 1, 'months': 30.44, 'years': 365.25}[unit]) | round(0) | int %}
+                    {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                    {% set whole = value | int %}
+                    {% set frac = {0.25: '¼', 0.5: '½', 0.75: '¾'}.get(((value - whole) * 100) | round(0) / 100, '') %}
+                    {% set n = value | int %}
+                    {% if unit == 'days' %}{{ n }} day{{ 's' if n != 1 }}
+                    {% elif unit == 'months' %}{{ n }} month{{ 's' if n != 1 }}
+                    {% elif 0 < value < 1 %}{{ (value * 12) | round(0) | int }} months
+                    {% elif frac %}{{ whole }}{{ frac }} years
+                    {% elif value == whole %}{{ whole }} year{{ 's' if whole != 1 }}
+                    {% else %}{{ value }} years
+                    {% endif %}
+                  # For the card and notifications: "every 6 months"; 0 = "no gap
+                  # (always due)", since the task is due again right after Done.
+                  interval_text: >
+                    {% set raw = states('input_number.' ~ key ~ '_interval') | float(none) %}
+                    {% set value = raw if raw is not none else default | float %}
+                    {% set iv = (value * {'days': 1, 'months': 30.44, 'years': 365.25}[unit]) | round(0) | int %}
+                    {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                    {% set whole = value | int %}
+                    {% set frac = {0.25: '¼', 0.5: '½', 0.75: '¾'}.get(((value - whole) * 100) | round(0) / 100, '') %}
+                    {% set n = value | int %}
+                    {% if value == 0 %}no gap (always due){% else %}every
+                    {% if unit == 'days' %}{{ n }} day{{ 's' if n != 1 }}
+                    {% elif unit == 'months' %}{{ n }} month{{ 's' if n != 1 }}
+                    {% elif 0 < value < 1 %}{{ (value * 12) | round(0) | int }} months
+                    {% elif frac %}{{ whole }}{{ frac }} years
+                    {% elif value == whole %}{{ whole }} year{{ 's' if whole != 1 }}
+                    {% else %}{{ value }} years
+                    {% endif %}
+                    {% endif %}
+                  last_done: >
+                    {% set raw = states('input_number.' ~ key ~ '_interval') | float(none) %}
+                    {% set value = raw if raw is not none else default | float %}
+                    {% set iv = (value * {'days': 1, 'months': 30.44, 'years': 365.25}[unit]) | round(0) | int %}
+                    {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                    {{ last.isoformat() if last is not none else none }}
+                  # A date (YYYY-MM-DD), not a time: tasks are due on a day.
+                  next_due: >
+                    {% set raw = states('input_number.' ~ key ~ '_interval') | float(none) %}
+                    {% set value = raw if raw is not none else default | float %}
+                    {% set iv = (value * {'days': 1, 'months': 30.44, 'years': 365.25}[unit]) | round(0) | int %}
+                    {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                    {{ (as_local(last).date() + timedelta(days=iv)).isoformat() if last is not none else none }}
+                  # Calendar days until the due date: 0 = due today, negative = days
+                  # overdue. None (not 0) when never recorded.
+                  days_left: >
+                    {% set raw = states('input_number.' ~ key ~ '_interval') | float(none) %}
+                    {% set value = raw if raw is not none else default | float %}
+                    {% set iv = (value * {'days': 1, 'months': 30.44, 'years': 365.25}[unit]) | round(0) | int %}
+                    {% set last = states('sensor.' ~ key ~ '_last_done') | as_datetime(none) %}
+                    {{ (as_local(last).date() + timedelta(days=iv) - now().date()).days if last is not none else none }}
+              name: Cat pad
+              unique_id: maintenance_cat_pee_pad
+              default_entity_id: sensor.maintenance_cat_pee_pad
+              icon: mdi:paw
+              variables:
+                key: maintenance_cat_pee_pad
+                # Unit of the interval (days, months or years) and its
+                # default, in that unit.
+                unit: days
+                default: 3
+
+    maintenance_under_sink_filter:
+      input_button:
+        maintenance_under_sink_filter_done:
+          name: Under-sink filter done
+          icon: mdi:water-pump
+      input_number:
+        maintenance_under_sink_filter_interval:
+          <<: *maintenance_interval
+          name: Under-sink filter interval
+          unit_of_measurement: years
+          min: 0
+          max: 4
+          step: 0.25
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_under_sink_filter_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_under_sink_filter_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Under-sink filter last done
+              unique_id: maintenance_under_sink_filter_last_done
+              default_entity_id: sensor.maintenance_under_sink_filter_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Under-sink filter
+              unique_id: maintenance_under_sink_filter
+              default_entity_id: sensor.maintenance_under_sink_filter
+              icon: mdi:water-pump
+              variables:
+                key: maintenance_under_sink_filter
+                unit: years
+                default: 1
+
+    maintenance_fridge_filter:
+      input_button:
+        maintenance_fridge_filter_done:
+          name: Fridge filter done
+          icon: mdi:fridge
+      input_number:
+        maintenance_fridge_filter_interval:
+          <<: *maintenance_interval
+          name: Fridge filter interval
+          unit_of_measurement: years
+          min: 0
+          max: 4
+          step: 0.25
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_fridge_filter_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_fridge_filter_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Fridge filter last done
+              unique_id: maintenance_fridge_filter_last_done
+              default_entity_id: sensor.maintenance_fridge_filter_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Fridge filter
+              unique_id: maintenance_fridge_filter
+              default_entity_id: sensor.maintenance_fridge_filter
+              icon: mdi:fridge
+              variables:
+                key: maintenance_fridge_filter
+                unit: years
+                default: 1
+
+    maintenance_espresso_filter:
+      input_button:
+        maintenance_espresso_filter_done:
+          name: Espresso filter done
+          icon: mdi:coffee-maker
+      input_number:
+        maintenance_espresso_filter_interval:
+          <<: *maintenance_interval
+          name: Espresso filter interval
+          unit_of_measurement: years
+          min: 0
+          max: 4
+          step: 0.25
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_espresso_filter_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_espresso_filter_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Espresso filter last done
+              unique_id: maintenance_espresso_filter_last_done
+              default_entity_id: sensor.maintenance_espresso_filter_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Espresso filter
+              unique_id: maintenance_espresso_filter
+              default_entity_id: sensor.maintenance_espresso_filter
+              icon: mdi:coffee-maker
+              variables:
+                key: maintenance_espresso_filter
+                unit: years
+                default: 3
+
+    maintenance_car_oil:
+      input_button:
+        maintenance_car_oil_done:
+          name: Car oil done
+          icon: mdi:oil
+      input_number:
+        maintenance_car_oil_interval:
+          <<: *maintenance_interval
+          name: Car oil interval
+          unit_of_measurement: months
+          min: 0
+          max: 12
+          step: 1
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_car_oil_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_car_oil_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Car oil last done
+              unique_id: maintenance_car_oil_last_done
+              default_entity_id: sensor.maintenance_car_oil_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Car oil
+              unique_id: maintenance_car_oil
+              default_entity_id: sensor.maintenance_car_oil
+              icon: mdi:oil
+              variables:
+                key: maintenance_car_oil
+                unit: months
+                default: 6
+
+    maintenance_furnace_filters:
+      input_button:
+        maintenance_furnace_filters_done:
+          name: Furnace filters done
+          icon: mdi:hvac
+      input_number:
+        maintenance_furnace_filters_interval:
+          <<: *maintenance_interval
+          name: Furnace filters interval
+          unit_of_measurement: years
+          min: 0
+          max: 4
+          step: 0.25
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_furnace_filters_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_furnace_filters_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Furnace filters last done
+              unique_id: maintenance_furnace_filters_last_done
+              default_entity_id: sensor.maintenance_furnace_filters_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Furnace filters
+              unique_id: maintenance_furnace_filters
+              default_entity_id: sensor.maintenance_furnace_filters
+              icon: mdi:hvac
+              variables:
+                key: maintenance_furnace_filters
+                unit: years
+                default: 2
+
+    maintenance_grill_cleaning:
+      input_button:
+        maintenance_grill_cleaning_done:
+          name: Grill done
+          icon: mdi:grill
+      input_number:
+        maintenance_grill_cleaning_interval:
+          <<: *maintenance_interval
+          name: Grill interval
+          unit_of_measurement: years
+          min: 0
+          max: 4
+          step: 0.5
+      template:
+        - triggers:
+            - trigger: state
+              entity_id: input_button.maintenance_grill_cleaning_done
+              not_to:
+                - unavailable
+                - unknown
+              id: done
+            - trigger: event
+              event_type: maintenance_correct_last_done
+              event_data:
+                entity_id: sensor.maintenance_grill_cleaning_last_done
+              id: correct
+          sensor:
+            - <<: *maintenance_last_done
+              name: Grill last done
+              unique_id: maintenance_grill_cleaning_last_done
+              default_entity_id: sensor.maintenance_grill_cleaning_last_done
+        - sensor:
+            - <<: *maintenance_status
+              name: Grill
+              unique_id: maintenance_grill_cleaning
+              default_entity_id: sensor.maintenance_grill_cleaning
+              icon: mdi:grill
+              variables:
+                key: maintenance_grill_cleaning
+                unit: years
+                default: 2
+    # Daily shot (HASS-11): a 7 pm reminder that says which side is next,
+    # alternating left and right. Done (on the dashboard or the phone
+    # notification) records the time and side and flips the next side; the
+    # automations are in automations.yaml under "Daily shot".
+    # To fix a mistake, set "Daily shot next side" (and, if needed, "Daily
+    # shot last done") by hand on the dashboard.
+    daily_shot:
+      input_select:
+        daily_shot_next_side:
+          name: Daily shot next side
+          icon: mdi:swap-horizontal
+          # Right first on purpose: a new input_select starts on its first
+          # option, and the shot on 2026-10-31 was on the left. No `initial:`,
+          # so the value survives restarts.
+          options:
+            - Right
+            - Left
+      input_button:
+        daily_shot_done:
+          name: Daily shot done
+          icon: mdi:check-circle
+      input_datetime:
+        daily_shot_last_done:
+          name: Daily shot last done
+          icon: mdi:calendar-check
+          has_date: true
+          has_time: true
+      input_text:
+        daily_shot_last_side:
+          name: Daily shot last side
+          icon: mdi:history
+          max: 5
+      template:
+        - sensor:
+            # "Done" once a shot is logged today, otherwise "To do". Next side and
+            # last shot are attributes for the dashboard and the notification.
+            - name: Daily shot
+              unique_id: daily_shot_status
+              default_entity_id: sensor.daily_shot
+              icon: mdi:needle
+              state: >
+                {% set last = states('input_datetime.daily_shot_last_done') | as_datetime(none) %}
+                {{ 'Done' if last is not none and as_local(last).date() == now().date() else 'To do' }}
+              attributes:
+                next_side: "{{ states('input_select.daily_shot_next_side') }}"
+                last_side: "{{ states('input_text.daily_shot_last_side') }}"
+                last_done: "{{ states('input_datetime.daily_shot_last_done') }}"

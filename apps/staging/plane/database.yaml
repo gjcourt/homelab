@@ -1,0 +1,86 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: plane-db-staging-cnpg-v1
+  namespace: plane-stage
+
+spec:
+  description: Postgres cluster for Plane
+  # Postgres 15: what Plane ships and tests (its Compose file and chart bundle
+  # 15.7). Plane documents no supported range, so moving to 17 like the other
+  # apps is its own change after an upgrade test.
+  imageName: ghcr.io/cloudnative-pg/postgresql:15.19
+
+  instances: 1
+
+  inheritedMetadata:
+    labels:
+      app: plane-database
+      env: staging
+      policy-type: "database"
+
+  monitoring:
+    enablePodMonitor: true
+
+  # Cross-cluster spread: see apps/production/golinks/database.yaml.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: ScheduleAnyway
+      labelSelector:
+        matchLabels:
+          policy-type: database
+
+  storage:
+    storageClass: truenas-iscsi
+    size: 2Gi
+
+  postgresql:
+    parameters:
+      # Small DB on a small volume: right-size WAL as memos does.
+      max_wal_size: "256MB"
+      wal_keep_size: "128MB"
+      max_slot_wal_keep_size: "256MB"
+
+  # serverName versions (docs/operations/2026-05-02-cnpg-backup-recovery.md):
+  #   v1 — first install, 2026-10-18. Holds the base backup and WAL up to the
+  #        2026-10-19 05:54Z staging prune (fixed in #1597).
+  #   v2 — used by a fresh-initdb cluster created mid-rebuild at 06:18Z, before
+  #        the recovery bootstrap reached it. Empty data; don't restore from it.
+  #   v3 — same: that fresh cluster picked v3 up and archived to it before it
+  #        was deleted. Don't restore from it.
+  #   v4 — archive after restoring from v1: WAL 07:49Z-08:29Z, no base backup.
+  #        The cluster was pruned at ~08:30Z when this PR went CONFLICTING and
+  #        the staging rebuild dropped it.
+  #   v5 — archive after the second restore from v1. The archiver needs an
+  #        empty path, so bump on every future restore or recreate, and change
+  #        it only while no cluster is running, or the running one archives
+  #        into it.
+  plugins:
+    - name: barman-cloud.cloudnative-pg.io
+      isWALArchiver: true
+      parameters:
+        barmanObjectName: plane-db-staging-cnpg-v1-backup
+        serverName: plane-db-staging-cnpg-v1-v5
+
+  # Restored from v1 (plan step 6, the restore drill). No owner secret: CNPG
+  # generates plane-db-staging-cnpg-v1-app, whose `uri` key becomes Plane's
+  # DATABASE_URL (see release-patch.yaml).
+  bootstrap:
+    recovery:
+      source: plane-db-backup
+      # Pin the original cluster's base backup. The fresh clusters created during
+      # the prune wrote base backups of their own (empty) databases into v1 too,
+      # and recovery otherwise picks the newest, which can't replay v1's WAL.
+      recoveryTarget:
+        backupID: 20261019T033306
+      database: app
+      owner: app
+
+  externalClusters:
+    - name: plane-db-backup
+      plugin:
+        name: barman-cloud.cloudnative-pg.io
+        parameters:
+          barmanObjectName: plane-db-staging-cnpg-v1-backup
+          serverName: plane-db-staging-cnpg-v1-v1

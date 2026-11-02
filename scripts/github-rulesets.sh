@@ -113,7 +113,64 @@ JSON
 )
 RULESETS=("$BODY" "$BODY_RENOVATE")
 
-errf=$(mktemp); trap 'rm -f "$errf"' EXIT
+# Per-repo rules added to default-branch-guard on top of BODY. Without an entry
+# here, --apply would PUT BODY over a repo's extra rule and delete it, and
+# --check would report the repo as drift.
+#   lab: auto-merge (including plane-sync's status PRs) must wait for CI. With
+#        no required check, GitHub auto-merge merges at once (lab#111 merged
+#        while lint-and-format was still running, 2026-10-22). integration_id
+#        15368 is GitHub Actions.
+#   agent-sandbox: HOMELAB-85 trial (rollout step 2). bench-paths and
+#        bench-approval, posted by agent-sandbox's bench-gate workflow, must
+#        pass before a PR merges; pinned to GitHub Actions so a same-name
+#        status from anyone else (the App, George's PAT) doesn't count.
+#        Plan: docs/plans/2026-11-01-bench-homelab-paths-plan.md.
+#   homelab: HOMELAB-85 rollout step 4, after the agent-sandbox trial passed
+#        (T0-T11, 2026-11-01). The same two checks, posted by homelab's
+#        bench-gate workflow. Both are success on every PR that isn't a bench
+#        PR (George's, Renovate's), so only bench-cloud PRs are held: by
+#        bench-paths outside apps/** and docs/**, and by bench-approval until
+#        George approves the head SHA. The classic branch protection's
+#        yaml-lint and validate-kustomize checks still apply on top.
+extra_rules() {
+  case "$1" in
+    agent-sandbox|homelab) cat <<'JSON' ;;
+[{"type": "required_status_checks", "parameters": {
+  "strict_required_status_checks_policy": false,
+  "do_not_enforce_on_create": false,
+  "required_status_checks": [
+    {"context": "bench-paths", "integration_id": 15368},
+    {"context": "bench-approval", "integration_id": 15368}]}}]
+JSON
+    lab) cat <<'JSON' ;;
+[{"type": "required_status_checks", "parameters": {
+  "strict_required_status_checks_policy": false,
+  "do_not_enforce_on_create": false,
+  "required_status_checks": [
+    {"context": "lint-and-format", "integration_id": 15368},
+    {"context": "readme / readme", "integration_id": 15368}]}}]
+JSON
+    *) echo '[]' ;;
+  esac
+}
+
+errf=$(mktemp); bodyf=$(mktemp); trap 'rm -f "$errf" "$bodyf"' EXIT
+
+# gh_retry ARGS... : `gh ARGS...`, retried up to twice (after 2s, then 5s) when
+# the failure looks transient: a connection error, a timeout or a 502/503/504.
+# One such blip in ~650 calls used to fail the whole run (2026-10-14, -19, -20,
+# -21: "error connecting to api.github.com"). Anything else (403, 404, 422)
+# fails at once. stdout passes through; the last attempt's stderr is left in
+# $errf. Only for calls that are safe to repeat: GETs and PUTs, never a POST.
+gh_once() { gh "$@" 2>"$errf" </dev/null; }
+gh_retry() {
+  local delay
+  for delay in 2 5 ''; do
+    gh "$@" 2>"$errf" </dev/null && return 0
+    [[ -n $delay ]] && grep -qiE 'error connecting|timeout|EOF|HTTP 50[234]' "$errf" || return 1
+    sleep "$delay"
+  done
+}
 
 # GitHub does not echo rule parameters back verbatim (measured 2026-09-26/27):
 #   - it OMITS parameters at their default (`update` came back with none,
@@ -151,13 +208,13 @@ norm() {
 if [[ -n "$ONLY" ]]; then
   # Trial on one repo: it must exist and not be archived (rulesets can't be
   # written to an archived repo).
-  archived=$(gh repo view "$OWNER/$ONLY" --json isArchived --jq .isArchived) || {
-    echo "FATAL: could not look up $OWNER/$ONLY (missing, or no access)" >&2; exit 1; }
+  archived=$(gh_retry repo view "$OWNER/$ONLY" --json isArchived --jq .isArchived) || {
+    echo "FATAL: could not look up $OWNER/$ONLY (missing, or no access): $(tr '\n' ' ' <"$errf")" >&2; exit 1; }
   [[ "$archived" == false ]] || { echo "FATAL: $OWNER/$ONLY is archived" >&2; exit 1; }
   repos=$ONLY
 else
-  repos=$(gh repo list "$OWNER" --limit 500 --no-archived --json name --jq '.[].name' | sort) || {
-    echo "FATAL: could not list $OWNER repos" >&2; exit 1; }
+  repos=$(gh_retry repo list "$OWNER" --limit 500 --no-archived --json name --jq '.[].name' | sort) || {
+    echo "FATAL: could not list $OWNER repos: $(tr '\n' ' ' <"$errf")" >&2; exit 1; }
 fi
 nrepos=$(grep -c . <<<"$repos" || true)
 if [[ $nrepos -eq 0 ]]; then echo "FATAL: $OWNER has no repos listed" >&2; exit 1; fi
@@ -167,12 +224,15 @@ ok=0 changed=0 missing=0 failed=0
 while IFS= read -r repo; do
 for BODY in "${RULESETS[@]}"; do
   NAME=$(jq -r .name <<<"$BODY")
+  if [[ $NAME == default-branch-guard ]]; then
+    BODY=$(jq --argjson extra "$(extra_rules "$repo")" '.rules += $extra' <<<"$BODY")
+  fi
   want=$(norm "$BODY" <<<"$BODY")
-  existing=$(gh api "repos/$OWNER/$repo/rulesets?per_page=100" \
-      --jq ".[] | select(.name == \"$NAME\") | .id" 2>"$errf") || {
+  existing=$(gh_retry api "repos/$OWNER/$repo/rulesets?per_page=100" \
+      --jq ".[] | select(.name == \"$NAME\") | .id") || {
     echo "FAIL    $repo [$NAME]  (list rulesets: $(tr '\n' ' ' <"$errf"))"; failed=$((failed + 1)); continue; }
   if [[ -n "$existing" ]]; then
-    live=$(gh api "repos/$OWNER/$repo/rulesets/$existing" 2>"$errf") || {
+    live=$(gh_retry api "repos/$OWNER/$repo/rulesets/$existing") || {
       echo "FAIL    $repo [$NAME]  (get ruleset $existing: $(tr '\n' ' ' <"$errf"))"; failed=$((failed + 1)); continue; }
     if [[ "$(norm "$BODY" <<<"$live")" == "$want" ]]; then
       # The Admin-role bypass (actor_id 5) is undocumented; this is GitHub's own
@@ -193,9 +253,14 @@ for BODY in "${RULESETS[@]}"; do
   case "$MODE" in
     dry-run|check) echo "WOULD-$verb $repo [$NAME]" ;;
     apply)
-      if out=$(gh api -X "$method" "$path" --input - <<<"$BODY" 2>&1); then
+      # A PUT replaces the ruleset, so repeating it is harmless; a POST that
+      # timed out may still have created one, and a retry would add a second.
+      printf '%s\n' "$BODY" >"$bodyf"
+      if [[ $method == PUT ]]; then run=gh_retry; else run=gh_once; fi
+      if out=$($run api -X "$method" "$path" --input "$bodyf"); then
         echo "${verb}d $repo [$NAME]"; changed=$((changed + 1))
       else
+        out=$(cat "$errf")
         hint=""
         # Personal-account rulesets on private repos need GitHub Pro; on a plan
         # without it GitHub's 403 asks to upgrade or make the repo public.

@@ -1,0 +1,41 @@
+ingress:
+  appHost: plane.burntbytes.com
+
+# MinIO holds uploads (attachments, images), so its volume uses the Retain
+# class: deleting the namespace must not delete them (staging's namespace was
+# deleted three times on 2026-10-19 by the preview prune). Redis and RabbitMQ
+# hold cache and queue state only, so they stay on the Delete class.
+redis:
+  storageClass: truenas-iscsi-ephemeral
+  volumeSize: 1Gi
+rabbitmq:
+  storageClass: truenas-iscsi-ephemeral
+  volumeSize: 1Gi
+minio:
+  storageClass: truenas-iscsi
+  volumeSize: 10Gi
+
+# MinIO root credentials, also used by the api and workers to reach the
+# bucket. Staging runs the chart defaults; production must not, because
+# /uploads routes MinIO's S3 API through the gateway to the whole LAN.
+external_secrets:
+  doc_store_existingSecret: plane-doc-store
+
+# Requests from staging's observed use (kubectl top, 2026-10-20, idle with a
+# test workspace), rounded up. Limits stay at the chart's 1000Mi except the
+# worker, which sat at 890Mi of it on staging.
+web:
+  memoryRequest: 64Mi
+admin:
+  memoryRequest: 64Mi
+space:
+  memoryRequest: 128Mi
+live:
+  memoryRequest: 192Mi
+api:
+  memoryRequest: 192Mi
+beatworker:
+  memoryRequest: 192Mi
+worker:
+  memoryRequest: 1Gi
+  memoryLimit: 1536Mi

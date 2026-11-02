@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Production dispatcher (agent desk plan, step 6): production Plane's SANDBOX
+# project only, real Jobs in bench-cloud. Namespace `agent-desk`, unsuffixed,
+# as the plan decided (Design table, "Namespace").
+namespace: agent-desk
+resources:
+  - ../../base/agent-desk/
+  - networkpolicy-plane.yaml
+  - networkpolicy-notify.yaml
+  # SOPS-encrypted by the operator from its .example template (agents never
+  # run sops in this repo); Flux decrypts it at apply time.
+  - secret-agent-desk.yaml
+
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false
+
+configMapGenerator:
+  - name: agent-desk-config
+    files:
+      - config.yaml
+
+patches:
+  - target:
+      kind: Deployment
+      name: agent-desk
+    patch: |
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: PLANE_URL, value: "http://plane-api.plane-prod.svc.cluster.local:8000"}
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: PLANE_WORKSPACE, value: home}
+      # Real Jobs: no DRY_RUN_JOBS here.
+      - op: add
+        path: /spec/template/spec/containers/0/env/-
+        value: {name: NOTIFY_URL, value: "http://homeassistant.homeassistant-prod.svc.cluster.local:8123"}
+
+# Pinned date-sha tag from build-agent-desk.yml (Flux does not auto-track).
+images:
+  - name: ghcr.io/gjcourt/agent-desk
+    newTag: 2026-11-02-4f7040e

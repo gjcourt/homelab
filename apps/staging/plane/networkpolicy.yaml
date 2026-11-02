@@ -1,0 +1,124 @@
+# Selects every pod the plane-ce chart renders (the CNPG pods are not
+# selected, as with every other app's database). Selected pods are
+# default-deny for anything not allowed here.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: plane
+  namespace: plane-stage
+  labels:
+    app.kubernetes.io/name: plane
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: >-
+    Gateway ingress to the web, space, admin, live, api and MinIO ports; bench-cloud, agent-desk-stage and plane-mobile-stage to the api; anything within the namespace; egress DNS, the namespace (CNPG included) and agent-desk-stage / plane-mobile-stage webhooks.
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: plane-ce
+      app.kubernetes.io/instance: plane
+  ingress:
+    # Everything in plane-stage: app-to-app, the migrator and bucket Jobs.
+    - fromEndpoints:
+        - {}
+    # The gateway's Envoy (seen as the remote-node / ingress identities).
+    - fromEntities:
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "3000"
+              protocol: TCP
+            - port: "8000"
+              protocol: TCP
+            - port: "9000"
+              protocol: TCP
+    # The local node: the gateway's Envoy when it runs there, and kubelet
+    # probes, which include Valkey (6379) and RabbitMQ (5672).
+    - fromEntities:
+        - host
+    # 03-042's agent Jobs reach the REST API and MCP server through this.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: bench-cloud
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    # The agent-desk dispatcher (staging) reads and updates tickets.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: agent-desk-stage
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+    # plane-mobile (staging) reads and updates tickets for the phone client.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-mobile-stage
+            app: plane-mobile
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    - toEndpoints:
+        - {}
+    # Webhook deliveries to the agent-desk dispatcher, the one host in
+    # WEBHOOK_ALLOWED_HOSTS (release-patch.yaml).
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: agent-desk-stage
+            app: agent-desk
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Webhook deliveries to plane-mobile-stage (POST /plane), also listed in
+    # WEBHOOK_ALLOWED_HOSTS.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-mobile-stage
+            app: plane-mobile
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+---
+# The api and worker reach the internet on 443: the api's start-up version
+# check (api.github.com, which fails soft after 10 s without it) and the
+# worker's link-title fetch for work item links, such as an agent's PR URL.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: plane-internet
+  namespace: plane-stage
+  labels:
+    app.kubernetes.io/name: plane
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: api and worker egress to the internet on 443.
+  endpointSelector:
+    matchExpressions:
+      - key: app.name
+        operator: In
+        values:
+          - plane-stage-plane-api
+          - plane-stage-plane-worker
+  egress:
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP

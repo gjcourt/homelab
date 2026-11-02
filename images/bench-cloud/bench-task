@@ -7,6 +7,9 @@
 #   TASK_REPO    owner/name to clone                 e.g. gjcourt/llmux
 #   TASK_PROMPT  the task, verbatim
 #   TASK_MODEL   optional model override (default: Claude Code's default)
+#   TASK_TICKET  optional: JSON naming the Plane ticket (agent-desk sets it).
+#                Ticket mode adds the Plane MCP server, the comment hook
+#                (bench-ticket) and the ticket workflow; needs PLANE_API_KEY.
 #   CLAUDE_CODE_OAUTH_TOKEN  inference-only subscription token (setup-token)
 #
 # Output: the record — prompt, Claude's JSON result (incl. usage), stderr, and
@@ -28,19 +31,38 @@ out="$stage/runs/$TASK_ID"
 mkdir -p "$out"
 printf '%s\n' "$TASK_PROMPT" > "$out/prompt.txt"
 jq -n --arg id "$TASK_ID" --arg repo "$TASK_REPO" --arg started "$(date -u +%FT%TZ)" \
-  '{id: $id, repo: $repo, started: $started}' > "$out/meta.json"
+  --arg ticket "$(jq -r '.key // empty' <<<"${TASK_TICKET:-null}")" \
+  '{id: $id, repo: $repo, started: $started} + (if $ticket != "" then {ticket: $ticket} else {} end)' \
+  > "$out/meta.json"
+
+# A ticket's last run, for the next Job woken on it (see the resume below).
+# Written now, not at exit, so a pod killed outright is still found.
+if [[ -n "${TASK_TICKET:-}" ]]; then
+  mkdir -p "$stage/tickets"
+  printf '%s\n' "$TASK_ID" > "$stage/tickets/$(jq -r .work_item_id <<<"$TASK_TICKET")"
+fi
+# The comment hook checkpoints this record to hestia as the run goes.
+export BENCH_STAGE=$stage BENCH_OUT=$out
 
 # shellcheck disable=SC2329  # invoked via `trap finish EXIT`
 finish() {
   rc=$?
   # (`end` is a jq keyword, hence $fin.)
-  jq --arg rc "$rc" --arg fin "$(date -u +%FT%TZ)" '. + {exit: ($rc|tonumber), finished: $fin}' \
+  # model: what the run ran on (a resume reads it back). cost_usd: this run's own
+  # cost, net of the earlier runs a resumed result repeats.
+  jq --arg rc "$rc" --arg fin "$(date -u +%FT%TZ)" --arg m "${TASK_MODEL:-}" \
+    --slurpfile r <(cat "$out/result.json" 2>/dev/null || echo '{}') \
+    '($r[0] // {}) as $res
+     | . + {exit: ($rc|tonumber), finished: $fin,
+            model: (if $m != "" then $m else ($res.modelUsage // {} | to_entries | max_by(.value.costUSD) | .key) end)}
+     + (if $res.total_cost_usd then {cost_usd: ($res.total_cost_usd - (.prev_cost_usd // 0))} else {} end)' \
     "$out/meta.json" > "$out/meta.json.tmp" && mv "$out/meta.json.tmp" "$out/meta.json" || true
   # Session transcripts live under ~/.claude/projects/<encoded cwd>/.
-  [[ -d "$HOME/.claude/projects" ]] && cp -r "$HOME/.claude/projects" "$out/transcripts" 2>/dev/null || true
+  # (rsync, not cp -r: the comment hook's checkpoints already made transcripts/.)
+  [[ -d "$HOME/.claude/projects" ]] && rsync -a "$HOME/.claude/projects/" "$out/transcripts/" 2>/dev/null || true
   # `rsync <stage>/runs hestia-inbox:` creates runs/ and runs/$TASK_ID/ under
   # the rrsync root without needing --mkpath (which rrsync may not allow).
-  if rsync -a "$stage/runs" hestia-inbox: ; then
+  if rsync -a "$stage/runs" "$stage"/tickets hestia-inbox: 2>/dev/null || rsync -a "$stage/runs" hestia-inbox: ; then
     echo "record: hestia:/mnt/main/agent-inbox/runs/$TASK_ID/"
   else
     # A task whose record is lost shouldn't look like a clean success: fail the
@@ -56,6 +78,24 @@ cd "$WORKSPACE"
 git clone -q "https://github.com/$TASK_REPO" repo
 cd repo
 
+# HOMELAB-85 defence in depth: a repo with a bench gate (scripts/bench-gate/
+# rules.yaml on its default branch) gets a pre-push hook that runs the gate's
+# path check before anything leaves the pod. The rules are copied out of the
+# clone, from the default branch, so edits on the agent's branch don't change
+# them. Set per clone, so other repos keep their own hooks. Not a security
+# boundary (the agent can edit its environment); the bench-paths status is.
+default=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)
+if [[ -n "$default" ]] && git cat-file -e "$default:scripts/bench-gate/rules.yaml" 2>/dev/null; then
+  mkdir -p "$HOME/.bench-gate"
+  git show "$default:scripts/bench-gate/rules.yaml" > "$HOME/.bench-gate/rules.yaml"
+  git config core.hooksPath /usr/local/share/bench-cloud/git-hooks
+  echo "bench-gate: pushes from this clone are checked against $TASK_REPO's rules ($default)"
+fi
+
+# Skill: the allowlisted skills bench-agents-sync installs (babysit, ci, ...);
+# without it a skill invocation that needs approval is denied here.
+tools=("Bash" "Read" "Edit" "Write" "Glob" "Grep" "WebFetch" "WebSearch" "TodoWrite" "Skill")
+
 # The prompt goes in on stdin, not argv: a prompt that starts with "-" would
 # otherwise be parsed as an option.
 args=(-p
@@ -67,12 +107,110 @@ args=(-p
   # Anything that would still prompt is denied (it would be anyway with no
   # host), and Claude is told nobody can approve it, so it doesn't retry.
   --permission-prompts none
-  # Skill: the allowlisted skills bench-agents-sync installs (babysit, ci, ...);
-  # without it a skill invocation that needs approval is denied here.
-  --allowedTools "Bash" "Read" "Edit" "Write" "Glob" "Grep" "WebFetch" "WebSearch" "TodoWrite" "Skill"
-  --append-system-prompt "You are running unattended as bench-cloud task $TASK_ID in a fresh clone of $TASK_REPO. Nobody can answer questions mid-task. Deliver your work as a pull request from a new branch, and end with a short summary that includes the PR URL, or says plainly why there is no PR."
   --name "$TASK_ID")
 [[ -n "${TASK_MODEL:-}" ]] && args+=(--model "$TASK_MODEL")
+
+if [[ -n "${TASK_TICKET:-}" ]]; then
+  : "${PLANE_API_KEY:?ticket mode needs the Jobs Plane key}"
+  key=$(jq -r .key <<<"$TASK_TICKET")
+  pid=$(jq -r .project_id <<<"$TASK_TICKET")
+  wid=$(jq -r .work_item_id <<<"$TASK_TICKET")
+  web=$(jq -r '.web_url // empty' <<<"$TASK_TICKET")   # the ticket's browser link, for the PR
+  # The Plane MCP server, pinned in the image. --strict-mcp-config: a .mcp.json
+  # in the cloned repo adds nothing. The key is already in this pod's env, so
+  # writing it to a 0600 file in the throwaway $HOME exposes nothing new.
+  mcp="$HOME/.bench-mcp.json"
+  ( umask 077; jq -n --arg url "$(jq -r .plane_url <<<"$TASK_TICKET")" --arg key "$PLANE_API_KEY" \
+      --arg ws "$(jq -r .workspace <<<"$TASK_TICKET")" \
+      '{mcpServers: {plane: {command: "/opt/plane-mcp/bin/plane-mcp-server", args: ["stdio"],
+        env: {PLANE_BASE_URL: $url, PLANE_API_KEY: $key, PLANE_WORKSPACE_SLUG: $ws}}}}' > "$mcp" )
+  # The comments in the prompt aren't news to the agent; any others the hook
+  # relays, including ones written after agent-desk built the prompt.
+  bench-ticket init
+  # bench-ticket wait holds one Bash call for up to 15 minutes; Bash's own cap is 10.
+  export BASH_MAX_TIMEOUT_MS=1000000
+  # Woken by a comment: carry on in the ticket's last session. Its transcript
+  # comes back from the record; tickets/<work item id> names the last run.
+  if [[ $(jq -r '.resume // false' <<<"$TASK_TICKET") == true ]]; then
+    prev=$(jq -r '.resume_from // empty' <<<"$TASK_TICKET")
+    if [[ -z "$prev" ]] && rsync -q "hestia-inbox:tickets/$wid" "$stage/prev" 2>/dev/null; then
+      prev=$(tr -cd 'a-z0-9-' < "$stage/prev")
+    fi
+    # A run that died before claude wrote anything has no session: go back to
+    # the run it resumed from (its meta.json says), a few hops at most.
+    for _ in 1 2 3; do
+      [[ -n "$prev" ]] || break
+      if rsync -aq "hestia-inbox:runs/$prev/transcripts/" "$HOME/.claude/projects/" 2>/dev/null; then
+        # The run's own session: the newest top-level transcript (subagents' are in subdirs).
+        # shellcheck disable=SC2012  # session files are uuid-named
+        sess=$(ls -t "$HOME/.claude/projects/-home-node-work-repo/"*.jsonl 2>/dev/null | head -1)
+        sess=$(basename "${sess:-}" .jsonl)
+      fi
+      [[ -n "${sess:-}" ]] && break
+      rsync -q "hestia-inbox:runs/$prev/meta.json" "$stage/hop.json" 2>/dev/null || break
+      echo "resume: $prev has no session; trying the run it resumed"
+      prev=$(jq -r '.resumed_from // empty' "$stage/hop.json" 2>/dev/null | tr -cd 'a-z0-9-')
+    done
+    if [[ -n "${sess:-}" ]]; then
+      echo "resume: $prev session $sess"
+      # Recorded first, so even a run that dies next can be traced back.
+      jq --arg p "$prev" --arg s "$sess" '. + {resumed_from: $p, session: $s}' "$out/meta.json" \
+        > "$out/meta.json.tmp" && mv "$out/meta.json.tmp" "$out/meta.json"
+      # Stay on the session's model (George, 2026-10-24): another model starts with
+      # a cold cache and re-reads the whole session, which cost more than the
+      # first run did on SANDBOX-6. Older records have no model; take it from usage.
+      rsync -q "hestia-inbox:runs/$prev/meta.json" "$stage/prev-meta.json" 2>/dev/null || true
+      rsync -q "hestia-inbox:runs/$prev/result.json" "$stage/prev-result.json" 2>/dev/null || true
+      pmodel=$(jq -r '.model // empty' "$stage/prev-meta.json" 2>/dev/null || true)
+      [[ -n "$pmodel" ]] || pmodel=$(jq -r '.modelUsage // {} | to_entries | max_by(.value.costUSD) | .key // empty' \
+        "$stage/prev-result.json" 2>/dev/null || true)
+      # The resumed result repeats the earlier runs' usage; finish() subtracts it.
+      prev_cost=$(jq -r '.total_cost_usd // 0' "$stage/prev-result.json" 2>/dev/null || echo 0)
+      if [[ -n "$pmodel" ]]; then
+        TASK_MODEL=$pmodel
+        kept=() skip=0
+        for a in "${args[@]}"; do
+          if (( skip )); then skip=0; continue; fi
+          if [[ $a == --model ]]; then skip=1; continue; fi
+          kept+=("$a")
+        done
+        args=("${kept[@]}" --model "$pmodel")
+      fi
+      jq --argjson c "${prev_cost:-0}" '. + {prev_cost_usd: $c}' "$out/meta.json" \
+        > "$out/meta.json.tmp" && mv "$out/meta.json.tmp" "$out/meta.json"
+      echo "resume: on ${pmodel:-the default model}"
+      # The session already has the ticket: send only what's new, and keep the
+      # whole-thread prompt in the record as the fallback that wasn't needed.
+      rp=$(jq -r '.resume_prompt // empty' <<<"$TASK_TICKET")
+      if [[ -n "$rp" ]]; then
+        mv "$out/prompt.txt" "$out/prompt-full.txt"
+        printf '%s\n' "$rp" > "$out/prompt.txt"
+      fi
+      # --fork-session: a new session id, so the earlier run's transcript is never rewritten.
+      args+=(--resume "$sess" --fork-session)
+    else
+      echo "resume: no earlier session for $key; starting from the thread"
+    fi
+  fi
+  tools+=("mcp__plane__workitem" "mcp__plane__workitem_comment" "mcp__plane__workitem_link"
+    "mcp__plane__state" "mcp__plane__workitem_activity")
+  args+=(--mcp-config "$mcp" --strict-mcp-config
+    # Hooks and the deny list for the Plane tools a ticket doesn't need, baked
+    # into the image like the managed settings; see the file.
+    --settings /usr/local/share/bench-cloud/ticket-settings.json
+    --append-system-prompt "You are running unattended as bench-cloud task $TASK_ID in a fresh clone of $TASK_REPO, working Plane ticket $key (project_id $pid, work item id $wid) through the plane MCP server. The ticket is your channel to George:
+- Deliver your work as a pull request from a new branch, titled \`<type>($key): <title text>\`, with the ticket linked in the description${web:+ ($web)}. Then attach the PR URL to the ticket as a link (workitem_link create), run your babysit and critique passes, and only then set the ticket's state to \"In review\" (look the state id up with the state tool). That state change is your last step before the summary, and the run isn't finished without it: an In Progress ticket tells George nothing. If the playbook's outcome is findings rather than a PR, post them as a ticket comment and set \"In review\" the same way.
+- If the ticket can be read more than one way, ask before you start, not after a PR.
+- To ask George something: post the question as a ticket comment, set the state to \"Blocked\", then run \`bench-ticket wait\` with the Bash tool and a timeout of 960000 ms. It returns his answer as soon as he comments (then set \"In Progress\" and carry on), or after 15 minutes says he hasn't; then end the run, and his reply will wake a new run in this same session.
+- George may comment while you work; his comments reach you as added context after a tool call. If one asks you something, answer it with a ticket comment.
+- A comment's comment_html is raw HTML, e.g. <p>Opened <a href=\"…\">PR #3</a>.</p>. Send the tags as they are; never escape them as &lt;p&gt;, or the ticket shows the markup.
+- Comment on a change only after you have made it (pushed, edited, run), never in the same step.
+- Touch only ticket $key. Never change its labels, and never delete anything in Plane.
+End with a short summary that includes the PR URL, or says plainly why there is no PR.")
+else
+  args+=(--append-system-prompt "You are running unattended as bench-cloud task $TASK_ID in a fresh clone of $TASK_REPO. Nobody can answer questions mid-task. Deliver your work as a pull request from a new branch, and end with a short summary that includes the PR URL, or says plainly why there is no PR.")
+fi
+args+=(--allowedTools "${tools[@]}")
 
 # In the background so a SIGTERM can be forwarded: claude then ends the run
 # (exit 143) and the EXIT trap still uploads whatever record exists.

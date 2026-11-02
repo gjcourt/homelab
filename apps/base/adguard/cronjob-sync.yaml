@@ -32,7 +32,7 @@ spec:
           containers:
             - name: adguardhome-sync
               # adguardhome-sync v0.9.0
-              image: ghcr.io/bakito/adguardhome-sync@sha256:4fec72b9c580c6711036ea42db645232d86384fde687365b0d0452d38d507280
+              image: ghcr.io/bakito/adguardhome-sync@sha256:8c5d65ef00b54cd8c2e78ccc70722ce322cf8ca5069b669e07c1e4edcd1836c7
               args: ["run", "--runOnStart", "--api-port", "0"]
               securityContext:
                 allowPrivilegeEscalation: false

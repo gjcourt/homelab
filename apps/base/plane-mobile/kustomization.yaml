@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# plane-mobile: phone-first PWA client for Plane (gjcourt/plane-mobile).
+# Deployment plan: plane-mobile docs/plans/2026-10-25-architecture-plan.md,
+# "Deployment in the homelab". Environment-specific pieces (ConfigMap, Secret,
+# HTTPRoute, the Plane and Authelia network rules) live in each overlay.
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+  - secret-ghcr.yaml

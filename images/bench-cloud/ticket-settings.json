@@ -1,0 +1,68 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__plane__workitem.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/bench-ticket pre",
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/bench-ticket stop",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/bench-ticket hook",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "deny": [
+      "mcp__plane__customer",
+      "mcp__plane__customer_property",
+      "mcp__plane__customer_request",
+      "mcp__plane__cycle",
+      "mcp__plane__get_pql_reference",
+      "mcp__plane__initiative",
+      "mcp__plane__intake",
+      "mcp__plane__label",
+      "mcp__plane__member",
+      "mcp__plane__milestone",
+      "mcp__plane__module",
+      "mcp__plane__page",
+      "mcp__plane__project",
+      "mcp__plane__project_estimate",
+      "mcp__plane__release",
+      "mcp__plane__release_label",
+      "mcp__plane__release_tag",
+      "mcp__plane__work_log",
+      "mcp__plane__workitem_attachment",
+      "mcp__plane__workitem_property",
+      "mcp__plane__workitem_relation",
+      "mcp__plane__workitem_type",
+      "mcp__plane__workspace",
+      "mcp__plane__template",
+      "mcp__plane__collection"
+    ]
+  }
+}

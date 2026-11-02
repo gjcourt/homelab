@@ -27,7 +27,7 @@ spec:
           type: RuntimeDefault
       initContainers:
         - name: init-files
-          image: busybox@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
+          image: busybox@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           # Write an empty YAML list for each include file if it doesn't already exist
           # or is empty (0 bytes). A bare touch creates a 0-byte file which HA refuses
           # to parse as a list, causing it to enter recovery mode and drop trusted_proxies.
@@ -58,7 +58,7 @@ spec:
             - name: config
               mountPath: /config
       containers:
-        - image: ghcr.io/home-assistant/home-assistant:2026.5.4@sha256:ceb1202133a5a036e8b03e20a10eb113186cc2f871968323c6fc6c3fc4205716
+        - image: ghcr.io/home-assistant/home-assistant:2026.10.4@sha256:23f4dfbb69ce76315dbc4de7915504f1c2dcecd7ca2648113a493a385972e133
           name: homeassistant
           ports:
             - containerPort: 8123
@@ -105,6 +105,14 @@ spec:
             - name: config-file
               mountPath: /config/scripts.yaml
               subPath: scripts.yaml
+            # secrets.yaml for !secret references (agent_desk_webhook_id): from
+            # the per-environment homeassistant-secrets Secret, so nothing
+            # secret is in this public repo. Without it HA can't load
+            # automations.yaml, so the Secret must exist before this rolls out.
+            - name: secrets-file
+              mountPath: /config/secrets.yaml
+              subPath: secrets.yaml
+              readOnly: true
             - name: config-file
               mountPath: /config/themes/tinted.yaml
               subPath: themes_tinted.yaml
@@ -115,6 +123,9 @@ spec:
             - name: config-file
               mountPath: /config/dashboards/control.yaml
               subPath: dashboards_control.yaml
+            - name: config-file
+              mountPath: /config/dashboards/home.yaml
+              subPath: dashboards_home.yaml
             # Vendored Mushroom card bundle, served at /local/mushroom.js and
             # registered via frontend.extra_module_url in configuration.yaml.
             - name: www-file
@@ -133,6 +144,9 @@ spec:
         - name: config-file
           configMap:
             name: homeassistant-config
+        - name: secrets-file
+          secret:
+            secretName: homeassistant-secrets
         - name: www-file
           configMap:
             name: homeassistant-www

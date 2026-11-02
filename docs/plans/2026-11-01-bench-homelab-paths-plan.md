@@ -174,6 +174,8 @@ The rules file is `scripts/bench-gate/rules.yaml`. One checker,
     policies (immich's `cronjob-bootstrap.yaml`) and kustomize patches whose target names the kind;
   - an added or removed line mentions `networkpolicy` (any case). This covers adding or removing
     `networkpolicy.yaml` from a `resources:` list.
+    Markdown files are exempt (2026-11-02, HASS-12/T13): prose may name the policy file. The kind
+    rule still reads Markdown, so a policy written into a `.md` file is refused.
 - **Fail closed.** If the PR has more than 3000 files (the API's limit), or a file's diff can't be
   read, or a binary file is changed, `bench-paths` fails.
 

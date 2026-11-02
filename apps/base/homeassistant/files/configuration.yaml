@@ -828,13 +828,18 @@ homeassistant:
         - sensor:
             # "Done" once a shot is logged today, otherwise "To do". Next side and
             # last shot are attributes for the dashboard and the notification.
+            # A shot counts only if "last side" holds a side: only "Daily shot —
+            # log it" writes that. A newly created input_datetime starts at
+            # midnight today, so without this check the first day reads "Done",
+            # and the reminder and the Done button both do nothing (11-01).
             - name: Daily shot
               unique_id: daily_shot_status
               default_entity_id: sensor.daily_shot
               icon: mdi:needle
               state: >
                 {% set last = states('input_datetime.daily_shot_last_done') | as_datetime(none) %}
-                {{ 'Done' if last is not none and as_local(last).date() == now().date() else 'To do' }}
+                {% set logged = states('input_text.daily_shot_last_side') in ['Left', 'Right'] %}
+                {{ 'Done' if logged and last is not none and as_local(last).date() == now().date() else 'To do' }}
               attributes:
                 next_side: "{{ states('input_select.daily_shot_next_side') }}"
                 last_side: "{{ states('input_text.daily_shot_last_side') }}"

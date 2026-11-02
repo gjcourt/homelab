@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_modified: 2026-10-21
+last_modified: 2026-11-02
 summary: "Self-hosted Plane CE (the tracker for lab 03-042's agent desk) on staging: Flux HelmRelease of plane-ce with post-render fixes, CNPG Postgres, LAN/VPN only, in-cluster webhooks to the dispatcher, restore drill before production"
 ---
 
@@ -14,8 +14,13 @@ Linear's UI without a paid SaaS plan. This plan covers **staging only**, up to a
 Production is a follow-up PR once staging has run for a while.
 
 Out of scope here: the dispatcher, the ticket-to-PR link and the agent playbooks. They live outside
-this repo (see 03-042). The homelab repo stays on the agent deny list until bench-watch exists, so
-this deploy is ordinary homelab work.
+this repo (see 03-042). When this was written, the homelab repo was on the agent deny list until
+bench-watch existed, so this deploy was ordinary homelab work.
+
+*Updated 2026-11-02:* homelab is off the deny list. Bench Jobs may open homelab PRs that change only
+`apps/**` and `docs/**`; the required checks `bench-paths` and `bench-approval` hold each PR until
+George approves it. The approval gate replaced bench-watch. See the
+[HOMELAB-85 plan](2026-11-01-bench-homelab-paths-plan.md).
 
 ## What the research found (2026-10-18)
 

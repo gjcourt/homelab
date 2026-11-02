@@ -126,7 +126,7 @@ views:
         action: navigate
         navigation_path: area-kitchen
     - type: custom:mushroom-template-card
-      primary: Front Foyer
+      primary: Entryway
       icon: mdi:door
       icon_color: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -1368,7 +1368,7 @@ views:
     column_span: 1
     cards:
     - type: heading
-      heading: Front Foyer
+      heading: Entryway
       heading_style: title
       icon: mdi:door
     - type: custom:mushroom-template-card
@@ -2040,7 +2040,7 @@ views:
 # `subview: true` keeps them off the top tab bar. Tinted single-column
 # layout: every light is a mushroom-light-card with a brightness slider
 # and card_mod that washes the card warm when the light is on.
-- title: Front Foyer
+- title: Entryway
   theme: Tinted
   path: area-front-foyer
   subview: true
@@ -2051,11 +2051,11 @@ views:
   - type: grid
     cards:
     - type: heading
-      heading: Front Foyer Lights
+      heading: Entryway Lights
       heading_style: title
       icon: mdi:door
     - type: custom:mushroom-template-card
-      primary: All Front Foyer Lights
+      primary: All Entryway Lights
       secondary: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{% set u = l | select('is_state', 'unavailable') | list | count %}{{ l | select('is_state', 'on') | list | count }} on{{ ' · ' ~ u ~ ' offline' if u else '' }}"
       icon: mdi:lightbulb-group
       icon_color: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"

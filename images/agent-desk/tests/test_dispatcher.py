@@ -327,6 +327,38 @@ def test_prompt_fence_cannot_be_closed_from_ticket_text(tmp_path):
     assert prompt.count("</ticket>") == 1
 
 
+def test_repo_note_is_appended_for_its_repo_only(tmp_path):
+    # HOMELAB-85: repoNotes tells the agent a repo's own limits (homelab's
+    # bench-gate paths) before it starts; other repos' prompts don't get it.
+    p = tmp_path / "config.yaml"
+    p.write_text(CONFIG.format(cap=6).replace("denyRepos: [gjcourt/homelab]", "denyRepos: []")
+                 + "repoNotes:\n  gjcourt/homelab: Only apps/** and docs/** may change.\n")
+    cfg = config.load(str(p), env={"PLANE_URL": "http://plane", "PLANE_WORKSPACE": "ws",
+                                   "DRY_RUN_JOBS": "true"})
+    cfg.job_template = TEMPLATE
+    assert cfg.repo_notes == {"gjcourt/homelab": "Only apps/** and docs/** may change."}
+    plane, kube = FakePlane(), FakeKube(None)
+    plane.add_project("p-sb", "SANDBOX")
+    plane.add_project("p-hl", "HOMELAB")
+    d = Dispatcher(cfg, plane, kube, log=lambda m: None)
+    plane.add_item("p-hl", "h1")
+    ready(plane, "p-hl", "h1")
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1")
+    d.poll()
+    prompts = {env_of(j, "TASK_REPO"): env_of(j, "TASK_PROMPT") for j, _ in kube.created}
+    hl = prompts["gjcourt/homelab"]
+    assert "Notes for gjcourt/homelab:\nOnly apps/** and docs/** may change." in hl
+    # in the instructions, before the untrusted ticket block
+    assert hl.index("Notes for gjcourt/homelab") < hl.index('<ticket id="HOMELAB-')
+    assert "Notes for" not in prompts["gjcourt/agent-sandbox"]
+
+
+def test_no_repo_notes_by_default(tmp_path):
+    d, _, _ = make(tmp_path)
+    assert d.cfg.repo_notes == {}
+
+
 def test_github_poll_moves_in_review(tmp_path):
     class GH:
         def __init__(self):

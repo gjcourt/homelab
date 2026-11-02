@@ -128,6 +128,7 @@ jobs:
               echo "  PR #$PR_NUM is ready at ${HEAD_SHA:0:7}. Attempting merge into staging..."
 
               git fetch origin "pull/$PR_NUM/head:pr-$PR_NUM"
+              PRE_MERGE=$(git rev-parse HEAD)
               if ! git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null; then
                 # Force-pushed while it was judged: the judged commit is gone.
                 # The push re-runs Lint, and that run picks up the new head.
@@ -142,6 +143,17 @@ jobs:
               else
                 echo "::warning::PR #$PR_NUM conflicts with master and was left out of staging; Flux will prune anything only it adds."
                 git merge --abort
+                SKIPPED=$((SKIPPED + 1))
+              fi
+              # GITHUB_TOKEN may not push a change under .github/workflows, so
+              # one such PR (Renovate's tool bumps, 2026-11-01) made every
+              # staging push fail. Workflows don't deploy anything to the
+              # cluster, so leave those PRs out of the staging build.
+              if [ "$(git rev-parse HEAD)" != "$PRE_MERGE" ] && \
+                 [ -n "$(git diff --name-only "$PRE_MERGE" HEAD -- .github/workflows)" ]; then
+                echo "::notice::PR #$PR_NUM changes .github/workflows; left out of staging (GITHUB_TOKEN cannot push workflow changes)."
+                git reset -q --hard "$PRE_MERGE"
+                MERGED=$((MERGED - 1))
                 SKIPPED=$((SKIPPED + 1))
               fi
             else

@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_modified: 2026-09-27
+last_modified: 2026-11-02
 summary: "bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia"
 ---
 
@@ -117,6 +117,10 @@ Code's version is pinned and bumped by Renovate.
   around it. **Fix deferred (George, 2026-09-27):** run the same check from a
   small repo the App isn't installed on ("bench-watch": scheduled GitHub
   Action + read-only token). **Revisit before agents run unattended on homelab.**
+  **Update 2026-11-01:** for homelab, bench-watch is now a nice-to-have (decision 6 of the
+  [HOMELAB-85 plan](2026-11-01-bench-homelab-paths-plan.md)). The `bench-paths` and `bench-approval` required checks stop the App merging an
+  unapproved homelab PR, and `infra/**` and `scripts/**` are outside its paths. bench-watch would
+  still be the only check that lives outside where the App can write.
 - **hestia exposure.** The `bench-agent` user is new attack surface on the NAS.
   `rrsync` plus a dataset of its own keep a mistake inside `agent-inbox`.
 

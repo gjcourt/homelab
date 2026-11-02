@@ -14,7 +14,7 @@ reproducible / restorable.
 Home Assistant depends on two controllers in [`infra/controllers/`](../../../../infra/controllers/):
 
 - **mosquitto** (MQTT broker, `infra/controllers/mosquitto/`). The ESPresense `mqtt_room` sensor in [`../files/configuration.yaml`](../files/configuration.yaml) subscribes to the broker to report which room each tracked device is closest to. The Home Assistant network policy allows egress to mosquitto on TCP 1883.
-- **zigbee2mqtt** (Zigbee bridge, `infra/controllers/zigbee2mqtt/`). The dependency is indirect. The Home Assistant network policy has no zigbee2mqtt rule; zigbee2mqtt publishes Zigbee devices and their availability to the mosquitto broker, and HA reads them from there. [`../files/automations.yaml`](../files/automations.yaml) relies on zigbee2mqtt availability for the dining room chandelier LEDs: they go `unavailable` when unpowered, and the automation waits for them to rejoin before sending a light command.
+- **zigbee2mqtt** (Zigbee bridge, `infra/controllers/zigbee2mqtt/`). The dependency is indirect. The Home Assistant network policy has no zigbee2mqtt rule; zigbee2mqtt publishes Zigbee devices and their availability to the mosquitto broker, and HA's MQTT integration, which is set up in the UI and so not in git, reads them from there. [`../files/automations.yaml`](../files/automations.yaml) relies on zigbee2mqtt availability for the dining room chandelier LEDs: they go `unavailable` when unpowered, and the automation waits for them to rejoin before sending a light command.
 
 ## What's git-managed vs. snapshotted here
 

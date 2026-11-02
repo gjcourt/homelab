@@ -29,7 +29,7 @@ ENV PATH=/usr/local/go/bin:/home/node/go/bin:$PATH \
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       build-essential ca-certificates curl git jq less make openssh-client \
-      openssl procps python3 python3-pip python3-venv ripgrep rsync tmux \
+      openssl procps python3 python3-pip python3-venv python3-yaml ripgrep rsync tmux \
  && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL -o /tmp/uv.tgz "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" \
@@ -62,6 +62,13 @@ RUN python3 -m venv /opt/plane-mcp \
  && /opt/plane-mcp/bin/pip install --no-cache-dir --require-hashes --no-deps -r /tmp/plane-mcp-requirements.txt \
  && rm /tmp/plane-mcp-requirements.txt
 
+# The bench gate's path checker (HOMELAB-85), copied from homelab at build
+# time like job.yaml below, and the pre-push hook that runs it. bench-task
+# points a clone's core.hooksPath at the hook only when the repo has a gate.
+# python3-yaml (apt, above) is the checker's one dependency.
+COPY scripts/bench-gate/check.py /usr/local/share/bench-cloud/bench-gate/check.py
+COPY images/bench-cloud/git-hooks/pre-push /usr/local/share/bench-cloud/git-hooks/pre-push
+
 # GitHub App auth: git and gh both get short-lived installation tokens.
 COPY images/bench-cloud/github-app-token /usr/local/bin/github-app-token
 COPY images/bench-cloud/gh-wrapper /usr/local/bin/gh
@@ -84,11 +91,13 @@ COPY images/bench-cloud/managed-settings.json /etc/claude-code/managed-settings.
 COPY images/bench-cloud/CLAUDE.md /etc/claude-code/CLAUDE.md
 # The trailing version checks fail the BUILD, not the first task, if a tool is missing.
 RUN chmod 0755 /usr/local/bin/github-app-token /usr/local/bin/gh /usr/local/bin/bench-entrypoint /usr/local/bin/bench-task /usr/local/bin/bench-cloud /usr/local/bin/bench-agents-sync /usr/local/bin/bench-ticket \
+      /usr/local/share/bench-cloud/git-hooks/pre-push \
  && git config --system credential.https://github.com.helper '!/usr/local/bin/github-app-token --git-credential' \
  && git config --system init.defaultBranch main \
  && go version && kubectl version --client=true && /usr/local/lib/gh/gh --version \
  && claude --version && python3 --version && tmux -V && rsync --version | head -1 \
- && /opt/plane-mcp/bin/python -c "import plane_mcp"
+ && /opt/plane-mcp/bin/python -c "import plane_mcp" \
+ && /usr/bin/python3 /usr/local/share/bench-cloud/bench-gate/check.py --help >/dev/null
 
 # node:22-bookworm ships uid/gid 1000 "node" — reuse it.
 USER 1000:1000

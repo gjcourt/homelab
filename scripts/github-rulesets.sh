@@ -124,11 +124,17 @@ RULESETS=("$BODY" "$BODY_RENOVATE")
 #        bench-approval, posted by agent-sandbox's bench-gate workflow, must
 #        pass before a PR merges; pinned to GitHub Actions so a same-name
 #        status from anyone else (the App, George's PAT) doesn't count.
-#        homelab gets the same case in rollout step 4, after the trial passes.
 #        Plan: docs/plans/2026-11-01-bench-homelab-paths-plan.md.
+#   homelab: HOMELAB-85 rollout step 4, after the agent-sandbox trial passed
+#        (T0-T11, 2026-11-01). The same two checks, posted by homelab's
+#        bench-gate workflow. Both are success on every PR that isn't a bench
+#        PR (George's, Renovate's), so only bench-cloud PRs are held: by
+#        bench-paths outside apps/** and docs/**, and by bench-approval until
+#        George approves the head SHA. The classic branch protection's
+#        yaml-lint and validate-kustomize checks still apply on top.
 extra_rules() {
   case "$1" in
-    agent-sandbox) cat <<'JSON' ;;
+    agent-sandbox|homelab) cat <<'JSON' ;;
 [{"type": "required_status_checks", "parameters": {
   "strict_required_status_checks_policy": false,
   "do_not_enforce_on_create": false,

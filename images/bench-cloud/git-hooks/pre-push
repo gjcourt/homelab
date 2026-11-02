@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# pre-push — bench-cloud's local copy of the bench-paths check (HOMELAB-85,
+# docs/plans/2026-11-01-bench-homelab-paths-plan.md, "Defence in depth in the
+# Job").
+#
+# bench-task points a clone's core.hooksPath here only when the target repo has
+# scripts/bench-gate/rules.yaml on its default branch, and copies that file to
+# $HOME/.bench-gate/rules.yaml first. This hook runs the same check.py the
+# bench-gate workflow runs (copied into the image from homelab at build time)
+# on origin/<default>...<pushed sha>, and refuses the push if any changed path
+# or line breaks a rule.
+#
+# It catches mistakes early. It is not a security boundary: the agent can edit
+# its own environment. The server-side bench-paths status is the boundary.
+#
+# Env overrides (tests only): BENCH_GATE_RULES, BENCH_GATE_CHECK,
+# BENCH_GATE_PYTHON.
+set -euo pipefail
+
+rules=${BENCH_GATE_RULES:-$HOME/.bench-gate/rules.yaml}
+check=${BENCH_GATE_CHECK:-/usr/local/share/bench-cloud/bench-gate/check.py}
+# The system Python, which has PyYAML from apt: a venv the agent activated
+# may not.
+python=${BENCH_GATE_PYTHON:-/usr/bin/python3}
+
+refuse() {
+  echo "bench-gate pre-push: $*" >&2
+  echo "bench-gate pre-push: push refused. The bench-paths check on the PR would fail too." >&2
+  exit 1
+}
+
+[[ -f $rules ]] || refuse "no rules at $rules (hooksPath is set, so this repo has a gate)"
+[[ -f $check ]] || refuse "no checker at $check"
+
+top=$(git rev-parse --show-toplevel)
+default=$(git -C "$top" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null) \
+  || refuse "can't tell the default branch (refs/remotes/origin/HEAD is unset)"
+# A stale origin/<default> would count master's own newer commits, merged into
+# this branch, as part of the change. Best effort: an offline check still runs.
+git -C "$top" fetch -q origin "+refs/heads/${default#origin/}:refs/remotes/$default" 2>/dev/null \
+  || echo "bench-gate pre-push: could not refresh $default; checking against the local copy" >&2
+
+rc=0
+# stdin: <local ref> <local sha> <remote ref> <remote sha>, one line per ref.
+while read -r lref lsha _rref _rsha; do
+  [[ -n ${lsha:-} ]] || continue
+  [[ $lsha =~ ^0+$ ]] && continue  # deleting a remote branch changes no files
+  echo "bench-gate pre-push: checking $lref against $default" >&2
+  set +e
+  "$python" "$check" --repo "$top" --rules "$rules" --base "$default" --head "$lsha" >&2
+  crc=$?
+  set -e
+  if ((crc != 0)); then
+    rc=1
+    ((crc == 2)) && echo "bench-gate pre-push: the check could not run for $lref" >&2
+  fi
+done
+
+((rc == 0)) || refuse "change only the allowed paths in $rules; George makes the rest of the change"
+exit 0

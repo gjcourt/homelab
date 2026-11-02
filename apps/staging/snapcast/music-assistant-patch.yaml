@@ -1,0 +1,59 @@
+# Music Assistant sidecar, staging only (HOMELAB-67 step 1,
+# docs/plans/2026-10-12-music-assistant.md). Runs next to Mopidy; nothing in
+# the base or prod changes. MA's Snapcast provider is set to "existing server"
+# at 127.0.0.1:1705, so its per-player TCP streams (4953-5153) stay inside the pod.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: snapcast
+  namespace: snapcast
+spec:
+  template:
+    metadata:
+      annotations:
+        # MA sorts first after the merge; keep kubectl logs/exec on snapserver.
+        kubectl.kubernetes.io/default-container: snapserver
+    spec:
+      containers:
+        - name: music-assistant
+          # Latest stable on 2026-11-02 (published 2026-10-30). No nightlies.
+          # The image defaults to root; it runs fine as the pod's uid 1000 with
+          # all capabilities dropped (checked locally). The only loss is
+          # AirPlay's PTP timing on UDP 319, and AirPlay is not used here.
+          image: ghcr.io/music-assistant/server:2.10.9@sha256:4ac0d5844363fbbefd6a61251df09d96cd546e05e01b8c1cc1a28803f0935e07
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: music-assistant
+              containerPort: 8095
+          readinessProbe:
+            tcpSocket:
+              port: music-assistant
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket:
+              port: music-assistant
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: music-assistant-data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+      volumes:
+        - name: music-assistant-data
+          persistentVolumeClaim:
+            claimName: snapcast-music-assistant-data

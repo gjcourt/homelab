@@ -1,0 +1,15 @@
+# Music Assistant settings, library database and cache (/data).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: snapcast-music-assistant-data
+  namespace: snapcast
+  labels:
+    app: snapcast
+spec:
+  storageClassName: truenas-iscsi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

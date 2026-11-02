@@ -14,11 +14,11 @@ Cluster-level controllers and configuration managed by Flux.
 | kube-prometheus-stack | Prometheus + Grafana monitoring |
 | loki | Log aggregation |
 | promtail | Log shipping to Loki |
-| mosquitto | MQTT broker |
+| mosquitto | MQTT broker. Used by Home Assistant (ESPresense `mqtt_room` sensor, and zigbee2mqtt devices) |
 | pingo | DNS updater for vpn.burnbytes.com |
 | renovate | Dependency update bot |
 | snapshot | Volume snapshot controller |
-| zigbee2mqtt | Zigbee bridge |
+| zigbee2mqtt | Zigbee bridge. Used by Home Assistant, through mosquitto |
 
 ## Configs (`infra/configs/`)
 

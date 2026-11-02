@@ -1,0 +1,27 @@
+# Adds the Music Assistant UI port to the base snapcast policy (Cilium policies
+# are additive). Gateway only: the UI is reached through ma.stage.burntbytes.com.
+# No new egress. MA's Chromecast, DLNA and AirPlay providers load by default,
+# but their ports are not in the base egress rules, so stage cannot reach a
+# real speaker on the LAN.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: snapcast-music-assistant
+  namespace: snapcast
+  labels:
+    app.kubernetes.io/name: snapcast
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: Music Assistant web UI (8095) from the gateway.
+  endpointSelector:
+    matchLabels:
+      app: snapcast
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8095"
+              protocol: TCP

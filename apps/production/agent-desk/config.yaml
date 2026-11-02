@@ -33,7 +33,7 @@ repoNotes:
     .github/**, scripts/**, images/**, hosts/**, root files, SOPS secrets
     (secret*.yaml or any file with a top-level sops: key), or network
     policies (networkpolicy*.yaml, any NetworkPolicy kind, or a line that
-    mentions one). Under apps/**, a change also may not add or touch a
+    mentions one, except in *.md files). Under apps/**, a change also may not add or touch a
     cluster-scoped kind (Namespace, PersistentVolume, any Cluster* kind such
     as a CNPG Cluster or ClusterRole, ...), Role or RoleBinding, an RBAC,
     admission, storage, cilium.io or Flux (*.toolkit.fluxcd.io) API group,

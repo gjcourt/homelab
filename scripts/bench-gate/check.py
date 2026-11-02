@@ -358,7 +358,11 @@ def check_changes(rules: dict, changes: list[Change]) -> list[Violation]:
         if not any_glob(rules.get("manifestPaths"), c.path):
             continue
         out += manifest_text_violations(rules, c.path, texts)
-        out += networkpolicy_line_violations(c.path, c)
+        # Markdown can't drop or add a policy, so prose may name the policy
+        # file. The kind rule above still reads Markdown, so a policy written
+        # into a .md file is refused (HASS-12, T13).
+        if not c.path.lower().endswith(".md"):
+            out += networkpolicy_line_violations(c.path, c)
         if posixpath.basename(c.path) in KUSTOMIZATION_NAMES:
             out += kustomization_violations(rules, c.path, c)
         out += privileged_violations(c.path, c)

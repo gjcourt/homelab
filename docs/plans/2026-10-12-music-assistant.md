@@ -93,6 +93,10 @@ Pieces:
 
 Steps 1–4 are reversible by reverting the PR; step 5 is the only one that removes anything.
 
+**Who builds it (2026-11-02).** Every step changes the `snapcast` network policy, which the HOMELAB-85
+bench gate does not allow for agent Jobs. So the orchestrator implements it as ordinary homelab PRs,
+one per step, not as a bench Job.
+
 ## Open questions to settle in step 1–2
 
 - Does snapserver 0.34 accept MA's `Stream.AddStream` calls with our config as-is, or

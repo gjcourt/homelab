@@ -18,8 +18,9 @@ this repo (see 03-042). When this was written, the homelab repo was on the agent
 bench-watch existed, so this deploy was ordinary homelab work.
 
 *Updated 2026-11-02:* homelab is off the deny list. Bench Jobs may open homelab PRs that change only
-`apps/**` and `docs/**`; the required checks `bench-paths` and `bench-approval` hold each PR until
-George approves it. The approval gate replaced bench-watch. See the
+`apps/**` and `docs/**`. The required check `bench-paths` fails a bench PR outside those paths, and
+`bench-approval` holds each bench PR until George approves its head. Per the HOMELAB-85 plan's
+decision 6, the approval gate replaces the bench-watch condition. See the
 [HOMELAB-85 plan](2026-11-01-bench-homelab-paths-plan.md).
 
 ## What the research found (2026-10-18)

@@ -60,7 +60,7 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (21)
+### In progress (22)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |

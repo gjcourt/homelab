@@ -198,6 +198,27 @@ def test_adding_networkpolicy_to_resources(repo, rules):
     assert_rule(vs, "networkpolicy")
 
 
+def test_markdown_may_name_a_network_policy_file(repo, rules):
+    doc = "## Depends on\n\n- mosquitto: the egress rule to 1883 in networkpolicy.yaml\n"
+    assert_ok(violations(repo, rules, {"apps/base/homeassistant/bootstrap/README.md": doc}))
+
+
+def test_markdown_removing_a_network_policy_mention(repo, rules):
+    path = "apps/base/app/README.md"
+    vs = violations(repo, rules, {path: "# app\n"}, base={path: "# app\n\nSee networkpolicy.yaml.\n"})
+    assert_ok(vs)
+
+
+def test_policy_written_into_markdown_is_still_refused(repo, rules):
+    assert_rule(violations(repo, rules, {"apps/base/app/notes.md": CNP}), "kind")
+
+
+def test_kustomization_listing_a_markdown_policy_file(repo, rules):
+    path = "apps/base/app/kustomization.yaml"
+    vs = violations(repo, rules, {path: "resources:\n  - deployment.yaml\n  - networkpolicy.md\n"}, base={path: "resources:\n  - deployment.yaml\n"})
+    assert_rule(vs, "networkpolicy")
+
+
 # --------------------------------------------------------------------------
 # Kinds: as a document, a patch target and a List item
 

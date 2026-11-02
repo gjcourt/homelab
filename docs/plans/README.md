@@ -86,7 +86,7 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (23)
+### Planned (24)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
@@ -95,6 +95,7 @@ see `scripts/plans-index/`).
 | [2026-10-12-music-assistant.md](2026-10-12-music-assistant.md) | 2026-11-02 | Music Assistant replaces the Mopidy/Iris sidecar: play Navidrome to chosen speakers, and per-speaker TTS announcements from HA |
 | [2026-10-10-roi-ranked-improvements.md](2026-10-10-roi-ranked-improvements.md) | 2026-10-10 | ROI-ranked fixes from the 2026-10-10 review: S3 backup verification, restore drill, UPS, Pushover, egress lockdown |
 | [2026-09-28-renovate-fixer-bench-cloud.md](2026-09-28-renovate-fixer-bench-cloud.md) | 2026-10-08 | Bench-cloud fixes stuck Renovate PRs; mechanical fixes auto-merge, risky go to George; renovate-review kept on subscription billing |
+| [2026-09-01-recover-readonly-pvc-script.md](2026-09-01-recover-readonly-pvc-script.md) | 2026-09-01 | implementation plan for scripts/recover-readonly-pvc.sh — the Tier 1 deliverable from the read-only PVC recovery plan; encodes the AGENTS.md runbook with a trap so Flux always resumes, gates on volumeattachment rather than pod count, detects the owning Kustomization instead of hardcoding apps-production, and refuses CNPG outright |
 | [2026-09-01-readonly-pvc-recovery.md](2026-09-01-readonly-pvc-recovery.md) | 2026-09-01 | read-only iSCSI remounts have recurred six times and always need an operator; detection is now solved by pvc-writeprobe, so close the remaining gap with a recovery script that encodes the runbook's traps — and deliberately do NOT build a controller that suspends Flux or restarts Postgres |
 | [2026-08-18-hestia-sshd-refused-diagnosis.md](2026-08-18-hestia-sshd-refused-diagnosis.md) | 2026-08-18 | hestia's sshd intermittently refuses port 22 while every other service stays up; the MaxStartups theory carried across sessions is disproven, so collect wedged-state evidence before changing any setting — **blocked:** Evidence from the wedged state, which has been destroyed 4-5 times by restarting the service before capturing it. Next wedge: capture from the TrueNAS web Shell over 443 BEFORE restarting. |
 | [2026-08-18-hestia-deploy-monitoring-gap.md](2026-08-18-hestia-deploy-monitoring-gap.md) | 2026-08-18 | hestia has no per-container metrics and no signal when the GitHub runner dies, so deploys failed silently for days; close it with an off-cluster canary, post-apply verification, and a container probe on the heartbeat that already exists |

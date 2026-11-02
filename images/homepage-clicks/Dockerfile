@@ -5,7 +5,7 @@
 # served on :9107. In the same "scope" family as mqttscope (a plain in-cluster
 # Deployment, no host access) — stdlib http.server + prometheus_client only,
 # runs unprivileged with a read-only root filesystem.
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 WORKDIR /app
 

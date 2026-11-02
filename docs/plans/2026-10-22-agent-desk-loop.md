@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_modified: 2026-10-24
+last_modified: 2026-11-02
 lab: 03-042
 summary: "The agent desk loop (lab 03-042 phase 1): a stateless in-cluster dispatcher turns ready Plane tickets into bench-cloud Jobs (up to 24 pods, 6 per playbook without asking), links each PR back to its ticket, and carries questions and mid-run comments through the ticket; sandbox repo first; docs-fix, dep-hold and main-ci playbooks"
 ---
@@ -42,7 +42,8 @@ George merges ── dispatcher sees the merge on GitHub ── ticket → "Done
 - **Ready gate:** per playbook. Each playbook declares whether its tickets start on their own or
   wait for George's `ready` label.
 - **Homelab repo out of scope for agent work** until bench-watch exists (the deferred merge-audit
-  fix in the [bench-cloud plan](2026-09-25-bench-cloud-agent.md#risks)).
+  fix in the [bench-cloud plan](2026-09-25-bench-cloud-agent.md#risks)). **Replaced 2026-11-01**
+  by decision 6 of the [HOMELAB-85 plan](2026-11-01-bench-homelab-paths-plan.md): the approval gate replaces bench-watch for homelab.
 - **The ticket is the chat** in phase 1: questions and mid-run messages go through ticket comments.
 
 ## Decisions (George, 2026-10-22, on this plan)
@@ -63,8 +64,8 @@ George merges ── dispatcher sees the merge on GitHub ── ticket → "Done
 | Plane project | Agent tickets? | Why |
 | --- | --- | --- |
 | **SANDBOX** (`gjcourt/agent-sandbox`, decision 1) | **Yes, first** | Throwaway repo: a wrong PR costs nothing |
-| Other repo projects except HOMELAB (DOMESTIQUE today; more as repos are added) | **After the milestone** (decision 1) | One project per repo, so the project decides the repo |
-| HOMELAB | **No** | Deny list, until bench-watch |
+| Other repo projects (DOMESTIQUE today; more as repos are added) | **After the milestone** (decision 1) | One project per repo, so the project decides the repo |
+| HOMELAB, HASS (`gjcourt/homelab`) | **Yes, since 2026-11-02** | [HOMELAB-85 plan](2026-11-01-bench-homelab-paths-plan.md) decision 6: the gate replaces bench-watch. PRs only in `apps/**` and `docs/**`, held until George approves the head SHA |
 | Lab categories (AUDIO, AUTO, COFFEE, CROSS, FIN, PIANO, WOOD) | **No** | Briefs are long-form ideas whose status plane-sync owns, not units of agent work |
 
 - **The repo comes from the project, never from the ticket text.** The dispatcher maps project
@@ -311,7 +312,9 @@ That's an idea for George to revisit, not a decision.
 - **Agents never merge.** Branch protection is never bypassed; George merges. bench-cloud's
   `bench-merge-audit` already pages on any merge by the App.
 - Every agent PR gets a **babysit and a critique pass** before it reaches "In review".
-- The homelab repo is on the dispatcher's **deny list** until bench-watch exists.
+- ~~The homelab repo is on the dispatcher's **deny list** until bench-watch exists.~~ Replaced by
+  decision 6 of the [HOMELAB-85 plan](2026-11-01-bench-homelab-paths-plan.md): homelab PRs are allowed in `apps/**` and `docs/**`, and the
+  `bench-approval` check holds each one until George approves its head SHA.
 - The dispatcher's Plane token is scoped to the workspace (and, by membership, to the in-scope
   projects). It holds **no GitHub write scope**; Jobs keep bench-cloud's existing GitHub App.
 - **Ticket text is untrusted input** to the agent, the same as any issue body. The prompt fences it.

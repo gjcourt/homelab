@@ -5,7 +5,7 @@
 > this page links out. **Update this file in the same PR whenever** a plan's
 > status changes, an incident postmortem lands, or hardware/topology changes.
 >
-> Last updated: 2026-08-29
+> Last updated: 2026-11-02
 
 ## Cluster at a glance
 
@@ -40,7 +40,7 @@ Active plans (see [docs/plans/](plans/README.md) for the full status-grouped ind
 - [Snapcast / HifiBerry rollout](plans/2026-05-03-snapcast-hifiberry-rollout.md) — server + LB IP live; per-device client setup remaining.
 - [Navidrome → Mopidy → Snapcast audio source](plans/2026-03-14-navidrome-snapcast-mopidy.md) — Mopidy sidecar in draft PR #426; not yet on master.
 - [Hestia memory benchmark](plans/2026-05-15-hestia-memory-benchmark.md) — 6-DIMM baseline captured; 8-DIMM comparison pending a physical DIMM swap.
-- [bench-cloud — Claude Code agents in-cluster](plans/2026-09-25-bench-cloud-agent.md) — agent image (#1482), phase-2 task runner (#1486), `default-branch-guard` on every repo (daily CronJob, #1493) and the hourly `bench-merge-audit` / `BenchCloudAppMerged` (#1491) are on master; operator setup (GitHub App, hestia `bench-agent`, secrets) done. Remaining for phase 1: merge #1483 (namespace/console), first console login, exit test. Deferred: out-of-repo "bench-watch" merge check — revisit before agents run unattended on homelab. Runbook: [operations/apps/bench-cloud.md](operations/apps/bench-cloud.md).
+- [bench-cloud — Claude Code agents in-cluster](plans/2026-09-25-bench-cloud-agent.md) — the console and task Jobs run in-cluster; [agent-desk](plans/2026-10-22-agent-desk-loop.md) turns `ready` Plane tickets into Jobs. Since 2026-11-02 ([HOMELAB-85](plans/2026-11-01-bench-homelab-paths-plan.md)) Jobs may open homelab PRs for Plane HOMELAB and HASS, limited to `apps/**` and `docs/**` by the `bench-paths` check and held by `bench-approval` until George approves the head SHA. Tests T12 and T13 (the homelab tests) have not run yet. The gate replaces bench-watch for homelab; bench-watch is now a nice-to-have. Runbooks: [bench-cloud](operations/apps/bench-cloud.md), [agent-desk](operations/apps/agent-desk.md).
 - [homelabscope — scheduled-job monitoring](plans/2026-07-04-homelabscope.md) — unified `homelabscope_job_*` metric family + hestia node-exporter textfile scraper (fixes the orphaned/unscraped immich-backup metric) + cronjob recording rules + templated staleness/absence alerts + Grafana table. Repo artifacts landed; operator steps remain (deploy node-exporter, build+enable the heartbeat Custom App, bump the immich image digest).
 - [Lab projects and repo plans in Plane](plans/2026-10-21-plane-lab-project-sync.md) — production Plane live at `plane.burntbytes.com` (2026-10-21); lab `Cancelled` status merged (lab#110); API verified on staging (findings in the plan). Next: the `images/plane-sync/` tool PR, staging import for review, then the production import and CronJob.
 

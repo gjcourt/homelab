@@ -60,15 +60,16 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (20)
+### In progress (21)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-10-22-agent-desk-loop.md](2026-10-22-agent-desk-loop.md) | 2026-10-24 | The agent desk loop (lab 03-042 phase 1): a stateless in-cluster dispatcher turns ready Plane tickets into bench-cloud Jobs (up to 24 pods, 6 per playbook without asking), links each PR back to its ticket, and carries questions and mid-run comments through the ticket; sandbox repo first; docs-fix, dep-hold and main-ci playbooks |
+| [2026-11-01-bench-homelab-paths-plan.md](2026-11-01-bench-homelab-paths-plan.md) | 2026-11-02 | agent-desk Jobs may open homelab PRs in apps/** and docs/**; a required check holds them until George approves the head |
+| [2026-10-22-agent-desk-loop.md](2026-10-22-agent-desk-loop.md) | 2026-11-02 | The agent desk loop (lab 03-042 phase 1): a stateless in-cluster dispatcher turns ready Plane tickets into bench-cloud Jobs (up to 24 pods, 6 per playbook without asking), links each PR back to its ticket, and carries questions and mid-run comments through the ticket; sandbox repo first; docs-fix, dep-hold and main-ci playbooks |
 | [2026-10-21-plane-lab-project-sync.md](2026-10-21-plane-lab-project-sync.md) | 2026-10-21 | Track lab briefs and repo plans in production Plane: a project per lab category and per repo, a one-time import, then an in-cluster plane-sync CronJob. Briefs: Plane owns status, synced back by PR. Plans (incl. open plan PRs): the repo owns status, Plane mirrors |
 | [2026-10-18-plane-staging.md](2026-10-18-plane-staging.md) | 2026-10-21 | Self-hosted Plane CE (the tracker for lab 03-042's agent desk) on staging: Flux HelmRelease of plane-ce with post-render fixes, CNPG Postgres, LAN/VPN only, in-cluster webhooks to the dispatcher, restore drill before production |
 | [2026-10-06-obsidian-livesync.md](2026-10-06-obsidian-livesync.md) | 2026-10-10 | Self-hosted Obsidian sync: one CouchDB in the cluster for the LiveSync plugin, one database per vault, E2EE, S3 backups with a restore drill |
-| [2026-09-25-bench-cloud-agent.md](2026-09-25-bench-cloud-agent.md) | 2026-09-27 | bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia |
+| [2026-09-25-bench-cloud-agent.md](2026-09-25-bench-cloud-agent.md) | 2026-11-02 | bench-cloud: up to 5 parallel Claude Code agents in-cluster — push PRs via a GitHub App, run tests, write to hestia |
 | [2026-09-04-hestia-silent-hang-diagnosis.md](2026-09-04-hestia-silent-hang-diagnosis.md) | 2026-09-05 | hestia failed four times in ~29 hours after 57 days of uptime in TWO distinct modes — two kernel panics that self-rebooted in ~3 min and two true hard lockups that sat until reset — and left no record of either because the box had no console, no crashkernel and an ERST pstore that captured nothing; detectors are now armed and one suspect is stopped as a live experiment |
 | [2026-07-28-mealie-food-migration.md](2026-07-28-mealie-food-migration.md) | 2026-07-28 | Rename Mealie mealie.burntbytes.com -> food.burntbytes.com (301 old->new, LAN-only) and fix Site Settings: v3.22.0, BASE_URL, SMTP email, OIDC redirect URIs |
 | [2026-07-13-immich-photos-images-to-media.md](2026-07-13-immich-photos-images-to-media.md) | 2026-07-13 | Consolidate the Immich photo library from family/images/photos onto the canonical family/media/photos (all media under family/media/ per the assimilation plan); retire family/images/* |
@@ -85,11 +86,10 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (22)
+### Planned (21)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-11-01-bench-homelab-paths-plan.md](2026-11-01-bench-homelab-paths-plan.md) | 2026-11-01 | agent-desk Jobs may open homelab PRs in apps/** and docs/**; a required check holds them until George approves the head |
 | [2026-10-25-winpc-claude-code-plan.md](2026-10-25-winpc-claude-code-plan.md) | 2026-10-25 | Claude Code in WSL2 on winpc so the laptop can use George's agents remotely, via Remote Control and SSH over WireGuard |
 | [2026-10-19-hestia-transcoder.md](2026-10-19-hestia-transcoder.md) | 2026-10-19 | Move x265 encoding from winpc to a hestia Custom App running 3-4 encodes in parallel; winpc only rips and hands off |
 | [2026-09-28-renovate-fixer-bench-cloud.md](2026-09-28-renovate-fixer-bench-cloud.md) | 2026-10-08 | Bench-cloud fixes stuck Renovate PRs; mechanical fixes auto-merge, risky go to George; renovate-review kept on subscription billing |

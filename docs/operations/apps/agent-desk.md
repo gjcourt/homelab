@@ -11,7 +11,7 @@ Code: [`images/agent-desk/`](../../../images/agent-desk/README.md).
 | Environment | Namespace | Plane | Jobs |
 | --- | --- | --- | --- |
 | Staging | `agent-desk-stage` | `plane-stage`, workspace `my-test-workspacce` | **Dry run** (`DRY_RUN_JOBS=true`): created with `dryRun=All` in `bench-cloud`, never stored |
-| Production | `agent-desk` | `plane-prod`, workspace `home`, SANDBOX only | **Real**, `docs-fix` only (plan step 6) |
+| Production | `agent-desk` | `plane-prod`, workspace `home`: the projects in `config.yaml`, HOMELAB and HASS included | **Real**, the playbooks in `config.yaml` |
 
 ## 2. Architecture
 
@@ -31,7 +31,13 @@ Code: [`images/agent-desk/`](../../../images/agent-desk/README.md).
   - the deny list;
   - the playbooks: their caps, deadlines and prompts.
 
-  It's a ConfigMap reviewed in this repo, and agents can't edit homelab.
+  It's a ConfigMap reviewed in this repo. Since #1757, HOMELAB and HASS map to `gjcourt/homelab`
+  and `denyRepos` is empty. Agents may open homelab PRs only in `apps/**` and `docs/**`, and
+  `apps/*/agent-desk/**` is outside those paths, so an agent can't change this config. The
+  `bench-paths` and `bench-approval` required checks hold each homelab PR until George approves
+  its head SHA. See the
+  [HOMELAB-85 plan](../../plans/2026-11-01-bench-homelab-paths-plan.md) and the bench-cloud
+  runbook.
 - **Rights in bench-cloud** (`apps/base/bench-cloud/rbac.yaml`):
   - the `bench-task-launcher` Role, which can create, delete, get, list and watch Jobs;
   - `get` on the `bench-console` Deployment only, to read the image to run.
@@ -66,8 +72,9 @@ Code: [`images/agent-desk/`](../../../images/agent-desk/README.md).
 - `apps/production/agent-desk/secret-agent-desk.yaml`:
   - `plane-api-key`: the bot's first key;
   - `webhook-secret`;
-  - `github-token`: a read-only fine-grained PAT, with Pull requests and Actions read on
-    `gjcourt/agent-sandbox`;
+  - `github-token`: the `agent-desk` fine-grained PAT: All repositories, Pull requests read and
+    Actions read (#1765). It must be agent-desk's own token. It used to share plane-sync-stage's
+    PAT, and deleting that PAT broke both;
   - `notify-webhook-id`: the production id already in Home Assistant's secret.
 - `apps/production/bench-cloud/secret-plane-jobs-token.yaml`: the bot's **second** key, for
   ticket Jobs, so each key can be revoked on its own.

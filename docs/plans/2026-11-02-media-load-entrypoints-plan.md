@@ -18,8 +18,8 @@ The pipeline scripts exist and are good, but they are not what actually gets run
   copied that onto five existing artist folders (David Bowie, Prince and The Revolution, The Beatles,
   The Clash, The Rolling Stones). Fixed by hand the same day. The script would not have done this.
 - **Video.** Every run needs a hand-written queue TSV (main feature + `Extra tNN (M min)` rows), and
-  the detach step is improvised each time. `C:\media-work` holds ~80 one-off `launch-*.ps1`,
-  `wait-*.ps1`, `probe*.ps1` and `status*.ps1` files from past sessions. That is the evidence that
+  the detach step is improvised each time. `C:\media-work` holds 73 one-off `.ps1` files from past
+  sessions (`launch-*`, `wait-*`, `probe*`, `status*` and more; counted 2026-11-03). That is the evidence that
   there is no single entry point.
 - **Video ownership gap.** `transcode.ps1` creates title dirs with `sudo mkdir -p` and only chowns the
   file. 43 of 115 movie dirs are `root:truenas_admin 2755`. Radarr (uid 568, group `apps`) needs group
@@ -66,7 +66,7 @@ nothing to improvise:
 5. **Docs.**
    - The README leads with `load.ps1`.
    - The memory/agent notes say: never hand-run scp/rsync for media.
-   - The ~80 ad-hoc scripts in `C:\media-work` are left alone (that directory is off-limits for
+   - The ad-hoc scripts in `C:\media-work` are left alone (that directory is off-limits for
      cleanup).
 
 ## Not changing

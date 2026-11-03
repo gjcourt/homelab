@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-11-02
+last_modified: 2026-11-03
 summary: "One load.ps1 entry point per media type on daedalus, a generated video queue, and Radarr-correct ownership on new movie dirs"
 ---
 
@@ -41,8 +41,12 @@ nothing to improvise:
 ## Changes
 
 1. **`load.ps1`: a thin entry point, with no pipeline logic of its own.**
-   - `git pull --ff-only` the checkout, then refuse to run if the tree is dirty.
-   - Refuse to start if another load or encode is running (one lock file).
+   - Refuse to run if the checkout has uncommitted changes, *then* `git pull --ff-only`. Checking
+     first gives a clear error instead of a failed pull.
+   - Refuse to start if another load or encode is running (one lock file,
+     `C:\media-work\load.lock`). The **detached run** holds the lock, not the launcher, and writes
+     its PID into it. A lock whose PID is no longer running is stale: it is reported and cleared.
+     A lock whose PID is alive blocks the start.
    - `-DryRun` runs in the foreground. A real run detaches via WMI (`Win32_Process.Create`) and logs
      to `C:\media-work\load-<type>-<stamp>.log`. Today that recipe is copy-pasted from the README.
    - `music` calls `import-music.ps1` unchanged.
@@ -53,6 +57,9 @@ nothing to improvise:
    - Titles under a minimum duration (default 60 s) are skipped, with a log line.
    - Writes `C:\media-work\queue-<slug>.tsv` and prints it. `-DryRun` stops there, so the
      main-feature pick can be checked before hours of encoding.
+   - "Longest title = the feature" is a heuristic, and it is wrong on discs that carry an
+     extended cut or several versions of the film. **The dry run is the guard**: always review
+     the pick before a real run. `-Main <file>` overrides it.
    - `-Name` is required: the `Title (Year)` naming rule (README) is a human decision, not something
      inferred from the disc label (`WAR_GAMES_25AE`).
 3. **`transcode.ps1`: fix destination dir ownership.**
@@ -60,7 +67,10 @@ nothing to improvise:
      majority and the Radarr requirement above.
    - Add a post-push check like the one in `import-music.ps1`: fail the title if its dir is not
      group `apps` with group write.
-4. **One-time normalize of the 43 existing movie dirs: needs George's OK, run separately.**
+4. **One-time normalize of existing movie dirs: needs George's OK, run separately.**
+   - Target every dir under `movies/` that is not group `apps` with group write. That is a
+     predicate, not a fixed list: on 2026-11-03 it matched 45 (43 `root:truenas_admin 2755`
+     plus 2 `truenas_admin:truenas_admin 2755`).
    - `chown truenas_admin:apps` + `chmod 2775` on dirs only. Files are not touched.
    - A list-only pass comes first.
 5. **Docs.**

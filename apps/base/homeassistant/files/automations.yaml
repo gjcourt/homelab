@@ -701,7 +701,7 @@
         title: "Daily shot: {{ side | lower }} side"
         message: >
           {% set last = states('input_datetime.daily_shot_last_done') | as_datetime(none) %}
-          {% if last is none %}Not logged yet.
+          {% if last is none or states('input_text.daily_shot_last_side') not in ['Left', 'Right'] %}Not logged yet.
           {% else %}Last one {{ as_local(last).strftime('%a %-d %b, %-I:%M %p') }}, {{ states('input_text.daily_shot_last_side') | lower }} side.
           {% endif %}
     - service: persistent_notification.create

@@ -22,8 +22,10 @@ The pipeline scripts exist and are good, but they are not what actually gets run
   `wait-*.ps1`, `probe*.ps1` and `status*.ps1` files from past sessions. That is the evidence that
   there is no single entry point.
 - **Video ownership gap.** `transcode.ps1` creates title dirs with `sudo mkdir -p` and only chowns the
-  file. 43 of 113 movie dirs are `root:truenas_admin 2755`. Radarr (uid 568, group `apps`) needs group
-  write. The other 67 are `truenas_admin:apps 2775`, the intended state.
+  file. 43 of 115 movie dirs are `root:truenas_admin 2755`. Radarr (uid 568, group `apps`) needs group
+  write. 67 are `truenas_admin:apps 2775`, the intended state. Of the other 5, three are group `apps`
+  with `2775` (`apps:apps`, `george:apps`) and two are `truenas_admin:truenas_admin 2755` (counted
+  2026-11-03).
 
 ## Goal
 
@@ -55,7 +57,7 @@ nothing to improvise:
      inferred from the disc label (`WAR_GAMES_25AE`).
 3. **`transcode.ps1`: fix destination dir ownership.**
    - After `mkdir -p`, set every dir it created to `truenas_admin:apps 2775`. That matches the
-     majority and the Radarr requirement in the media docs.
+     majority and the Radarr requirement above.
    - Add a post-push check like the one in `import-music.ps1`: fail the title if its dir is not
      group `apps` with group write.
 4. **One-time normalize of the 43 existing movie dirs: needs George's OK, run separately.**

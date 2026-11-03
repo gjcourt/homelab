@@ -17,9 +17,9 @@
 #   - welcome header, Favorites (HA's `common-controls` section strategy,
 #     still generated live by HA), Areas and the Summaries sidebar: from HA's
 #     Overview
-#   - Today, Music — Room Volume, the curated room cards and the four summary
-#     tiles: from the Config dashboard's Overview (dashboards/control.yaml),
-#     with links pointing back into /home-control
+#   - Today, Music — Room Volume, the curated room cards, the four summary
+#     tiles and Daily shot: from the Config dashboard's Overview
+#     (dashboards/control.yaml), with links pointing back into /home-control
 #
 # What is no longer automatic, compared with HA's Overview:
 #   - the "Other areas" list is fixed: a new area in HA needs a card here.
@@ -236,6 +236,39 @@ views:
       tap_action:
         action: navigate
         navigation_path: /security?historyBack=1
+  # ── Daily shot (from Config → Overview, HASS-11) ───────────────────────
+  # Today's status, the next side (pick it by hand to fix a mistake) and
+  # Done, which asks first so a stray tap can't log a shot.
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Daily shot
+      heading_style: title
+    - type: tile
+      entity: sensor.daily_shot
+      name: Today
+      icon: mdi:needle
+      state_content:
+      - state
+      - last_side
+    - type: tile
+      entity: input_select.daily_shot_next_side
+      name: Next side
+      features:
+      - type: select-options
+    - type: tile
+      entity: input_button.daily_shot_done
+      name: Done
+      icon: mdi:check-circle
+      hide_state: true
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.daily_shot_done
+        confirmation:
+          text: Log today's shot and switch the next side?
   # ── Areas ──────────────────────────────────────────────────────────────
   # Curated rooms first (from Config → Overview; tap opens that room's page
   # on the Config dashboard), then every other area as HA's Overview shows

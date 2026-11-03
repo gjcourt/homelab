@@ -462,9 +462,9 @@ cyclopts==5.2.0 \
     --hash=sha256:5da2a5d65164e03008621fc4795946b88a722b881398b5dfa58afa6218342cff \
     --hash=sha256:b63c1b1beaadf3ead19214385a0f90b990f152c4107c174e1724c45dc71e9541
     # via fastmcp
-dnspython==2.9.0 \
-    --hash=sha256:9a4aedb833c3c1b49214d04d44d3032ab7a9135f7c1d29a549b4ff78fd82fda9 \
-    --hash=sha256:b44dc6b18f07a8b1c56676a19fbfdb5209415b046a9cece286baafa87ff3f7f1
+dnspython==2.9.1 \
+    --hash=sha256:7c81caf8de1ed57b8cfc7e0ad4f528a0b8ceace473c7eb946df195dc9def751f \
+    --hash=sha256:9a6d30e55f8dc63e6052597666112bff0586b95a2474a9deda03afbbf820d37a
     # via email-validator
 docstring-parser==0.18.0 \
     --hash=sha256:292510982205c12b1248696f44959db3cdd1740237a968ea1e2e7a900eeb2015 \

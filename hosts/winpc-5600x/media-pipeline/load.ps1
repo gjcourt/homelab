@@ -24,9 +24,9 @@
   (Start-Process does not), and logs to C:\media-work\load-<type>-<stamp>.log.
 
   THE LOCK (C:\media-work\load.lock) is held by the detached run, not by this
-  launcher, and holds its PID. A lock whose PID is not a running PowerShell is
-  stale - left by a crash or a kill - and is reported and cleared. A live one
-  blocks the start.
+  launcher, and holds its PID. A lock whose PID is not a running PowerShell
+  that started before the lock was written is stale - left by a crash or a
+  kill - and is reported and cleared. A live one blocks the start.
 
 .EXAMPLE
   .\load.ps1 status
@@ -108,10 +108,15 @@ if ($Child) {
   $rc = 1
   try {
     Log "== load $Child started (PID $PID) from $(git -C $REPO log -1 --format='%h %s') =="
+    # Own process, not `&`: neither script ends with an explicit `exit` on
+    # success, so after `&` $LASTEXITCODE is whatever native command (ssh,
+    # ffmpeg) ran last. A -File process exits with the script's `exit` value,
+    # 0 if it ran to the end, or 1 on an unhandled error.
+    $ps = (Get-Process -Id $PID).Path
     if ($Child -eq 'music') {
-      & (Join-Path $HERE 'import-music.ps1')
+      & $ps -NoProfile -ExecutionPolicy Bypass -File (Join-Path $HERE 'import-music.ps1')
     } else {
-      & (Join-Path $HERE 'transcode.ps1') -Queue $Queue
+      & $ps -NoProfile -ExecutionPolicy Bypass -File (Join-Path $HERE 'transcode.ps1') -Queue $Queue
     }
     $rc = $LASTEXITCODE
     Log "== load $Child finished, exit $rc =="

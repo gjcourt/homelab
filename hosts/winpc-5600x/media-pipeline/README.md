@@ -32,8 +32,8 @@ What it does, in order. Each step is a refusal if it fails:
    `C:\media-work\load-<type>-<stamp>.log`.
 
 **The lock** (`C:\media-work\load.lock`) is held by the detached run, not by the
-launcher, and holds the run's PID. If that PID is not a running PowerShell, the
-lock is stale (left by a crash or a kill), and the next `load.ps1` reports it and
+launcher, and holds the run's PID. If that PID is not a running PowerShell that
+started before the lock was written (a recycled PID fails that), the lock is stale (left by a crash or a kill), and the next `load.ps1` reports it and
 clears it. A live lock blocks the start.
 
 ### `build-queue.ps1`: the video queue, generated

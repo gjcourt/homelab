@@ -377,9 +377,19 @@ foreach ($it in $runnable) {
     # Check BEFORE landing the file, the way import-music.ps1 checks ownership:
     # a dir Radarr cannot write is a failure, not a warning. An existing dir from
     # before this fix fails here too - run normalize-movie-dirs.ps1.
-    $ga = ((Invoke-SshRead -RemoteHost $HST -Cmd "stat -c '%G %A' '$HBASE/$dest'") -join '').Trim()
-    $gs = $ga -split ' '
-    if ($gs.Count -ne 2 -or $gs[0] -ne 'apps' -or $gs[1].Length -lt 6 -or $gs[1][5] -ne 'w') {
+    # Every dir below movies/ (title dir AND extras/), not just the leaf: an
+    # extras/ created now under a pre-fix root-owned title dir would otherwise
+    # pass while Radarr still cannot write the title dir.
+    $chk = @(); $acc = "$HBASE/media/video/movies"
+    foreach ($c in @(($it.Dir -split '/') | Select-Object -Skip 1)) { $acc = "$acc/$c"; $chk += "'$acc'" }
+    $lines = @(Invoke-SshRead -RemoteHost $HST -Cmd "stat -c '%G %A' $($chk -join ' ')" | Where-Object { $_ })
+    $ga = ($lines -join '; ')
+    $bad = ($lines.Count -ne $chk.Count)
+    foreach ($ln in $lines) {
+      $gs = "$ln".Trim() -split ' '
+      if ($gs.Count -ne 2 -or $gs[0] -ne 'apps' -or $gs[1].Length -lt 6 -or $gs[1][5] -ne 'w') { $bad = $true }
+    }
+    if ($bad) {
       ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null
       VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note="dest dir is '$ga', not group apps with group write" })
       Log "FAIL dir ownership: $HBASE/$dest is '$ga' (need group apps + g+w; see normalize-movie-dirs.ps1) -- keeping local"; continue

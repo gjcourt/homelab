@@ -61,7 +61,10 @@ $titles = @()
 foreach ($f in $files) {
   $excluded = $false
   foreach ($pat in $Exclude) { if ($f.Name -like $pat) { $excluded = $true } }
-  $d = & $FP -v quiet -show_entries format=duration -of default=nw=1:nk=1 $f.FullName 2>$null
+  # Native call under a local 'Continue': in Windows PowerShell 5.1 a redirected
+  # stderr line becomes an ErrorRecord, and with the script-wide 'Stop' that is
+  # a terminating error instead of an UNREADABLE row.
+  $d = & { $ErrorActionPreference = 'Continue'; & $FP -v quiet -show_entries format=duration -of default=nw=1:nk=1 $f.FullName 2>$null }
   $sec = 0.0; if ("$d".Trim() -match '^[\d.]+$') { $sec = [double]"$d".Trim() }
   $tn = if ($f.BaseName -match '_t(\d+)$') { [int]$Matches[1] } else { $null }
   $titles += [pscustomobject]@{ File = $f; Sec = $sec; T = $tn; Excluded = $excluded }
@@ -71,7 +74,9 @@ $unreadable = @($titles | Where-Object { $_.Sec -le 0 })
 foreach ($u in $unreadable) { Write-Output "  UNREADABLE  $($u.File.Name) (skipped)" }
 
 if ($Main) {
-  $mainT = $titles | Where-Object { $_.File.FullName -eq (Resolve-Path -LiteralPath $Main).Path }
+  $mainPath = Resolve-Path -LiteralPath $Main -ErrorAction SilentlyContinue
+  if (-not $mainPath) { Fail "-Main not found: $Main" }
+  $mainT = $titles | Where-Object { $_.File.FullName -eq $mainPath.Path }
   if (-not $mainT) { Fail "-Main is not a file in $Disc : $Main" }
   $how = 'given by -Main'
 } else {
@@ -110,3 +115,6 @@ Write-Output "== QUEUE for $Name : $($rows.Count) title(s) from $Disc =="
 $out | ForEach-Object { Write-Output $_ }
 Write-Output "== written: $qf =="
 Write-Output $qf
+# Explicit: load.ps1 gates on $LASTEXITCODE, which would otherwise still hold
+# the last ffprobe's exit code.
+exit 0

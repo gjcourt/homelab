@@ -67,8 +67,18 @@ function Read-Lock {
   $f = "$raw".Trim() -split "`t"
   $lockPid = 0; [void][int]::TryParse($f[0], [ref]$lockPid)
   $p = if ($lockPid -gt 0) { Get-Process -Id $lockPid -ErrorAction SilentlyContinue } else { $null }
-  # PID reuse: a recycled PID belonging to something else is not our run.
-  $alive = [bool]($p -and $p.ProcessName -match '^(powershell|pwsh)$')
+  # PID reuse: a recycled PID belonging to something else is not our run. The
+  # name check alone passes any powershell.exe (an interactive SSH shell, say),
+  # so also require the process to have started no later than the lock was
+  # written - a recycled PID starts after it.
+  $alive = $false
+  if ($p -and $p.ProcessName -match '^(powershell|pwsh)$') {
+    $alive = $true
+    $st = [datetime]::MinValue
+    if ([datetime]::TryParse("$($f[2])", [ref]$st)) {
+      try { if ($p.StartTime -gt $st.AddSeconds(5)) { $alive = $false } } catch { }
+    }
+  }
   [pscustomobject]@{ Pid = $lockPid; Type = $f[1]; Started = $f[2]; Log = $f[3]; Alive = $alive }
 }
 
@@ -170,12 +180,16 @@ $cmd = "cmd.exe /c `"set LOAD_LOG=$logPath&& powershell -NoProfile -ExecutionPol
 $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $cmd; CurrentDirectory = $REPO }
 if ($r.ReturnValue -ne 0) { Log "FAIL: could not start the detached run (Win32_Process.Create returned $($r.ReturnValue))"; exit 1 }
 
-# Confirm it actually took the lock rather than reporting success blind.
-for ($i = 0; $i -lt 20; $i++) { Start-Sleep -Milliseconds 500; $l = Read-Lock; if ($l -and $l.Alive) { break } }
-if ($l -and $l.Alive) {
+# Confirm it actually took the lock rather than reporting success blind. The
+# lock must be OURS (same log path): if two launchers race past Assert-Free,
+# the losing child refuses, and its launcher must not report the winner's run.
+$l = $null
+for ($i = 0; $i -lt 20; $i++) { Start-Sleep -Milliseconds 500; $l = Read-Lock; if ($l -and $l.Alive -and $l.Log -eq $logPath) { break } }
+if ($l -and $l.Alive -and $l.Log -eq $logPath) {
   Log "STARTED $Type load, PID $($l.Pid). Log: $logPath"
   Log 'Check on it with: .\load.ps1 status'
 } else {
-  Log "WARNING: started, but no live lock after 10 s. Read the log: $logPath"
+  if ($l -and $l.Alive) { Log "WARNING: another load (PID $($l.Pid), log $($l.Log)) holds the lock; this one did not start. Read: $logPath" }
+  else                  { Log "WARNING: started, but no live lock after 10 s. Read the log: $logPath" }
   exit 1
 }

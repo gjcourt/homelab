@@ -307,6 +307,45 @@ Dedup normalises away punctuation, so a tag reading `True Love: A Celebration of
 Cole Porter` correctly matches the on-disk `True Love - A Celebration of Cole
 Porter` instead of re-importing it.
 
+## AccurateRip check (`ar-verify.ps1`)
+
+Before staging, every disc being imported is checked against the public
+AccurateRip database: are its tracks bit-identical to what other people ripped
+from the same pressing? It runs in dry runs too, so `-DryRun` with the disc still
+in the drive is the moment to catch a bad track. About 2-3 s per disc.
+
+| Status | Meaning | What to do |
+| :--- | :--- | :--- |
+| `OK` | Every track matches | Nothing |
+| `BAD_TRACKS` | Some tracks match, the listed ones match nothing | **Clean the disc and re-rip those tracks before returning it.** The disc still imports, and the run ends with a `!! RE-RIP BEFORE RETURNING` block |
+| `NO_MATCH` | In the database, but nothing matches | Usually a different pressing with the same track layout, not a bad rip |
+| `NOT_IN_AR` | No database entry | Cannot be checked either way |
+| `SKIP` / `ERROR` | Not CD audio, or decode/network failure | The import is never blocked by the check; `-SkipAccurateRip` turns it off |
+
+Each disc's result is a ledger row, event `AR_CHECK`, scope `disc`: `dest` is the
+library folder and `note` carries `status=`, `bad=`, `minconf=`, the per-track
+confidences and the database URL. The ledger is the system of record; the
+bad-disc tally in the private `media-library` repo is generated from these rows.
+
+**Why it exists.** A library-wide scan on 2026-11-04 found 7 discs where 1-4
+tracks matched nothing while the rest matched at confidence 5-200: read errors,
+found weeks after the discs had gone back to SFPL. Nothing at rip time caught
+them, and EAC was saving no logs.
+
+**Shift 0 only, on purpose.** EAC already applies the drive's read offset (see
+`rip-tools/README.md`), so the rip is checked exactly as written. Searching
+other shifts finds coincidences: one disc in that scan matched a single
+submitter at -6 and others at -60, -12 and +456, all at confidence 1.
+
+The checksum code is compiled C# inside the script (ffmpeg decodes). Its
+per-track confidences were cross-checked against the Python checker used for
+the library scan on 15 discs, identical on every track, and a deliberately
+altered track was reported as `BAD_TRACKS` with its neighbours still matching.
+
+**EAC logs** (`AutoSaveStatus` on since 2026-11-04) are copied to
+`hestia:/mnt/main/archive/_inventory/rips/eac-logs/<sha256-16>.log`, once per
+distinct log, with a `LOG_ARCHIVED` ledger row recording the original name.
+
 ## Afterwards, on the Mac
 
 Refresh `~/src/music-library/owned_albums.txt` so the SFPL borrow queue stops

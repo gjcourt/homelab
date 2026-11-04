@@ -11,9 +11,9 @@
         siteMonitor: https://jellyfin.stage.burntbytes.com
     - Navidrome:
         icon: navidrome.png
-        href: https://music.stage.burntbytes.com
+        href: https://navidrome.stage.burntbytes.com
         description: Music server and streamer
-        siteMonitor: https://music.stage.burntbytes.com
+        siteMonitor: https://navidrome.stage.burntbytes.com
     - Snapcast:
         icon: mdi-speaker-multiple
         href: https://snapcast.stage.burntbytes.com

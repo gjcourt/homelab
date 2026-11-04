@@ -34,8 +34,9 @@ spec:
         - name: snapcast
           port: 1780
 ---
-# Music Assistant (HOMELAB-67 step 1). Temporary host; LAN only, not on the
-# Cloudflare tunnel.
+# Music Assistant at music.stage (MA plan; was ma.stage until 2026-11-03).
+# LAN only, not on the Cloudflare tunnel, and no Authelia rule: MA has its own
+# login.
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:
@@ -43,7 +44,7 @@ metadata:
   namespace: snapcast-stage
 spec:
   hostnames:
-    - ma.stage.burntbytes.com
+    - music.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default
@@ -62,7 +63,7 @@ metadata:
   namespace: snapcast-stage
 spec:
   hostnames:
-    - ma.stage.burntbytes.com
+    - music.stage.burntbytes.com
   parentRefs:
     - name: app-gateway-staging
       namespace: default

@@ -14,6 +14,10 @@ authentication_backend:
 access_control:
   default_policy: bypass
   rules:
+    # Every hostname that routes to Navidrome gets a one_factor rule. Navidrome
+    # does not trust Remote-User today (docs/operations/apps/navidrome.md).
+    - domain: "navidrome.burntbytes.com"
+      policy: one_factor
     - domain: "music.burntbytes.com"
       policy: one_factor
     - domain: "alerts.burntbytes.com"

@@ -14,7 +14,11 @@ authentication_backend:
 access_control:
   default_policy: bypass
   rules:
-    - domain: "music.stage.burntbytes.com"
+    # Every hostname that routes to Navidrome gets a one_factor rule. Navidrome
+    # does not trust Remote-User today (docs/operations/apps/navidrome.md).
+    # music.stage now serves Music Assistant, which has its own login and no
+    # rule (HA's MA integration calls it through the gateway).
+    - domain: "navidrome.stage.burntbytes.com"
       policy: one_factor
     - domain: "chat.stage.burntbytes.com"
       policy: one_factor

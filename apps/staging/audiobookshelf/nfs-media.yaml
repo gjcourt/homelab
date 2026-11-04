@@ -1,0 +1,100 @@
+# NFS-backed PersistentVolumes for the Audiobookshelf libraries (staging).
+# Read-only mounts of the same canonical media tree prod uses (as staging
+# Navidrome does for music), so staging Music Assistant has books to test with.
+# A PV binds one claim, hence separate -stage PVs. Read-only: staging can't
+# change the files; listening progress lives in staging ABS's own database.
+# Book library -> audiobooks/,
+# podcast library -> podcasts/ (split out of the old audiobooks/ bucket;
+# AA recordings moved to family/audio). Files are 0644/world-readable, so no
+# uid pinning is needed (unlike navidrome's 0700 music tree).
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: audiobookshelf-audiobooks-pv-stage
+  labels:
+    app: audiobookshelf
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: audiobookshelf-audiobooks-pvc
+    namespace: audiobookshelf-stage
+  mountOptions:
+    - nfsvers=3
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+    - nolock
+  nfs:
+    server: 10.42.2.10
+    path: /mnt/main/family/media/audiobooks
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audiobookshelf-audiobooks-pvc
+  namespace: audiobookshelf
+  labels:
+    app: audiobookshelf
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Ti
+  volumeName: audiobookshelf-audiobooks-pv-stage
+  storageClassName: ""
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: audiobookshelf-podcasts-pv-stage
+  labels:
+    app: audiobookshelf
+spec:
+  capacity:
+    storage: 1Ti
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: audiobookshelf-podcasts-pvc
+    namespace: audiobookshelf-stage
+  mountOptions:
+    - nfsvers=3
+    - rsize=1048576
+    - wsize=1048576
+    - hard
+    - timeo=600
+    - retrans=2
+    - nolock
+  nfs:
+    server: 10.42.2.10
+    path: /mnt/main/family/media/podcasts
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: audiobookshelf-podcasts-pvc
+  namespace: audiobookshelf
+  labels:
+    app: audiobookshelf
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 1Ti
+  volumeName: audiobookshelf-podcasts-pv-stage
+  storageClassName: ""

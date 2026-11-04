@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 last_modified: 2026-11-03
 summary: "One load.ps1 entry point per media type on daedalus, a generated video queue, and Radarr-correct ownership on new movie dirs"
 ---

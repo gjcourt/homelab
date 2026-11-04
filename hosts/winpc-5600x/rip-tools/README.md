@@ -46,11 +46,13 @@ Settings that matter, by registry value:
 Drive settings live under `Drive Options\<drive>`. The ripping drive is the
 **`HL-DT-STBD-RE  BH16NS40 1.03`** (LG BH16NS40). For that drive: AccurateRip is
 on (`UseAccurateRip`), C2 is off (`UseC2Correction`), the combined offset is in
-use (`UseCombinedSampleOffset`), and **both `SampleOffset` and
-`CombinedSampleOffset` are stored as 0**. AccurateRip's drive-offset list
-gives this model as +6 (not re-checked for this capture). Check in EAC (Drive Options > Offset) before relying on
-AccurateRip matches. This snapshot only records the stored value. It does not
-say which value is right. `SecureMode` (`03,00`) and `ExtractionMode` (`05,00`)
+use (`UseCombinedSampleOffset`), and **`SampleOffset` / `CombinedSampleOffset` are +6**
+(`hex:06,00,00,00`). That matches the [AccurateRip drive-offset
+list](http://www.accuraterip.com/driveoffsets.htm) for the LG BD-RE BH16NS40: +6, 2,617
+submissions, 100% agree (checked 2026-11-03). ⚠️ Until 2026-11-03 both were stored as 0, so
+CD rips made before then are shifted by 6 samples (~0.14 ms): inaudible, but not bit-exact and
+they will not match AccurateRip. A backup of the pre-fix key is on daedalus at
+`%TEMP%\EACU-before-offset-20261103.reg`. `SecureMode` (`03,00`) and `ExtractionMode` (`05,00`)
 are recorded raw and not decoded here. The `GP65NB60` and `Msft Virtual
 DVD-ROM` entries are other drives EAC has seen. They are not used for ripping.
 

@@ -62,7 +62,7 @@ The policy must be inverted to support the global filter:
 - `access_control.default_policy`: **Must be `bypass`**.
 - Specific rules are added for apps requiring auth:
   ```yaml
-  - domain: "music.burntbytes.com"
+  - domain: "navidrome.burntbytes.com"
     policy: one_factor
   ```
 

@@ -12,8 +12,11 @@ Navidrome is deployed as a standard Kubernetes `Deployment` with a single replic
 - **Networking**: Exposed via Cilium Gateway API (`HTTPRoute`).
 
 ## 3. URLs
-- **Staging**: https://music.stage.burntbytes.com
-- **Production**: https://music.burntbytes.com
+- **Staging**: https://navidrome.stage.burntbytes.com
+- **Production**: https://navidrome.burntbytes.com. `music.burntbytes.com` also routes here until
+  Music Assistant takes that name (MA plan step 2).
+- Every hostname that routes to Navidrome needs an Authelia `one_factor` rule, because
+  Navidrome trusts the `Remote-User` header Authelia sets.
 
 ## 4. Configuration
 - **Environment Variables**:
@@ -87,7 +90,7 @@ sequenceDiagram
 ### Configuration Details
 
 - **Global Envoy Filter**: `infra/configs/gateway/cilium-envoy-config-production.yaml` defines the `ext_authz` filter pointing to Authelia. See [Gateway Authentication Architecture](../architecture/gateway-auth.md) for details on why and how this works.
-- **Authelia Policy**: `apps/production/authelia/configuration.yaml` defines the rule for `music.burntbytes.com` (Policy: `one_factor`) which triggers the header injection.
+- **Authelia Policy**: `apps/production/authelia/configuration.yaml` defines the rules for `navidrome.burntbytes.com` and `music.burntbytes.com` (Policy: `one_factor`) which triggers the header injection.
 - **Navidrome Config**: `ND_EXTAUTH_USERHEADER` is set to `Remote-User` and trusted proxies are configured via `ND_EXTAUTH_TRUSTEDSOURCES`.
 
 See [Navidrome Documentation](https://www.navidrome.org/docs/getting-started/extauth-quickstart/) for more details on External Authentication.

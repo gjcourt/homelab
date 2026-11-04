@@ -58,14 +58,20 @@ Pieces:
   latest **stable** release at implementation time (2.10.9 on 2026-11-02; no nightlies).
 - PVC `snapcast-music-assistant-data` (`truenas-iscsi`, 1Gi) mounted at `/data`.
 - Service: add port 8095 (MA web UI + HA websocket API). Remove 6600/6680 with Mopidy (step 5).
-- HTTPRoute: `cast.burntbytes.com` → 8095 at cutover (step 4). Until then MA gets a
-  temporary host (`ma.burntbytes.com` / `ma.stage.burntbytes.com`; `music.*` is
-  already Navidrome's).
+- **Hostnames** (George, 2026-11-03: MA becomes his primary music app):
+  - **MA** takes `music.burntbytes.com` / `music.stage.burntbytes.com`. It's LAN only and
+    has no Authelia rule, because MA has its own login and HA's MA integration calls it
+    through the gateway.
+  - **Navidrome** moves to `navidrome.burntbytes.com` / `navidrome.stage.burntbytes.com`.
+    Navidrome trusts the `Remote-User` header that Authelia sets, so every Navidrome
+    hostname gets its `one_factor` rule in the same commit that adds the hostname.
+  - **`cast.burntbytes.com`** is removed together with Mopidy in step 5.
 - Network policy: allow 8095 from the gateway (`ingress`) and from the
   `homeassistant-*` namespaces; MA egress to Navidrome 4533 (already allowed for Mopidy,
   to `navidrome-prod` only).
-- HA: add the built-in **Music Assistant** integration pointing at
-  `http://snapcast.snapcast-prod.svc:8095`.
+- HA: add the built-in **Music Assistant** integration at MA's **public** URL
+  (`https://music.burntbytes.com`). The integration's login step opens that URL in the
+  browser, so the in-cluster Service URL doesn't work (found in stage, 2026-11-03).
 
 ## Steps
 
@@ -75,23 +81,28 @@ Pieces:
    egress only there). Run a throwaway snapclient against the stage server (no real
    speakers in stage) and confirm: MA lists it as a player, a Navidrome track plays,
    and a stream appears in `Server.GetStatus` for the MA session.
-2. **Prod, side by side.** Same sidecar in prod, Mopidy still running. Add the HA
-   integration. Tests, each on a real speaker:
+2. **Prod, side by side.** Same sidecar in prod, Mopidy still running.
+   - **Hostnames.** Before this step, Navidrome gets `navidrome.burntbytes.com` alongside
+     `music.`, and George moves his Subsonic clients to the new name. In this step MA takes
+     `music.burntbytes.com`, Navidrome drops `music.`, and the `music.` Authelia rule goes.
+     That's the only breaking moment for a client still on `music.`.
+   - **HA.** Add the HA integration. Tests, each on a real speaker:
    - Navidrome album → kitchen only; living-room keeps its Spotify stream.
    - Navidrome album → kitchen + living-room as one MA group, in sync.
    - `tts.speak` (Piper, `narrator_high`) → kitchen only. Then an announcement over
      music playing in the kitchen; the music should resume afterwards.
    - Spotify Connect to a Pi and to the pod's "Snapcast" device still work.
-3. **George uses it for a while** at the temporary host. Iris stays at
+3. **George uses it for a while** at `music.burntbytes.com`. Iris stays at
    `cast.burntbytes.com` as the fallback.
-4. **Cutover.** Point `cast.burntbytes.com` at MA (8095) and drop its `/` → `/iris/`
-   redirect. Remove the temporary host.
-5. **Remove Mopidy** once George is happy: the `mopidy` container, its ConfigMap and
+4. **No separate cutover.** MA already has its permanent hostname from step 2, so this
+   step is gone (2026-11-03).
+5. **Remove Mopidy** once George is happy: the `cast.burntbytes.com` route and its
+   homepage tile, the `mopidy` container, its ConfigMap and
    PVC, the `navidrome` stream and FIFO, Service and network-policy ports 6600/6680,
    and the `navidrome-credentials` Secret if MA's Subsonic login moves to its own Secret. Update
    `docs/operations/apps/snapcast.md`.
 
-Steps 1–4 are reversible by reverting the PR; step 5 is the only one that removes anything.
+Steps 1–3 are reversible by reverting the PR; step 5 is the only one that removes anything.
 
 **Who builds it (2026-11-02).** Every step changes the `snapcast` network policy, which the HOMELAB-85
 bench gate does not allow for agent Jobs. So the orchestrator implements it as ordinary homelab PRs,
@@ -123,16 +134,41 @@ A throwaway snapclient on George's Mac (`--hostID mac-ma-test`) stood in for a s
 - **Navidrome podcasts.** The OpenSubsonic provider logs a 501 warning about them. It's harmless,
   and turning podcasts off in the provider stops it.
 
+**End to end, confirmed 2026-11-03 by George:**
+
+- **Audio:** a Navidrome album played from MA through snapserver to the Mac client was audible
+  on the Mac's speakers. The earlier "silence" was the Mac sending its output to a monitor with
+  no speakers.
+- **Control from the phone:** with MA open in Safari on George's iPhone, an album played to the
+  Mac client. One uninterrupted play lasted about a minute (03:18:32–03:19:35 UTC), and George
+  reported it still playing after that. The client's group stayed on
+  `Music Assistant - mamacmatest`, with the stream `playing`.
+- **The earlier 5–20 s plays** came from switching between players, not from a fault. Each stop
+  matches a play starting on another player, and MA logged no error.
+
+**MA's browser tab is a player.** Opening the MA web app registers that browser as a Sendspin
+player ("Web (Safari on iPhone)", "Web (Chrome on Mac)"). The first play from the phone went to
+the phone itself for about 8 s, before George chose the Mac. That matters for the UI safety
+check in step 3; see "UI" below. MA also logs "non-compliant client" warnings about its own
+Safari web player, a sign of how fast Sendspin is changing.
+
 **Not settled:**
 
-- **Is the audio audible?** On every attempt so far, MA's stream stopped after 5 to 20 s and the
-  group went back to `default`. When ffmpeg disconnects, snapserver logs
-  `AsioStream Error reading message: End of file`. It's not yet clear whether this is MA, or the
-  Mac sending output to a monitor with no speakers. Retest with the Mac on its built-in speakers,
-  and with a 30 s play left alone, before step 2.
-- **Does MA leave groups as it found them?** Afterwards MA puts the group on `default`. In this
-  test the group was already on `default`, so "restores the previous stream" and "always resets
-  to default" look the same. Test it in step 2 with a group on `spotify`.
+- **Does MA leave groups as it found them?** After playback MA puts the group back on `default`.
+  In this test the group was already on `default`, so "restores the previous stream" and "always
+  resets to default" look the same. Test it in step 2 with a group on `spotify`.
+
+**Announcements, rehearsed in stage 2026-11-03 (George):**
+
+- **It worked.** `music_assistant.play_announcement` (with `tts.google_translate_en_com`) on
+  `media_player.georges_macbook_air_local` played on the Mac. HA called MA through the gateway,
+  and MA fetched the TTS audio from HA on 8123 (#1790).
+- **Use MA's public URL in the integration,** not the Service URL. Its login opens the URL in
+  the browser.
+- **The OAuth callback goes to prod HA.** In stage, `my.home-assistant.io` redirects it there,
+  which shows "Invalid state". Change the host to `hass.stage.burntbytes.com` by hand.
+- **Not yet tested:** an announcement over music, and whether the music resumes afterwards.
+  That's still a step 2 test.
 
 ## Sendspin, MA's own protocol (researched 2026-11-03)
 
@@ -187,6 +223,7 @@ Settled in step 1:
 - **Does snapserver accept `Stream.AddStream`?** Yes, as-is, with no JSON-RPC permission setting.
 - **Does MA need to run as root?** No. It runs as uid 1000 with all capabilities dropped. The one
   loss is AirPlay's PTP on UDP 319, and AirPlay isn't used.
+- **Does MA keep a stream playing?** Yes. The "stops" were player switches (see above).
 - **Authentication.** MA 2.10 has its own user accounts. Keep the host LAN-only as well.
 
 Still open:
@@ -194,7 +231,6 @@ Still open:
 - MA's Subsonic login: reuse the `navidrome-credentials` Secret or a dedicated Navidrome user.
 - Does MA leave groups as it found them? See "Not settled" above. Spotify on a Pi and MA on the
   same speaker are two ways into one room, so confirm they don't fight.
-- Does MA keep a stream playing past 20 s? See "Not settled" above.
 
 ## UI
 
@@ -202,7 +238,9 @@ This adopts MA's own web app rather than building one, so there is no prototype 
 Per `~/src/agents/UI.md`, judge it in step 3 on George's real task ("play this album in
 the kitchen"): steps taken vs Iris + Snapweb (efficiency), whether the speaker choice is
 obvious (learnability), and whether it is easy to start music in the wrong room by
-mistake (safety).
+mistake (safety). Step 1 found one concrete safety risk: MA's browser tab registers
+itself as a player, and a phone's first play can land on the phone. Check whether MA can hide or
+disable the web player, or keep the last chosen speaker as the default.
 
 ## Out of scope
 

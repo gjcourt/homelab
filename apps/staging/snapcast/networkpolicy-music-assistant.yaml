@@ -1,7 +1,7 @@
 # Adds the Music Assistant UI port to the base snapcast policy (Cilium policies
-# are additive). Gateway only: the UI is reached through ma.stage.burntbytes.com.
-# The only new egress is to staging Home Assistant on 8123, to fetch TTS audio for
-# announcements. MA's Chromecast, DLNA and AirPlay providers load by default,
+# are additive). Gateway only: the UI is reached through music.stage.burntbytes.com.
+# New egress: staging Home Assistant on 8123, to fetch TTS audio for announcements,
+# and staging Audiobookshelf for MA's ABS provider. MA's Chromecast, DLNA and AirPlay providers load by default,
 # but their ports are not in the base egress rules, so stage cannot reach a
 # real speaker on the LAN.
 apiVersion: cilium.io/v2
@@ -13,7 +13,7 @@ metadata:
     app.kubernetes.io/name: snapcast
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: Music Assistant web UI (8095) from the gateway and staging HA; egress to staging HA 8123 for TTS.
+  description: Music Assistant web UI (8095) from the gateway and staging HA; egress to staging HA 8123 for TTS and staging ABS.
   endpointSelector:
     matchLabels:
       app: snapcast
@@ -44,4 +44,15 @@ spec:
       toPorts:
         - ports:
             - port: "8123"
+              protocol: TCP
+    # Audiobookshelf provider (library, covers, audio). Staging ABS only: MA syncs
+    # listening progress back, so staging must never point at prod ABS. Pod port
+    # 13378 (the Service maps 3005 -> 13378).
+    - toEndpoints:
+        - matchLabels:
+            app: audiobookshelf
+            k8s:io.kubernetes.pod.namespace: audiobookshelf-stage
+      toPorts:
+        - ports:
+            - port: "13378"
               protocol: TCP

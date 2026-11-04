@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_modified: 2026-11-02
+last_modified: 2026-11-03
 summary: "Music Assistant replaces the Mopidy/Iris sidecar: play Navidrome to chosen speakers, and per-speaker TTS announcements from HA"
 ---
 
@@ -97,17 +97,104 @@ Steps 1–4 are reversible by reverting the PR; step 5 is the only one that remo
 bench gate does not allow for agent Jobs. So the orchestrator implements it as ordinary homelab PRs,
 one per step, not as a bench Job.
 
-## Open questions to settle in step 1–2
+## Step 1 results (stage, 2026-11-02 to 11-03)
 
-- Does snapserver 0.34 accept MA's `Stream.AddStream` calls with our config as-is, or
-  does it need a JSON-RPC permission setting?
+MA 2.10.9 runs as the sidecar in `snapcast-stage`, as uid 1000 with all capabilities dropped.
+A throwaway snapclient on George's Mac (`--hostID mac-ma-test`) stood in for a speaker.
+
+**Works:**
+
+- **Providers.** Snapcast set to "existing server" at 127.0.0.1:1705, and OpenSubsonic pointed at
+  `navidrome-prod`. Chromecast, DLNA and AirPlay are disabled.
+- **The player.** The Mac client shows up in MA as a player.
+- **Streams.** Playing to it makes MA call `Stream.AddStream` for a TCP stream named
+  `Music Assistant - <player>` and switch the client's group to it. snapserver 0.34 accepts this
+  with our config as-is, with no JSON-RPC permission setting. The client receives FLAC at
+  48000:16:2.
+- **Volume.** MA's volume slider sets the client's Snapcast volume.
+
+**Gotchas:**
+
+- **The "existing server" switch.** While it is off, MA starts its own bundled snapserver, which
+  competes with the sidecar for port 1705. Turn it on before saving the provider.
+- **Provider labels.** MA 2.10.9's provider manifest marks Snapcast `unmaintained` and Sendspin
+  `beta`. Sendspin can't be disabled. MA's docs list a community maintainer for the Snapcast
+  provider, and give no deprecation or removal timeline (checked 2026-11-03).
+- **Navidrome podcasts.** The OpenSubsonic provider logs a 501 warning about them. It's harmless,
+  and turning podcasts off in the provider stops it.
+
+**Not settled:**
+
+- **Is the audio audible?** On every attempt so far, MA's stream stopped after 5 to 20 s and the
+  group went back to `default`. When ffmpeg disconnects, snapserver logs
+  `AsioStream Error reading message: End of file`. It's not yet clear whether this is MA, or the
+  Mac sending output to a monitor with no speakers. Retest with the Mac on its built-in speakers,
+  and with a 30 s play left alone, before step 2.
+- **Does MA leave groups as it found them?** Afterwards MA puts the group on `default`. In this
+  test the group was already on `default`, so "restores the previous stream" and "always resets
+  to default" look the same. Test it in step 2 with a group on `spotify`.
+
+## Sendspin, MA's own protocol (researched 2026-11-03)
+
+MA's direction is Sendspin, an Open Home Foundation protocol. MA still calls it a "technical
+preview".
+
+**Clients for our Pis:**
+
+- **`sendspin-cpp-cli`.** C++ binaries for arm64, armv7 and armv6. It installs with a script that
+  creates a systemd unit, and the ALSA device is set in `/etc/sendspin-cli.conf`. Its wiki
+  names HiFiBerry HATs.
+- **`sendspin`.** A Python client with `sendspin daemon`. It needs Python 3.12 or later and
+  libportaudio2.
+
+**Sync:** the spec uses a Kalman filter on clock offset and drift. No accuracy figure is
+published. One open client PR addresses a start-up offset that is then corrected aggressively.
+
+**Maturity:**
+
+- The Python client went from 0.1.0 (2025-12) to 9.1.0 (2026-10-27).
+- The C++ client's 0.4.0 changed the protocol, adding encryption and pairing. Re-adding clients
+  after upgrades is documented.
+- No first-hand HiFiBerry or DietPi reports were found.
+
+**Our Pis (checked 2026-11-03):**
+
+| Pi | OS | glibc | Python | C++ client | Python client |
+|---|---|---|---|---|---|
+| living-room (.39) | trixie | 2.41 | 3.13 | ✓ | ✓ |
+| kitchen (.38) | bookworm | 2.36 | 3.11 | ✗ (armv7/arm64 need glibc 2.38) | ✗ |
+
+The office Pi was not checked.
+
+**Decision for now: stay on Snapcast for steps 2–5.**
+
+- It's what the Pis run today.
+- The Snapcast provider works in stage.
+- Sendspin is changing its protocol from release to release.
+
+Revisit when any of these happens:
+
+- MA announces it is removing the Snapcast provider;
+- Sendspin reaches a stable 1.0 client release;
+- the kitchen Pi moves to trixie.
+
+Migrating later only touches the Pis' client service. MA stays the same.
+
+## Open questions to settle in step 2
+
+Settled in step 1:
+
+- **Does snapserver accept `Stream.AddStream`?** Yes, as-is, with no JSON-RPC permission setting.
+- **Does MA need to run as root?** No. It runs as uid 1000 with all capabilities dropped. The one
+  loss is AirPlay's PTP on UDP 319, and AirPlay isn't used.
+- **Authentication.** MA 2.10 has its own user accounts. Keep the host LAN-only as well.
+
+Still open:
+
 - MA's Subsonic login: reuse the `navidrome-credentials` Secret or a dedicated Navidrome user.
-- Does MA leave groups as it found them after playback, or does it regroup clients?
-  Spotify on a Pi and MA on the same speaker are two ways into one room — confirm they
-  don't fight.
-- The `snapcast` pod runs as uid 1000 with `runAsNonRoot`. Does the MA server image run
-  as non-root, or does it need its own `securityContext`?
-- MA web UI authentication. `cast.burntbytes.com` is LAN-only today; keep it that way.
+- Does MA leave groups as it found them? See "Not settled" above. Spotify on a Pi and MA on the
+  same speaker are two ways into one room, so confirm they don't fight.
+- Does MA keep a stream playing past 20 s? See "Not settled" above.
 
 ## UI
 

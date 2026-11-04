@@ -77,8 +77,8 @@ Windows Registry Editor Version 5.00
 [HKEY_CURRENT_USER\Software\AWSoftware\EACU\Drive Options\HL-DT-STBD-RE  BH16NS40 1.03]
 "GapDetectionAccuracy"=dword:00000000
 "GapDetectionMode"=dword:00000001
-"SampleOffset"=hex:00,00,00,00
-"CombinedSampleOffset"=hex:00,00,00,00
+"SampleOffset"=hex:06,00,00,00
+"CombinedSampleOffset"=hex:06,00,00,00
 "UseCombinedSampleOffset"=hex:ff
 "UseC2Correction"=hex:00
 "SpeedSelection"=hex:ff,ff,ff,ff

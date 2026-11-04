@@ -1,7 +1,67 @@
 # media-pipeline (winpc-5600x)
 
 Transcodes MakeMKV disc rips to x265 and pushes them into the hestia media
-library that Jellyfin serves.
+library that Jellyfin serves, and imports CD rips into the Navidrome library.
+
+## Loading anything: `load.ps1` (start here)
+
+**Every load goes through `load.ps1`. Never hand-run `scp`/`rsync` into the
+library.** On 2026-11-02 two CD loads were done by hand instead of with
+`import-music.ps1`. A plain `rsync -a` stamped `truenas_admin 707` onto five
+existing artist folders, and five multi-disc albums landed without their
+`[Disc N]` folders. Both are things the script prevents.
+
+```powershell
+cd C:\Users\George\src\homelab\hosts\winpc-5600x\media-pipeline
+.\load.ps1 status                                    # lock, ffmpeg, last 3 load logs
+.\load.ps1 music -DryRun                             # what import-music.ps1 would do
+.\load.ps1 music                                     # real run, detached
+.\load.ps1 video -Disc C:\Video\Looper -Name 'Looper (2012)' -DryRun
+.\load.ps1 video -Disc C:\Video\Looper -Name 'Looper (2012)' -Exclude '*Play_All*','*SEG_*'
+```
+
+What it does, in order. Each step is a refusal if it fails:
+
+1. **Uncommitted changes in the checkout → refuse.** This is checked *before* pulling, so the message
+   is clear rather than a failed pull. Scripts are edited in the repo, merged, then pulled.
+2. **`git pull --ff-only` fails → refuse.** A stale or diverged copy never runs.
+3. **Lock held by a live run, or an ffmpeg already running → refuse.**
+4. **Video only:** `build-queue.ps1` writes `C:\media-work\queue-<slug>.tsv` and prints the pick.
+5. **`-DryRun`:** runs `import-music.ps1 -DryRun` or `transcode.ps1 -DryRun` in the foreground, then stops.
+6. **Otherwise:** detaches via WMI (it survives the SSH session ending) and logs to
+   `C:\media-work\load-<type>-<stamp>.log`.
+
+**The lock** (`C:\media-work\load.lock`) is held by the detached run, not by the
+launcher, and holds the run's PID. If that PID is not a running PowerShell that
+started before the lock was written (a recycled PID fails that), the lock is stale (left by a crash or a kill), and the next `load.ps1` reports it and
+clears it. A live lock blocks the start.
+
+### `build-queue.ps1`: the video queue, generated
+
+- **The main feature is the longest title** (`-Main <file>` overrides). It goes to
+  `movies/<Name>/<Name>.mkv`.
+- **Every other title** goes to `movies/<Name>/extras/Extra tNN (M min).mkv`. `tNN` is MakeMKV's
+  title number.
+- Titles under 60 s are skipped. `-Exclude` takes file-name wildcards. `-NoExtras` queues the
+  feature alone.
+- `-Name` is required and must be `Title (Year)`, with none of the characters transcode refuses.
+
+⚠️ **"Longest = feature" is a heuristic, and the dry run is the guard.** It is wrong on
+discs with an extended cut, several versions of the film, or a Play All reel
+longer than the film. Read the printed queue before every real run.
+
+Looper (2012) is the worked example. The disc has 33 titles. The deleted scenes
+appear twice (`SEG_` segments and `SF_` copies), and there are two Play All reels.
+`-Exclude '*Play_All*','*SEG_*'` brings that down to 20. Extra t00 (a silent
+Easter egg) is then skipped by transcode's no-audio check.
+
+### `normalize-movie-dirs.ps1`: one-time ownership fix
+
+Before 2026-11-03, `transcode.ps1` created title dirs as `root:truenas_admin
+2755`. Radarr (uid 568, group `apps`) cannot write to those. The script is
+list-only by default; `-Apply` sets every movie **dir** that is not group `apps`
+with group write to `truenas_admin:apps 2775`. Files are not touched. It matched
+73 dirs on 2026-11-03. New dirs are created correctly now (see `transcode.ps1`).
 
 ## Importing CD rips (`import-music.ps1`)
 

@@ -77,11 +77,7 @@
         # /api/edgar/health returns {"ok":true}; the root path is a SPA, so probe
         # the health endpoint for the status dot.
         siteMonitor: https://ladder.burntbytes.com/api/edgar/health
-    - Finance:
-        icon: mdi-finance
-        href: https://finance.burntbytes.com
-        description: Net worth + IPS allocation dashboard
-        siteMonitor: https://finance.burntbytes.com
+    # Finance tile removed while finance.burntbytes.com is not routed (HOMELAB-90).
 
 - Notes & Learning:
     - Memos:

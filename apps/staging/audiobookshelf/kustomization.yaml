@@ -5,6 +5,7 @@ resources:
   - ../../base/audiobookshelf/
   - httproute.yaml
   - secret-sso.yaml
+  - nfs-media.yaml
 
 labels:
   - pairs:

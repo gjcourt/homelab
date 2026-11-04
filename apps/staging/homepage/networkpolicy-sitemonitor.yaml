@@ -72,7 +72,7 @@ spec:
         - ports:
             - port: "4533"
               protocol: TCP
-    # Snapcast (Snapweb)
+    # Snapcast (Snapweb 1780) and Music Assistant (8095, music.stage)
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: snapcast-stage
@@ -80,6 +80,8 @@ spec:
       toPorts:
         - ports:
             - port: "1780"
+              protocol: TCP
+            - port: "8095"
               protocol: TCP
     # Audiobookshelf
     - toEndpoints:

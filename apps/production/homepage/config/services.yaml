@@ -25,9 +25,9 @@
         siteMonitor: https://jellyfin.burntbytes.com
     - Navidrome:
         icon: navidrome.png
-        href: https://music.burntbytes.com
+        href: https://navidrome.burntbytes.com
         description: Music server and streamer
-        siteMonitor: https://music.burntbytes.com
+        siteMonitor: https://navidrome.burntbytes.com
     - Audiobookshelf:
         icon: audiobookshelf.png
         href: https://audiobooks.burntbytes.com

@@ -15,8 +15,8 @@ Navidrome is deployed as a standard Kubernetes `Deployment` with a single replic
 - **Staging**: https://navidrome.stage.burntbytes.com
 - **Production**: https://navidrome.burntbytes.com. `music.burntbytes.com` also routes here until
   Music Assistant takes that name (MA plan step 2).
-- Every hostname that routes to Navidrome needs an Authelia `one_factor` rule, because
-  Navidrome trusts the `Remote-User` header Authelia sets.
+- Every hostname that routes to Navidrome gets an Authelia `one_factor` rule (see
+  Authentication below).
 
 ## 4. Configuration
 - **Environment Variables**:
@@ -63,34 +63,22 @@ To verify Navidrome is working:
   - Check the pod logs for API rate limiting or authentication errors.
 
 ## 10. Authentication
-Navidrome is configured to use Authelia for single sign-on (SSO). The authentication flow is handled by a globally injected Envoy `ext_authz` filter on the Cilium Gateway.
+Navidrome uses **its own login** (username and password). Subsonic clients and Music
+Assistant authenticate with Navidrome credentials too.
 
-### Flow Diagram
+**Reverse-proxy (`Remote-User`) auth is disabled on purpose (2026-11-03).**
+- **The flaw:** the gateway's Authelia `ext_authz` filter isn't injected on this Cilium version
+  (see `infra/configs/gateway/cilium-envoy-config-production.yaml` and
+  [Gateway Authentication Architecture](../../architecture/gateway-auth.md)), so nothing
+  removes a `Remote-User` header the client sends. With `ND_EXTAUTH_TRUSTEDSOURCES` set to
+  every private range, any LAN client could send `Remote-User: <name>` and be logged in as
+  that user.
+- **Worse:** an unknown name was auto-created. On stage it became an admin, because it was the
+  first user. This was verified on stage.
+- **What to keep unset:** `ND_EXTAUTH_TRUSTEDSOURCES` and `ND_EXTAUTH_USERHEADER`. Re-enable
+  them only once the gateway both strips a client-sent header and sets it from Authelia,
+  and a forged-header request is shown to fail.
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant G as Gateway (Cilium)
-    participant A as Authelia
-    participant N as Navidrome
-
-    U->>G: HTTP Request (music.burntbytes.com)
-    G->>A: Envoy ExtAuthz Check
-    alt Session Valid
-        A-->>G: 200 OK (Header: Remote-User=user)
-        G->>N: Request + Remote-User
-        N-->>G: 200 OK (App Response)
-        G-->>U: 200 OK
-    else Session Invalid
-        A-->>G: 401 Unauthorized (Redirect to Login)
-        G-->>U: 302 Found (Location: auth.burntbytes.com)
-    end
-```
-
-### Configuration Details
-
-- **Global Envoy Filter**: `infra/configs/gateway/cilium-envoy-config-production.yaml` defines the `ext_authz` filter pointing to Authelia. See [Gateway Authentication Architecture](../architecture/gateway-auth.md) for details on why and how this works.
-- **Authelia Policy**: `apps/production/authelia/configuration.yaml` defines the rules for `navidrome.burntbytes.com` and `music.burntbytes.com` (Policy: `one_factor`) which triggers the header injection.
-- **Navidrome Config**: `ND_EXTAUTH_USERHEADER` is set to `Remote-User` and trusted proxies are configured via `ND_EXTAUTH_TRUSTEDSOURCES`.
-
-See [Navidrome Documentation](https://www.navidrome.org/docs/getting-started/extauth-quickstart/) for more details on External Authentication.
+The Authelia `one_factor` rules for the Navidrome hostnames
+(`apps/{production,staging}/authelia/configuration.yaml`) stay in place for when the
+filter works.

@@ -64,7 +64,9 @@ spec:
               memory: 128Mi
             limits:
               cpu: 500m
-              memory: 512Mi
+              # 512Mi OOMKilled staging ABS during its first full library scan
+              # while Music Assistant synced it (2026-11-04).
+              memory: 1Gi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

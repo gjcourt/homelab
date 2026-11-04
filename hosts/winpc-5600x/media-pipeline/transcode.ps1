@@ -351,7 +351,51 @@ foreach ($it in $runnable) {
   # swap is a rename within one dataset, so it is atomic, and a failed verify
   # leaves the existing file untouched.
   $inc = "$rel.incoming"
-  ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$HBASE/$dest' && sudo -n mv '$tmp' '$HBASE/$inc' && sudo -n chown 1028:100 '$HBASE/$inc' && sudo -n chmod 644 '$HBASE/$inc'"
+  # ⚠️ Movie dirs must be group `apps` (gid 568, Radarr) with group write. This
+  # used to be a bare `sudo mkdir -p`, which made every new title dir
+  # root:truenas_admin 2755 - 71 of them by 2026-11-03, invisible to Radarr's
+  # writes while Jellyfin played them fine. Create each MISSING component
+  # explicitly and stamp it; never touch a dir that already exists. Outside
+  # movies/ nothing manages the tree, so the old behaviour stands.
+  if ($it.Dir -like 'movies/*') {
+    $mk = @(); $acc = "$HBASE/media/video"
+    foreach ($c in ($it.Dir -split '/')) {
+      $acc = "$acc/$c"
+      $mk += "{ [ -d '$acc' ] || { sudo -n mkdir '$acc' && sudo -n chown truenas_admin:apps '$acc' && sudo -n chmod 2775 '$acc'; }; }"
+    }
+    $mkCmd = $mk -join ' && '
+  } else {
+    $mkCmd = "sudo -n mkdir -p '$HBASE/$dest'"
+  }
+  ssh -n -o BatchMode=yes $HST $mkCmd
+  if ($LASTEXITCODE -ne 0) {
+    ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null
+    VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note='could not create destination dir' })
+    Log "FAIL mkdir: $name -- keeping local"; continue
+  }
+  if ($it.Dir -like 'movies/*') {
+    # Check BEFORE landing the file, the way import-music.ps1 checks ownership:
+    # a dir Radarr cannot write is a failure, not a warning. An existing dir from
+    # before this fix fails here too - run normalize-movie-dirs.ps1.
+    # Every dir below movies/ (title dir AND extras/), not just the leaf: an
+    # extras/ created now under a pre-fix root-owned title dir would otherwise
+    # pass while Radarr still cannot write the title dir.
+    $chk = @(); $acc = "$HBASE/media/video/movies"
+    foreach ($c in @(($it.Dir -split '/') | Select-Object -Skip 1)) { $acc = "$acc/$c"; $chk += "'$acc'" }
+    $lines = @(Invoke-SshRead -RemoteHost $HST -Cmd "stat -c '%G %A' $($chk -join ' ')" | Where-Object { $_ })
+    $ga = ($lines -join '; ')
+    $bad = ($lines.Count -ne $chk.Count)
+    foreach ($ln in $lines) {
+      $gs = "$ln".Trim() -split ' '
+      if ($gs.Count -ne 2 -or $gs[0] -ne 'apps' -or $gs[1].Length -lt 6 -or $gs[1][5] -ne 'w') { $bad = $true }
+    }
+    if ($bad) {
+      ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null
+      VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note="dest dir is '$ga', not group apps with group write" })
+      Log "FAIL dir ownership: $HBASE/$dest is '$ga' (need group apps + g+w; see normalize-movie-dirs.ps1) -- keeping local"; continue
+    }
+  }
+  ssh -n -o BatchMode=yes $HST "sudo -n mv '$tmp' '$HBASE/$inc' && sudo -n chown 1028:100 '$HBASE/$inc' && sudo -n chmod 644 '$HBASE/$inc'"
   if ($LASTEXITCODE -ne 0) {
     VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note='move into library failed' })
     Log "FAIL push: $name -- keeping local"; continue

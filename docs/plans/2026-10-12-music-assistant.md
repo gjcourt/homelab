@@ -86,6 +86,8 @@ Pieces:
      `music.`, and George moves his Subsonic clients to the new name. In this step MA takes
      `music.burntbytes.com`, Navidrome drops `music.`, and the `music.` Authelia rule goes.
      That's the only breaking moment for a client still on `music.`.
+   - **Homepage.** Add a Music Assistant tile at `music.burntbytes.com`, with site-monitor
+     egress to `snapcast-prod` 8095, as stage already has.
    - **HA.** Add the HA integration. Tests, each on a real speaker:
    - Navidrome album → kitchen only; living-room keeps its Spotify stream.
    - Navidrome album → kitchen + living-room as one MA group, in sync.

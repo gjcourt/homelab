@@ -1,5 +1,5 @@
 # Adds the Music Assistant UI port to the base snapcast policy (Cilium policies
-# are additive). Gateway only: the UI is reached through ma.stage.burntbytes.com.
+# are additive). Gateway only: the UI is reached through music.stage.burntbytes.com.
 # New egress: staging Home Assistant on 8123, to fetch TTS audio for announcements,
 # and staging Audiobookshelf for MA's ABS provider. MA's Chromecast, DLNA and AirPlay providers load by default,
 # but their ports are not in the base egress rules, so stage cannot reach a

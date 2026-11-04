@@ -14,6 +14,10 @@ authentication_backend:
 access_control:
   default_policy: bypass
   rules:
+    # Navidrome trusts the Remote-User header that Authelia sets, so every
+    # hostname that routes to Navidrome needs a one_factor rule here.
+    - domain: "navidrome.burntbytes.com"
+      policy: one_factor
     - domain: "music.burntbytes.com"
       policy: one_factor
     - domain: "alerts.burntbytes.com"

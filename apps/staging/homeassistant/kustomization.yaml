@@ -75,3 +75,32 @@ patches:
             - ports:
                 - port: "8123"
                   protocol: TCP
+  # Music Assistant in snapcast-stage (MA plan, step 1 announcement test). HA
+  # drives MA over its API on 8095; MA fetches TTS audio back from HA on 8123.
+  # Stage only: staging HA reaches staging MA, never prod.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: homeassistant
+    patch: |
+      - op: add
+        path: /spec/egress/-
+        value:
+          toEndpoints:
+            - matchLabels:
+                app: snapcast
+                k8s:io.kubernetes.pod.namespace: snapcast-stage
+          toPorts:
+            - ports:
+                - port: "8095"
+                  protocol: TCP
+      - op: add
+        path: /spec/ingress/-
+        value:
+          fromEndpoints:
+            - matchLabels:
+                app: snapcast
+                k8s:io.kubernetes.pod.namespace: snapcast-stage
+          toPorts:
+            - ports:
+                - port: "8123"
+                  protocol: TCP

@@ -75,3 +75,21 @@ patches:
             - ports:
                 - port: "8123"
                   protocol: TCP
+  # Snapcast server control port: the HA Snapcast integration polls each
+  # snapclient as a media_player (volume) over JSON-RPC. Moved here from base
+  # (2026-11-03) so staging HA cannot reach the prod snapserver.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: homeassistant
+    patch: |
+      - op: add
+        path: /spec/egress/-
+        value:
+          toEndpoints:
+            - matchLabels:
+                app: snapcast
+                k8s:io.kubernetes.pod.namespace: snapcast-prod
+          toPorts:
+            - ports:
+                - port: "1705"
+                  protocol: TCP

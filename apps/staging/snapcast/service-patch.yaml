@@ -6,7 +6,7 @@ metadata:
 spec:
   ports:
     # Music Assistant web UI and API (HOMELAB-67 step 1). Reached through
-    # ma.stage.burntbytes.com, LAN only.
+    # music.stage.burntbytes.com, LAN only.
     - name: music-assistant
       port: 8095
       targetPort: 8095

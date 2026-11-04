@@ -1,3 +1,6 @@
+# NOT DEPLOYED: commented out of kustomization.yaml until HOMELAB-90 (Authelia
+# ext_authz not enforced) is fixed. This site has no login of its own.
+#
 # LAN-only front door: https://finance.burntbytes.com via the Cilium gateway.
 # The gateway's *.burntbytes.com listener already terminates TLS with the
 # wildcard cert, and internal DNS resolves *.burntbytes.com to the gateway's

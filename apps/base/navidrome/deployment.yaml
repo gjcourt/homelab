@@ -74,10 +74,15 @@ spec:
             #        SELECT missing, count(*) FROM media_file GROUP BY missing;
             - name: ND_SESSIONTIMEOUT
               value: 24h
-            - name: ND_EXTAUTH_TRUSTEDSOURCES
-              value: "10.0.0.0/8,192.168.0.0/16,172.16.0.0/12"
-            - name: ND_EXTAUTH_USERHEADER
-              value: "Remote-User"
+            # No reverse-proxy (Remote-User) auth: ND_EXTAUTH_* stay unset, so
+            # Navidrome uses its own login. The gateway's Authelia ext_authz
+            # filter is not injected on this Cilium version (see
+            # infra/configs/gateway/cilium-envoy-config-production.yaml), so
+            # nothing strips a client-sent Remote-User. With the header trusted
+            # from every private range, any LAN client could log in as any user,
+            # and an unknown name was auto-created as an admin (verified on
+            # stage, 2026-11-03). Do not re-enable until the gateway strips and
+            # sets the header itself.
           # Last.fm credentials are injected from the navidrome-lastfm Secret
           # (defined per-environment overlay). They enable album cover art and
           # artist biography/image fetching, and allow per-user scrobbling.

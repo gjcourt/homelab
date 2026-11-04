@@ -14,8 +14,8 @@ authentication_backend:
 access_control:
   default_policy: bypass
   rules:
-    # Navidrome trusts the Remote-User header that Authelia sets, so every
-    # hostname that routes to Navidrome needs a one_factor rule here.
+    # Every hostname that routes to Navidrome gets a one_factor rule. Navidrome
+    # does not trust Remote-User today (docs/operations/apps/navidrome.md).
     # music.stage now serves Music Assistant, which has its own login and no
     # rule (HA's MA integration calls it through the gateway).
     - domain: "navidrome.stage.burntbytes.com"

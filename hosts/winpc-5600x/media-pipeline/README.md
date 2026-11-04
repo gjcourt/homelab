@@ -3,6 +3,8 @@
 Transcodes MakeMKV disc rips to x265 and pushes them into the hestia media
 library that Jellyfin serves, and imports CD rips into the Navidrome library.
 
+Rip-tool settings (EAC, MakeMKV, Picard) are captured in [`../rip-tools/`](../rip-tools/README.md).
+
 ## Loading anything: `load.ps1` (start here)
 
 **Every load goes through `load.ps1`. Never hand-run `scp`/`rsync` into the

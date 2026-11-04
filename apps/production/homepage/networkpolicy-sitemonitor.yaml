@@ -170,15 +170,7 @@ spec:
         - ports:
             - port: "8080"
               protocol: TCP
-    # Finance
-    - toEndpoints:
-        - matchLabels:
-            k8s:io.kubernetes.pod.namespace: finance-dashboard
-            app: finance-dashboard
-      toPorts:
-        - ports:
-            - port: "8080"
-              protocol: TCP
+    # Finance: removed while finance.burntbytes.com is not routed (HOMELAB-90).
     # Open WebUI
     - toEndpoints:
         - matchLabels:

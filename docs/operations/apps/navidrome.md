@@ -73,7 +73,8 @@ Assistant authenticate with Navidrome credentials too.
   removes a `Remote-User` header the client sends. With `ND_EXTAUTH_TRUSTEDSOURCES` set to
   every private range, any LAN client could send `Remote-User: <name>` and be logged in as
   that user.
-- **Worse:** an unknown name was auto-created as an admin. This was verified on stage.
+- **Worse:** an unknown name was auto-created. On stage it became an admin, because it was the
+  first user. This was verified on stage.
 - **What to keep unset:** `ND_EXTAUTH_TRUSTEDSOURCES` and `ND_EXTAUTH_USERHEADER`. Re-enable
   them only once the gateway both strips a client-sent header and sets it from Authelia,
   and a forged-header request is shown to fail.

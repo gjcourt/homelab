@@ -46,13 +46,13 @@ Settings that matter, by registry value:
 Drive settings live under `Drive Options\<drive>`. The ripping drive is the
 **`HL-DT-STBD-RE  BH16NS40 1.03`** (LG BH16NS40). For that drive: AccurateRip is
 on (`UseAccurateRip`), C2 is off (`UseC2Correction`), the combined offset is in
-use (`UseCombinedSampleOffset`), and **`SampleOffset` / `CombinedSampleOffset` are +6**
-(`hex:06,00,00,00`). That matches the [AccurateRip drive-offset
-list](http://www.accuraterip.com/driveoffsets.htm) for the LG BD-RE BH16NS40: +6, 2,617
-submissions, 100% agree (checked 2026-11-03). ⚠️ Until 2026-11-03 both were stored as 0, so
-CD rips made before then are shifted by 6 samples (~0.14 ms): inaudible, but not bit-exact and
-they will not match AccurateRip. A backup of the pre-fix key is on daedalus at
-`%TEMP%\EACU-before-offset-20261103.reg`. `SecureMode` (`03,00`) and `ExtractionMode` (`05,00`)
+use (`UseCombinedSampleOffset`), and `SampleOffset` / `CombinedSampleOffset` are stored as 0.
+**Leave them at 0.** AccurateRip's drive-offset list gives this model +6, but rips made with these
+settings verify against AccurateRip **as-is (shift 0)**: checked 2026-11-03 on Stone Temple Pilots
+*Core* (confidence 33-34 on every track), Nirvana *In Utero* and Led Zeppelin *Physical Graffiti*.
+So EAC already applies the right correction; where it takes it from was not traced, but these
+registry values are not it. Setting them to +6 (#1793) was reverted the same day, from a backup
+of the pre-change key. `SecureMode` (`03,00`) and `ExtractionMode` (`05,00`)
 are recorded raw and not decoded here. The `GP65NB60` and `Msft Virtual
 DVD-ROM` entries are other drives EAC has seen. They are not used for ripping.
 

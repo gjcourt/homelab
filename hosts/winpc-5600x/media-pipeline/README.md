@@ -508,6 +508,21 @@ Files in `C:\media-work\rescue\`: `<Name>.iso` (the image, ~50 GB), `.map`
 | **`-HestiaHost`, not `-LedgerHost`** | `ledger.ps1` sets `$script:LedgerHost = $null` when dot-sourced, which silently blanked a parameter of that name. |
 | **Ledger** | `RUN_START`, `IMAGED` (with `unrecovered=<bytes>`), `RIPPED`, `RUN_END` / `RUN_ABORT` go to the shared hestia ledger. |
 
+### When rescue-disc.ps1 stalls: `rescue/`
+
+`rescue-disc.ps1` runs a fixed retry count and stops when the drive locks up (errno 13). For a
+disc worth an overnight effort, the Cygwin scripts in `rescue/` resume from the same
+`<Name>.iso` / `<Name>.map` (start with `rescue-disc.ps1` so `<Name>.disc` pins the disc):
+
+| Script | Does |
+| --- | --- |
+| `rescue-loop.sh <Name>` | Up to `PASSES` (60) single retry passes, alternating forward / reverse so each restart after a lock-up works a different area; logs ddrescue stats per pass to `<Name>-loop.log`. `touch STOP-LOOP` in the work dir stops it after the current pass. |
+| `rescue-reverse.sh <Name>` | One reverse pass with no trim or scrape (`-R -n -N`) over what is still non-tried. |
+| `stop-ddrescue.sh` | SIGINT, then waits for ddrescue to exit, so the map is flushed. Never `kill -9`. |
+
+`DIR` (default `/cygdrive/c/media-work/rescue`) and `DEV` (default `/dev/sr0`) are
+overridable. First used on the E.T. disc in 2026-10 (99.73% recovered).
+
 ## Why Cygwin, not WSL
 
 WSL2 cannot see the optical drive without USB passthrough (`usbipd`), and

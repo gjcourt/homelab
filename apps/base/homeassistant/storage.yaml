@@ -9,6 +9,9 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      # Actual usage: ~9Mi; provisioned 1Gi with growth headroom for HA config,
-      # automations, SQLite DB, and scripts. Requires PVC deletion to take effect.
-      storage: 1Gi
+      # 1Gi filled on 2026-11-04 (98%): the recorder SQLite DB grew after the
+      # Companion app phones were added, and HA then failed every recorder
+      # commit and every .storage write (restore_state) with ENOSPC.
+      # truenas-iscsi expands online (democratic-csi v1.9.5), so a size bump
+      # here is applied in place; no PVC deletion needed.
+      storage: 5Gi

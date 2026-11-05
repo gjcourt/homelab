@@ -43,6 +43,12 @@ Settings that matter, by registry value:
 | Metadata provider (`Internet Options\MetadataPluginUsed`) | `AA545B54-…` = **GD3** | GUID matched in `GD3.dll` in the EAC install folder. `RetrieveCDDBOnUnknownCD` is off |
 | Legacy freedb host (`ActualHostName`) | `freedb.freedb.org` | Leftover default, not the active provider |
 
+**Logs:** `Extraction Options\AutoSaveStatus` (save the status log after every
+extraction) and `StartUp Options\CreateEnglishLogFile` are **on** since 2026-11-04;
+they were off, so no rip before then has an EAC log. `import-music.ps1` archives
+the logs to hestia. Where EAC writes the log, and under what name, was not yet
+observed when this was set: check after the next rip.
+
 Drive settings live under `Drive Options\<drive>`. The ripping drive is the
 **`HL-DT-STBD-RE  BH16NS40 1.03`** (LG BH16NS40). For that drive: AccurateRip is
 on (`UseAccurateRip`), C2 is off (`UseC2Correction`), the combined offset is in

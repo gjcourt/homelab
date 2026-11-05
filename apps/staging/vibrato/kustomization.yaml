@@ -18,3 +18,27 @@ patches:
       - op: replace
         path: /metadata/name
         value: vibrato-stage
+  # Staging runs on the simulator and has no MQTT bridge, so it needs neither the
+  # real ito (10.42.7.11:23, owned by prod) nor prod's mosquitto. Drop both
+  # egress rules so staging cannot reach them even if an env var comes back.
+  # `test` ops pin the indices: if the base rule order changes, the build fails
+  # instead of silently removing the wrong rule.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: vibrato
+    patch: |
+      - op: test
+        path: /spec/egress/2/toEndpoints/0/matchLabels/k8s:io.kubernetes.pod.namespace
+        value: mosquitto
+      - op: remove
+        path: /spec/egress/2
+      - op: test
+        path: /spec/egress/1/toPorts/0/ports/0/port
+        value: "23"
+      - op: remove
+        path: /spec/egress/1
+      - op: replace
+        path: /spec/description
+        value: >-
+          Gateway ingress on 8080. Egress for DNS only: staging runs the simulator
+          with no MQTT bridge, so it reaches neither the real ito nor prod mosquitto.

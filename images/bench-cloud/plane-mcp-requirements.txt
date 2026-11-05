@@ -675,9 +675,9 @@ plane-mcp-server==0.3.5 \
     --hash=sha256:40ab3d65d42f3e5e865ffaf9352b66bc770bdf15a1671ff881e9b4de93612241 \
     --hash=sha256:c2ccb776b91a6dedbbccb5f5449329e366b3111788d9cf30a64a16f025e47cb4
     # via -r /private/tmp/claude-501/-Users-george-src/1b8b9bc6-edec-4068-b7e7-8d9b068440f8/scratchpad/pmcp.in
-plane-sdk==0.3.1 \
-    --hash=sha256:c7794876403af6b790fc1d9d594357a02163b353d38eb8c3eb6fcc157256e827 \
-    --hash=sha256:e093f0d6cc83a155cc9e1670d26da14e8f57f4dc33fed9672aa785f70662ec64
+plane-sdk==0.3.2 \
+    --hash=sha256:de489ecb945399171b29350dcb635f92da0957da7379d9da3b00b971acfa2b0d \
+    --hash=sha256:fd2af2564ac6bf52cd87c47c41429cf8f2eebe8d09949b1f7803f687de05014b
     # via plane-mcp-server
 platformdirs==4.13.0 \
     --hash=sha256:1aa0b0d3f224c1f07c295121e312a5a24a180d6ae5a8425ea1784b3e3863e9c0 \

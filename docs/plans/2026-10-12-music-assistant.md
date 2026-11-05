@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_modified: 2026-11-03
+last_modified: 2026-11-04
 summary: "Music Assistant replaces the Mopidy/Iris sidecar: play Navidrome to chosen speakers, and per-speaker TTS announcements from HA"
 ---
 
@@ -171,6 +171,27 @@ Safari web player, a sign of how fast Sendspin is changing.
   which shows "Invalid state". Change the host to `hass.stage.burntbytes.com` by hand.
 - **Not yet tested:** an announcement over music, and whether the music resumes afterwards.
   That's still a step 2 test.
+- **Re-adding the integration from a phone** (2026-11-04, after the move to `music.stage`): the
+  HA companion app is signed in to prod, so the login callback opens the app. It works in Safari
+  if `my.home-assistant.io`'s default instance is set to `https://hass.stage.burntbytes.com` first
+  and the open-the-app prompt is cancelled. Enter the MA URL without a trailing slash: with
+  one, MA logs requests to `//login`.
+
+**Audiobookshelf, tried in stage 2026-11-04 (George):**
+
+- **It works end to end.** MA's Audiobookshelf provider (stable, built in) logs in to staging ABS
+  at `http://audiobookshelf.audiobookshelf-stage.svc:3005` with a username and password; an ABS
+  API key also works. Books played to the Mac player, and ABS recorded a playback session for
+  "Music Assistant" and saved the position.
+- **Staging writes progress only to staging ABS**, the only ABS that staging MA's network policy
+  reaches (#1795). Prod listening progress is untouched.
+- **Staging ABS needed media.** It had no mounts and no libraries, so the provider reported "no
+  libraries visible". #1802 mounts prod's audiobooks/podcasts tree read-only, as staging Navidrome
+  does for music. After that, add a Book and a Podcast library in ABS, let the scan finish, then
+  sync the provider in MA.
+- **ABS was OOMKilled once** at the 512 MiB limit, during its first full scan while MA was
+  syncing. The limit is raised in a separate PR.
+- **Prod is not decided.** Whether prod MA gets ABS too is a step 2 question, below.
 
 ## Sendspin, MA's own protocol (researched 2026-11-03)
 
@@ -233,6 +254,9 @@ Still open:
 - MA's Subsonic login: reuse the `navidrome-credentials` Secret or a dedicated Navidrome user.
 - Does MA leave groups as it found them? See "Not settled" above. Spotify on a Pi and MA on the
   same speaker are two ways into one room, so confirm they don't fight.
+- Does an announcement over music resume the music afterwards? Not tested yet.
+- Should prod MA get Audiobookshelf too? It worked in stage (above). If yes, prod MA writes
+  listening progress to prod ABS, the same as the ABS app does.
 
 ## UI
 
@@ -247,5 +271,5 @@ disable the web player, or keep the last chosen speaker as the default.
 ## Out of scope
 
 - Moving Spotify into MA. go-librespot stays as is.
-- AirPlay/Chromecast players and Audiobookshelf in MA — possible later, not needed for
-  the goal.
+- AirPlay/Chromecast players in MA — possible later, not needed for the goal.
+  (Audiobookshelf was tried in stage; see step 1 results.)

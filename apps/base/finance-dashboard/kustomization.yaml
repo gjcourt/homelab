@@ -6,11 +6,9 @@ resources:
   - deployment.yaml
   - service.yaml
   - networkpolicy.yaml
-  # httproute.yaml is deliberately NOT deployed. The gateway's Authelia ext_authz
-  # filter is not enforced (HOMELAB-90), and this site has no login of its own, so
-  # the route served the full balance sheet to anyone on the LAN. Use the
-  # port-forward in service.yaml until HOMELAB-90 is fixed, then restore this line.
-  # - httproute.yaml
+  # Gated by Authelia via the route's ExternalAuth filter (HOMELAB-90). This site
+  # has no login of its own: never deploy the route without that filter.
+  - httproute.yaml
   # SOPS-encrypted, operator-created from the .example templates. CI / kustomize
   # build fails until both exist — the intended gate.
   - secret-finance-data.yaml

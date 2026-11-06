@@ -26,7 +26,7 @@ encrypted-YAML data and served on the LAN. **No public ingress.**
 | Image | `ghcr.io/gjcourt/finance-dashboard` (built from `images/finance-dashboard/`, **code-only**) |
 | Namespace | `finance-dashboard` (production-only; plain name) |
 | Data | one SOPS Secret `finance-dashboard-data` (5 YAML keys) mounted at `/data` |
-| Exposure | **Port-forward only** while HOMELAB-90 is open (the HTTPRoute is not deployed). Was LAN-only via the gateway at `https://finance.burntbytes.com` |
+| Exposure | LAN-only via gateway — `https://finance.burntbytes.com` (wildcard cert), **behind Authelia** (`one_factor`, the HTTPRoute's ExternalAuth filter); not tunneled |
 | Interactivity | Real-estate + runway pages use client-side JS (sliders, Monte Carlo, Chart.js vendored locally) — no backend |
 
 ## Architecture
@@ -41,11 +41,11 @@ DNS-only).
 
 ## Access
 
-**Port-forward only, for now.** The site has no login of its own, and the gateway's
-Authelia check is not enforced (HOMELAB-90; audited 2026-11-03, the route served the
-whole balance sheet to anyone on the LAN). The HTTPRoute stays out of
-`kustomization.yaml` until that is fixed, then comes back at
-`https://finance.burntbytes.com`.
+On the LAN: **https://finance.burntbytes.com**, behind an Authelia login (`one_factor`).
+The site has no login of its own, so the route must never be deployed without the
+ExternalAuth filter in `apps/base/finance-dashboard/httproute.yaml` (HOMELAB-90; the
+2026-11-03 audit found the ungated route serving the balance sheet to the whole LAN).
+Not tunneled, so it's unreachable off-network. Fallback:
 ```bash
 kubectl -n finance-dashboard port-forward svc/finance-dashboard 8080:8080  # → localhost:8080
 ```

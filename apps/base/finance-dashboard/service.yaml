@@ -6,8 +6,8 @@ metadata:
   labels:
     app: finance-dashboard
 spec:
-  # ClusterIP. The HTTPRoute is not deployed while HOMELAB-90 is open, so the
-  # only way in is a port-forward:
+  # ClusterIP — the LAN gateway (HTTPRoute → https://finance.burntbytes.com,
+  # behind Authelia) routes to it. Fallback for debugging without DNS:
   #   kubectl -n finance-dashboard port-forward svc/finance-dashboard 8080:8080
   type: ClusterIP
   selector:

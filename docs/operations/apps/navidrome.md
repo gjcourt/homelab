@@ -79,6 +79,15 @@ Assistant authenticate with Navidrome credentials too.
   them only once the gateway both strips a client-sent header and sets it from Authelia,
   and a forged-header request is shown to fail.
 
+**Staging trial of Authelia SSO (2026-11-06).** With Cilium 1.20 the gateway's `ExternalAuth`
+filter runs. So staging (`navidrome.stage.`) has reverse-proxy auth back on, under three conditions:
+- `ND_EXTAUTH_TRUSTEDSOURCES` is the four per-node Cilium ingress IPs. It is not the private ranges.
+- The gated route sets `Remote-User` from Authelia.
+- The ungated `/rest` rule strips a client-sent `Remote-User`.
+
+See `apps/staging/navidrome/`. Prod stays off until the forged-header checks in that PR pass on
+staging.
+
 The Authelia `one_factor` rules for the Navidrome hostnames
 (`apps/{production,staging}/authelia/configuration.yaml`) stay in place for when the
 filter works.

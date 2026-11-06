@@ -1,3 +1,25 @@
+# Gateway API v1.6.1 CRDs.
+#
+# Source: https://github.com/kubernetes-sigs/gateway-api/releases/tag/v1.6.1
+# standard-install.yaml, with three local changes:
+#
+# 1. httproutes.gateway.networking.k8s.io comes from experimental-install.yaml
+#    instead. HTTPRoute filter `type: ExternalAuth` (GEP-1494), which Cilium 1.20
+#    uses to gate one_factor hosts with Authelia, is experimental-only in v1.6.1:
+#    the standard CRD rejects the filter type. Switch HTTPRoute back to standard
+#    when ExternalAuth graduates. Plan:
+#    docs/plans/2026-11-04-cilium-1-20-external-auth-plan.md (step 2).
+# 2. The ValidatingAdmissionPolicy and binding `safe-upgrades.gateway.networking.k8s.io`
+#    are left out. That policy rejects experimental CRDs applied over standard
+#    ones, which change 1 needs. infra-crds has prune: false, so removing it here
+#    does not remove it from the cluster; it was deleted by hand before this applied.
+# 3. TLSRoute v1alpha2 stays served: true while the cluster is on Cilium 1.19.x
+#    (see the comment in crds.yaml). Revert to upstream (served: false) after the
+#    Cilium 1.20 upgrade.
+#
+# To regenerate: start from standard-install.yaml at the new tag, swap in the
+# httproutes CRD from experimental-install.yaml, drop the two safe-upgrades
+# objects, re-apply change 3 if still on 1.19, then `make fmt-yaml`.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:

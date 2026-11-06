@@ -36,7 +36,7 @@ spec:
       containers:
         - name: vibrato
           # Public ghcr package; overlays pin the date tag (see deployment-patch.yaml).
-          image: ghcr.io/gjcourt/vibrato:2026-11-05-243593a
+          image: ghcr.io/gjcourt/vibrato:2026-11-06-c6eb744
           ports:
             - name: http
               containerPort: 8080

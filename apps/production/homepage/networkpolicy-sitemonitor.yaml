@@ -98,6 +98,9 @@ spec:
               protocol: TCP
             - port: "6680"
               protocol: TCP
+            # Music Assistant (music.burntbytes.com)
+            - port: "8095"
+              protocol: TCP
     # Vibrato
     - toEndpoints:
         - matchLabels:

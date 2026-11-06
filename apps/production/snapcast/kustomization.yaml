@@ -4,6 +4,8 @@ namespace: snapcast-prod
 resources:
   - ../../base/snapcast/
   - httproute.yaml
+  - networkpolicy-music-assistant.yaml
+  - storage-music-assistant.yaml
 
 labels:
   - pairs:
@@ -22,6 +24,7 @@ patches:
       - op: add
         path: /metadata/labels/http-ingress
         value: "true"
+  - path: music-assistant-patch.yaml
   - path: service-patch.yaml
     target:
       kind: Service

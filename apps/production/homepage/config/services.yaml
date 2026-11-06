@@ -23,6 +23,12 @@
         href: https://jellyfin.burntbytes.com
         description: Media streaming server
         siteMonitor: https://jellyfin.burntbytes.com
+    # Music Assistant at music. (MA plan step 2).
+    - Music Assistant:
+        icon: music-assistant.png
+        href: https://music.burntbytes.com
+        description: Play music to the speakers
+        siteMonitor: https://music.burntbytes.com
     - Navidrome:
         icon: navidrome.png
         href: https://navidrome.burntbytes.com

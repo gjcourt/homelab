@@ -34,8 +34,6 @@ access_control:
     # (apps/production/navidrome/httproute.yaml).
     - domain: "navidrome.burntbytes.com"
       policy: one_factor
-    - domain: "music.burntbytes.com"
-      policy: one_factor
     - domain: "alerts.burntbytes.com"
       policy: one_factor
     - domain: "prometheus.burntbytes.com"

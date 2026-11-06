@@ -1,6 +1,6 @@
 ---
 status: in-progress
-last_modified: 2026-11-04
+last_modified: 2026-11-06
 summary: "Music Assistant replaces the Mopidy/Iris sidecar: play Navidrome to chosen speakers, and per-speaker TTS announcements from HA"
 ---
 
@@ -238,6 +238,16 @@ Revisit when any of these happens:
 - the kitchen Pi moves to trixie.
 
 Migrating later only touches the Pis' client service. MA stays the same.
+
+## Step 2 (prod, 2026-11-06)
+
+PR adds to `snapcast-prod`: the MA sidecar (same 2.10.9 digest as stage), its PVC, port 8095 on the
+Service, `music.burntbytes.com` routes, and network policy for HA (8095 both ways, 8123 for TTS)
+and prod Audiobookshelf. Navidrome drops `music.` and keeps `navidrome.`; the `music.` Authelia rule
+goes. Homepage gets the MA tile.
+
+- **ABS: yes** (George, 2026-11-06). Prod MA reads prod ABS and writes listening progress there.
+- MA's providers and its Subsonic login are set in MA's own settings after deploy, as on stage.
 
 ## Open questions to settle in step 2
 

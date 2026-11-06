@@ -13,8 +13,9 @@ Navidrome is deployed as a standard Kubernetes `Deployment` with a single replic
 
 ## 3. URLs
 - **Staging**: https://navidrome.stage.burntbytes.com
-- **Production**: https://navidrome.burntbytes.com. `music.burntbytes.com` also routes here until
-  Music Assistant takes that name (MA plan step 2).
+- **Production**: https://navidrome.burntbytes.com. `music.burntbytes.com` routed here until
+  2026-11-06, when Music Assistant took that name (MA plan step 2). Point Subsonic clients at
+  `navidrome.burntbytes.com`.
 - Every hostname that routes to Navidrome gets an Authelia `one_factor` rule (see
   Authentication below).
 
@@ -63,7 +64,7 @@ To verify Navidrome is working:
   - Check the pod logs for API rate limiting or authentication errors.
 
 ## 10. Authentication
-**Browser: Authelia single sign-on.** `navidrome.`, `music.` and `navidrome.stage.` sit behind the
+**Browser: Authelia single sign-on.** `navidrome.` and `navidrome.stage.` sit behind the
 gateway's Authelia `ExternalAuth` filter. One Authelia login goes straight into Navidrome: the
 gateway sets `Remote-User` and Navidrome trusts it (reverse-proxy auth). See
 [Gateway authentication](../../architecture/gateway-auth.md).

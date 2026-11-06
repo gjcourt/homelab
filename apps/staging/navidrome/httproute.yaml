@@ -43,7 +43,10 @@ spec:
               namespace: authelia-stage
               port: 9091
             http:
-              path: /api/authz/ext-authz
+              # Trailing slash matters: the gateway appends the original path
+              # (which starts with "/") and Authelia strips exactly this prefix,
+              # so without it "/favicon.ico" reaches Authelia as "favicon.ico".
+              path: /api/authz/ext-authz/
               # Always sent: Host, Method, Path, Content-Length, Authorization.
               # Authelia also needs the session cookie and the original scheme.
               allowedHeaders:

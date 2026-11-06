@@ -1,6 +1,3 @@
-# NOT DEPLOYED: commented out of kustomization.yaml until HOMELAB-90 (Authelia
-# ext_authz not enforced) is fixed. This site has no login of its own.
-#
 # LAN-only front door: https://finance.burntbytes.com via the Cilium gateway.
 # The gateway's *.burntbytes.com listener already terminates TLS with the
 # wildcard cert, and internal DNS resolves *.burntbytes.com to the gateway's
@@ -24,7 +21,7 @@ spec:
             scheme: https
             statusCode: 301
 ---
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: finance-dashboard-https
@@ -37,6 +34,31 @@ spec:
       namespace: default
       sectionName: https
   rules:
-    - backendRefs:
+    # Authelia gate (Gateway API ExternalAuth, Cilium 1.20). This host has no
+    # login of its own; the one_factor rule is in
+    # apps/production/authelia/configuration.yaml. Cilium plan step 5:
+    # docs/plans/2026-11-04-cilium-1-20-external-auth-plan.md
+    - filters:
+        - type: ExternalAuth
+          externalAuth:
+            protocol: HTTP
+            backendRef:
+              name: authelia
+              namespace: authelia-prod
+              port: 9091
+            http:
+              # Trailing slash matters: see apps/staging/navidrome/httproute.yaml.
+              path: /api/authz/ext-authz/
+              allowedHeaders:
+                - cookie
+                - x-forwarded-proto
+                - x-forwarded-for
+                - accept
+              allowedResponseHeaders:
+                - remote-user
+                - remote-groups
+                - remote-name
+                - remote-email
+      backendRefs:
         - name: finance-dashboard
           port: 8080

@@ -77,7 +77,13 @@
         # /api/edgar/health returns {"ok":true}; the root path is a SPA, so probe
         # the health endpoint for the status dot.
         siteMonitor: https://ladder.burntbytes.com/api/edgar/health
-    # Finance tile removed while finance.burntbytes.com is not routed (HOMELAB-90).
+    - Finance:
+        icon: mdi-finance
+        href: https://finance.burntbytes.com
+        description: Net worth + IPS allocation dashboard
+        # No health endpoint and no Authelia bypass: behind the gate this dot
+        # shows whether finance. is reachable through Authelia, not app health.
+        siteMonitor: https://finance.burntbytes.com
 
 - Notes & Learning:
     - Memos:

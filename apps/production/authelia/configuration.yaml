@@ -14,6 +14,21 @@ authentication_backend:
 access_control:
   default_policy: bypass
   rules:
+    # Health endpoints probed by Homepage's siteMonitor (no browser, no session).
+    # They must stay reachable through the gateway's ExternalAuth gate, and expose
+    # nothing beyond up/down. Listed first: Authelia applies the first match.
+    - domain: "prometheus.burntbytes.com"
+      policy: bypass
+      resources:
+        - "^/-/healthy$"
+    - domain: "alerts.burntbytes.com"
+      policy: bypass
+      resources:
+        - "^/-/healthy$"
+    - domain: "ladder.burntbytes.com"
+      policy: bypass
+      resources:
+        - "^/api/edgar/health$"
     # Every hostname that routes to Navidrome gets a one_factor rule. Navidrome
     # does not trust Remote-User today (docs/operations/apps/navidrome.md).
     - domain: "navidrome.burntbytes.com"
@@ -41,8 +56,15 @@ access_control:
 
 session:
   name: authelia_session
-  domain: burntbytes.com
   same_site: lax
+  # Multi-domain form (replaces the deprecated top-level `domain`). authelia_url
+  # lets the authz endpoints answer an unauthenticated request with a 302 to the
+  # portal instead of a bare 401; the gateway's ExternalAuth filter relies on it.
+  # Same cookie name and domain as before, so existing sessions stay valid.
+  # Same change as staging (#1826).
+  cookies:
+    - domain: burntbytes.com
+      authelia_url: https://auth.burntbytes.com
   expiration: 1h
   inactivity: 15m
   remember_me: 30d

@@ -38,8 +38,15 @@ access_control:
 
 session:
   name: authelia_session
-  domain: stage.burntbytes.com
   same_site: lax
+  # Multi-domain form (replaces the deprecated top-level `domain`). The
+  # authelia_url is what lets the authz endpoints answer an unauthenticated
+  # request with a 302 to the portal instead of a bare 401; the gateway's
+  # ExternalAuth filter (Cilium plan step 4) relies on it. Same cookie name
+  # and domain as before, so existing sessions stay valid.
+  cookies:
+    - domain: stage.burntbytes.com
+      authelia_url: https://auth.stage.burntbytes.com
   expiration: 1h
   inactivity: 15m
   remember_me: 30d

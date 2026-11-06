@@ -79,3 +79,22 @@ spec:
       backendRefs:
         - name: navidrome
           port: 4533
+    # Login endpoints: ungated, and Cookie + Remote-User removed. On a failed
+    # login Navidrome logs every request header (navidrome v0.61.2
+    # server/auth.go:56), which would put the Authelia session cookie (valid on
+    # every gated *.burntbytes.com host) in the pod log. /auth/login and
+    # /auth/createAdmin read credentials from the JSON body only (auth.go:36-45,
+    # 110-132), so they need neither header.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /auth
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            remove:
+              - Cookie
+              - Remote-User
+      backendRefs:
+        - name: navidrome
+          port: 4533

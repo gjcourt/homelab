@@ -29,8 +29,9 @@ access_control:
       policy: bypass
       resources:
         - "^/api/edgar/health$"
-    # Every hostname that routes to Navidrome gets a one_factor rule. Navidrome
-    # does not trust Remote-User today (docs/operations/apps/navidrome.md).
+    # Every hostname that routes to Navidrome gets a one_factor rule. The gated
+    # route sets Remote-User for Navidrome's SSO; /rest and /auth are ungated
+    # (apps/production/navidrome/httproute.yaml).
     - domain: "navidrome.burntbytes.com"
       policy: one_factor
     - domain: "music.burntbytes.com"

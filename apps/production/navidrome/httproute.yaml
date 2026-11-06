@@ -20,15 +20,13 @@ spec:
             scheme: https
             statusCode: 301
 ---
-apiVersion: gateway.networking.k8s.io/v1beta1
+apiVersion: gateway.networking.k8s.io/v1
 kind: HTTPRoute
 metadata:
   name: navidrome-https
   namespace: navidrome-prod
 spec:
   hostnames:
-    # navidrome. is the new name. music. stays until Music Assistant takes it
-    # in MA plan step 2 (docs/plans/2026-10-12-music-assistant.md).
     - navidrome.burntbytes.com
     - music.burntbytes.com
   parentRefs:
@@ -36,6 +34,71 @@ spec:
       namespace: default
       sectionName: https
   rules:
-    - backendRefs:
+    # Authelia gate via Gateway API ExternalAuth (Cilium 1.20). Sets Remote-User
+    # for Navidrome's reverse-proxy auth (deployment-extauth-patch.yaml), so one
+    # Authelia login goes straight into Navidrome. Same setup as staging
+    # (apps/staging/navidrome/), which was proven there first.
+    - filters:
+        - type: ExternalAuth
+          externalAuth:
+            protocol: HTTP
+            backendRef:
+              name: authelia
+              namespace: authelia-prod
+              port: 9091
+            http:
+              # Trailing slash matters: the gateway appends the original path
+              # (which starts with "/") and Authelia strips exactly this prefix,
+              # so without it "/favicon.ico" reaches Authelia as "favicon.ico".
+              path: /api/authz/ext-authz/
+              # Always sent: Host, Method, Path, Content-Length, Authorization.
+              # Authelia also needs the session cookie and the original scheme.
+              allowedHeaders:
+                - cookie
+                - x-forwarded-proto
+                - x-forwarded-for
+                - accept
+              allowedResponseHeaders:
+                - remote-user
+                - remote-groups
+                - remote-name
+                - remote-email
+      backendRefs:
+        - name: navidrome
+          port: 4533
+    # Subsonic API: clients (and Music Assistant) authenticate with their own
+    # Navidrome credentials in URL params and can't follow an Authelia login,
+    # so /rest is not gated. Navidrome's Subsonic API also honours the ExtAuth
+    # header (navidrome v0.61.2 server/subsonic/middlewares.go:61), so strip
+    # any client-sent Remote-User here or it could be forged through this gap.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /rest
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            remove:
+              - Remote-User
+      backendRefs:
+        - name: navidrome
+          port: 4533
+    # Login endpoints: ungated, and Cookie + Remote-User removed. On a failed
+    # login Navidrome logs every request header (navidrome v0.61.2
+    # server/auth.go:56), which would put the Authelia session cookie (valid on
+    # every gated *.burntbytes.com host) in the pod log. /auth/login and
+    # /auth/createAdmin read credentials from the JSON body only (auth.go:36-45,
+    # 110-132), so they need neither header.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /auth
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            remove:
+              - Cookie
+              - Remote-User
+      backendRefs:
         - name: navidrome
           port: 4533

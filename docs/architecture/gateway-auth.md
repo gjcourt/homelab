@@ -19,10 +19,10 @@ filter needs Cilium 1.20 and the experimental-channel HTTPRoute CRD (`infra/crds
 | alerts.burntbytes.com | same file | `/-/healthy` bypassed |
 | ladder.burntbytes.com | `apps/base/ladder/httproute.yaml` | `/api/edgar/health` bypassed |
 | finance.burntbytes.com | `apps/base/finance-dashboard/httproute.yaml` | never deploy this route without the filter |
-| navidrome.stage.burntbytes.com | `apps/staging/navidrome/httproute.yaml` | SSO trial; `/rest` ungated (below) |
+| navidrome. / music.burntbytes.com | `apps/production/navidrome/httproute.yaml` | SSO; `/rest` and `/auth` ungated (below) |
+| navidrome.stage.burntbytes.com | `apps/staging/navidrome/httproute.yaml` | same as prod |
 
-**Not gated, although Authelia has a `one_factor` rule for them:** chat., music., navidrome. and
-chat.stage. They rely on the app's own login. The rules are dormant until a route gets the filter.
+**Not gated, although Authelia has a `one_factor` rule for them:** chat. and chat.stage. They rely on the app's own login. The rules are dormant until a route gets the filter.
 
 The bypassed health paths exist so Homepage's status dots keep reporting app health, not the
 Authelia redirect. They are Authelia rules (`policy: bypass` with `resources:`), listed before the
@@ -93,10 +93,12 @@ host to some users, add `subject: group:<name>` to its rule, or `two_factor` to 
 - **`authelia_url` on the session cookie.** Authelia 4.39 answers the authz endpoint with a bare 401
   unless the cookie entry names the portal URL. With it, it answers 302 to the portal.
 - **Forged identity headers.** On a gated rule the gateway replaces a client-sent `Remote-User` with
-  Authelia's value (tested on staging). An ungated rule does not, so strip it explicitly. Staging
-  Navidrome's `/rest` rule (Subsonic clients, no browser cookie) has a `RequestHeaderModifier` that
-  removes `Remote-User`.
-- **Apps that trust `Remote-User`** must trust it only from the gateway: Navidrome staging sets
+  Authelia's value (tested on staging). An ungated rule does not, so strip it explicitly.
+  Navidrome's `/rest` rule (Subsonic clients, no browser cookie) and `/auth` rule each have a
+  `RequestHeaderModifier` that removes `Remote-User`.
+- **Apps that log request headers.** Navidrome logs every header on a failed login, which would
+  include the Authelia session cookie. Its `/auth` rule is ungated and also removes `Cookie`.
+- **Apps that trust `Remote-User`** must trust it only from the gateway: Navidrome sets
   `ND_EXTAUTH_TRUSTEDSOURCES` to the four per-node Cilium ingress IPs, not the private ranges.
   See [the Navidrome runbook](../operations/apps/navidrome.md#10-authentication).
 

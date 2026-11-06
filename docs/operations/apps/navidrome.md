@@ -63,29 +63,34 @@ To verify Navidrome is working:
   - Check the pod logs for API rate limiting or authentication errors.
 
 ## 10. Authentication
-Navidrome uses **its own login** (username and password). Subsonic clients and Music
-Assistant authenticate with Navidrome credentials too.
+**Browser: Authelia single sign-on.** `navidrome.`, `music.` and `navidrome.stage.` sit behind the
+gateway's Authelia `ExternalAuth` filter. One Authelia login goes straight into Navidrome: the
+gateway sets `Remote-User` and Navidrome trusts it (reverse-proxy auth). See
+[Gateway authentication](../../architecture/gateway-auth.md).
 
-**Reverse-proxy (`Remote-User`) auth is disabled on purpose (2026-11-03).**
-- **The flaw:** at the time, the gateway's Authelia `ext_authz` filter wasn't injected (Cilium
-  1.19), so nothing removed a `Remote-User` header the client sent. The prod route still has no
-  gate; see [Gateway authentication](../../architecture/gateway-auth.md). With `ND_EXTAUTH_TRUSTEDSOURCES` set to
-  every private range, any LAN client could send `Remote-User: <name>` and be logged in as
-  that user.
-- **Worse:** an unknown name was auto-created. On stage it became an admin, because it was the
-  first user. This was verified on stage.
-- **What to keep unset:** `ND_EXTAUTH_TRUSTEDSOURCES` and `ND_EXTAUTH_USERHEADER`. Re-enable
-  them only once the gateway both strips a client-sent header and sets it from Authelia,
-  and a forged-header request is shown to fail.
+**Subsonic clients and Music Assistant** use their own Navidrome credentials on `/rest`, which is
+not gated. Snapcast's mopidy talks to the in-cluster Service and never goes through the gateway.
 
-**Staging trial of Authelia SSO (2026-11-06).** With Cilium 1.20 the gateway's `ExternalAuth`
-filter runs. So staging (`navidrome.stage.`) has reverse-proxy auth back on, under three conditions:
-- `ND_EXTAUTH_TRUSTEDSOURCES` is the four per-node Cilium ingress IPs. It is not the private ranges.
-- The gated route sets `Remote-User` from Authelia.
-- The ungated `/rest` rule strips a client-sent `Remote-User`.
+What makes reverse-proxy auth safe (all three must hold; `apps/{production,staging}/navidrome/`):
+- `ND_EXTAUTH_TRUSTEDSOURCES` is the four per-node Cilium ingress IPs, never the private ranges.
+  Navidrome checks the direct peer, so a client can't spoof it. A rebuilt node can get a new
+  ingress IP (`kubectl get ciliumnode -o custom-columns=N:.metadata.name,I:.spec.ingress`); SSO
+  then fails closed to Navidrome's own login until the list is updated.
+- The gated rule sets `Remote-User` from Authelia, replacing any client-sent value.
+- The ungated `/rest` and `/auth` rules remove a client-sent `Remote-User`. Navidrome's Subsonic
+  API also honours the header (v0.61.2 `server/subsonic/middlewares.go:61`).
 
-See `apps/staging/navidrome/`. Prod stays off until the forged-header checks in that PR pass on
-staging.
+**`/auth` also drops `Cookie`.** On a failed login Navidrome logs every request header
+(`server/auth.go:56`), which would put the Authelia session cookie in the pod log. That cookie
+is valid on every gated `*.burntbytes.com` host. The login endpoints read credentials from the
+body only, so they don't need it.
 
-The Authelia `one_factor` rules for the prod Navidrome hostnames
-(`apps/production/authelia/configuration.yaml`) are dormant until the prod route gets the filter.
+**An Authelia user with no Navidrome account is created on first visit.** Only Authelia's own
+users can reach the gated rule.
+
+**History (2026-11-03):** reverse-proxy auth was turned off because the old gateway filter never
+ran (Cilium 1.19) and the header was trusted from every private range: any LAN client could send
+`Remote-User: <name>` and be logged in as that user, and an unknown name was auto-created (on
+stage, as the first user, an admin). Staging re-enabled it with the conditions above once
+Cilium 1.20's `ExternalAuth` worked (#1828), and the forged-header checks passed there before
+prod got it.

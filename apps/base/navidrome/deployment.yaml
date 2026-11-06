@@ -75,9 +75,8 @@ spec:
             - name: ND_SESSIONTIMEOUT
               value: 24h
             # No reverse-proxy (Remote-User) auth: ND_EXTAUTH_* stay unset, so
-            # Navidrome uses its own login. The gateway's Authelia ext_authz
-            # filter is not injected on this Cilium version (see
-            # infra/configs/gateway/cilium-envoy-config-production.yaml), so
+            # Navidrome uses its own login. The prod route has no Authelia
+            # ExternalAuth filter (docs/architecture/gateway-auth.md), so
             # nothing strips a client-sent Remote-User. With the header trusted
             # from every private range, any LAN client could log in as any user,
             # including

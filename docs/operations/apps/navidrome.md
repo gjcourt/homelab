@@ -67,10 +67,9 @@ Navidrome uses **its own login** (username and password). Subsonic clients and M
 Assistant authenticate with Navidrome credentials too.
 
 **Reverse-proxy (`Remote-User`) auth is disabled on purpose (2026-11-03).**
-- **The flaw:** the gateway's Authelia `ext_authz` filter isn't injected on this Cilium version
-  (see `infra/configs/gateway/cilium-envoy-config-production.yaml` and
-  [Gateway Authentication Architecture](../../architecture/gateway-auth.md)), so nothing
-  removes a `Remote-User` header the client sends. With `ND_EXTAUTH_TRUSTEDSOURCES` set to
+- **The flaw:** at the time, the gateway's Authelia `ext_authz` filter wasn't injected (Cilium
+  1.19), so nothing removed a `Remote-User` header the client sent. The prod route still has no
+  gate; see [Gateway authentication](../../architecture/gateway-auth.md). With `ND_EXTAUTH_TRUSTEDSOURCES` set to
   every private range, any LAN client could send `Remote-User: <name>` and be logged in as
   that user.
 - **Worse:** an unknown name was auto-created. On stage it became an admin, because it was the
@@ -88,6 +87,5 @@ filter runs. So staging (`navidrome.stage.`) has reverse-proxy auth back on, und
 See `apps/staging/navidrome/`. Prod stays off until the forged-header checks in that PR pass on
 staging.
 
-The Authelia `one_factor` rules for the Navidrome hostnames
-(`apps/{production,staging}/authelia/configuration.yaml`) stay in place for when the
-filter works.
+The Authelia `one_factor` rules for the prod Navidrome hostnames
+(`apps/production/authelia/configuration.yaml`) are dormant until the prod route gets the filter.

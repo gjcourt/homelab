@@ -60,7 +60,7 @@ See `docs/architecture/` for component-level architecture (DNS strategy, gateway
 
 ## Domain
 
-4-node Talos Kubernetes cluster (3 control-plane + 1 worker, Talos v1.12.4, Kubernetes v1.35.0; current topology in `docs/STATUS.md`) running ~14 self-hosted apps (Audiobookshelf, Authelia, Excalidraw, Golinks, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Pingo, Snapcast, Vitals + Adguard / Vitals etc.) plus infrastructure (Cilium 1.19 VXLAN, cert-manager, CNPG, monitoring, Authelia SSO). GitOps via Flux CD with an automatic preview environment (`staging` branch) rebuilt by CI from `master + open PRs`.
+4-node Talos Kubernetes cluster (3 control-plane + 1 worker, Talos v1.12.4, Kubernetes v1.35.0; current topology in `docs/STATUS.md`) running ~14 self-hosted apps (Audiobookshelf, Authelia, Excalidraw, Golinks, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Pingo, Snapcast, Vitals + Adguard / Vitals etc.) plus infrastructure (Cilium 1.20 VXLAN, cert-manager, CNPG, monitoring, Authelia SSO). GitOps via Flux CD with an automatic preview environment (`staging` branch) rebuilt by CI from `master + open PRs`.
 
 ## Cross-service dependencies
 

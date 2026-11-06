@@ -1,7 +1,7 @@
 # LAN-only Kokoro web player: https://voice.burntbytes.com/web/ (the API is on the same host).
 # Served off the *.burntbytes.com wildcard listener; not in the Cloudflare tunnel,
-# so unreachable from the internet. No login yet — the gateway's Authelia
-# ext_authz isn't enforcing; add a one_factor rule for this host once it is.
+# so unreachable from the internet. No login: to gate it, add an ExternalAuth
+# filter plus a one_factor rule (docs/architecture/gateway-auth.md).
 apiVersion: gateway.networking.k8s.io/v1beta1
 kind: HTTPRoute
 metadata:

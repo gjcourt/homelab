@@ -217,7 +217,7 @@ Windows Registry Editor Version 5.00
 "AddChecksumLogFile"=hex:00
 "WriteUTF8M3U"=hex:ff
 "ConvertBMPToJPG"=hex:ff
-"AutoSaveStatus"=hex:00
+"AutoSaveStatus"=hex:ff
 "DisableCopyProtection"=hex:00
 "BackgroundExternalCompression"=hex:00
 "NoCompressionWindow"=hex:ff
@@ -278,7 +278,7 @@ Windows Registry Editor Version 5.00
 "RecordPath"=""
 "UseProfile"=""
 "UseLanguage"="47AB3DF2"
-"CreateEnglishLogFile"=hex:00
+"CreateEnglishLogFile"=hex:ff
 "ColumnsWidth"=hex:3c,00,00,00,78,00,00,00,78,00,00,00,78,00,00,00,50,00,00,00,50,00,00,00,50,00,00,00,50,00,00,00,50,00,00,00,50,00,00,00,50,00,00,00,50,00,00,00,28,00,00,00,64,00,00,00
 "WindowPosition"=hex:81,0a,00,00,08,00,00,00,9d,0e,00,00,bd,02,00,00
 "WindowPositionComplete"=hex:2c,00,00,00,00,00,00,00,01,00,00,00,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,81,0a,00,00,08,00,00,00,9d,0e,00,00,bd,02,00,00

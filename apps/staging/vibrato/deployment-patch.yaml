@@ -8,7 +8,7 @@ spec:
     spec:
       containers:
         - name: vibrato
-          image: ghcr.io/gjcourt/vibrato:2026-08-27-01a3482
+          image: ghcr.io/gjcourt/vibrato:2026-11-05-243593a
           env:
             - name: LEVA_NODE_ID
               value: "vibrato-stage"
@@ -19,3 +19,11 @@ spec:
             # owns the ito; staging validates the app stack on canned frames.
             - name: LEVA_TRANSPORT
               value: "sim"
+            # Staging must not publish into production's broker. mosquitto.mosquitto
+            # is the broker prod Home Assistant reads, so a staging bridge there puts
+            # simulator telemetry into prod HA. The sim's timer never resets and its
+            # temperature is a sine wave, so it wrote ~170k recorder rows a day and
+            # filled the HA config PVC on 2026-11-04. With LEVA_MQTT_URL unset the
+            # server starts no MQTT bridge at all.
+            - name: LEVA_MQTT_URL
+              $patch: delete

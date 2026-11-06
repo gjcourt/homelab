@@ -60,10 +60,11 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (23)
+### In progress (24)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-11-04-accuraterip-on-import-plan.md](2026-11-04-accuraterip-on-import-plan.md) | 2026-11-04 | AccurateRip-check every CD at import time, record results in the rip ledger, archive EAC logs, and generate a bad-disc tally from the ledger |
 | [2026-11-02-media-load-entrypoints-plan.md](2026-11-02-media-load-entrypoints-plan.md) | 2026-11-03 | One load.ps1 entry point per media type on daedalus, a generated video queue, and Radarr-correct ownership on new movie dirs |
 | [2026-11-01-bench-homelab-paths-plan.md](2026-11-01-bench-homelab-paths-plan.md) | 2026-11-02 | agent-desk Jobs may open homelab PRs in apps/** and docs/**; a required check holds them until George approves the head |
 | [2026-10-22-agent-desk-loop.md](2026-10-22-agent-desk-loop.md) | 2026-11-02 | The agent desk loop (lab 03-042 phase 1): a stateless in-cluster dispatcher turns ready Plane tickets into bench-cloud Jobs (up to 24 pods, 6 per playbook without asking), links each PR back to its ticket, and carries questions and mid-run comments through the ticket; sandbox repo first; docs-fix, dep-hold and main-ci playbooks |

@@ -17,6 +17,9 @@ spec:
     - group: gateway.networking.k8s.io
       kind: HTTPRoute
       namespace: finance-dashboard
+    - group: gateway.networking.k8s.io
+      kind: HTTPRoute
+      namespace: navidrome-prod
   to:
     - group: ""
       kind: Service

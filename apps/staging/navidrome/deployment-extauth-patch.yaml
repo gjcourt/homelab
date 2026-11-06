@@ -9,7 +9,7 @@
 #   from (`kubectl get ciliumnode -o jsonpath='{..spec.ingress}'`). If a node
 #   is rebuilt its IP can change; SSO then fails closed to Navidrome's own login.
 # - The gated HTTPRoute rule sets Remote-User from Authelia; the ungated /rest
-#   rule strips it (see httproute.yaml).
+#   and /auth rules strip it (see httproute.yaml).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

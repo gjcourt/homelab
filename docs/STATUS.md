@@ -14,7 +14,7 @@
 | Cluster | `melodic-muse` |
 | Nodes | 4 — 3 control-plane (`.20`/`.21`/`.23`) + 1 worker (`.25`), **all `Ready`**; `.22`/`.24` physically out (see Known issues). `.20` recovered ~2026-07-01 and is scheduling normally (46 pods as of 2026-08-13) |
 | Platform | Talos v1.12.4 · Kubernetes v1.35.0 |
-| CNI / ingress | Cilium 1.19 (VXLAN) + Gateway API |
+| CNI / ingress | Cilium 1.20 (VXLAN) + Gateway API (per-route Authelia ExternalAuth) |
 | GitOps | Flux CD, reconciling from `master` |
 | Apps | ~14 self-hosted (see [apps/README.md](../apps/README.md)) |
 | LB advertisement | L2 announcements + BGP to the UCGF (AS 65010 ↔ 65100) |

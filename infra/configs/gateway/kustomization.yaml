@@ -1,6 +1,6 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+# Authelia gating is per-route (Gateway API ExternalAuth filter on each HTTPRoute),
+# not a gateway-wide Envoy patch. See docs/architecture/gateway-auth.md.
 resources:
-  - cilium-envoy-config-production.yaml
-  - cilium-envoy-config-staging.yaml
   - gateway-production.yaml

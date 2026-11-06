@@ -1,78 +1,107 @@
-# Global Authentication Architecture (Gateway API + Authelia + Envoy)
+# Gateway authentication (Gateway API ExternalAuth + Authelia)
 
-This document describes the authentication strategy implemented on the Cilium Gateway API using Envoy `ext_authz` filters and Authelia. This architecture enables Single Sign-On (SSO) and header injection for applications that do not support OIDC natively (e.g., Navidrome).
+How the Cilium gateway puts Authelia in front of apps that have no login of their own.
 
-## Problem Statement
+**The model is per-route.** An HTTPRoute opts in by carrying an `ExternalAuth` filter. A route
+without the filter is never checked by Authelia, whatever Authelia's `access_control` rules say.
 
-Some applications require authentication via specific HTTP headers (like `Remote-User`) injected by a trusted reverse proxy, a pattern known as **Forward Authentication**. While Cilium Gateway API supports basic authentication policies, it lacks native support for complex header injection scenarios required by legacy or specific applications.
+This replaced a gateway-wide Envoy `ext_authz` patch (`CiliumClusterwideEnvoyConfig`) that was never
+injected on Cilium 1.15–1.19, so nothing it was meant to gate was gated. See
+[the 2026-02-27 incident](../operations/incidents/2026-02-27-navidrome-ext-authz-gateway-api-broken.md),
+HOMELAB-90, and [the Cilium 1.20 plan](../plans/2026-11-04-cilium-1-20-external-auth-plan.md). The
+filter needs Cilium 1.20 and the experimental-channel HTTPRoute CRD (`infra/crds/gateway-api/`).
 
-To solve this, we inject a raw Envoy filter configuration directly into the Cilium Gateway using `CiliumClusterwideEnvoyConfig`.
+## What is gated
 
-## Architecture Overview
+| Host | Route | Notes |
+|---|---|---|
+| prometheus.burntbytes.com | `infra/controllers/kube-prometheus-stack/httproute.yaml` | `/-/healthy` bypassed |
+| alerts.burntbytes.com | same file | `/-/healthy` bypassed |
+| ladder.burntbytes.com | `apps/base/ladder/httproute.yaml` | `/api/edgar/health` bypassed |
+| finance.burntbytes.com | `apps/base/finance-dashboard/httproute.yaml` | never deploy this route without the filter |
+| navidrome.stage.burntbytes.com | `apps/staging/navidrome/httproute.yaml` | SSO trial; `/rest` ungated (below) |
 
-We implement a **Global Forward Authorization** strategy:
+**Not gated, although Authelia has a `one_factor` rule for them:** chat., music., navidrome. and
+chat.stage. They rely on the app's own login. The rules are dormant until a route gets the filter.
 
-1.  **Global Filter Injection**: A `CiliumClusterwideEnvoyConfig` resource injects an `ext_authz` filter into the Gateway's listener. This filter intercepts *every* HTTP request routed through the Gateway.
-2.  **Authelia as Decision Engine**: The filter forwards metadata (headers, path, method) of every request to Authelia's backend (`api/authz/ext-authz`).
-3.  **Bypass-by-Default Policy**: To prevent breaking existing OIDC applications (which handle their own authentication), Authelia is configured with a default policy of `bypass`.
-4.  **Specific Protection**: Applications requiring header injection (like Navidrome) are explicitly protected by Authelia rules (e.g., `policy: one_factor`) which trigger the authentication flow and header injection.
+The bypassed health paths exist so Homepage's status dots keep reporting app health, not the
+Authelia redirect. They are Authelia rules (`policy: bypass` with `resources:`), listed before the
+host's `one_factor` rule.
 
-### Request Flow
+## Request flow
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Gateway as Cilium Gateway (Envoy)
-    participant Authelia
-    participant App as Protected App (e.g. Navidrome)
+    participant GW as Cilium gateway (Envoy)
+    participant A as Authelia :9091
+    participant App
 
-    User->>Gateway: HTTPS Request
-    Note right of Gateway: Global ext_authz filter triggers
-    Gateway->>Authelia: Check Authorization
-
-    alt Policy = Bypass (Default)
-        Authelia-->>Gateway: 200 OK (No Headers)
-        Gateway->>App: Forward Request
-        App-->>User: App Response (e.g. Login Page)
-    else Policy = One_Factor (Protected)
-        alt Session Valid
-            Authelia-->>Gateway: 200 OK + Headers (Remote-User)
-            Gateway->>App: Forward Request + Remote-User
-            App-->>User: App Response (Logged In)
-        else Session Invalid
-            Authelia-->>Gateway: 401 Unauthorized
-            Gateway-->>User: 302 Redirect to Login
-        end
+    User->>GW: GET https://finance.burntbytes.com/
+    Note right of GW: route has ExternalAuth filter
+    GW->>A: /api/authz/ext-authz/ (cookie, x-forwarded-*, accept)
+    alt no valid session
+        A-->>GW: 302 to auth.burntbytes.com/?rd=...
+        GW-->>User: 302 (log in, then back to rd)
+    else valid session, rule allows
+        A-->>GW: 200 + Remote-User / Remote-Groups / Remote-Name / Remote-Email
+        GW->>App: request + those headers
+        App-->>User: response
     end
 ```
 
-## Configuration Components
+## One login covers every gated host
 
-### 1. Envoy Filter (`infra/configs/gateway/cilium-envoy-config-*.yaml`)
+The session cookie is set on the parent domain (`session.cookies[].domain: burntbytes.com`, and
+`stage.burntbytes.com` on staging). So one Authelia login is valid on every gated host until the
+session ends: `expiration: 1h`, `inactivity: 15m`, or 30 days with *remember me*.
 
-The `CiliumClusterwideEnvoyConfig` (CEC) defines the `ext_authz` filter. It specifies:
-- **Service**: The Gateway service to attach to.
-- **Cluster**: The upstream Authelia service (local cluster DNS).
-- **Failure Mode**: `failure_mode_allow: false` (fail closed if Authelia is down).
-- **Headers**: Which headers to forward to Authelia and which to accept back (e.g., `Remote-User`).
+Every gated host uses `policy: one_factor`, so any Authelia user can open all of them. To limit a
+host to some users, add `subject: group:<name>` to its rule, or `two_factor` to require 2FA.
 
-### 2. Authelia Configuration (`apps/*/authelia/configuration.yaml`)
+## Adding the gate to a route
 
-The policy must be inverted to support the global filter:
-- `access_control.default_policy`: **Must be `bypass`**.
-- Specific rules are added for apps requiring auth:
-  ```yaml
-  - domain: "navidrome.burntbytes.com"
-    policy: one_factor
-  ```
+1. Add the filter to the route's rule. Copy it from `apps/base/ladder/httproute.yaml`:
 
-### 3. Application Configuration
+   ```yaml
+   filters:
+     - type: ExternalAuth
+       externalAuth:
+         protocol: HTTP
+         backendRef:
+           name: authelia
+           namespace: authelia-prod        # authelia-stage on staging
+           port: 9091
+         http:
+           path: /api/authz/ext-authz/     # trailing slash required, see below
+           allowedHeaders: [cookie, x-forwarded-proto, x-forwarded-for, accept]
+           allowedResponseHeaders: [remote-user, remote-groups, remote-name, remote-email]
+   ```
 
-The application must be configured to trust the Gateway and read the injected header.
-- **Navidrome Example**:
-  - `ND_EXTAUTH_USERHEADER`: `Remote-User`
-  - `ND_EXTAUTH_TRUSTEDSOURCES`: CIDRs of the Gateway/Cluster pod network.
+2. Add the route's namespace to `from:` in `apps/{production,staging}/authelia/referencegrant.yaml`.
+   Without it the cross-namespace `backendRef` is refused and the route reports `ResolvedRefs=False`.
+3. Add a `one_factor` rule for the host in `apps/{production,staging}/authelia/configuration.yaml`.
+   `default_policy` is `bypass`, so without a rule Authelia lets everything through.
+4. Bypass any path a monitor polls, before the host's main rule.
+5. After merge: unauthenticated GET → 302 to auth., logged-in browser → 200, and route
+   `Accepted` + `ResolvedRefs` both True.
 
-## why not per-route filters?
+## Details that bit us
 
-Cilium Gateway API's implementation of HTTPRoute filters for `ext_authz` is limited or requires complex matching logic that is difficult to maintain with the standard K8s API. A global filter ensures a consistent security posture and simplifies the Gateway configuration, shifting the complexity to the Authelia policy engine—a specialized tool designed for exactly this purpose.
+- **Trailing slash on `path`.** Without it Authelia sees a path with no leading `/` and answers
+  400, then the browser loops on 301s. Fixed in #1827.
+- **`authelia_url` on the session cookie.** Authelia 4.39 answers the authz endpoint with a bare 401
+  unless the cookie entry names the portal URL. With it, it answers 302 to the portal.
+- **Forged identity headers.** On a gated rule the gateway replaces a client-sent `Remote-User` with
+  Authelia's value (tested on staging). An ungated rule does not, so strip it explicitly. Staging
+  Navidrome's `/rest` rule (Subsonic clients, no browser cookie) has a `RequestHeaderModifier` that
+  removes `Remote-User`.
+- **Apps that trust `Remote-User`** must trust it only from the gateway: Navidrome staging sets
+  `ND_EXTAUTH_TRUSTEDSOURCES` to the four per-node Cilium ingress IPs, not the private ranges.
+  See [the Navidrome runbook](../operations/apps/navidrome.md#10-authentication).
+
+## Known upstream issue
+
+cilium/cilium#49132 (open on 1.20): removing an HTTPRoute that has an ExternalAuth filter can make
+unrelated routes answer 403 on existing connections. Avoid deleting gated routes casually; when you
+must, do it in a quiet window and then check a few ungated hosts (home., hass.) return 200.

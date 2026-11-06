@@ -62,3 +62,20 @@ spec:
       backendRefs:
         - name: navidrome
           port: 4533
+    # Subsonic API: clients (and Music Assistant) authenticate with their own
+    # Navidrome credentials in URL params and can't follow an Authelia login,
+    # so /rest is not gated. Navidrome's Subsonic API also honours the ExtAuth
+    # header (navidrome v0.61.2 server/subsonic/middlewares.go:61), so strip
+    # any client-sent Remote-User here or it could be forged through this gap.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /rest
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            remove:
+              - Remote-User
+      backendRefs:
+        - name: navidrome
+          port: 4533

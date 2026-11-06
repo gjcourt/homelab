@@ -21,8 +21,15 @@ Snapcast is deployed as a Kubernetes `Deployment` with a single replica in the `
   - Exposed via Cilium Gateway API (`HTTPRoute`) for the web UI.
 
 ## 3. URLs
-- **Staging**: https://snapcast.stage.burntbytes.com
-- **Production**: https://snapcast.burntbytes.com
+- **Staging**: https://snapcast.stage.burntbytes.com, Music Assistant at https://music.stage.burntbytes.com
+- **Production**: https://snapcast.burntbytes.com, Music Assistant at https://music.burntbytes.com,
+  Iris (Mopidy) at https://cast.burntbytes.com until Mopidy is removed.
+
+**Music Assistant** (`music-assistant` sidecar, port 8095, PVC `snapcast-music-assistant-data`)
+runs in both namespaces next to Mopidy. It plays Navidrome (and Audiobookshelf) to the speakers
+through this snapserver, and HA's Music Assistant integration uses it for announcements. It has
+its own login and no Authelia gate; LAN only. Setup and test results:
+`docs/plans/2026-10-12-music-assistant.md`.
 
 ## 4. Configuration
 - **Environment Variables**: N/A

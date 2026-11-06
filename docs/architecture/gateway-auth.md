@@ -19,7 +19,7 @@ filter needs Cilium 1.20 and the experimental-channel HTTPRoute CRD (`infra/crds
 | alerts.burntbytes.com | same file | `/-/healthy` bypassed |
 | ladder.burntbytes.com | `apps/base/ladder/httproute.yaml` | `/api/edgar/health` bypassed |
 | finance.burntbytes.com | `apps/base/finance-dashboard/httproute.yaml` | never deploy this route without the filter |
-| navidrome. / music.burntbytes.com | `apps/production/navidrome/httproute.yaml` | SSO; `/rest` and `/auth` ungated (below) |
+| navidrome.burntbytes.com | `apps/production/navidrome/httproute.yaml` | SSO; `/rest` and `/auth` ungated (below) |
 | navidrome.stage.burntbytes.com | `apps/staging/navidrome/httproute.yaml` | same as prod |
 
 **Not gated, although Authelia has a `one_factor` rule for them:** chat. and chat.stage. They rely on the app's own login. The rules are dormant until a route gets the filter.

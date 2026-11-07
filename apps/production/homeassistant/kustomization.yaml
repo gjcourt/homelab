@@ -15,6 +15,49 @@ labels:
     includeSelectors: false
 
 patches:
+  # Device egress, production only (moved from base; HASS-1 plan, "Staging network
+  # policy first"): staging HA must never reach devices production owns.
+  #  - Lutron Caséta Smart Bridge 10.42.2.16: 8083 = LAP (pairing cert signing),
+  #    8081 = LEAP (post-pair verification and all device control). toCIDR because
+  #    Cilium classifies LAN hosts as world, and the world rule only opens 443/80.
+  #  - Mosquitto MQTT broker (in-cluster, mosquitto namespace).
+  #  - ESPHome native API on the IoT VLAN (10.42.7.0/24), 6053: the "Add" flow and
+  #    steady-state control. toCIDR for the same reason as the Lutron bridge.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: homeassistant
+    patch: |
+      - op: add
+        path: /spec/egress/-
+        value:
+          toCIDR:
+            - 10.42.2.16/32
+          toPorts:
+            - ports:
+                - port: "8083"
+                  protocol: TCP
+                - port: "8081"
+                  protocol: TCP
+      - op: add
+        path: /spec/egress/-
+        value:
+          toEndpoints:
+            - matchLabels:
+                app: mosquitto
+                k8s:io.kubernetes.pod.namespace: mosquitto
+          toPorts:
+            - ports:
+                - port: "1883"
+                  protocol: TCP
+      - op: add
+        path: /spec/egress/-
+        value:
+          toCIDR:
+            - 10.42.7.0/24
+          toPorts:
+            - ports:
+                - port: "6053"
+                  protocol: TCP
   # Wyoming TTS (wyoming-piper, lab brief 03-036) in this environment. Added per
   # overlay rather than in base so prod HA can only reach prod Piper and staging
   # HA only staging Piper. Kept first in the list so it doesn't collide with other

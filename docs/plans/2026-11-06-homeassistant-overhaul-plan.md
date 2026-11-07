@@ -314,7 +314,7 @@ Steps 2–7 can run in parallel. HASS-2 is already done.
 
 ## Questions for George
 
-Each has a recommendation; none is decided until George answers.
+Each has a recommendation; none is decided until George answers, except where marked decided.
 
 1. **Who builds HASS tickets.** On 2026-10-31 the decision was orchestrator-written PRs, with no
    agent-desk Jobs because homelab was on the deny list. Since HOMELAB-85 (2026-11-02),
@@ -323,6 +323,8 @@ Each has a recommendation; none is decided until George answers.
    keep orchestrator PRs for the UI work (HASS-4, HASS-5), where the prototype loop needs you in the
    conversation; allow Jobs for the bounded YAML tickets (housekeeping, Renovate hold) once T13 has
    run.
+   **Decided 2026-11-06 (George): the split.** The orchestrator writes the UI work (HASS-4, HASS-5)
+   as PRs; agent-desk Jobs take bounded YAML tickets once T13 has run.
 2. **Energy inventory read.** This plan does not exec into production, and an HA long-lived token
    carries the full rights of its user, so there is no read-only API path. Will you share the Energy
    settings page and the `ldata` device's entity list (screenshot or copied text)?

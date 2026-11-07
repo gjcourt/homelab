@@ -21,12 +21,19 @@ projects:
   TOPPINGCTL: gjcourt/toppingctl
   MODEMSCOPE: gjcourt/modemscope
   FAX: gjcourt/fax
+  VIBRATO: gjcourt/vibrato
   # HOMELAB-85: both Plane projects work in homelab, inside the gate's paths.
   HOMELAB: gjcourt/homelab
   HASS: gjcourt/homelab
 denyRepos: []
 # Appended to every playbook prompt for the repo, ahead of the ticket.
 repoNotes:
+  gjcourt/vibrato: |
+    Vibrato monitors and controls a real espresso machine (ito + leva!) over
+    TCP. Work against the simulator only (LEVA_TRANSPORT=sim). Never connect
+    to a real machine, and never send it commands, menu navigation or profile
+    writes. Real-machine checks in a ticket's acceptance list are George's;
+    say in the PR which ones remain.
   gjcourt/homelab: |
     This repo has a bench gate (scripts/bench-gate/rules.yaml on master). A
     bench PR may change only files under apps/** and docs/**, and never:
@@ -131,6 +138,7 @@ playbooks:
       - gjcourt/domestique
       - gjcourt/toppingctl
       - gjcourt/fax
+      - gjcourt/vibrato
       # HOMELAB-85: within the bench gate's paths (repoNotes above).
       - gjcourt/homelab
     prompt: |

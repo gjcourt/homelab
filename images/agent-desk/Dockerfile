@@ -4,7 +4,7 @@
 # Built from the repo root so the Job template is the one `bench-cloud run`
 # uses (scripts/bench-cloud/job.yaml), not a copy that can drift.
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 WORKDIR /app
 

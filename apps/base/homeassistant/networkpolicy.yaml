@@ -41,42 +41,6 @@ spec:
               protocol: TCP
             - port: "80"
               protocol: TCP
-    # Lutron Caséta Smart Bridge at 10.42.2.16. Two TLS ports are required:
-    #   8083 — LAP (Lutron Authentication Protocol): cert signing during the
-    #          pairing flow (CSR submission, button-press wait, signed-cert return).
-    #   8081 — LEAP (Lutron Extensible Application Protocol): post-pair
-    #          verification AND all normal device control/state communication.
-    # Earlier comment claimed pylutron-caseta uses 8083 alone — wrong; pairing
-    # uses 8083 then verification + steady-state ops use 8081. Without 8081 the
-    # bridge appears to "pair successfully" then immediately becomes unreachable.
-    # toCIDR is required because Cilium classifies non-cluster LAN hosts as world,
-    # but the world rule above only opens 443/80. The bridge is LAN-only so a CIDR
-    # rule is more precise than widening the world ports.
-    - toCIDR:
-        - 10.42.2.16/32
-      toPorts:
-        - ports:
-            - port: "8083"
-              protocol: TCP
-            - port: "8081"
-              protocol: TCP
-    # Mosquitto MQTT broker (in-cluster, mosquitto namespace).
-    - toEndpoints:
-        - matchLabels:
-            app: mosquitto
-            k8s:io.kubernetes.pod.namespace: mosquitto
-      toPorts:
-        - ports:
-            - port: "1883"
-              protocol: TCP
-    # ESPHome native API on the IoT VLAN (10.42.7.0/24) — IR blaster, presence
-    # sensors, etc. Discovery is inbound mDNS, so devices appear; but the "Add"
-    # flow (and steady-state control) needs HASS to reach the device on 6053.
-    # LAN hosts are classified as world by Cilium, so — like the Lutron bridge —
-    # a CIDR rule is required (the world rule above only opens 443/80).
-    - toCIDR:
-        - 10.42.7.0/24
-      toPorts:
-        - ports:
-            - port: "6053"
-              protocol: TCP
+    # Device egress (Lutron bridge, mosquitto, the ESPHome VLAN) is NOT here: it
+    # lives in the production overlay only, so staging HA can never reach devices
+    # production owns (HASS-1 plan, "Staging network policy first").

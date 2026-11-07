@@ -20,6 +20,7 @@ projects:
   DOMESTIQUE: gjcourt/domestique
   TOPPINGCTL: gjcourt/toppingctl
   MODEMSCOPE: gjcourt/modemscope
+  FAX: gjcourt/fax
   # HOMELAB-85: both Plane projects work in homelab, inside the gate's paths.
   HOMELAB: gjcourt/homelab
   HASS: gjcourt/homelab
@@ -128,6 +129,7 @@ playbooks:
       - gjcourt/plane-mobile
       - gjcourt/domestique
       - gjcourt/toppingctl
+      - gjcourt/fax
       # HOMELAB-85: within the bench gate's paths (repoNotes above).
       - gjcourt/homelab
     prompt: |

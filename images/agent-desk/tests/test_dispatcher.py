@@ -79,6 +79,7 @@ def test_owner_ready_starts_dry_run_job(tmp_path):
     env = {e["name"]: e.get("value") for e in spec["containers"][0]["env"]}
     assert env["TASK_REPO"] == "gjcourt/agent-sandbox"
     assert json.loads(env["TASK_TICKET"])["key"] == "SANDBOX-3"
+    assert env["TASK_PLAYBOOK"] == "docs-fix"  # recorded in meta.json (HOMELAB-94)
     assert json.loads(env["TASK_TICKET"])["owner_id"] == OWNER
     web = json.loads(env["TASK_TICKET"])["web_url"]
     assert web.startswith("https://plane.example/") and web.endswith("/browse/SANDBOX-3/")

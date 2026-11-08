@@ -229,6 +229,13 @@ kubectl -n bench-cloud exec deploy/bench-console -- sh -c '
 
 ## Monitoring
 
+- **Grafana "Bench fleet"** (uid `bench-fleet`, HOMELAB-94 Phase 1): agent-desk Job throughput,
+  running Jobs per playbook against each cap, outcomes (`BackoffLimitExceeded` = the shared
+  subscription's session limit), runtime p50/p95, and per-project throughput. Built from
+  kube-state-metrics Job series via the `bench:*` recording rules in
+  `infra/configs/alerts/bench-fleet-rules.yaml`, so it covers only Jobs Kubernetes still knows
+  about. Cost and tokens are Phase 2. The cap lines are copied from
+  `apps/production/agent-desk/config.yaml`; change both together.
 - **`BenchCloudAppMerged`** (critical) — the last `bench-merge-audit` run
   (`renovate` namespace, hourly) failed. The audit fails when it finds a PR
   merged by `bench-cloud[bot]` in its 25 h lookback, but also when the audit

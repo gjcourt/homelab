@@ -30,9 +30,18 @@ stage=$(mktemp -d)
 out="$stage/runs/$TASK_ID"
 mkdir -p "$out"
 printf '%s\n' "$TASK_PROMPT" > "$out/prompt.txt"
+# playbook and project feed the bench fleet dashboard's exporter (HOMELAB-94):
+# playbook comes from agent-desk (TASK_PLAYBOOK); project is the ticket key's
+# prefix, lower-cased (DOMESTIQUE-48 -> domestique), matching the ad-<project>-
+# Job names. Both are left out when unknown, never written empty.
+ticket_key=$(jq -r '.key // empty' <<<"${TASK_TICKET:-null}")
+project=$(sed -nE 's/^([A-Za-z0-9]+)-[0-9]+$/\1/p' <<<"$ticket_key" | tr '[:upper:]' '[:lower:]')
 jq -n --arg id "$TASK_ID" --arg repo "$TASK_REPO" --arg started "$(date -u +%FT%TZ)" \
-  --arg ticket "$(jq -r '.key // empty' <<<"${TASK_TICKET:-null}")" \
-  '{id: $id, repo: $repo, started: $started} + (if $ticket != "" then {ticket: $ticket} else {} end)' \
+  --arg ticket "$ticket_key" --arg playbook "${TASK_PLAYBOOK:-}" --arg project "$project" \
+  '{id: $id, repo: $repo, started: $started}
+   + (if $ticket != "" then {ticket: $ticket} else {} end)
+   + (if $playbook != "" then {playbook: $playbook} else {} end)
+   + (if $project != "" then {project: $project} else {} end)' \
   > "$out/meta.json"
 
 # A ticket's last run, for the next Job woken on it (see the resume below).

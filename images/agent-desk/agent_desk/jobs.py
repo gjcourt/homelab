@@ -51,6 +51,10 @@ def build_job(template: dict, *, tid: str, image: str, repo: str, prompt: str,
         {"name": "TASK_REPO", "value": repo},
         {"name": "TASK_PROMPT", "value": prompt},
         {"name": "TASK_TICKET", "value": json.dumps(ticket, sort_keys=True)},
+        # Recorded in the run's meta.json for the bench fleet dashboard's
+        # exporter (HOMELAB-94), which has no Job to read the label from once
+        # the Job is gone.
+        {"name": "TASK_PLAYBOOK", "value": playbook},
     ]
     if model:
         env.append({"name": "TASK_MODEL", "value": model})

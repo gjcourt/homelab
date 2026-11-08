@@ -36,7 +36,7 @@ spec:
       containers:
         - name: vibrato
           # Public ghcr package; overlays pin the date tag (see deployment-patch.yaml).
-          image: ghcr.io/gjcourt/vibrato:2026-11-06-c6eb744
+          image: ghcr.io/gjcourt/vibrato:2026-11-08-ed1882f
           ports:
             - name: http
               containerPort: 8080
@@ -76,7 +76,10 @@ spec:
               memory: 64Mi
             limits:
               cpu: 200m
-              memory: 192Mi
+              # 512Mi since 2026-11-08-ed1882f (UI redesign): that build was
+              # OOMKilled at 192Mi ~9 s after start on staging; steady state is
+              # ~100Mi, so the spike is at startup. Tried on staging first.
+              memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -1,0 +1,99 @@
+# Recording rules for the bench fleet dashboard (HOMELAB-94 / BENCH-DASH-2;
+# docs/plans/2026-11-07-bench-fleet-dashboard-plan.md, Phase 1b).
+#
+# Every bench-cloud Job is one agent-desk run, named ad-<project>-<seq>-<date>-<hex>.
+# kube-state-metrics gives per-Job series keyed by job_name; these rules attach
+# `project` (parsed from the name) and `playbook` (from the agent-desk/playbook
+# Job label, exposed by the metricLabelsAllowlist in kube-prometheus-stack
+# values) so the dashboard can slice cheaply.
+#
+# Notes:
+# - The project regex assumes project slugs have no hyphen (true for every
+#   mapped project as of 2026-11-07). Widen it if that ever changes.
+# - Jobs that predate the label allowlist, or lack the label, get
+#   playbook="unknown" rather than disappearing.
+# - History is bounded by Job TTL and Prometheus retention: a Job that has been
+#   deleted no longer reports, so these are "Jobs Kubernetes still knows about".
+#   Long-run totals are Phase 2's exporter (result.json), not this file.
+#
+# Selected by Prometheus via ruleSelector `release: kube-prometheus-stack`.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: bench-fleet-rules
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: bench-fleet.recording
+      interval: 1m
+      rules:
+        # One series per Job, value 1, labels {namespace, job_name, project}.
+        - record: bench:job_project:info
+          expr: |
+            label_replace(
+              max by (namespace, job_name) (kube_job_created{namespace="bench-cloud", job_name=~"ad-.*"}) * 0 + 1,
+              "project", "$1", "job_name", "ad-([a-z0-9]+)-.*"
+            )
+
+        # One series per Job, value 1, labels {namespace, job_name, project, playbook}.
+        - record: bench:job:info
+          expr: |
+            (
+              bench:job_project:info
+              * on (namespace, job_name) group_left (playbook)
+              label_replace(
+                max by (namespace, job_name, label_agent_desk_playbook) (kube_job_labels{namespace="bench-cloud"}) * 0 + 1,
+                "playbook", "$1", "label_agent_desk_playbook", "(.+)"
+              )
+            )
+            or on (namespace, job_name)
+            label_replace(bench:job_project:info, "playbook", "unknown", "", "")
+
+        # Per-Job outcome, value 1: succeeded | running | <failure reason>
+        # (BackoffLimitExceeded = the shared-subscription session-limit stalls,
+        # DeadlineExceeded = playbook deadline).
+        - record: bench:job_outcome:info
+          expr: |
+            ((
+              max by (namespace, job_name, outcome) (
+                label_replace(kube_job_complete{namespace="bench-cloud", condition="true"} == 1, "outcome", "succeeded", "", "")
+              )
+              or on (namespace, job_name)
+              max by (namespace, job_name, outcome) (
+                label_replace(kube_job_status_failed{namespace="bench-cloud"} > 0, "outcome", "$1", "reason", "(.+)")
+              )
+              or on (namespace, job_name)
+              max by (namespace, job_name, outcome) (
+                label_replace(kube_job_status_active{namespace="bench-cloud"} > 0, "outcome", "running", "", "")
+              )
+            ) * 0 + 1)
+            * on (namespace, job_name) group_left (project, playbook) bench:job:info
+
+        # Timestamps (unix seconds) with project/playbook attached.
+        - record: bench:job_created_time
+          expr: |
+            max by (namespace, job_name) (kube_job_created{namespace="bench-cloud"})
+            * on (namespace, job_name) group_left (project, playbook) bench:job:info
+        - record: bench:job_completion_time
+          expr: |
+            max by (namespace, job_name) (kube_job_status_completion_time{namespace="bench-cloud"})
+            * on (namespace, job_name) group_left (project, playbook) bench:job:info
+
+        # Runtime of finished Jobs, seconds.
+        - record: bench:job_duration_seconds
+          expr: |
+            (
+              max by (namespace, job_name) (kube_job_status_completion_time{namespace="bench-cloud"})
+              - max by (namespace, job_name) (kube_job_status_start_time{namespace="bench-cloud"})
+            )
+            * on (namespace, job_name) group_left (project, playbook) bench:job:info
+
+        # Concurrent running Jobs per playbook (the utilization-vs-cap series).
+        - record: bench:jobs_active:sum_by_playbook
+          expr: |
+            sum by (playbook) (
+              (max by (namespace, job_name) (kube_job_status_active{namespace="bench-cloud"} > 0) * 0 + 1)
+              * on (namespace, job_name) group_left (playbook) bench:job:info
+            )

@@ -2701,6 +2701,14 @@ kube-state-metrics:
         verbs: ["list", "watch"]
   releaseLabel: true
 
+  # Job labels for the bench fleet dashboard (HOMELAB-94 / BENCH-DASH-1;
+  # docs/plans/2026-11-07-bench-fleet-dashboard-plan.md). Emits
+  # kube_job_labels{label_agent_desk_playbook, label_bench_cloud_task,
+  # label_agent_desk_ticket} so kube_job_status_* can be sliced by playbook.
+  # Only Jobs carry these labels (agent-desk sets them on bench-cloud Jobs).
+  metricLabelsAllowlist:
+    - jobs=[agent-desk/playbook,bench-cloud/task,agent-desk/ticket]
+
   # Emit gotk_resource_info{customresource_kind, exported_namespace, name,
   # ready, suspended, revision} for Flux objects, mirroring the upstream
   # flux2-monitoring-example. This is the replacement for the removed

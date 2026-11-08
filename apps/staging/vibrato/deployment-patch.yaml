@@ -9,6 +9,12 @@ spec:
       containers:
         - name: vibrato
           image: ghcr.io/gjcourt/vibrato:2026-11-08-ed1882f
+          # 2026-11-08: the UI-redesign build (ed1882f) was OOMKilled at the base
+          # 192Mi limit ~9 s after start. Raised on staging only to measure real
+          # use; prod stays at base until the cause is understood.
+          resources:
+            limits:
+              memory: 512Mi
           env:
             - name: LEVA_NODE_ID
               value: "vibrato-stage"

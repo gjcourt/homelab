@@ -491,7 +491,22 @@ yes.
 - **Same third-party runner image on alcatraz** (`hosts/alcatraz/actions-runner/docker-compose.yml:35`).
   The single-maintainer concern remains there until open question 6 is decided.
 
-## Open questions for George
+## Decisions on the open questions (George, 2026-11-09)
+
+Answered one at a time; each answer is the option George picked.
+
+| # | Question | George's answer |
+|---|---|---|
+| 1 | Should the deployer create new apps? | "Opt-in, later": only `x-deploy.create: true`, behind the bind-mount preflight, after two stable weeks (Phase 5) |
+| 2 | "Deployed" commit status in GitHub? | "No, Grafana only": homelabscope row + alerts for v1 |
+| 3 | Require GitHub-verified head commits? | "No": branch protection + TLS, as Flux |
+| 4 | Is ≤5 min merge-to-deploy acceptable? | "5 min is fine": 300 s ticks |
+| 5 | Keep the 3-apps-per-tick cap? | "Keep 3 per tick" |
+| 6 | Same treatment for alcatraz? | "Yes, follow-up plan", once hestia has run on the deployer for a month |
+
+The original questions, with their recommendations, are kept below for the record.
+
+## Open questions for George (answered above)
 
 1. **Should the deployer create new apps?** Recommendation: yes, but only for compose
    files with `x-deploy.create: true`, behind a bind-mount preflight, and only after

@@ -278,8 +278,9 @@ def discover(files: dict[str, str], load_yaml) -> list[dict]:
 
     Two ACTIVE (managed/invalid-by-content) files claiming one name are both
     invalid: applying either would fight the other. An archived file that
-    shares a name with an active one is dropped from the result (logged by the
-    caller) so the metric for that app reflects the live file.
+    shares a name with an active one (or with an earlier archived file) is
+    marked `shadowed`: reconcile skips it, so each app name yields exactly one
+    metric series and it reflects the live file.
     """
     entries = [parse_entry(p, t, load_yaml) for p, t in sorted(files.items()) if is_compose_path(p)]
     active: dict[str, list[dict]] = {}
@@ -292,12 +293,13 @@ def discover(files: dict[str, str], load_yaml) -> list[dict]:
             for e in group:
                 if e["status"] != "excluded":
                     e.update(status="invalid", reason=f"duplicate app name {name!r}: {files_}", compose=None)
-    out = []
+    seen_archived: set[str] = set()
     for e in entries:
-        if e["status"] == "archived" and e["name"] in active:
-            e["shadowed"] = True
-        out.append(e)
-    return sorted(out, key=lambda e: (e["name"], e["file"]))
+        if e["status"] == "archived":
+            if e["name"] in active or e["name"] in seen_archived:
+                e["shadowed"] = True
+            seen_archived.add(e["name"])
+    return sorted(entries, key=lambda e: (e["name"], e["file"]))
 
 
 # ================================================================ fetch (container)
@@ -628,12 +630,20 @@ def render_metrics(*, ok: bool, now: int, prev_success: int | None, duration: in
     if commit_seconds is not None:
         fams.append(("homelabscope_deploy_head_commit_seconds", [("", commit_seconds)]))
 
+    # One series per app. Duplicate-name files are all `invalid`, so a clash
+    # resolves to invalid; never emit the same label set twice.
+    by_app: dict[str, str] = {}
+    for r in results:
+        if r["app"] in by_app and by_app[r["app"]] != r["state"]:
+            by_app[r["app"]] = "invalid"
+        else:
+            by_app.setdefault(r["app"], r["state"])
     states = []
     paused = [('scope="global"', 1 if global_paused else 0)]
-    for r in sorted(results, key=lambda r: r["app"]):
-        states.append((f'app="{_esc(r["app"])}",state="{r["state"]}"', 1))
-        if r["state"] == "paused":
-            paused.append((f'scope="{_esc(r["app"])}"', 1))
+    for app, st in sorted(by_app.items()):
+        states.append((f'app="{_esc(app)}",state="{st}"', 1))
+        if st == "paused":
+            paused.append((f'scope="{_esc(app)}"', 1))
     fams.append(("homelabscope_deploy_app_state", states))
     fams.append(("homelabscope_deploy_paused", paused))
 

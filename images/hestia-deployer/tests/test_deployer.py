@@ -204,6 +204,13 @@ def test_archived_file_sharing_an_active_name_is_shadowed():
     assert by_file["hosts/hestia/monitoring/docker-compose.yml"].get("shadowed") is True
 
 
+def test_two_archived_files_with_one_name_emit_one_series():
+    svc = f"services:\n  foo:\n    image: {IMG}\n"
+    arch = "x-deploy:\n  name: same\n  archived: true\n" + svc
+    out = d.discover({"hosts/hestia/a/docker-compose.yml": arch, "hosts/hestia/b/docker-compose.yml": arch}, load)
+    assert [e.get("shadowed", False) for e in out] == [False, True]
+
+
 def real_tree():
     files = {}
     for path in glob.glob(os.path.join(ROOT, "hosts/hestia/**/docker-compose*.yml"), recursive=True):
@@ -442,6 +449,15 @@ def test_render_metrics_first_failure_does_not_fabricate_success():
     assert 'homelabscope_job_last_status{job="hestia-deployer"} 1' in body
     body = d.render_metrics(ok=False, now=100, prev_success=42, duration=1, dry_run=True)
     assert 'homelabscope_job_last_success_seconds{job="hestia-deployer"} 42' in body
+
+
+def test_render_metrics_one_series_per_app():
+    results = [{"app": "a", "state": "invalid"}, {"app": "a", "state": "invalid"}, {"app": "b", "state": "synced"},
+               {"app": "b", "state": "pending"}]
+    body = d.render_metrics(ok=True, now=1, prev_success=None, duration=0, dry_run=True, results=results)
+    lines = [ln for ln in body.splitlines() if ln.startswith("homelabscope_deploy_app_state")]
+    assert lines == ['homelabscope_deploy_app_state{app="a",state="invalid"} 1',
+                     'homelabscope_deploy_app_state{app="b",state="invalid"} 1']
 
 
 def test_render_applied():

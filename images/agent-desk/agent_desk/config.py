@@ -71,6 +71,10 @@ class Config:
     notify_webhook: str = ""
     # Plane's browser URL, for the link in a notification ({base}/{ws}/browse/{key}/).
     plane_web_url: str = ""
+    # plane-mobile's URL (https://desk.burntbytes.com). When set, a phone
+    # notification links to {base}/t/{key} in the app instead of Plane; other
+    # links (a PR description's ticket link) stay on Plane.
+    app_web_url: str = ""
 
 
 def _read_file(env: str) -> str:
@@ -119,6 +123,7 @@ def load(path: str | None = None, env=os.environ) -> Config:
         notify_url=env.get("NOTIFY_URL", ""),
         notify_webhook=_read_file("NOTIFY_WEBHOOK_FILE"),
         plane_web_url=raw.get("planeWebUrl", ""),
+        app_web_url=raw.get("appWebUrl", "") or "",
         github_owner=raw.get("githubOwner", "") or "",
     )
     for key in ("job_namespace", "job_template", "console_deployment", "run_record",

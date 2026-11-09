@@ -100,6 +100,12 @@ To check: `kubectl -n agent-desk-<env> logs deploy/agent-desk | grep notif` show
 (`notified: SANDBOX-8 needs you`) or failed. On staging the notice appears as a persistent
 notification in staging Home Assistant, never on the phone.
 
+**Where a notification links.** With `appWebUrl` in `config.yaml` (production:
+`https://desk.burntbytes.com`), the link opens the ticket in plane-mobile, `<appWebUrl>/t/<KEY>`;
+without it, the ticket in Plane (`planeWebUrl`). The ticket link agent-desk gives a Job for its PR
+description stays on Plane either way. Rollback: remove `appWebUrl`. See
+[plane-mobile](plane-mobile.md), section 6.
+
 ## 4. Observability
 
 ```bash

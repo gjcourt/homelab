@@ -123,6 +123,12 @@ class Dispatcher:
         base = self.cfg.plane_web_url.rstrip("/")
         return f"{base}/{self.cfg.workspace}/browse/{t.key}/" if base else ""
 
+    def notify_url(self, t: Ticket) -> str:
+        """The link in a phone notification: plane-mobile when appWebUrl is
+        set, otherwise Plane. Removing appWebUrl is the rollback."""
+        app = self.cfg.app_web_url.rstrip("/")
+        return f"{app}/t/{t.key}" if app else self.ticket_url(t)
+
     def note_state(self, pr: Project, t: Ticket) -> None:
         """Tell George when one of his tickets reaches Blocked (a question, or a
         Job that ended badly) or In review (a PR to look at)."""
@@ -139,12 +145,12 @@ class Dispatcher:
             mine = sorted((c for c in cmts if c.get("actor", c.get("created_by")) == self.bot_id),
                           key=lambda c: c.get("created_at") or "")
             text = promptmod.html_to_text(mine[-1].get("comment_html", "")) if mine else t.name
-            self.notifier.send(f"{t.key} needs you", text, self.ticket_url(t))
+            self.notifier.send(f"{t.key} needs you", text, self.notify_url(t))
         else:
             prs = [link.get("title") or link.get("url", "") for link in self.plane.links(pr.id, t.id)
                    if PR_URL.match(link.get("url", ""))]
             self.notifier.send(f"{t.key} is ready for review", "; ".join(prs) or t.name,
-                               self.ticket_url(t))
+                               self.notify_url(t))
 
     def saw_delivery(self) -> None:
         """A signed delivery arrived (called from the HTTP thread)."""
@@ -269,7 +275,7 @@ class Dispatcher:
                     mine[-1].get("comment_html", ""))):
                 self.notifier.send(f"{t.key}: reopen?", f"You commented on a {t.state_name} "
                                    f"ticket. Reply `{rules.REOPEN_WORD}` to wake the agent.",
-                                   self.ticket_url(t))
+                                   self.notify_url(t))
             self.comment_once(pr, t, text)
         elif d.action == "start":
             self.start(pr, t, d, job_list)

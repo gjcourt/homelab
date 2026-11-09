@@ -45,7 +45,19 @@ job. Measured: `RestartCount` went **0 → 9 across a single 10-job deploy**.
 **Do not read a rising `RestartCount` as a fault.** Tens of restarts per hour is
 a busy deploy day. Thousands is a crash loop. See §4 for where the line is.
 
-### 2.2 Auto-update is ENABLED, and "false" will not turn it off
+### 2.2 Auto-update is DISABLED (since 2026-11-08), and "false" would not turn it off
+
+> **Current state (2026-11-08, HOMELAB-102):** `DISABLE_AUTO_UPDATE: "true"` is
+> set again, so the runner runs with `--disableupdate`. The self-update failure
+> in §2.3 recurred on 2026-10-23 (2.337.0 -> 2.338.0) and this time broke the
+> container layer itself: `docker diff` showed 107 files deleted from
+> `/actions-runner/bin` (`libhostpolicy.so ... not found`, exit 131), and
+> because `restart: unless-stopped` reuses the same container it looped 24,912
+> times. A failed self-update is permanent; a deprecation is fixed by applying
+> the Renovate digest bump (§6). **Runner upgrades are now manual only: apply
+> each Renovate bump of `hosts/hestia/actions-runner/` by hand, or GitHub will
+> eventually deprecate the pinned version (§3).** The history below explains why
+> it was off from 2026-08-19 to 2026-11-08.
 
 Same presence-test bug: setting `DISABLE_AUTO_UPDATE: "false"` still passes
 `--disableupdate`. **The only way to turn auto-update off is to ADD the variable
@@ -221,7 +233,8 @@ shipped 2.336.0, so the first attempt it actually needed was
 few to call it certain, but the mechanism predicts recurrence and nothing has
 been changed to prevent it.
 
-Options, none yet taken:
+Options (the second was taken on 2026-11-08, HOMELAB-102, after a second
+occurrence; see the note at the top of §2.2):
 
 - **Stop persisting the work dir**, or persist a narrower path than the one the
   updater writes into. `RUNNER_WORKDIR` exists for job workspaces; the updater
@@ -427,10 +440,30 @@ The runner cannot deploy its own fix. This is manual, by design.
 
 **Do not "fix" this by setting `DISABLE_AUTO_UPDATE: "false"`.** It is
 presence-tested (§2.2) and will change nothing — `false` is a non-empty string and
-turns the flag ON. **The variable is currently absent, so auto-update is on**, and
-the runner therefore drifts from the digest pinned in Git. That drift is expected:
-on 2026-09-04 Git pinned `d46c0e6…` while hestia ran `de596f58…`. Confirm what is
-actually running (§7) rather than assuming the pin is live.
+turns the flag ON. **Since 2026-11-08 the variable is set, so auto-update is off**
+and the running version is exactly the digest you applied. Confirm what is
+actually running (§7) rather than assuming the Git pin is live: Renovate bumps the
+pin in Git, but nothing applies it to hestia until you do step 3.
+
+#### Applying from a shell on hestia (2026-11-08 method)
+
+`app.update` with the Git compose would blank `ACCESS_TOKEN` / `TRUENAS_API_KEY`
+(Git holds `""`). Edit the stored config in place instead, on hestia, as root,
+without printing it:
+
+```python
+# sudo python3 apply.py   (truenas_api_client ships with TrueNAS 26.x)
+from truenas_api_client import Client
+with Client() as c:
+    cfg = c.call('app.config', 'gha-runner')
+    cfg['services']['runner']['image'] = 'myoung34/github-runner:ubuntu-noble@sha256:<digest from Git>'
+    c.call('app.stop', 'gha-runner', job=True)
+    c.call('app.update', 'gha-runner', {'custom_compose_config': cfg}, job=True)
+```
+
+then `sudo midclt call --job app.start gha-runner`. The stop first sidesteps the
+crash-loop no-op quirk (§7): on 2026-11-08 the update removed the old container
+and the start created a fresh one (`RestartCount` 0).
 
 ## 7. Related failure: a deploy that reports success and does nothing
 

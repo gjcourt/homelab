@@ -76,6 +76,16 @@
       ],
       "matchCurrentValue": "/^\\d{4}-\\d{2}-\\d{2}(-\\d{1,3})?$/",
       "versioning": "regex:^(?<major>\\d{4})-(?<minor>\\d{2})-(?<patch>\\d{2})(?:-(?<build>\\d{1,3}))?(?:-[0-9a-f]{7})?$"
+    },
+    {
+      "description": "linuxserver/qbittorrent carries two bare-number tags from its old scheme that Renovate's docker versioning sorts ABOVE current releases: 20.04.1 (pushed 2021-11-29 with the qBittorrent 14.3.9 / Ubuntu 20.04.1 build -- the number is the Ubuntu base, not a qBittorrent version) and 14.3.9. Renovate offered 5.2.1 -> 20.04.1 as a 'major' in #1612, which would have replaced a current image with a 2021 one. Excluded by exact tag so real future majors (6.x) still come through.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "lscr.io/linuxserver/qbittorrent"
+      ],
+      "allowedVersions": "!/^(14\\.3\\.9|20\\.04\\.1)$/"
     }
   ]
 }

@@ -151,8 +151,8 @@ data:
         {
           "id": 3,
           "type": "stat",
-          "title": "Started, last 24h",
-          "description": "Jobs created in the last 24 h that Kubernetes still knows about.",
+          "title": "Started, in range",
+          "description": "Jobs created in the selected time range (the picker, ending at its end time) that Kubernetes still knows about.",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -169,7 +169,7 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count((bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - 86400)) or vector(0)",
+              "expr": "count((bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s})) or vector(0)",
               "legendFormat": "",
               "refId": "A",
               "instant": true,
@@ -199,8 +199,8 @@ data:
         {
           "id": 4,
           "type": "stat",
-          "title": "Succeeded, last 24h",
-          "description": "Jobs created in the last 24 h that completed.",
+          "title": "Succeeded, in range",
+          "description": "Jobs created in the selected time range that completed.",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -217,7 +217,7 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count(bench:job_outcome:info{outcome=\"succeeded\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - 86400)) or vector(0)",
+              "expr": "count(bench:job_outcome:info{outcome=\"succeeded\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s})) or vector(0)",
               "legendFormat": "",
               "refId": "A",
               "instant": true,
@@ -247,8 +247,8 @@ data:
         {
           "id": 5,
           "type": "stat",
-          "title": "Success rate, last 24h",
-          "description": "Succeeded / finished, among Jobs created in the last 24 h. n/a when nothing has finished \u2014 never shown as 0.",
+          "title": "Success rate, in range",
+          "description": "Succeeded / finished, among Jobs created in the selected time range. n/a when nothing has finished \u2014 never shown as 0.",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -265,7 +265,7 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count(bench:job_outcome:info{outcome=\"succeeded\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - 86400)) / count(bench:job_outcome:info{outcome!=\"running\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - 86400))",
+              "expr": "count(bench:job_outcome:info{outcome=\"succeeded\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s})) / count(bench:job_outcome:info{outcome!=\"running\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s}))",
               "legendFormat": "",
               "refId": "A",
               "instant": true,
@@ -296,8 +296,8 @@ data:
         {
           "id": 6,
           "type": "stat",
-          "title": "Failed, last 24h",
-          "description": "Jobs created in the last 24 h that failed. BackoffLimitExceeded is usually the shared subscription's session limit (see the Outcome row).",
+          "title": "Failed, in range",
+          "description": "Jobs created in the selected time range that failed. BackoffLimitExceeded is usually the shared subscription's session limit (see the Outcome row).",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
@@ -314,7 +314,7 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count(bench:job_outcome:info{outcome!~\"succeeded|running\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - 86400)) or vector(0)",
+              "expr": "count(bench:job_outcome:info{outcome!~\"succeeded|running\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s})) or vector(0)",
               "legendFormat": "",
               "refId": "A",
               "instant": true,
@@ -675,21 +675,19 @@ data:
               "legendFormat": "",
               "refId": "A",
               "instant": true,
+              "format": "table",
               "range": false
             }
           ],
           "transformations": [
             {
-              "id": "labelsToFields",
-              "options": {
-                "mode": "columns"
-              }
-            },
-            {
               "id": "organize",
               "options": {
                 "excludeByName": {
                   "Time": true
+                },
+                "renameByName": {
+                  "Value": "Jobs"
                 }
               }
             }
@@ -724,21 +722,19 @@ data:
               "legendFormat": "",
               "refId": "A",
               "instant": true,
+              "format": "table",
               "range": false
             }
           ],
           "transformations": [
             {
-              "id": "labelsToFields",
-              "options": {
-                "mode": "columns"
-              }
-            },
-            {
               "id": "organize",
               "options": {
                 "excludeByName": {
                   "Time": true
+                },
+                "renameByName": {
+                  "Value": "Jobs"
                 }
               }
             }
@@ -908,21 +904,19 @@ data:
               "legendFormat": "",
               "refId": "A",
               "instant": true,
+              "format": "table",
               "range": false
             }
           ],
           "transformations": [
             {
-              "id": "labelsToFields",
-              "options": {
-                "mode": "columns"
-              }
-            },
-            {
               "id": "organize",
               "options": {
                 "excludeByName": {
                   "Time": true
+                },
+                "renameByName": {
+                  "Value": "Jobs"
                 }
               }
             }

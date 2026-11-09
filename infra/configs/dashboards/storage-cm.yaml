@@ -132,7 +132,7 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count(max by (persistentvolumeclaim) (kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) > 0.8) or (count(kubelet_volume_stats_used_bytes)*0)",
+              "expr": "count((max by (vol) (label_replace((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))) > 80) or (count(kubelet_volume_stats_used_bytes)*0)",
               "legendFormat": "",
               "refId": "A"
             }
@@ -219,9 +219,9 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "topk(1, 100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes)",
+              "expr": "topk(1, (max by (vol) (label_replace((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))))",
               "instant": true,
-              "legendFormat": "{{namespace}}/{{persistentvolumeclaim}}",
+              "legendFormat": "{{vol}}",
               "range": false,
               "refId": "A"
             }
@@ -304,7 +304,7 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count(predict_linear(kubelet_volume_stats_available_bytes[6h], 7*86400) < 0) or (count(kubelet_volume_stats_available_bytes)*0)",
+              "expr": "count((max by (vol) (label_replace((predict_linear(kubelet_volume_stats_available_bytes[6h], 7*86400)) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((predict_linear(kubelet_volume_stats_available_bytes[6h], 7*86400)) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))) < 0) or (count(kubelet_volume_stats_used_bytes)*0)",
               "legendFormat": "",
               "refId": "A"
             }
@@ -1065,7 +1065,7 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "label_replace(topk(10, max by (persistentvolumeclaim) (100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes)),\"vol\",\"$1\",\"persistentvolumeclaim\",\"(.*)\")",
+              "expr": "topk(10, (max by (vol) (label_replace((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))))",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -1077,7 +1077,7 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "label_replace(max by (persistentvolumeclaim) (kubelet_volume_stats_used_bytes) and on(persistentvolumeclaim) topk(10, max by (persistentvolumeclaim) (100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes)),\"vol\",\"$1\",\"persistentvolumeclaim\",\"(.*)\")",
+              "expr": "(max by (vol) (label_replace((kubelet_volume_stats_used_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((kubelet_volume_stats_used_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))) and on(vol) topk(10, (max by (vol) (label_replace((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))))",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -1089,7 +1089,7 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "label_replace(max by (persistentvolumeclaim) (kubelet_volume_stats_capacity_bytes) and on(persistentvolumeclaim) topk(10, max by (persistentvolumeclaim) (100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes)),\"vol\",\"$1\",\"persistentvolumeclaim\",\"(.*)\")",
+              "expr": "(max by (vol) (label_replace((kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))) and on(vol) topk(10, (max by (vol) (label_replace((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))))",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -1101,7 +1101,7 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "label_replace(max by (persistentvolumeclaim) (predict_linear(kubelet_volume_stats_available_bytes[6h], 7*86400)) and on(persistentvolumeclaim) topk(10, max by (persistentvolumeclaim) (100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes)),\"vol\",\"$1\",\"persistentvolumeclaim\",\"(.*)\")",
+              "expr": "(max by (vol) (label_replace((predict_linear(kubelet_volume_stats_available_bytes[6h], 7*86400)) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((predict_linear(kubelet_volume_stats_available_bytes[6h], 7*86400)) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))) and on(vol) topk(10, (max by (vol) (label_replace((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))))",
               "format": "table",
               "instant": true,
               "legendFormat": "",
@@ -1109,7 +1109,7 @@ data:
               "refId": "D"
             }
           ],
-          "title": "Fullest 10 volumes (same-named stage/prod twins merged)",
+          "title": "Fullest 10 volumes (each NFS path counted once)",
           "transformations": [
             {
               "id": "joinByField",
@@ -1237,8 +1237,8 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "topk(10, 100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes)",
-              "legendFormat": "{{namespace}}/{{persistentvolumeclaim}}",
+              "expr": "topk(10, (max by (vol) (label_replace((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((100 * kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))))",
+              "legendFormat": "{{vol}}",
               "refId": "A"
             }
           ],
@@ -1466,12 +1466,12 @@ data:
                     "type": "prometheus",
                     "uid": "${datasource}"
                   },
-                  "expr": "sum(kube_persistentvolumeclaim_resource_requests_storage_bytes)",
+                  "expr": "sum((max by (vol) (label_replace((kube_persistentvolumeclaim_resource_requests_storage_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((kube_persistentvolumeclaim_resource_requests_storage_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))))",
                   "legendFormat": "",
                   "refId": "A"
                 }
               ],
-              "title": "Total provisioned (requested, sum over PVCs)",
+              "title": "Total provisioned (requested, NFS paths counted once)",
               "type": "stat"
             },
             {
@@ -1544,16 +1544,16 @@ data:
                     "type": "prometheus",
                     "uid": "${datasource}"
                   },
-                  "expr": "sum(kubelet_volume_stats_used_bytes)",
+                  "expr": "sum((max by (vol) (label_replace((kubelet_volume_stats_used_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"$1\",\"nfs_path\",\"/mnt/main/(.*)\")) or max by (vol) (label_join((kubelet_volume_stats_used_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=\"\"},\"volumename\",\"$1\",\"persistentvolume\",\"(.*)\"),\"vol\",\"/\",\"namespace\",\"persistentvolumeclaim\"))))",
                   "legendFormat": "",
                   "refId": "A"
                 }
               ],
-              "title": "Total used (sum over PVCs)",
+              "title": "Total used (NFS paths counted once)",
               "type": "stat"
             }
           ],
-          "title": "Details: totals (double-count caveat)",
+          "title": "Details: totals",
           "type": "row"
         },
         {

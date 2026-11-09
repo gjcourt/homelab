@@ -27,7 +27,9 @@ name: Deploy hestia Custom Apps
 #
 # Excluded unconditionally: `hosts/hestia/actions-runner/` (chicken-and-egg —
 # the runner can't reliably deploy a compose change that recreates its own
-# container). Runner upgrades stay manual.
+# container). Its image pin is applied by gha-runner-apply.yml instead, which
+# schedules the update to run after the job ends, while the runner is idle
+# (HOMELAB-106). Other edits to the runner compose stay manual.
 #
 # See: docs/plans/2026-05-02-hestia-gha-runner.md
 

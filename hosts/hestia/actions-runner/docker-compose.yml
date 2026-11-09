@@ -36,8 +36,8 @@ services:
       #
       # A self-update failure is permanent; a deprecation is fixed by applying
       # the Renovate digest bump below. This path is excluded from
-      # deploy-hestia.yml; gha-runner-apply.yml applies the image pin while the
-      # runner is idle (HOMELAB-106). Anything else here is applied by hand.
+      # deploy-hestia.yml; the gha-runner-watchdog app applies the image pin
+      # while the runner is idle and recreates a dead runner (HOMELAB-108). Anything else here is applied by hand.
       # See docs/operations/apps/gha-runner.md §6. Keep the pin current.
       # =====================================================================
       DISABLE_AUTO_UPDATE: "true"

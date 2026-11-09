@@ -188,17 +188,19 @@ views:
     - type: heading
       heading: Music
       heading_style: title
-    - &volume_row
-      type: tile
+    # Shared anchors hold only the keys every row has in common: HA warns
+    # when a card's own key overrides a merged one.
+    - <<: &volume_row
+        type: tile
+        state_content:
+        - volume_level
+        grid_options:
+          columns: 12
+        features:
+        - type: media-player-volume-slider
       entity: media_player.living_room_snapcast_client
       name: Living Room
       icon: mdi:sofa
-      state_content:
-      - volume_level
-      grid_options:
-        columns: 12
-      features:
-      - type: media-player-volume-slider
     - <<: *volume_row
       entity: media_player.kitchen_snapcast_client
       name: Kitchen
@@ -254,22 +256,21 @@ views:
       - condition: state
         entity: timer.lights_off_undo
         state: active
-    - &room
-      type: tile
+    - <<: &room
+        type: tile
+        hold_action:
+          action: more-info
+        grid_options:
+          columns: 6
       entity: light.living_room_lights
       name: Living Room
       icon: mdi:sofa
-      tap_action: &room_toggle
+      tap_action: &living_room
         action: perform-action
         perform_action: script.smart_light_toggle
         data:
-          entities:
-          - light.living_room_sconces
-      icon_tap_action: *room_toggle
-      hold_action:
-        action: more-info
-      grid_options:
-        columns: 6
+          entities: [light.living_room_sconces]
+      icon_tap_action: *living_room
     - <<: *room
       entity: light.kitchen_lights
       name: Kitchen

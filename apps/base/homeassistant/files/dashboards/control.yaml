@@ -214,8 +214,14 @@ views:
       name: Next side
       features:
       - type: select-options
+    # Shown only until today's shot is logged: a second press would be
+    # ignored by "Daily shot — log it" anyway, so don't offer it.
     - type: tile
       entity: input_button.daily_shot_done
+      visibility:
+      - condition: state
+        entity: sensor.daily_shot
+        state: To do
       name: Done
       icon: mdi:check-circle
       hide_state: true

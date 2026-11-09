@@ -56,3 +56,25 @@ jobs:
 
       - name: Only bench-gate.yaml may write commit statuses
         run: python3 scripts/bench-gate/lint_workflows.py .github/workflows
+
+  # HOMELAB-106: pure logic of the gha-runner image applier (pin parsing,
+  # converge/idle decisions, textfile metrics and their HELP strings).
+  gha-runner-apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Unit tests
+        run: python -m pytest -q scripts/gha-runner-apply/tests
+
+      - name: Shell syntax
+        run: bash -n scripts/gha-runner-apply/launch.sh

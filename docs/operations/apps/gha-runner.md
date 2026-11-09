@@ -54,10 +54,11 @@ a busy deploy day. Thousands is a crash loop. See §4 for where the line is.
 > `/actions-runner/bin` (`libhostpolicy.so ... not found`, exit 131), and
 > because `restart: unless-stopped` reuses the same container it looped 24,912
 > times. A failed self-update is permanent; a deprecation is fixed by applying
-> the Renovate digest bump (§6). **Runner upgrades are now manual only: apply
-> each Renovate bump of `hosts/hestia/actions-runner/` by hand, or GitHub will
-> eventually deprecate the pinned version (§3).** The history below explains why
-> it was off from 2026-08-19 to 2026-11-08.
+> the Renovate digest bump (§6). **Runner upgrades now come only from the Git
+> pin.** Since HOMELAB-106 a merged pin bump is applied automatically by
+> `gha-runner-apply.yml` (§6.1); if that stops working, apply it by hand (§6.2),
+> or GitHub will eventually deprecate the pinned version (§3). The history below
+> explains why it was off from 2026-08-19 to 2026-11-08.
 
 Same presence-test bug: setting `DISABLE_AUTO_UPDATE: "false"` still passes
 `--disableupdate`. **The only way to turn auto-update off is to ADD the variable
@@ -415,9 +416,80 @@ Log signatures:
 | `Listening for Jobs` then immediate exit | Normal ephemeral completion, not a fault | Nothing |
 | Nothing at all / container absent | App stopped or removed in SCALE | Start it; check `HomelabscopeContainerMetricAbsent` |
 
-## 6. Recovery — upgrading a deprecated runner
+## 6. Upgrading the runner
 
-The runner cannot deploy its own fix. This is manual, by design.
+### 6.1 Automatic: `gha-runner-apply.yml` (HOMELAB-106)
+
+The runner cannot recreate its own container mid-job, so
+`deploy-hestia.yml` skips this path. Instead
+[`.github/workflows/gha-runner-apply.yml`](../../../.github/workflows/gha-runner-apply.yml)
+runs on push to the runner compose and every 6 hours, and **schedules** the
+apply to happen after its own job ends:
+
+1. The job (on the runner) runs
+   [`scripts/gha-runner-apply/launch.sh`](../../../scripts/gha-runner-apply/launch.sh),
+   which reads the pin from Git and starts a detached sibling container,
+   `gha-runner-apply`, through the runner's docker socket. The sibling outlives
+   the job. It uses the runner's current image (always local, ships `nsenter`)
+   and is `--privileged --pid=host`. That adds no privilege: the runner already
+   holds `/var/run/docker.sock`, which is host root.
+2. The sibling `nsenter`s into hestia's host namespaces and runs
+   [`apply.py`](../../../scripts/gha-runner-apply/apply.py) with the host
+   `python3` and `truenas_api_client`, the same method as §6.2. No secret is
+   passed in. The GitHub token for the runners API is the runner's own
+   `ACCESS_TOKEN`, read from the stored app config in-process and never printed.
+3. If the stored config **and** the live container both match the pin, it
+   writes a success heartbeat and exits. This is the usual case.
+4. Otherwise it waits for the triggering job's container to restart (the
+   ephemeral runner exits after every job), then for the runner to be idle: on
+   two samples 10 s apart, GitHub reports `hestia` online and not busy **and**
+   no `Runner.Worker` process is in the container. It checks again just before
+   stopping. It waits up to 5 h, then defers (exit 3) to the next run.
+5. `app.stop` -> `app.update` with the stored config, changing **only the
+   image** (so the masked `ACCESS_TOKEN` / `TRUENAS_API_KEY` survive) ->
+   `app.start`. Stopping first avoids the no-op quirk (§7). If the update
+   fails after the stop, it starts the app again on the old config.
+6. It verifies, for up to 10 min, that the new container runs the pin and
+   GitHub reports the runner online, then writes the result.
+
+Metrics (node-exporter textfile `homelabscope-gha-runner-apply.prom`):
+`homelabscope_job_*{job="gha-runner-image-apply"}`, with a 14 h `max_age`.
+
+| Alert | Fires when |
+|---|---|
+| `HomelabscopeGhaRunnerApplyFailed` | the last apply failed, or the runner did not come back online (`last_status == 1`, 5m) |
+| `HomelabscopeJobStale` | not converged for 14 h (runner never idle, workflow not running, applier broken) |
+| `HomelabscopeJobMetricAbsent` | the heartbeat has never been written or has vanished, 1h |
+
+Where to look:
+
+```bash
+# outcome of the most recent applier run (kept until the next run replaces it)
+ssh truenas_admin@10.42.2.10 'sudo docker logs gha-runner-apply'
+# every run also copies the previous run's log into its own job log
+gh run list --repo gjcourt/homelab --workflow gha-runner-apply.yml --limit 10
+```
+
+Dry run (checks drift and idle, changes nothing, writes no metric):
+`gh workflow run gha-runner-apply.yml -f dry_run=true`, or from a hestia shell
+in a checkout: `sudo scripts/gha-runner-apply/launch.sh
+hosts/hestia/actions-runner/docker-compose.yml --dry-run`.
+
+Limits, on purpose:
+
+- **Image only.** Any other change to the runner compose (env vars, volumes)
+  still needs §6.2 with the full compose in mind.
+- **Residual race.** GitHub can assign a job in the second between the last
+  idle check and `app.stop`; that job is lost and needs a re-run. Jobs still
+  *queued* are not affected: they wait and the new runner takes them.
+- **It needs a working runner to start.** If the runner is already dead (for
+  example, deprecated), nothing schedules the apply. The canary and the
+  container alerts (§4) catch that, and §6.2 is the fix.
+
+### 6.2 Manual: upgrading a deprecated runner
+
+Use this when §6.1 cannot run (the runner is already down) or for a compose
+change other than the image.
 
 1. Find the current digest for the pinned tag:
    ```bash
@@ -425,8 +497,8 @@ The runner cannot deploy its own fix. This is manual, by design.
      | jq -r '.manifests[] | select(.platform.architecture=="amd64" and .platform.os=="linux") | .digest'
    ```
 2. Update the `image:` pin in `hosts/hestia/actions-runner/docker-compose.yml`,
-   branch + PR + merge as normal. **The merge will not deploy it** — the path is
-   excluded from `deploy-hestia.yml`.
+   branch + PR + merge as normal. `deploy-hestia.yml` skips this path; with a
+   healthy runner §6.1 applies it, otherwise continue below.
 3. Apply it by hand, either:
    - SCALE UI → Apps → `gha-runner` → Edit → paste the updated compose → Save; or
    - from a machine with network access to hestia:
@@ -443,7 +515,7 @@ presence-tested (§2.2) and will change nothing — `false` is a non-empty strin
 turns the flag ON. **Since 2026-11-08 the variable is set, so auto-update is off**
 and the running version is exactly the digest you applied. Confirm what is
 actually running (§7) rather than assuming the Git pin is live: Renovate bumps the
-pin in Git, but nothing applies it to hestia until you do step 3.
+pin in Git, and only §6.1 or step 3 applies it to hestia.
 
 #### Applying from a shell on hestia (2026-11-08 method)
 

@@ -246,6 +246,7 @@ spec:
             or absent(homelabscope_job_last_success_seconds{job="renovate"})
             or absent(homelabscope_job_last_success_seconds{job="adguard-sync-prod"})
             or absent(homelabscope_job_last_success_seconds{job="adguard-sync-stage"})
+            or absent(homelabscope_job_last_success_seconds{job="gha-runner-image-apply"})
           for: 1h
           labels:
             # critical for the same reason as HomelabscopeJobStale: only
@@ -257,6 +258,27 @@ spec:
             summary: "Homelabscope job {{ $labels.job }} heartbeat is absent"
             description: >
               No homelabscope_job_last_success_seconds series exists for job {{ $labels.job }} for >1h. Its heartbeat has vanished entirely (textfile no longer written / exporter down, or the CronJob was removed) — distinct from "stale", which needs the series to still exist. Check the hestia node-exporter (:9100) and the homelabscope-heartbeat Custom App, or `kubectl get cronjob -A` for the CronJob-backed jobs.
+
+        # gha-runner image apply (HOMELAB-106). The runner cannot redeploy
+        # itself, so .github/workflows/gha-runner-apply.yml schedules a detached
+        # applier on hestia that stops, updates and restarts the runner while it
+        # is idle, then checks GitHub reports it online again. A failed apply or
+        # a runner that does not come back writes last_status=1 for this job.
+        # Staleness (14h budget, 6-hourly schedule) is covered by the generic
+        # HomelabscopeJobStale above; this rule is the fast path, because a
+        # failed apply can leave the deploy runner down. The series is guarded
+        # in HomelabscopeJobMetricAbsent: the first run fires on the merge that
+        # adds the workflow (its own path is a push trigger).
+        # Runbook: docs/operations/apps/gha-runner.md section 6.
+        - alert: HomelabscopeGhaRunnerApplyFailed
+          expr: homelabscope_job_last_status{job="gha-runner-image-apply"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Automatic gha-runner image apply on hestia failed"
+            description: >
+              The last automatic apply of the Git runner pin to hestia failed or the runner did not come back online on GitHub. hestia deploys may be stuck. Read the applier log on hestia (sudo docker logs gha-runner-apply), check the runner at https://github.com/gjcourt/homelab/settings/actions/runners, and follow docs/operations/apps/gha-runner.md section 6.
 
     # -----------------------------------------------------------------------
     # Container health on hestia — homelabscope_container_* family.

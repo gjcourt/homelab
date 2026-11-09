@@ -35,9 +35,10 @@ services:
       #   container, so it looped 24,912 times and never recovered.
       #
       # A self-update failure is permanent; a deprecation is fixed by applying
-      # the Renovate digest bump below (this path is excluded from
-      # deploy-hestia.yml, so apply it by hand — see
-      # docs/operations/apps/gha-runner.md §6). Keep the pin current.
+      # the Renovate digest bump below. This path is excluded from
+      # deploy-hestia.yml; gha-runner-apply.yml applies the image pin while the
+      # runner is idle (HOMELAB-106). Anything else here is applied by hand.
+      # See docs/operations/apps/gha-runner.md §6. Keep the pin current.
       # =====================================================================
       DISABLE_AUTO_UPDATE: "true"
 

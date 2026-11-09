@@ -159,7 +159,7 @@ Delete `/mnt/main/apps/actions-runner/work/.runner` on hestia; restart the app. 
 
 ## Image upgrades
 
-Update the digest pin in `docker-compose.yml` (Renovate does this). `deploy-hestia.yml` skips this directory; after the merge, `gha-runner-apply.yml` applies the new image while the runner is idle and checks it comes back online (HOMELAB-106). It reconciles the image only: any other edit here is applied by hand. See [`docs/operations/apps/gha-runner.md` §6](../../../docs/operations/apps/gha-runner.md#6-upgrading-the-runner).
+Update the digest pin in `docker-compose.yml` (Renovate does this). `deploy-hestia.yml` skips this directory; after the merge, the [`gha-runner-watchdog`](../gha-runner-watchdog/docker-compose.yml) app on hestia applies the new image within ~5 min of the runner going idle and checks it comes back online (HOMELAB-108). It also recreates a runner that GitHub reports offline for 15 min. It reconciles the image only: any other edit here is applied by hand. See [`docs/operations/apps/gha-runner.md` §6](../../../docs/operations/apps/gha-runner.md#6-upgrading-the-runner).
 
 To find the current digest of a tag:
 

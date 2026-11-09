@@ -33,6 +33,7 @@ The compose YAML in each subdirectory is the canonical source.
 | Service | Directory | Notes |
 |---------|-----------|-------|
 | gha-runner | `actions-runner/` | Self-hosted GitHub Actions runner; auto-deploys other hestia apps |
+| gha-runner-watchdog | `gha-runner-watchdog/` | Applies the runner's image pin and recreates a dead runner, from outside it (HOMELAB-108) |
 | immich-photos-backup | `immich-photos-backup/` | Daily rsync of the Immich photo library from alcatraz into ZFS |
 | libation | `libation/` | Audible → DRM-free M4B for Audiobookshelf; writes the audiobooks dataset that Audiobookshelf mounts read-only over NFS (operator bootstrap: interactive Audible auth) |
 | qbittorrent | `qbittorrent/` | P2P client, private-tracker downloads |

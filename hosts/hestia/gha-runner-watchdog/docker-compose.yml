@@ -1,0 +1,42 @@
+# gha-runner-watchdog — keeps the hestia GitHub Actions runner on its Git pin and
+# recreates it when it dies (HOMELAB-108). Source: images/gha-runner-watchdog/.
+#
+# WHY A SEPARATE APP. The runner cannot fix itself once it stops taking jobs,
+# and anything scheduled AS a job (HOMELAB-106's gha-runner-apply.yml) stops
+# with it. This app runs beside the runner, not on it, so a deprecated,
+# corrupted or deregistered runner still gets recreated. Every 5 min it:
+#   - reads the runner pin from Git (hosts/hestia/actions-runner/docker-compose.yml)
+#   - applies it when the runner is idle (or dead with no job running)
+#   - recreates a runner GitHub has reported offline for 15 min (max once/hour)
+#   - reports whether the runner's ACCESS_TOKEN works and when it expires
+# Runbook: docs/operations/apps/gha-runner.md section 6.
+#
+# PRIVILEGE. privileged + pid: host so watchdog.sh can `nsenter -t 1` into the
+# host and run watchdog.py with hestia's python3 (truenas_api_client, docker
+# CLI). That is host root, the same as the runner itself already holds through
+# /var/run/docker.sock. It needs no secret: the runner's ACCESS_TOKEN is read
+# from the stored app config in-process and never printed.
+#
+# ARCHIVED until the image is built. build-gha-runner-watchdog.yml publishes
+# ghcr.io/gjcourt/gha-runner-watchdog on the first push of
+# images/gha-runner-watchdog/** to master. Then, in a follow-up PR: pin the
+# digest below and flip archived to false. The first install of a new app is
+# an operator step (app.create, hosts/hestia/README.md); deploy-hestia.yml
+# rolls every later change.
+x-deploy:
+  name: gha-runner-watchdog
+  archived: true
+  archived-at: "2026-11-09"
+  archived-reason: "image not built yet (HOMELAB-108 bootstrap)"
+
+services:
+  gha-runner-watchdog:
+    image: ghcr.io/gjcourt/gha-runner-watchdog:latest
+    container_name: gha-runner-watchdog
+    restart: unless-stopped
+    privileged: true
+    pid: host
+    user: "0:0"
+    environment:
+      - INTERVAL_SECONDS=300
+      - TZ=America/Los_Angeles

@@ -17,21 +17,16 @@
 # /var/run/docker.sock. It needs no secret: the runner's ACCESS_TOKEN is read
 # from the stored app config in-process and never printed.
 #
-# ARCHIVED until the image is built. build-gha-runner-watchdog.yml publishes
-# ghcr.io/gjcourt/gha-runner-watchdog on the first push of
-# images/gha-runner-watchdog/** to master. Then, in a follow-up PR: pin the
-# digest below and flip archived to false. The first install of a new app is
-# an operator step (app.create, hosts/hestia/README.md); deploy-hestia.yml
-# rolls every later change.
+# Image: build-gha-runner-watchdog.yml publishes a date-sha tag on every push
+# of images/gha-runner-watchdog/**; pin its digest here in a follow-up PR and
+# deploy-hestia.yml rolls it. The first install was an operator app.create
+# (hosts/hestia/README.md, 2026-11-09).
 x-deploy:
   name: gha-runner-watchdog
-  archived: true
-  archived-at: "2026-11-09"
-  archived-reason: "image not built yet (HOMELAB-108 bootstrap)"
 
 services:
   gha-runner-watchdog:
-    image: ghcr.io/gjcourt/gha-runner-watchdog:latest
+    image: ghcr.io/gjcourt/gha-runner-watchdog:2026-11-09-a054323@sha256:3be681534256b2575c567ed112b8adc5977bb92912e55beab37575e12fa42e6c
     container_name: gha-runner-watchdog
     restart: unless-stopped
     privileged: true

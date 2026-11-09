@@ -5,8 +5,8 @@ to the TrueNAS Scale instance at hestia (`10.42.2.10`) over the WebSocket
 JSON-RPC API to scrape iSCSI target/extent state, then joins each extent
 back to a Kubernetes PV's claimRef to expose per-PVC labeled metrics.
 
-Plus a Grafana dashboard (auto-discovered via `grafana_dashboard: "1"`
-ConfigMap label) and a PrometheusRule for SAN-side alerts.
+Plus a PrometheusRule for SAN-side alerts. Its metrics are shown on the
+merged `Storage` dashboard (`infra/configs/dashboards/storage-cm.yaml`).
 
 ## Two-source design (different from the Synology exporter)
 
@@ -50,7 +50,7 @@ To validate changes safely:
 - For exporter script changes (`script-cm.yaml`), test the Python locally
   against TrueNAS with a port-forwarded kubeconfig and inspect the
   `/metrics` output before merging.
-- For dashboard / PrometheusRule edits, render via
+- For PrometheusRule edits, render via
   `kubectl apply --dry-run=server` against the production namespace.
 
 ## Operator setup checklist

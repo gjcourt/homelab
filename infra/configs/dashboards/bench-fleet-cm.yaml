@@ -11,109 +11,132 @@ metadata:
 data:
   bench-fleet.json: |
     {
-      "title": "Bench fleet",
-      "uid": "bench-fleet",
-      "tags": [
-        "homelab",
-        "bench-cloud",
-        "agents"
+      "annotations": {
+        "list": []
+      },
+      "description": "Is the agent fleet working, and is it failing? Right now first, then this range.",
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Modem",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/modemscope-overview"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Cluster net",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/netscope-overview"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Thermals",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/34ae4f48-4436-408b-9721-bb5fd18c1a78"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Storage",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/storage"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Jobs",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/homelabscope"
+        }
       ],
-      "schemaVersion": 38,
-      "refresh": "1m",
-      "time": {
-        "from": "now-24h",
-        "to": "now"
-      },
-      "timepicker": {},
-      "description": "agent-desk / bench-cloud fleet: throughput, utilization vs cap, outcome and duration (HOMELAB-94 Phase 1). Built from kube-state-metrics Job series, so history is bounded by Job TTL and Prometheus retention. Cost and tokens come in Phase 2.",
-      "templating": {
-        "list": [
-          {
-            "name": "datasource",
-            "label": "Datasource",
-            "type": "datasource",
-            "query": "prometheus",
-            "current": {},
-            "hide": 0,
-            "refresh": 1,
-            "options": []
-          },
-          {
-            "name": "playbook",
-            "label": "Playbook",
-            "type": "query",
-            "datasource": {
-              "type": "prometheus",
-              "uid": "${datasource}"
-            },
-            "definition": "label_values(bench:job:info, playbook)",
-            "query": {
-              "query": "label_values(bench:job:info, playbook)",
-              "refId": "playbook"
-            },
-            "refresh": 2,
-            "includeAll": true,
-            "multi": true,
-            "allValue": ".*",
-            "current": {
-              "text": "All",
-              "value": "$__all"
-            },
-            "sort": 1
-          },
-          {
-            "name": "project",
-            "label": "Project",
-            "type": "query",
-            "datasource": {
-              "type": "prometheus",
-              "uid": "${datasource}"
-            },
-            "definition": "label_values(bench:job:info, project)",
-            "query": {
-              "query": "label_values(bench:job:info, project)",
-              "refId": "project"
-            },
-            "refresh": 2,
-            "includeAll": true,
-            "multi": true,
-            "allValue": ".*",
-            "current": {
-              "text": "All",
-              "value": "$__all"
-            },
-            "sort": 1
-          }
-        ]
-      },
       "panels": [
         {
-          "id": 1,
-          "type": "row",
-          "title": "Fleet overview",
           "collapsed": false,
           "gridPos": {
-            "x": 0,
-            "y": 0,
+            "h": 1,
             "w": 24,
-            "h": 1
-          },
-          "panels": []
-        },
-        {
-          "id": 2,
-          "type": "stat",
-          "title": "Running now",
-          "description": "Bench Jobs active right now (all projects; the playbook filter applies).",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "gridPos": {
             "x": 0,
-            "y": 1,
-            "w": 4,
-            "h": 4
+            "y": 0
+          },
+          "id": 1,
+          "panels": [],
+          "title": "Right now",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Jobs running right now. 0 is real (the fleet's series exist and none are active); No data means the fleet's metrics are missing.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 1
+          },
+          "id": 2,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
           },
           "targets": [
             {
@@ -121,47 +144,77 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "sum(bench:jobs_active:sum_by_playbook{playbook=~\"$playbook\"}) or vector(0)",
+              "expr": "sum(bench:jobs_active:sum_by_playbook{playbook=~\"$playbook\"}) or (count(bench:job:info)*0)",
               "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "range": false
+              "refId": "A"
             }
           ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "colorMode": "value",
-            "graphMode": "none"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "none",
-              "color": {
-                "mode": "fixed",
-                "fixedColor": "text"
-              }
-            },
-            "overrides": []
-          }
+          "title": "Running now",
+          "type": "stat"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Time since the most recent Job completed. If the fleet is meant to be busy and this keeps growing, it has stalled.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 1
+          },
           "id": 3,
-          "type": "stat",
-          "title": "Started, in range",
-          "description": "Jobs created in the selected time range (the picker, ending at its end time) that Kubernetes still knows about.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "gridPos": {
-            "x": 4,
-            "y": 1,
-            "w": 5,
-            "h": 4
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
           },
           "targets": [
             {
@@ -169,47 +222,77 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count((bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s})) or vector(0)",
+              "expr": "time() - max(bench:job_completion_time{playbook=~\"$playbook\", project=~\"$project\"})",
               "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "range": false
+              "refId": "A"
             }
           ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "colorMode": "value",
-            "graphMode": "none"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "none",
-              "color": {
-                "mode": "fixed",
-                "fixedColor": "text"
-              }
-            },
-            "overrides": []
-          }
+          "title": "Last job finished",
+          "type": "stat"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Time since the most recent failed Job started (failed Jobs have no completion time; within Job-TTL history). No data = no failure in retained history.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 1
+          },
           "id": 4,
-          "type": "stat",
-          "title": "Succeeded, in range",
-          "description": "Jobs created in the selected time range that completed.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "gridPos": {
-            "x": 9,
-            "y": 1,
-            "w": 5,
-            "h": 4
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
           },
           "targets": [
             {
@@ -217,47 +300,366 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count(bench:job_outcome:info{outcome=\"succeeded\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s})) or vector(0)",
+              "expr": "time() - max(bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) bench:job_outcome:info{outcome!~\"succeeded|running\"})",
               "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "range": false
+              "refId": "A"
             }
           ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "colorMode": "value",
-            "graphMode": "none"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "none",
-              "color": {
-                "mode": "fixed",
-                "fixedColor": "text"
-              }
-            },
-            "overrides": []
-          }
+          "title": "Last failure (age of its start)",
+          "type": "stat"
         },
         {
-          "id": 5,
-          "type": "stat",
-          "title": "Success rate, in range",
-          "description": "Succeeded / finished, among Jobs created in the selected time range. n/a when nothing has finished \u2014 never shown as 0.",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           },
+          "description": "Running Jobs per playbook with its cap. Replaces '% of slots used, now', which read 0% whenever nothing was running at the instant you looked.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
           "gridPos": {
-            "x": 14,
-            "y": 1,
-            "w": 5,
-            "h": 4
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 1
+          },
+          "id": 5,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "text": {
+              "titleSize": 14,
+              "valueSize": 40
+            },
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(bench:jobs_active:sum_by_playbook{playbook=\"feature\"}) or (count(bench:job:info)*0)",
+              "legendFormat": "feature (cap 8) ",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(bench:jobs_active:sum_by_playbook{playbook=\"docs-fix\"}) or (count(bench:job:info)*0)",
+              "legendFormat": "docs-fix (cap 6) ",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(bench:jobs_active:sum_by_playbook{playbook=\"design\"}) or (count(bench:job:info)*0)",
+              "legendFormat": "design (cap 2) ",
+              "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(bench:jobs_active:sum_by_playbook{playbook=\"review\"}) or (count(bench:job:info)*0)",
+              "legendFormat": "review (cap 1) ",
+              "refId": "D"
+            }
+          ],
+          "title": "Slots in use now",
+          "type": "stat"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 5
+          },
+          "id": 6,
+          "panels": [],
+          "title": "In this range (dashboard time range)",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Jobs created in the selected range.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 6
+          },
+          "id": 7,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "count(bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s}) or (count(bench:job:info)*0)",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Started",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 6
+          },
+          "id": 8,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "count(bench:job_outcome:info{outcome=\"succeeded\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s})) or (count(bench:job:info)*0)",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Succeeded",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Succeeded / finished in range. Green 95%+, amber 80-95%, red below (PROPOSED). No data when nothing finished.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.8
+                  },
+                  {
+                    "color": "green",
+                    "value": 0.95
+                  }
+                ]
+              },
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 6
+          },
+          "id": 9,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
           },
           "targets": [
             {
@@ -267,46 +669,80 @@ data:
               },
               "expr": "count(bench:job_outcome:info{outcome=\"succeeded\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s})) / count(bench:job_outcome:info{outcome!=\"running\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s}))",
               "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "range": false
+              "refId": "A"
             }
           ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "colorMode": "value",
-            "graphMode": "none"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percentunit",
-              "color": {
-                "mode": "fixed",
-                "fixedColor": "text"
-              },
-              "noValue": "n/a"
-            },
-            "overrides": []
-          }
+          "title": "Success rate",
+          "type": "stat"
         },
         {
-          "id": 6,
-          "type": "stat",
-          "title": "Failed, in range",
-          "description": "Jobs created in the selected time range that failed. BackoffLimitExceeded is usually the shared subscription's session limit (see the Outcome row).",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           },
+          "description": "Jobs that ended in any non-success outcome in range. Red whenever > 0; the list is below.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
           "gridPos": {
-            "x": 19,
-            "y": 1,
-            "w": 5,
-            "h": 4
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 6
+          },
+          "id": 10,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
           },
           "targets": [
             {
@@ -314,47 +750,56 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count(bench:job_outcome:info{outcome!~\"succeeded|running\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s})) or vector(0)",
+              "expr": "count(bench:job_outcome:info{outcome!~\"succeeded|running\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s})) or (count(bench:job:info)*0)",
               "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "range": false
+              "refId": "A"
             }
           ],
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "colorMode": "value",
-            "graphMode": "none"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "none",
-              "color": {
-                "mode": "fixed",
-                "fixedColor": "text"
-              }
-            },
-            "overrides": []
-          }
+          "title": "Failed",
+          "type": "stat"
         },
         {
-          "id": 7,
-          "type": "timeseries",
-          "title": "Jobs started / completed / failed (rolling 1 h)",
-          "description": "Each point counts Jobs in the hour before it. Failed Jobs have no completion time, so they are counted by when they started.",
           "datasource": {
             "type": "prometheus",
             "uid": "${datasource}"
           },
+          "description": "Empty table with 'No data' = no failures in the range.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
           "gridPos": {
+            "h": 6,
+            "w": 14,
             "x": 0,
-            "y": 5,
-            "w": 24,
-            "h": 7
+            "y": 10
+          },
+          "id": 11,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true
           },
           "targets": [
             {
@@ -362,8 +807,241 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count(bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - 3600) or vector(0)",
-              "legendFormat": "started",
+              "expr": "bench:job_outcome:info{outcome!~\"succeeded|running\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s})",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Failed jobs in range",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "Value": true,
+                  "__name__": true,
+                  "container": true,
+                  "endpoint": true,
+                  "instance": true,
+                  "job": true,
+                  "namespace": true,
+                  "pod": true,
+                  "service": true
+                },
+                "renameByName": {
+                  "job_name": "Job",
+                  "outcome": "Outcome",
+                  "playbook": "Playbook",
+                  "project": "Project"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Rows: playbook. Columns: each outcome. One table; the old version showed one row per frame and hid failures behind a frame selector.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 10,
+            "x": 14,
+            "y": 10
+          },
+          "id": 12,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "count by (playbook, outcome) (bench:job_outcome:info{playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - ${__range_s}))",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Outcomes by playbook",
+          "transformations": [
+            {
+              "id": "groupingToMatrix",
+              "options": {
+                "columnField": "outcome",
+                "emptyValue": "zero",
+                "rowField": "playbook",
+                "valueField": "Value"
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 16
+          },
+          "id": 13,
+          "panels": [],
+          "title": "Utilisation vs cap",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Peak = most Jobs running at once in the range; Average busy = mean concurrent Jobs over the whole range (idle time counts as 0); Peak % = peak / cap. At 100% a playbook hit its cap and work may have queued.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Peak as % of cap"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percentunit"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "#6c7480",
+                          "value": null
+                        },
+                        {
+                          "color": "text",
+                          "value": -1000000000
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Average busy"
+                },
+                "properties": [
+                  {
+                    "id": "decimals",
+                    "value": 2
+                  },
+                  {
+                    "id": "unit",
+                    "value": "none"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": "Cap.*|Peak conc.*"
+                },
+                "properties": [
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 14,
+            "x": 0,
+            "y": 17
+          },
+          "id": 14,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "label_replace(vector(8),\"playbook\",\"feature\",\"\",\"\") or label_replace(vector(6),\"playbook\",\"docs-fix\",\"\",\"\") or label_replace(vector(2),\"playbook\",\"design\",\"\",\"\") or label_replace(vector(1),\"playbook\",\"review\",\"\",\"\")",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
               "refId": "A"
             },
             {
@@ -371,8 +1049,11 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count(bench:job_completion_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - 3600) or vector(0)",
-              "legendFormat": "completed",
+              "expr": "label_replace(max_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"feature\"}) or (count(bench:job:info)*0))[$__range:1m]),\"playbook\",\"feature\",\"\",\"\") or label_replace(max_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"docs-fix\"}) or (count(bench:job:info)*0))[$__range:1m]),\"playbook\",\"docs-fix\",\"\",\"\") or label_replace(max_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"design\"}) or (count(bench:job:info)*0))[$__range:1m]),\"playbook\",\"design\",\"\",\"\") or label_replace(max_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"review\"}) or (count(bench:job:info)*0))[$__range:1m]),\"playbook\",\"review\",\"\",\"\")",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
               "refId": "B"
             },
             {
@@ -380,25 +1061,124 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count(bench:job_outcome:info{outcome!~\"succeeded|running\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time > time() - 3600)) or vector(0)",
-              "legendFormat": "failed (by start time)",
+              "expr": "label_replace(avg_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"feature\"}) or (count(bench:job:info)*0))[$__range:1m]),\"playbook\",\"feature\",\"\",\"\") or label_replace(avg_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"docs-fix\"}) or (count(bench:job:info)*0))[$__range:1m]),\"playbook\",\"docs-fix\",\"\",\"\") or label_replace(avg_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"design\"}) or (count(bench:job:info)*0))[$__range:1m]),\"playbook\",\"design\",\"\",\"\") or label_replace(avg_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"review\"}) or (count(bench:job:info)*0))[$__range:1m]),\"playbook\",\"review\",\"\",\"\")",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
               "refId": "C"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "label_replace(max_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"feature\"}) or (count(bench:job:info)*0))[$__range:1m]) / 8,\"playbook\",\"feature\",\"\",\"\") or label_replace(max_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"docs-fix\"}) or (count(bench:job:info)*0))[$__range:1m]) / 6,\"playbook\",\"docs-fix\",\"\",\"\") or label_replace(max_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"design\"}) or (count(bench:job:info)*0))[$__range:1m]) / 2,\"playbook\",\"design\",\"\",\"\") or label_replace(max_over_time((sum(bench:jobs_active:sum_by_playbook{playbook=\"review\"}) or (count(bench:job:info)*0))[$__range:1m]) / 1,\"playbook\",\"review\",\"\",\"\")",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "D"
             }
           ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "none",
-              "custom": {
-                "fillOpacity": 0,
-                "stacking": {
-                  "mode": "none"
-                },
-                "lineWidth": 2,
-                "spanNulls": false
+          "title": "Slot use in range: peak and average vs cap",
+          "transformations": [
+            {
+              "id": "joinByField",
+              "options": {
+                "byField": "playbook",
+                "mode": "outer"
               }
             },
-            "overrides": []
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "Time 1": true,
+                  "Time 2": true,
+                  "Time 3": true,
+                  "Time 4": true
+                },
+                "indexByName": {
+                  "Value #A": 1,
+                  "Value #B": 2,
+                  "Value #C": 3,
+                  "Value #D": 4,
+                  "playbook": 0
+                },
+                "renameByName": {
+                  "Value #A": "Cap (slots)",
+                  "Value #B": "Peak concurrent",
+                  "Value #C": "Average busy",
+                  "Value #D": "Peak as % of cap",
+                  "playbook": "Playbook"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
           },
+          "description": "Stacked running Jobs per playbook, with each playbook's maxConcurrent as a dashed line. Caps are copied from apps/production/agent-desk/config.yaml (2026-11-07); update both together.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "fillOpacity": 30,
+                "lineWidth": 2,
+                "spanNulls": false,
+                "stacking": {
+                  "mode": "normal"
+                }
+              },
+              "unit": "none"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegexp",
+                  "options": ".* cap .*"
+                },
+                "properties": [
+                  {
+                    "id": "custom.stacking",
+                    "value": {
+                      "mode": "none"
+                    }
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [
+                        8,
+                        6
+                      ],
+                      "fill": "dash"
+                    }
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 1
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 10,
+            "x": 14,
+            "y": 17
+          },
+          "id": 15,
           "options": {
             "legend": {
               "displayMode": "list",
@@ -407,35 +1187,6 @@ data:
             "tooltip": {
               "mode": "multi"
             }
-          }
-        },
-        {
-          "id": 8,
-          "type": "row",
-          "title": "Utilization vs cap",
-          "collapsed": false,
-          "gridPos": {
-            "x": 0,
-            "y": 12,
-            "w": 24,
-            "h": 1
-          },
-          "panels": []
-        },
-        {
-          "id": 9,
-          "type": "timeseries",
-          "title": "Concurrent running Jobs by playbook",
-          "description": "Stacked running Jobs per playbook, with each playbook's maxConcurrent as a dashed line. Caps are copied from apps/production/agent-desk/config.yaml (2026-11-07); update both together.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "gridPos": {
-            "x": 0,
-            "y": 13,
-            "w": 16,
-            "h": 9
           },
           "targets": [
             {
@@ -484,53 +1235,49 @@ data:
               "refId": "E"
             }
           ],
+          "title": "Concurrent running Jobs vs caps",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": false,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 25
+          },
+          "id": 16,
+          "panels": [],
+          "title": "Duration and throughput",
+          "type": "row"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Runtime of completed Jobs (completion − start). Failed Jobs have no completion time and are excluded. Playbook deadlines for reference: 90 m / 2 h / 3 h (see agent-desk config).",
           "fieldConfig": {
             "defaults": {
-              "unit": "none",
               "custom": {
-                "fillOpacity": 30,
-                "stacking": {
-                  "mode": "normal"
-                },
+                "fillOpacity": 0,
                 "lineWidth": 2,
-                "spanNulls": false
-              }
+                "spanNulls": false,
+                "stacking": {
+                  "mode": "none"
+                }
+              },
+              "unit": "s"
             },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": ".* cap .*"
-                },
-                "properties": [
-                  {
-                    "id": "custom.stacking",
-                    "value": {
-                      "mode": "none"
-                    }
-                  },
-                  {
-                    "id": "custom.fillOpacity",
-                    "value": 0
-                  },
-                  {
-                    "id": "custom.lineStyle",
-                    "value": {
-                      "fill": "dash",
-                      "dash": [
-                        8,
-                        6
-                      ]
-                    }
-                  },
-                  {
-                    "id": "custom.lineWidth",
-                    "value": 1
-                  }
-                ]
-              }
-            ]
+            "overrides": []
           },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 26
+          },
+          "id": 20,
           "options": {
             "legend": {
               "displayMode": "list",
@@ -539,238 +1286,6 @@ data:
             "tooltip": {
               "mode": "multi"
             }
-          }
-        },
-        {
-          "id": 10,
-          "type": "bargauge",
-          "title": "% of slots used, now",
-          "description": "Running Jobs / maxConcurrent per playbook. A playbook with no running Jobs shows 0 %, which is a real zero.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "gridPos": {
-            "x": 16,
-            "y": 13,
-            "w": 8,
-            "h": 9
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "expr": "(sum(bench:jobs_active:sum_by_playbook{playbook=\"feature\"}) or vector(0)) / 8",
-              "legendFormat": "feature",
-              "refId": "A",
-              "instant": true,
-              "range": false
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "expr": "(sum(bench:jobs_active:sum_by_playbook{playbook=\"docs-fix\"}) or vector(0)) / 6",
-              "legendFormat": "docs-fix",
-              "refId": "B",
-              "instant": true,
-              "range": false
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "expr": "(sum(bench:jobs_active:sum_by_playbook{playbook=\"design\"}) or vector(0)) / 2",
-              "legendFormat": "design",
-              "refId": "C",
-              "instant": true,
-              "range": false
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "expr": "(sum(bench:jobs_active:sum_by_playbook{playbook=\"review\"}) or vector(0)) / 1",
-              "legendFormat": "review",
-              "refId": "D",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "options": {
-            "orientation": "horizontal",
-            "displayMode": "gradient",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ]
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "unit": "percentunit",
-              "min": 0,
-              "max": 1,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "orange",
-                    "value": 0.75
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
-                ]
-              }
-            },
-            "overrides": []
-          }
-        },
-        {
-          "id": 11,
-          "type": "row",
-          "title": "Outcome",
-          "collapsed": false,
-          "gridPos": {
-            "x": 0,
-            "y": 22,
-            "w": 24,
-            "h": 1
-          },
-          "panels": []
-        },
-        {
-          "id": 12,
-          "type": "table",
-          "title": "Outcomes by playbook",
-          "description": "Every Job Kubernetes still knows about, by playbook and outcome. BackoffLimitExceeded runs that all end in the same minute are the shared-subscription session limit, not a code fault.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "gridPos": {
-            "x": 0,
-            "y": 23,
-            "w": 12,
-            "h": 8
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "expr": "count by (playbook, outcome) (bench:job_outcome:info{playbook=~\"$playbook\", project=~\"$project\"})",
-              "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "format": "table",
-              "range": false
-            }
-          ],
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true
-                },
-                "renameByName": {
-                  "Value": "Jobs"
-                }
-              }
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          }
-        },
-        {
-          "id": 13,
-          "type": "table",
-          "title": "Outcomes by project",
-          "description": "Every Job Kubernetes still knows about, by project and outcome.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "gridPos": {
-            "x": 12,
-            "y": 23,
-            "w": 12,
-            "h": 8
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "expr": "count by (project, outcome) (bench:job_outcome:info{playbook=~\"$playbook\", project=~\"$project\"})",
-              "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "format": "table",
-              "range": false
-            }
-          ],
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true
-                },
-                "renameByName": {
-                  "Value": "Jobs"
-                }
-              }
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          }
-        },
-        {
-          "id": 14,
-          "type": "row",
-          "title": "Duration",
-          "collapsed": false,
-          "gridPos": {
-            "x": 0,
-            "y": 31,
-            "w": 24,
-            "h": 1
-          },
-          "panels": []
-        },
-        {
-          "id": 15,
-          "type": "timeseries",
-          "title": "Job runtime p50 / p95 by playbook (finished Jobs)",
-          "description": "Runtime of completed Jobs (completion \u2212 start). Failed Jobs have no completion time and are excluded. Playbook deadlines for reference: 90 m / 2 h / 3 h (see agent-desk config).",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "gridPos": {
-            "x": 0,
-            "y": 32,
-            "w": 24,
-            "h": 8
           },
           "targets": [
             {
@@ -792,20 +1307,36 @@ data:
               "refId": "B"
             }
           ],
+          "title": "Job runtime p50 / p95 by playbook (finished Jobs)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Each point counts Jobs that completed in the 24 h before it. No line for a project means it completed nothing in that window.",
           "fieldConfig": {
             "defaults": {
-              "unit": "s",
               "custom": {
-                "fillOpacity": 0,
-                "stacking": {
-                  "mode": "none"
-                },
+                "fillOpacity": 30,
                 "lineWidth": 2,
-                "spanNulls": false
-              }
+                "spanNulls": false,
+                "stacking": {
+                  "mode": "normal"
+                }
+              },
+              "unit": "none"
             },
             "overrides": []
           },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 26
+          },
+          "id": 21,
           "options": {
             "legend": {
               "displayMode": "list",
@@ -814,35 +1345,6 @@ data:
             "tooltip": {
               "mode": "multi"
             }
-          }
-        },
-        {
-          "id": 16,
-          "type": "row",
-          "title": "Throughput by project",
-          "collapsed": false,
-          "gridPos": {
-            "x": 0,
-            "y": 40,
-            "w": 24,
-            "h": 1
-          },
-          "panels": []
-        },
-        {
-          "id": 17,
-          "type": "timeseries",
-          "title": "Completed Jobs per project (rolling 24 h)",
-          "description": "Each point counts Jobs that completed in the 24 h before it. No line for a project means it completed nothing in that window.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "gridPos": {
-            "x": 0,
-            "y": 41,
-            "w": 16,
-            "h": 8
           },
           "targets": [
             {
@@ -855,76 +1357,257 @@ data:
               "refId": "A"
             }
           ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "none",
-              "custom": {
-                "fillOpacity": 30,
-                "stacking": {
-                  "mode": "normal"
-                },
-                "lineWidth": 2,
-                "spanNulls": false
-              }
-            },
-            "overrides": []
-          },
-          "options": {
-            "legend": {
-              "displayMode": "list",
-              "placement": "bottom"
-            },
-            "tooltip": {
-              "mode": "multi"
-            }
-          }
+          "title": "Completed Jobs per project (rolling 24 h)",
+          "type": "timeseries"
         },
         {
-          "id": 18,
-          "type": "table",
-          "title": "Jobs per project",
-          "description": "All Jobs Kubernetes still knows about, per project.",
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
+          "collapsed": true,
           "gridPos": {
-            "x": 16,
-            "y": 41,
-            "w": 8,
-            "h": 8
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 35
           },
-          "targets": [
+          "id": 17,
+          "panels": [
             {
               "datasource": {
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count by (project) (bench:job:info{playbook=~\"$playbook\", project=~\"$project\"})",
-              "legendFormat": "",
-              "refId": "A",
-              "instant": true,
-              "format": "table",
-              "range": false
-            }
-          ],
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true
+              "description": "Each point counts Jobs in the hour before it. Failed Jobs have no completion time, so they are counted by when they started.",
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "fillOpacity": 0,
+                    "lineWidth": 2,
+                    "spanNulls": false,
+                    "stacking": {
+                      "mode": "none"
+                    }
+                  },
+                  "unit": "none"
                 },
-                "renameByName": {
-                  "Value": "Jobs"
+                "overrides": []
+              },
+              "gridPos": {
+                "h": 7,
+                "w": 24,
+                "x": 0,
+                "y": 35
+              },
+              "id": 30,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
                 }
-              }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "count(bench:job_created_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - 3600) or vector(0)",
+                  "legendFormat": "started",
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "count(bench:job_completion_time{playbook=~\"$playbook\", project=~\"$project\"} > time() - 3600) or vector(0)",
+                  "legendFormat": "completed",
+                  "refId": "B"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "count(bench:job_outcome:info{outcome!~\"succeeded|running\", playbook=~\"$playbook\", project=~\"$project\"} and on (namespace, job_name) (bench:job_created_time > time() - 3600)) or vector(0)",
+                  "legendFormat": "failed (by start time)",
+                  "refId": "C"
+                }
+              ],
+              "title": "Jobs started / completed (rolling 1 h)",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Every Job Kubernetes still knows about, by project and outcome.",
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 43
+              },
+              "id": 31,
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "count by (project, outcome) (bench:job_outcome:info{playbook=~\"$playbook\", project=~\"$project\"})",
+                  "format": "table",
+                  "instant": true,
+                  "legendFormat": "",
+                  "range": false,
+                  "refId": "A"
+                }
+              ],
+              "title": "Outcomes by project",
+              "transformations": [
+                {
+                  "id": "organize",
+                  "options": {
+                    "excludeByName": {
+                      "Time": true
+                    },
+                    "renameByName": {
+                      "Value": "Jobs"
+                    }
+                  }
+                }
+              ],
+              "type": "table"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "All Jobs Kubernetes still knows about, per project.",
+              "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 43
+              },
+              "id": 32,
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "count by (project) (bench:job:info{playbook=~\"$playbook\", project=~\"$project\"})",
+                  "format": "table",
+                  "instant": true,
+                  "legendFormat": "",
+                  "range": false,
+                  "refId": "A"
+                }
+              ],
+              "title": "Jobs per project",
+              "transformations": [
+                {
+                  "id": "organize",
+                  "options": {
+                    "excludeByName": {
+                      "Time": true
+                    },
+                    "renameByName": {
+                      "Value": "Jobs"
+                    }
+                  }
+                }
+              ],
+              "type": "table"
             }
           ],
-          "fieldConfig": {
-            "defaults": {},
-            "overrides": []
-          }
+          "title": "Details: start/finish timeline, outcomes and jobs per project",
+          "type": "row"
         }
-      ]
+      ],
+      "refresh": "1m",
+      "schemaVersion": 39,
+      "tags": [
+        "bench-cloud",
+        "critique-review"
+      ],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "hide": 0,
+            "label": "Datasource",
+            "name": "datasource",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "type": "datasource"
+          },
+          {
+            "allValue": ".*",
+            "current": {
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${datasource}"
+            },
+            "definition": "label_values(bench:job:info, playbook)",
+            "includeAll": true,
+            "label": "Playbook",
+            "multi": true,
+            "name": "playbook",
+            "query": {
+              "query": "label_values(bench:job:info, playbook)",
+              "refId": "playbook"
+            },
+            "refresh": 2,
+            "sort": 1,
+            "type": "query"
+          },
+          {
+            "allValue": ".*",
+            "current": {
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${datasource}"
+            },
+            "definition": "label_values(bench:job:info, project)",
+            "includeAll": true,
+            "label": "Project",
+            "multi": true,
+            "name": "project",
+            "query": {
+              "query": "label_values(bench:job:info, project)",
+              "refId": "project"
+            },
+            "refresh": 2,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "title": "Bench fleet",
+      "uid": "bench-fleet"
     }

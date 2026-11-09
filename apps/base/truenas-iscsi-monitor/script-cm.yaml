@@ -131,7 +131,19 @@ data:
 
         def fetch_iscsi_state(self):
             """Single round-trip: auth, then targets, extents, zvols."""
-            with ws_connect(self.url, ssl_context=self._ssl) as ws:
+            # max_size: websockets caps inbound frames at 1 MiB by default.
+            # The unfiltered pool.dataset.query for ~230 zvols is ~1.1 MB,
+            # so every scrape died with "1009 (message too big)". The
+            # select below cuts it to ~66 KB; the 16 MiB cap is headroom so
+            # PV growth can't silently re-break it. open_timeout: TrueNAS
+            # middleware sometimes takes >10s (the default) to answer the
+            # WebSocket handshake.
+            with ws_connect(
+                self.url,
+                ssl_context=self._ssl,
+                max_size=16 * 1024 * 1024,
+                open_timeout=30,
+            ) as ws:
                 auth_ok = self._rpc(ws, "auth.login_with_api_key", [self.api_key])
                 if not auth_ok:
                     raise RuntimeError("auth.login_with_api_key returned false")
@@ -140,7 +152,10 @@ data:
                 zvols = self._rpc(
                     ws,
                     "pool.dataset.query",
-                    [[["type", "=", "VOLUME"]]],
+                    [
+                        [["type", "=", "VOLUME"]],
+                        {"select": ["name", "volsize", "used"]},
+                    ],
                 )
                 return targets, extents, zvols
 

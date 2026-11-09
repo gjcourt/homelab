@@ -8,664 +8,2130 @@ metadata:
 data:
   thermalscope.json: |
     {
-      "annotations": {"list": []},
+      "annotations": {
+        "list": []
+      },
+      "description": "Is anything in the rack too hot, worn out, or not reporting?",
       "editable": true,
-      "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
-      "id": null,
-      "links": [],
+      "links": [
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Modem",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/modemscope-overview"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Cluster net",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/netscope-overview"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Storage",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/storage"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Bench fleet",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/bench-fleet"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Jobs",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/homelabscope"
+        }
+      ],
       "panels": [
         {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0},
-          "id": 99,
-          "title": "Overview — at-a-glance thermals",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Per-host CPU control temperature (Tctl). Orange ≥75°C, red ≥85°C.",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Worst of: CPU Tctl (warm 75, hot 85), NVMe composite (55/65), PoE switch (70/75), gateway (70/75). No data if every source is missing.",
           "fieldConfig": {
             "defaults": {
-              "color": {"mode": "thresholds"},
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                },
+                {
+                  "options": {
+                    "0": {
+                      "color": "green",
+                      "index": 0,
+                      "text": "All OK"
+                    },
+                    "1": {
+                      "color": "orange",
+                      "index": 1,
+                      "text": "WARM"
+                    },
+                    "2": {
+                      "color": "red",
+                      "index": 2,
+                      "text": "HOT"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "noValue": "No data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 75},
-                  {"color": "red", "value": 85}
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 2
+                  }
                 ]
               },
-              "unit": "celsius",
-              "min": 0,
-              "max": 100
-            }
+              "unit": "none"
+            },
+            "overrides": []
           },
-          "gridPos": {"h": 5, "w": 6, "x": 0, "y": 1},
-          "id": 20,
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 0,
+            "y": 0
+          },
+          "id": 901,
           "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "auto",
-            "colorMode": "background",
-            "graphMode": "area",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"}",
-              "legendFormat": "{{instance}}"
-            }
-          ],
-          "title": "CPU Tctl per host",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Hottest NVMe Composite sensor per host. Orange ≥55°C, red ≥65°C.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 55},
-                  {"color": "red", "value": 65}
-                ]
-              },
-              "unit": "celsius",
-              "min": 0,
-              "max": 90
-            }
-          },
-          "gridPos": {"h": 5, "w": 6, "x": 6, "y": 1},
-          "id": 21,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "auto",
-            "colorMode": "background",
-            "graphMode": "area",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "max by (instance) (thermalscope_nvme_temperature_celsius{instance=~\"$instance\"})",
-              "legendFormat": "{{instance}}"
-            }
-          ],
-          "title": "NVMe max per host",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "UniFi gateway (UDM/UXG/UCG/UGW) board temperature. Orange ≥60°C, red ≥70°C.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 60},
-                  {"color": "red", "value": 70}
-                ]
-              },
-              "unit": "celsius",
-              "min": 0,
-              "max": 100
-            }
-          },
-          "gridPos": {"h": 5, "w": 6, "x": 12, "y": 1},
-          "id": 22,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "auto",
-            "colorMode": "background",
-            "graphMode": "area",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "max by (name) (unpoller_device_temperature_celsius{type=~\"udm|uxg|ucg|ugw\"})",
-              "legendFormat": "{{name}}"
-            }
-          ],
-          "title": "UniFi gateway temp",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "UniFi PoE switch (type=usw) board temperature. Orange ≥50°C, red ≥65°C.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 50},
-                  {"color": "red", "value": 65}
-                ]
-              },
-              "unit": "celsius",
-              "min": 0,
-              "max": 100
-            }
-          },
-          "gridPos": {"h": 5, "w": 6, "x": 18, "y": 1},
-          "id": 23,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "auto",
-            "colorMode": "background",
-            "graphMode": "area",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "unpoller_device_temperature_celsius{type=\"usw\"}",
-              "legendFormat": "{{name}}"
-            }
-          ],
-          "title": "UniFi switch temp",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Number of UniFi devices currently exceeding their type-specific overheating threshold. Mirrors the UniFiDeviceOverheating alert.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]
-              },
-              "unit": "short"
-            }
-          },
-          "gridPos": {"h": 3, "w": 24, "x": 0, "y": 6},
-          "id": 203,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "auto",
             "colorMode": "background",
             "graphMode": "none",
-            "textMode": "value_and_name"
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value",
+            "wideLayout": true
           },
           "targets": [
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "count(unpoller_device_temperature_celsius{type=\"usw\"} > 70) or vector(0)",
-              "legendFormat": "Switches overheating"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "count(unpoller_device_temperature_celsius{type=~\"udm|uxg|ucg|ugw\"} > 75) or vector(0)",
-              "legendFormat": "Gateways overheating"
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(label_replace(max(((thermalscope_cpu_temperature_celsius{sensor=\"Tctl\"}) >= bool 75) + ((thermalscope_cpu_temperature_celsius{sensor=\"Tctl\"}) >= bool 85)),\"k\",\"cpu\",\"\",\"\") or label_replace(max(((thermalscope_nvme_temperature_celsius{sensor=\"Composite\"}) >= bool 55) + ((thermalscope_nvme_temperature_celsius{sensor=\"Composite\"}) >= bool 65)),\"k\",\"nvme\",\"\",\"\") or label_replace(max(((unpoller_device_temperature_celsius{type=\"usw\"}) >= bool 70) + ((unpoller_device_temperature_celsius{type=\"usw\"}) >= bool 75)),\"k\",\"sw\",\"\",\"\") or label_replace(max(((unpoller_device_temperature_celsius{type=~\"udm|uxg|ucg|ugw\"}) >= bool 70) + ((unpoller_device_temperature_celsius{type=~\"udm|uxg|ucg|ugw\"}) >= bool 75)),\"k\",\"gw\",\"\",\"\"))",
+              "legendFormat": "",
+              "refId": "A"
             }
           ],
-          "title": "Overheating Devices",
+          "title": "Thermal status",
           "type": "stat"
         },
         {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
-          "id": 100,
-          "title": "CPU",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Hottest CPU control temperature across hosts. Warm 75, hot 85 (Tjmax advisory 95).",
           "fieldConfig": {
             "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 75},
-                  {"color": "red", "value": 85}
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": -1000000000
+                  },
+                  {
+                    "color": "orange",
+                    "value": 75
+                  },
+                  {
+                    "color": "red",
+                    "value": 85
+                  }
                 ]
               },
               "unit": "celsius"
-            }
+            },
+            "overrides": []
           },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 10},
-          "id": 1,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"}",
-              "legendFormat": "{{instance}} Tctl"
-            }
-          ],
-          "title": "CPU Control Temperature (Tctl)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "unit": "celsius"
-            }
+          "gridPos": {
+            "h": 5,
+            "w": 5,
+            "x": 4,
+            "y": 0
           },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 10},
-          "id": 2,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=~\"Tccd.*\"}",
-              "legendFormat": "{{instance}} {{sensor}}"
-            }
-          ],
-          "title": "CPU Die Temperatures (Tccd1–4)",
-          "type": "timeseries"
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 18},
-          "id": 101,
-          "title": "NVMe Drives",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 55},
-                  {"color": "red", "value": 65}
-                ]
-              },
-              "unit": "celsius"
-            }
-          },
-          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 19},
-          "id": 3,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "right"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_temperature_celsius{instance=~\"$instance\", sensor=\"Composite\"}",
-              "legendFormat": "{{instance}} {{device}}"
-            }
-          ],
-          "title": "NVMe Drive Temperatures",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 55},
-                  {"color": "red", "value": 65}
-                ]
-              },
-              "unit": "celsius",
-              "min": 0,
-              "max": 90
-            }
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 19},
-          "id": 4,
+          "id": 902,
           "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "horizontal",
-            "displayMode": "gradient"
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name",
+            "wideLayout": true
           },
           "targets": [
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_temperature_celsius{instance=~\"$instance\", sensor=\"Composite\"}",
-              "legendFormat": "{{instance}} {{device}}"
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "topk(1, thermalscope_cpu_temperature_celsius{sensor=\"Tctl\"})",
+              "instant": true,
+              "legendFormat": "{{instance}}",
+              "range": false,
+              "refId": "A"
             }
           ],
-          "title": "NVMe Current Temps",
-          "type": "bargauge"
+          "title": "Hottest CPU (Tctl)",
+          "type": "stat"
         },
         {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 27},
-          "id": 200,
-          "title": "UniFi Thermals",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Per-device board temperature for all UniFi devices reported by unpoller. One line per (device, sensor).",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Hottest NVMe composite temperature. Warm 55, hot 65 (drive crit thresholds are 82-88 C).",
           "fieldConfig": {
             "defaults": {
-              "unit": "celsius",
-              "min": 0,
-              "max": 100,
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 60},
-                  {"color": "red", "value": 70}
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": -1000000000
+                  },
+                  {
+                    "color": "orange",
+                    "value": 55
+                  },
+                  {
+                    "color": "red",
+                    "value": 65
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 5,
+            "x": 9,
+            "y": 0
+          },
+          "id": 903,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "topk(1, thermalscope_nvme_temperature_celsius{sensor=\"Composite\"})",
+              "instant": true,
+              "legendFormat": "{{instance}} {{device}}",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Hottest NVMe drive",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Hottest UniFi gateway or switch. Warm 70, hot 75 (the old dashboard coloured 60 C orange).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": -1000000000
+                  },
+                  {
+                    "color": "orange",
+                    "value": 70
+                  },
+                  {
+                    "color": "red",
+                    "value": 75
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 5,
+            "x": 14,
+            "y": 0
+          },
+          "id": 904,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "topk(1, unpoller_device_temperature_celsius{type=~\"udm|uxg|ucg|ugw|usw\"})",
+              "instant": true,
+              "legendFormat": "{{name}}",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Hottest network gear",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Highest NVMe endurance used. Amber 70%, red 85%. Critical-warning flags and media errors are in the NVMe row below.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": -1000000000
+                  },
+                  {
+                    "color": "orange",
+                    "value": 0.7
+                  },
+                  {
+                    "color": "red",
+                    "value": 0.85
+                  }
+                ]
+              },
+              "unit": "percentunit"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 5,
+            "x": 19,
+            "y": 0
+          },
+          "id": 905,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "topk(1, thermalscope_nvme_percentage_used_ratio)",
+              "instant": true,
+              "legendFormat": "{{instance}} {{device}}",
+              "range": false,
+              "refId": "A"
+            }
+          ],
+          "title": "Worst NVMe wear",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "thermalscope hwmon collectors that are down. 0 = every host reports.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 0,
+            "y": 5
+          },
+          "id": 906,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "count(thermalscope_hwmon_up) - sum(thermalscope_hwmon_up)",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Collectors not reporting",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Smallest margin to the advisory Tjmax ($cpu_tjmax C). Amber below 20, red below 10.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": -1000000000
+                  },
+                  {
+                    "color": "orange",
+                    "value": 10
+                  },
+                  {
+                    "color": "green",
+                    "value": 20
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 6,
+            "y": 5
+          },
+          "id": 907,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "min($cpu_tjmax - thermalscope_cpu_temperature_celsius{sensor=\"Tctl\"})",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "CPU headroom to Tjmax (min)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Measured draw of everything on the USP PDU Pro. Informational.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "watt"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 12,
+            "y": 5
+          },
+          "id": 908,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(unpoller_device_outlet_ac_power_consumption{name=\"USP PDU Pro\"})",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Wall power now (PDU)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Now-watts x 720 h x $cost_per_kwh. An estimate, not a bill.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "currencyUSD"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 18,
+            "y": 5
+          },
+          "id": 909,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(unpoller_device_outlet_ac_power_consumption{name=\"USP PDU Pro\"}) * 24 * 30 / 1000 * $cost_per_kwh",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Wall power cost, per month (estimate)",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Lines at 75 C (warm) and 85 C (hot). Axis starts at 40 C.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "min": 40,
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": -1000000000
+                  },
+                  {
+                    "color": "orange",
+                    "value": 75
+                  },
+                  {
+                    "color": "red",
+                    "value": 85
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 8
+          },
+          "id": 910,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "thermalscope_cpu_temperature_celsius{sensor=\"Tctl\", instance=~\"$instance\"}",
+              "legendFormat": "{{instance}}",
+              "refId": "A"
+            }
+          ],
+          "title": "CPU temperature by host (Tctl)",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "One line per host: its hottest NVMe. Individual drives are in the NVMe row below.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "min": 30,
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": -1000000000
+                  },
+                  {
+                    "color": "orange",
+                    "value": 55
+                  },
+                  {
+                    "color": "red",
+                    "value": 65
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 8
+          },
+          "id": 911,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max by (instance) (thermalscope_nvme_temperature_celsius{sensor=\"Composite\", instance=~\"$instance\"})",
+              "legendFormat": "{{instance}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Hottest NVMe drive per host",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "min": 30,
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": -1000000000
+                  },
+                  {
+                    "color": "orange",
+                    "value": 70
+                  },
+                  {
+                    "color": "red",
+                    "value": 75
+                  }
+                ]
+              },
+              "unit": "celsius"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 16
+          },
+          "id": 912,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "unpoller_device_temperature_celsius",
+              "legendFormat": "{{name}} {{temp_area}}",
+              "refId": "A"
+            }
+          ],
+          "title": "UniFi device temperatures",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "CPU clock vs max is idle frequency scaling, not throttling: it routinely sits at 55-100%.",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "inspect": false
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "CPU Tctl"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "celsius"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background"
+                    }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "#6c7480",
+                          "value": null
+                        },
+                        {
+                          "color": "green",
+                          "value": -1000000000
+                        },
+                        {
+                          "color": "orange",
+                          "value": 75
+                        },
+                        {
+                          "color": "red",
+                          "value": 85
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Hottest NVMe"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "celsius"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background"
+                    }
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "#6c7480",
+                          "value": null
+                        },
+                        {
+                          "color": "green",
+                          "value": -1000000000
+                        },
+                        {
+                          "color": "orange",
+                          "value": 55
+                        },
+                        {
+                          "color": "red",
+                          "value": 65
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "CPU clock vs max"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percentunit"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 0
+                  }
                 ]
               }
-            }
+            ]
           },
-          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 28},
-          "id": 201,
-          "options": {"legend": {"displayMode": "table", "placement": "right", "showLegend": true}},
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 16
+          },
+          "id": 913,
+          "options": {
+            "cellHeight": "sm",
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "CPU Tctl"
+              }
+            ]
+          },
           "targets": [
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "unpoller_device_temperature_celsius",
-              "legendFormat": "{{name}} {{temp_area}}"
-            }
-          ],
-          "title": "UniFi Device Temperatures",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Current board temperature per UniFi PoE switch (type=usw). Cell turns red ≥65°C — see UniFiPoESwitchTempHigh alert.",
-          "fieldConfig": {
-            "defaults": {
-              "unit": "celsius",
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 50},
-                  {"color": "red", "value": 65}
-                ]
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
               },
-              "min": 0,
-              "max": 100
-            }
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 28},
-          "id": 202,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "auto",
-            "colorMode": "background",
-            "graphMode": "area",
-            "textMode": "value_and_name"
-          },
-          "targets": [
+              "expr": "thermalscope_cpu_temperature_celsius{sensor=\"Tctl\", instance=~\"$instance\"}",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "CPU",
+              "range": false,
+              "refId": "A"
+            },
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "unpoller_device_temperature_celsius{type=\"usw\"}",
-              "legendFormat": "{{name}}"
-            }
-          ],
-          "title": "PoE Switch Temperatures",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "UniFi PoE switch fan level (0–4 typical). High sustained levels indicate elevated chassis heat.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "unit": "short",
-              "min": 0
-            }
-          },
-          "gridPos": {"h": 6, "w": 24, "x": 0, "y": 36},
-          "id": 204,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "unpoller_device_fan_level{type=\"usw\"}",
-              "legendFormat": "{{name}} fan level"
-            }
-          ],
-          "title": "PoE Switch Fan Level",
-          "type": "timeseries"
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 42},
-          "id": 106,
-          "title": "Chassis Fans (hestia)",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "unit": "rotrpm"
-            }
-          },
-          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 43},
-          "id": 14,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "right"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "ipmi_fan_speed_rpm{instance=\"hestia\"}",
-              "legendFormat": "{{name}}"
-            }
-          ],
-          "title": "Chassis Fan RPM",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "red", "value": null},
-                  {"color": "orange", "value": 200},
-                  {"color": "green", "value": 500}
-                ]
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
               },
-              "unit": "rotrpm",
-              "min": 0,
-              "max": 8000
-            }
-          },
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 43},
-          "id": 15,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "horizontal",
-            "displayMode": "gradient"
-          },
-          "targets": [
+              "expr": "max by (instance) (thermalscope_nvme_temperature_celsius{sensor=\"Composite\", instance=~\"$instance\"})",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "NVMe",
+              "range": false,
+              "refId": "B"
+            },
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "ipmi_fan_speed_rpm{instance=\"hestia\"}",
-              "legendFormat": "{{name}}"
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max by (instance) (instance:thermalscope_cpu_freq_ratio{instance=~\"$instance\"})",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "Clock",
+              "range": false,
+              "refId": "C"
             }
           ],
-          "title": "Current Fan RPM",
-          "type": "bargauge"
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 51},
-          "id": 300,
-          "title": "Power & Energy — CPU RAPL + SoC; cost is an estimate (set $cost_per_kwh)",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Per-node CPU package power from the RAPL energy counter (rate over 5m). Backed by the instance:thermalscope_cpu_package_watts:rate5m recording rule.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "unit": "watt",
-              "min": 0
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 52},
-          "id": 301,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
+          "title": "Each host at a glance",
+          "transformations": [
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "instance:thermalscope_cpu_package_watts:rate5m{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}}"
+              "id": "joinByField",
+              "options": {
+                "byField": "instance",
+                "mode": "outer"
+              }
+            },
+            {
+              "id": "filterFieldsByName",
+              "options": {
+                "include": {
+                  "names": [
+                    "instance",
+                    "Value #A",
+                    "Value #B",
+                    "Value #C"
+                  ]
+                }
+              }
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "Time 1": true,
+                  "Time 2": true,
+                  "Time 3": true,
+                  "__name__": true,
+                  "job": true,
+                  "job 1": true,
+                  "job 2": true,
+                  "namespace": true,
+                  "namespace 1": true,
+                  "namespace 2": true,
+                  "sensor": true,
+                  "sensor 1": true
+                },
+                "renameByName": {
+                  "Value #A": "CPU Tctl",
+                  "Value #B": "Hottest NVMe",
+                  "Value #C": "CPU clock vs max",
+                  "instance": "Host"
+                }
+              }
             }
           ],
-          "title": "CPU Package Power (RAPL)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Per-node SoC rail power reported by the amdgpu chip sensor.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "unit": "watt",
-              "min": 0
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 52},
-          "id": 302,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_power_watts{instance=~\"$instance\", chip=\"amdgpu\"}",
-              "legendFormat": "{{instance}}"
-            }
-          ],
-          "title": "SoC Power (amdgpu)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Total CPU package energy across all nodes over the trailing 24h. Backed by the instance:thermalscope_cpu_package_kwh:increase1d recording rule.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-              "unit": "kwatth",
-              "decimals": 3,
-              "min": 0
-            }
-          },
-          "gridPos": {"h": 5, "w": 12, "x": 0, "y": 60},
-          "id": 303,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "auto",
-            "colorMode": "value",
-            "graphMode": "area",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "sum(instance:thermalscope_cpu_package_kwh:increase1d{instance=~\"$instance\"})",
-              "legendFormat": "Total CPU energy / day"
-            }
-          ],
-          "title": "Energy per day (kWh)",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Estimated monthly CPU-package electricity cost: daily kWh × 30 × $cost_per_kwh. This is an ESTIMATE driven by the editable cost_per_kwh template variable — set it to your actual rate. Covers CPU package (RAPL) only, not whole-system draw.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-              "unit": "currencyUSD",
-              "decimals": 2,
-              "min": 0
-            }
-          },
-          "gridPos": {"h": 5, "w": 12, "x": 12, "y": 60},
-          "id": 304,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "auto",
-            "colorMode": "value",
-            "graphMode": "none",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "sum(instance:thermalscope_cpu_package_kwh:increase1d{instance=~\"$instance\"}) * 30 * $cost_per_kwh",
-              "legendFormat": "Est. CPU cost / month"
-            }
-          ],
-          "title": "Estimated cost / month ($) — estimate, see $cost_per_kwh",
-          "type": "stat"
+          "type": "table"
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 65},
-          "id": 600,
-          "title": "Wall Power (UniFi PDU) — measured per-device draw from the USP PDU Pro, not RAPL estimate",
-          "type": "row",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 24
+          },
+          "id": 100,
           "panels": [
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "description": "Measured WALL power per PDU outlet from the UniFi USP PDU Pro (real per-device draw, not a CPU-only RAPL estimate). Only energized outlets shown (> 0 W), sorted descending. Some outlets carry an operator-set name (DS923+, 805 G6, UCG Fiber, XB8); unnamed ones show as their outlet index.",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
               "fieldConfig": {
                 "defaults": {
-                  "color": {"mode": "thresholds"},
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "lineWidth": 2,
+                    "spanNulls": false
+                  },
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
-                      {"color": "green", "value": null},
-                      {"color": "orange", "value": 100},
-                      {"color": "red", "value": 200}
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 55
+                      },
+                      {
+                        "color": "red",
+                        "value": 65
+                      }
                     ]
                   },
-                  "unit": "watt",
-                  "min": 0
+                  "unit": "celsius"
                 }
               },
-              "gridPos": {"h": 10, "w": 12, "x": 0, "y": 66},
+              "gridPos": {
+                "h": 8,
+                "w": 16,
+                "x": 0,
+                "y": 25
+              },
+              "id": 3,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "right"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_nvme_temperature_celsius{instance=~\"$instance\", sensor=\"Composite\"}",
+                  "legendFormat": "{{instance}} {{device}}"
+                }
+              ],
+              "title": "NVMe Drive Temperatures",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "max": 90,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 55
+                      },
+                      {
+                        "color": "red",
+                        "value": 65
+                      }
+                    ]
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 25
+              },
+              "id": 4,
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_nvme_temperature_celsius{instance=~\"$instance\", sensor=\"Composite\"}",
+                  "legendFormat": "{{instance}} {{device}}"
+                }
+              ],
+              "title": "NVMe Current Temps",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "SMART endurance estimate per drive (0–1 = fraction of rated write endurance consumed). Yellow ≥70%, red ≥85%; the drive is end-of-life past ~95%.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "max": 1,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 0.7
+                      },
+                      {
+                        "color": "red",
+                        "value": 0.85
+                      }
+                    ]
+                  },
+                  "unit": "percentunit"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 90
+              },
+              "id": 701,
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_nvme_percentage_used_ratio{instance=~\"$instance\"}",
+                  "instant": true,
+                  "legendFormat": "{{instance}} {{device}}",
+                  "range": false
+                }
+              ],
+              "title": "% endurance used",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Spare headroom per drive: available-spare ratio minus the drive's own SMART spare threshold. Green ≥10%, orange <10%, red at/below threshold (0) — a drive running out of spare turns red.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "max": 1,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 0.05
+                      },
+                      {
+                        "color": "green",
+                        "value": 0.1
+                      }
+                    ]
+                  },
+                  "unit": "percentunit"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 90
+              },
+              "id": 702,
+              "options": {
+                "displayMode": "lcd",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_nvme_available_spare_ratio{instance=~\"$instance\"} - thermalscope_nvme_available_spare_threshold_ratio{instance=~\"$instance\"}",
+                  "instant": true,
+                  "legendFormat": "{{instance}} {{device}}",
+                  "range": false
+                }
+              ],
+              "title": "NVMe Spare Headroom",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "SMART critical-warning bitfield per drive. 0 = OK; any non-zero value means the drive is reporting a critical condition (failing).",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [
+                    {
+                      "options": {
+                        "0": {
+                          "color": "green",
+                          "text": "OK"
+                        }
+                      },
+                      "type": "value"
+                    }
+                  ],
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 1
+                      }
+                    ]
+                  },
+                  "unit": "short"
+                }
+              },
+              "gridPos": {
+                "h": 6,
+                "w": 12,
+                "x": 0,
+                "y": 98
+              },
+              "id": 703,
+              "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                },
+                "textMode": "value_and_name"
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_nvme_critical_warning{instance=~\"$instance\"}",
+                  "instant": true,
+                  "legendFormat": "{{instance}} {{device}}",
+                  "range": false
+                }
+              ],
+              "title": "Critical warning",
+              "type": "stat"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Cumulative uncorrectable (media) errors per drive, plus new errors in the last 24h. Any non-zero value is bad.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineWidth": 2,
+                    "spanNulls": false
+                  },
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "red",
+                        "value": 1
+                      }
+                    ]
+                  },
+                  "unit": "short"
+                }
+              },
+              "gridPos": {
+                "h": 6,
+                "w": 12,
+                "x": 12,
+                "y": 98
+              },
+              "id": 704,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "right"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_nvme_media_errors_total{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} {{device}} total"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "increase(thermalscope_nvme_media_errors_total{instance=~\"$instance\"}[24h])",
+                  "legendFormat": "{{instance}} {{device}} +24h"
+                }
+              ],
+              "title": "Media errors (cumulative + 24h)",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Lifetime power-on hours per drive — age/context for the wear figures.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "blue",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "h"
+                }
+              },
+              "gridPos": {
+                "h": 4,
+                "w": 12,
+                "x": 0,
+                "y": 104
+              },
+              "id": 705,
+              "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                },
+                "textMode": "value_and_name"
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_nvme_power_on_hours_total{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} {{device}}"
+                }
+              ],
+              "title": "Power-on hours",
+              "type": "stat"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Lifetime host data written per drive (data units × 512000 = bytes). Context for endurance burn rate.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "blue",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "decbytes"
+                }
+              },
+              "gridPos": {
+                "h": 4,
+                "w": 12,
+                "x": 12,
+                "y": 104
+              },
+              "id": 706,
+              "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                },
+                "textMode": "value_and_name"
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_nvme_data_units_written_total{instance=~\"$instance\"} * 512000",
+                  "legendFormat": "{{instance}} {{device}}"
+                }
+              ],
+              "title": "Data written",
+              "type": "stat"
+            }
+          ],
+          "title": "NVMe drives and wear",
+          "type": "row"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 25
+          },
+          "id": 101,
+          "panels": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Per-node CPU package power from the RAPL energy counter (rate over 5m). Backed by the instance:thermalscope_cpu_package_watts:rate5m recording rule.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "lineWidth": 2,
+                    "spanNulls": false
+                  },
+                  "min": 0,
+                  "unit": "watt"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 26
+              },
+              "id": 301,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "instance:thermalscope_cpu_package_watts:rate5m{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}}"
+                }
+              ],
+              "title": "CPU Package Power (RAPL)",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Per-node SoC rail power reported by the amdgpu chip sensor.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "lineWidth": 2,
+                    "spanNulls": false
+                  },
+                  "min": 0,
+                  "unit": "watt"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 26
+              },
+              "id": 302,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_power_watts{instance=~\"$instance\", chip=\"amdgpu\"}",
+                  "legendFormat": "{{instance}}"
+                }
+              ],
+              "title": "SoC Power (amdgpu)",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Total CPU package energy across all nodes over the trailing 24h. Backed by the instance:thermalscope_cpu_package_kwh:increase1d recording rule.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "decimals": 3,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "kwatth"
+                }
+              },
+              "gridPos": {
+                "h": 5,
+                "w": 12,
+                "x": 0,
+                "y": 34
+              },
+              "id": 303,
+              "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": ""
+                },
+                "textMode": "value_and_name"
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "sum(instance:thermalscope_cpu_package_kwh:increase1d{instance=~\"$instance\"})",
+                  "legendFormat": "Total CPU energy / day"
+                }
+              ],
+              "title": "Energy per day (kWh)",
+              "type": "stat"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Estimated monthly CPU-package electricity cost: daily kWh × 30 × $cost_per_kwh. This is an ESTIMATE driven by the editable cost_per_kwh template variable — set it to your actual rate. Covers CPU package (RAPL) only, not whole-system draw.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "decimals": 2,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "currencyUSD"
+                }
+              },
+              "gridPos": {
+                "h": 5,
+                "w": 12,
+                "x": 12,
+                "y": 34
+              },
+              "id": 304,
+              "options": {
+                "colorMode": "value",
+                "graphMode": "none",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": ""
+                },
+                "textMode": "value_and_name"
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "sum(instance:thermalscope_cpu_package_kwh:increase1d{instance=~\"$instance\"}) * 30 * $cost_per_kwh",
+                  "legendFormat": "Est. CPU cost / month"
+                }
+              ],
+              "title": "Estimated CPU-only cost / month ($) - estimate",
+              "type": "stat"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Measured WALL power per PDU outlet from the UniFi USP PDU Pro (real per-device draw, not a CPU-only RAPL estimate). Only energized outlets shown (> 0 W), sorted descending. Some outlets carry an operator-set name (DS923+, 805 G6, UCG Fiber, XB8); unnamed ones show as their outlet index.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 100
+                      },
+                      {
+                        "color": "red",
+                        "value": 200
+                      }
+                    ]
+                  },
+                  "unit": "watt"
+                }
+              },
+              "gridPos": {
+                "h": 10,
+                "w": 12,
+                "x": 0,
+                "y": 40
+              },
               "id": 601,
               "options": {
-                "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-                "orientation": "horizontal",
                 "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": ""
+                },
                 "sortBy": "Value",
                 "sortDescending": true
               },
               "targets": [
                 {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
                   "expr": "unpoller_device_outlet_outlet_power{name=\"USP PDU Pro\"} > 0",
                   "legendFormat": "{{outlet_name}}"
                 }
@@ -674,25 +2140,46 @@ data:
               "type": "bargauge"
             },
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
               "description": "Total AC power consumption reported by the UniFi USP PDU Pro — the true whole-rack wall draw for everything plugged into it.",
               "fieldConfig": {
                 "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "watt",
-                  "min": 0
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "lineWidth": 2,
+                    "spanNulls": false
+                  },
+                  "min": 0,
+                  "unit": "watt"
                 }
               },
-              "gridPos": {"h": 5, "w": 12, "x": 12, "y": 66},
+              "gridPos": {
+                "h": 5,
+                "w": 12,
+                "x": 12,
+                "y": 40
+              },
               "id": 602,
               "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
               },
               "targets": [
                 {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
                   "expr": "unpoller_device_outlet_ac_power_consumption{name=\"USP PDU Pro\"}",
                   "legendFormat": "PDU total"
                 }
@@ -701,29 +2188,55 @@ data:
               "type": "timeseries"
             },
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
               "description": "Estimated monthly electricity cost from MEASURED wall power (PDU total), covering ALL devices plugged into the USP PDU Pro: PDU watts × 24 × 30 / 1000 × $cost_per_kwh. Unlike the RAPL cost stat above (CPU package only), this is the true whole-system bill for the rack. Cost is an estimate driven by the editable $cost_per_kwh template variable.",
               "fieldConfig": {
                 "defaults": {
-                  "color": {"mode": "thresholds"},
-                  "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}]},
-                  "unit": "currencyUSD",
+                  "color": {
+                    "mode": "thresholds"
+                  },
                   "decimals": 2,
-                  "min": 0
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "currencyUSD"
                 }
               },
-              "gridPos": {"h": 5, "w": 12, "x": 12, "y": 71},
+              "gridPos": {
+                "h": 5,
+                "w": 12,
+                "x": 12,
+                "y": 45
+              },
               "id": 603,
               "options": {
-                "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-                "orientation": "auto",
                 "colorMode": "value",
                 "graphMode": "none",
+                "orientation": "auto",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": ""
+                },
                 "textMode": "value_and_name"
               },
               "targets": [
                 {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
                   "expr": "unpoller_device_outlet_ac_power_consumption{name=\"USP PDU Pro\"} * 24 * 30 / 1000 * $cost_per_kwh",
                   "legendFormat": "Wall cost / month (PDU, all devices)"
                 }
@@ -732,35 +2245,62 @@ data:
               "type": "stat"
             },
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
               "description": "PoE power delivered per switch port (unpoller_device_port_poe_watts), energized ports only (> 0 W). This is the PoE draw the switch sources to downstream devices (APs, cameras, phones); it is a subset of the switch's own outlet wall power.",
               "fieldConfig": {
                 "defaults": {
-                  "color": {"mode": "thresholds"},
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "min": 0,
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
-                      {"color": "green", "value": null},
-                      {"color": "orange", "value": 15},
-                      {"color": "red", "value": 25}
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 15
+                      },
+                      {
+                        "color": "red",
+                        "value": 25
+                      }
                     ]
                   },
-                  "unit": "watt",
-                  "min": 0
+                  "unit": "watt"
                 }
               },
-              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 76},
+              "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 50
+              },
               "id": 604,
               "options": {
-                "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-                "orientation": "horizontal",
                 "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": ""
+                },
                 "sortBy": "Value",
                 "sortDescending": true
               },
               "targets": [
                 {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
                   "expr": "unpoller_device_port_poe_watts > 0",
                   "legendFormat": "{{name}} {{port_name}}"
                 }
@@ -768,553 +2308,878 @@ data:
               "title": "PoE delivered per port (W)",
               "type": "bargauge"
             }
-          ]
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 66},
-          "id": 400,
-          "title": "Headroom & Throttle — °C to thermal limits + CPU clock throttle indicator",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "NVMe thermal headroom to the SMART crit threshold, per drive (crit − current). Backed by the instance:thermalscope_nvme_headroom_celsius recording rule. Red <5°C, orange <10°C.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "red", "value": null},
-                  {"color": "orange", "value": 5},
-                  {"color": "green", "value": 10}
-                ]
-              },
-              "unit": "celsius",
-              "min": 0
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 67},
-          "id": 401,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "horizontal",
-            "displayMode": "gradient"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "instance:thermalscope_nvme_headroom_celsius{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
-            }
           ],
-          "title": "NVMe headroom (°C to crit)",
-          "type": "bargauge"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "CPU thermal headroom to Tjmax, per host ($cpu_tjmax − Tctl). Tjmax is an advisory constant — these AMD APUs expose no crit sensor — set via the $cpu_tjmax template variable. Red <5°C, orange <10°C.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "red", "value": null},
-                  {"color": "orange", "value": 5},
-                  {"color": "green", "value": 10}
-                ]
-              },
-              "unit": "celsius",
-              "min": 0
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 67},
-          "id": 402,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"], "fields": ""},
-            "orientation": "horizontal",
-            "displayMode": "gradient"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "$cpu_tjmax - thermalscope_cpu_temperature_celsius{sensor=\"Tctl\", instance=~\"$instance\"}",
-              "legendFormat": "{{instance}}"
-            }
-          ],
-          "title": "CPU headroom (°C to Tjmax)",
-          "type": "bargauge"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Worst-throttled-core CPU frequency ratio (current/max), per node. Backed by the instance:thermalscope_cpu_freq_ratio recording rule. NOTE: these APUs idle-park cores well below max, so the idle baseline is ~0.4–0.7, NOT ~1.0 — a low ratio is only concerning alongside high temperature (see the ThermalScopeCPUThrottling alert). node-exporter covers the 6 Talos nodes only (not hestia). Red <0.85.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [{"color": "red", "value": null}, {"color": "green", "value": 0.85}]
-              },
-              "unit": "percentunit",
-              "min": 0,
-              "max": 1
-            }
-          },
-          "gridPos": {"h": 8, "w": 24, "x": 0, "y": 75},
-          "id": 403,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "instance:thermalscope_cpu_freq_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}}"
-            }
-          ],
-          "title": "CPU frequency ratio (throttle indicator)",
-          "type": "timeseries"
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 83},
-          "id": 700,
-          "title": "NVMe Wear & Health",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "SMART endurance estimate per drive (0–1 = fraction of rated write endurance consumed). Yellow ≥70%, red ≥85%; the drive is end-of-life past ~95%.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 0.7},
-                  {"color": "red", "value": 0.85}
-                ]
-              },
-              "unit": "percentunit",
-              "min": 0,
-              "max": 1
-            }
-          },
-          "id": 701,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "horizontal",
-            "displayMode": "gradient"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_percentage_used_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "title": "% endurance used",
-          "type": "bargauge",
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 84}
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Spare headroom per drive: available-spare ratio minus the drive's own SMART spare threshold. Green ≥10%, orange <10%, red at/below threshold (0) — a drive running out of spare turns red.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "red", "value": null},
-                  {"color": "orange", "value": 0.05},
-                  {"color": "green", "value": 0.1}
-                ]
-              },
-              "unit": "percentunit",
-              "min": 0,
-              "max": 1
-            }
-          },
-          "id": 702,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "horizontal",
-            "displayMode": "lcd"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_available_spare_ratio{instance=~\"$instance\"} - thermalscope_nvme_available_spare_threshold_ratio{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "title": "NVMe Spare Headroom",
-          "type": "bargauge",
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 84}
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "SMART critical-warning bitfield per drive. 0 = OK; any non-zero value means the drive is reporting a critical condition (failing).",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]
-              },
-              "mappings": [{"type": "value", "options": {"0": {"text": "OK", "color": "green"}}}],
-              "unit": "short"
-            }
-          },
-          "id": 703,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "auto",
-            "colorMode": "background",
-            "graphMode": "none",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_critical_warning{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}",
-              "instant": true,
-              "range": false
-            }
-          ],
-          "title": "Critical warning",
-          "type": "stat",
-          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 92}
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Cumulative uncorrectable (media) errors per drive, plus new errors in the last 24h. Any non-zero value is bad.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 2, "spanNulls": false, "fillOpacity": 10, "drawStyle": "line"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]
-              },
-              "unit": "short",
-              "min": 0
-            }
-          },
-          "id": 704,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "right"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_media_errors_total{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}} total"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "increase(thermalscope_nvme_media_errors_total{instance=~\"$instance\"}[24h])",
-              "legendFormat": "{{instance}} {{device}} +24h"
-            }
-          ],
-          "title": "Media errors (cumulative + 24h)",
-          "type": "timeseries",
-          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 92}
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Lifetime power-on hours per drive — age/context for the wear figures.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
-              "unit": "h"
-            }
-          },
-          "id": 705,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "auto",
-            "colorMode": "value",
-            "graphMode": "none",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_power_on_hours_total{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} {{device}}"
-            }
-          ],
-          "title": "Power-on hours",
-          "type": "stat",
-          "gridPos": {"h": 4, "w": 12, "x": 0, "y": 98}
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Lifetime host data written per drive (data units × 512000 = bytes). Context for endurance burn rate.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {"mode": "absolute", "steps": [{"color": "blue", "value": null}]},
-              "unit": "decbytes"
-            }
-          },
-          "id": 706,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "auto",
-            "colorMode": "value",
-            "graphMode": "none",
-            "textMode": "value_and_name"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_nvme_data_units_written_total{instance=~\"$instance\"} * 512000",
-              "legendFormat": "{{instance}} {{device}}"
-            }
-          ],
-          "title": "Data written",
-          "type": "stat",
-          "gridPos": {"h": 4, "w": 12, "x": 12, "y": 98}
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 102},
-          "id": 500,
-          "title": "Degradation & Fans — temp-vs-load (cooling drift) + fan curve",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Cooling-degradation scatter: CPU Tctl (Y) vs CPU utilization (X), per host. A host that over time drifts UP-and-LEFT (hotter at the same load) is losing cooling capacity (dust, dried paste, weak fan). Utilization is the instance:node_cpu_utilization:rate5m recording rule, re-keyed to the thermalscope instance label via node_uname_info. node-exporter covers the 6 Talos nodes only — hestia (bare host, no DaemonSet) has no utilization series and does not appear here.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"pointSize": {"fixed": 8}},
-              "unit": "celsius"
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 103},
-          "id": 501,
-          "options": {
-            "seriesMapping": "manual",
-            "series": [
-              {
-                "frame": {"matcher": {"id": "byIndex", "options": 0}},
-                "x": {"matcher": {"id": "byName", "options": "cpu_util"}},
-                "y": {"matcher": {"id": "byName", "options": "cpu_temp"}}
-              }
-            ],
-            "colorField": {"matcher": {"id": "byName", "options": "instance"}},
-            "pointSize": {"mode": "fixed", "fixed": 8},
-            "tooltip": {"mode": "single"},
-            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "label_replace(thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_cpu_utilization:rate5m, \"__name__\", \"cpu_temp\", \"\", \"\")",
-              "format": "table",
-              "instant": true,
-              "range": false,
-              "refId": "A",
-              "legendFormat": "cpu_temp"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "label_replace(instance:node_cpu_utilization:rate5m{instance=~\"$instance\"}, \"__name__\", \"cpu_util\", \"\", \"\")",
-              "format": "table",
-              "instant": true,
-              "range": false,
-              "refId": "B",
-              "legendFormat": "cpu_util"
-            }
-          ],
-          "transformations": [
-            {"id": "joinByLabels", "options": {"value": "__name__", "join": ["instance"]}}
-          ],
-          "title": "CPU temp vs CPU load (degradation scatter)",
-          "type": "xychart"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Secondary degradation scatter: CPU Tctl (Y) vs busy disk fraction (X), per host. Backed by instance:node_disk_busy:rate5m (hottest device per node, re-keyed to the thermalscope instance label). Useful when a host's heat tracks storage I/O rather than CPU. Talos nodes only (no hestia node-exporter series).",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"pointSize": {"fixed": 8}},
-              "unit": "celsius"
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 103},
-          "id": 502,
-          "options": {
-            "seriesMapping": "manual",
-            "series": [
-              {
-                "frame": {"matcher": {"id": "byIndex", "options": 0}},
-                "x": {"matcher": {"id": "byName", "options": "disk_busy"}},
-                "y": {"matcher": {"id": "byName", "options": "cpu_temp"}}
-              }
-            ],
-            "colorField": {"matcher": {"id": "byName", "options": "instance"}},
-            "pointSize": {"mode": "fixed", "fixed": 8},
-            "tooltip": {"mode": "single"},
-            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "label_replace(thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_disk_busy:rate5m, \"__name__\", \"cpu_temp\", \"\", \"\")",
-              "format": "table",
-              "instant": true,
-              "range": false,
-              "refId": "A",
-              "legendFormat": "cpu_temp"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "label_replace(instance:node_disk_busy:rate5m{instance=~\"$instance\"}, \"__name__\", \"disk_busy\", \"\", \"\")",
-              "format": "table",
-              "instant": true,
-              "range": false,
-              "refId": "B",
-              "legendFormat": "disk_busy"
-            }
-          ],
-          "transformations": [
-            {"id": "joinByLabels", "options": {"value": "__name__", "join": ["instance"]}}
-          ],
-          "title": "CPU temp vs disk busy (degradation scatter)",
-          "type": "xychart"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "Cooling-drift trend: current CPU Tctl minus Tctl 7 days ago, per host. Persistent positive drift = the host runs hotter than a week ago (cooling degradation). Retention is 10d so the offset window is 7d, NOT 30d — this signal DEEPENS as history accumulates and a longer baseline becomes possible. Compares wall-clock-aligned samples (not same-load), so read it alongside the scatter panels. Orange ≥2°C hotter, red ≥5°C.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "custom": {"lineWidth": 2, "spanNulls": false},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {"color": "green", "value": null},
-                  {"color": "orange", "value": 2},
-                  {"color": "red", "value": 5}
-                ]
-              },
-              "unit": "celsius"
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 111},
-          "id": 503,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} - thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} offset 7d",
-              "legendFormat": "{{instance}} Δ vs 7d ago"
-            }
-          ],
-          "title": "CPU temp drift vs 7d ago (deepens as history grows)",
-          "type": "timeseries"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "description": "hestia fan curve: chassis fan RPM (Y) vs CPU Tctl (X). Shows whether the BMC fan curve ramps sensibly with CPU heat. Fan RPM and temp join on instance=\"hestia\" (ipmi-exporter and thermalscope both label this host literally — no node_uname_info re-key needed). Visualization only; backs the ThermalScopeFanFailing alert qualitatively.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"pointSize": {"fixed": 8}},
-              "unit": "rotrpm"
-            }
-          },
-          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 111},
-          "id": 504,
-          "options": {
-            "seriesMapping": "manual",
-            "series": [
-              {
-                "frame": {"matcher": {"id": "byIndex", "options": 0}},
-                "x": {"matcher": {"id": "byName", "options": "fan_tctl"}},
-                "y": {"matcher": {"id": "byName", "options": "fan_rpm"}}
-              }
-            ],
-            "colorField": {"matcher": {"id": "byName", "options": "name"}},
-            "pointSize": {"mode": "fixed", "fixed": 8},
-            "tooltip": {"mode": "single"},
-            "legend": {"displayMode": "list", "placement": "bottom", "showLegend": true}
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "label_replace(ipmi_fan_speed_rpm{instance=\"hestia\"}, \"__name__\", \"fan_rpm\", \"\", \"\")",
-              "format": "table",
-              "instant": true,
-              "range": false,
-              "refId": "A",
-              "legendFormat": "fan_rpm"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "label_replace(ipmi_fan_speed_rpm{instance=\"hestia\"} * 0 + on(instance) group_left max by(instance)(thermalscope_cpu_temperature_celsius{instance=\"hestia\", sensor=\"Tctl\"}), \"__name__\", \"fan_tctl\", \"\", \"\")",
-              "format": "table",
-              "instant": true,
-              "range": false,
-              "refId": "B",
-              "legendFormat": "fan_tctl"
-            }
-          ],
-          "transformations": [
-            {"id": "joinByLabels", "options": {"value": "__name__", "join": ["name"]}}
-          ],
-          "title": "hestia fan curve (RPM vs CPU Tctl)",
-          "type": "xychart"
+          "title": "Power and energy (estimates)",
+          "type": "row"
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 119},
-          "id": 105,
-          "title": "AMD iGPU Thermals (Talos APUs)",
-          "type": "row",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 26
+          },
+          "id": 102,
           "panels": [
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
               "fieldConfig": {
                 "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "lineWidth": 2,
+                    "spanNulls": false
+                  },
+                  "unit": "rotrpm"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 16,
+                "x": 0,
+                "y": 34
+              },
+              "id": 14,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "right"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "ipmi_fan_speed_rpm{instance=\"hestia\"}",
+                  "legendFormat": "{{name}}"
+                }
+              ],
+              "title": "Chassis Fan RPM",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "max": 8000,
+                  "min": 0,
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
-                      {"color": "green", "value": null},
-                      {"color": "orange", "value": 80},
-                      {"color": "red", "value": 90}
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 200
+                      },
+                      {
+                        "color": "green",
+                        "value": 500
+                      }
+                    ]
+                  },
+                  "unit": "rotrpm"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 8,
+                "x": 16,
+                "y": 34
+              },
+              "id": 15,
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "ipmi_fan_speed_rpm{instance=\"hestia\"}",
+                  "legendFormat": "{{name}}"
+                }
+              ],
+              "title": "Current Fan RPM",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "UniFi PoE switch fan level (0–4 typical). High sustained levels indicate elevated chassis heat.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "lineWidth": 2,
+                    "spanNulls": false
+                  },
+                  "min": 0,
+                  "unit": "short"
+                }
+              },
+              "gridPos": {
+                "h": 6,
+                "w": 24,
+                "x": 0,
+                "y": 27
+              },
+              "id": 204,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "unpoller_device_fan_level{type=\"usw\"}",
+                  "legendFormat": "{{name}} fan level"
+                }
+              ],
+              "title": "PoE Switch Fan Level",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "NVMe thermal headroom to the SMART crit threshold, per drive (crit − current). Backed by the instance:thermalscope_nvme_headroom_celsius recording rule. Red <5°C, orange <10°C.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 5
+                      },
+                      {
+                        "color": "green",
+                        "value": 10
+                      }
                     ]
                   },
                   "unit": "celsius"
                 }
               },
-              "gridPos": {"h": 8, "w": 24, "x": 0, "y": 120},
-              "id": 13,
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 58
+              },
+              "id": 401,
               "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": ""
+                }
               },
               "targets": [
                 {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "instance:thermalscope_nvme_headroom_celsius{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} {{device}}"
+                }
+              ],
+              "title": "NVMe headroom (°C to crit)",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "CPU thermal headroom to Tjmax, per host ($cpu_tjmax − Tctl). Tjmax is an advisory constant — these AMD APUs expose no crit sensor — set via the $cpu_tjmax template variable. Red <5°C, orange <10°C.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 5
+                      },
+                      {
+                        "color": "green",
+                        "value": 10
+                      }
+                    ]
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 58
+              },
+              "id": 402,
+              "options": {
+                "displayMode": "gradient",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ],
+                  "fields": ""
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "$cpu_tjmax - thermalscope_cpu_temperature_celsius{sensor=\"Tctl\", instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}}"
+                }
+              ],
+              "title": "CPU headroom (°C to Tjmax)",
+              "type": "bargauge"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Worst-throttled-core CPU frequency ratio (current/max), per node. Backed by the instance:thermalscope_cpu_freq_ratio recording rule. NOTE: these APUs idle-park cores well below max, so the idle baseline is ~0.4–0.7, NOT ~1.0 — a low ratio is only concerning alongside high temperature (see the ThermalScopeCPUThrottling alert). node-exporter covers the 6 Talos nodes only (not hestia). Red <0.85.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "custom": {
+                    "lineWidth": 2,
+                    "spanNulls": false
+                  },
+                  "max": 1,
+                  "min": 0,
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "text",
+                        "value": null
+                      }
+                    ]
+                  },
+                  "unit": "percentunit"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 66
+              },
+              "id": 403,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "instance:thermalscope_cpu_freq_ratio{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}}"
+                }
+              ],
+              "title": "CPU clock vs max (idle frequency scaling, NOT throttling)",
+              "type": "timeseries"
+            }
+          ],
+          "title": "Fans and cooling",
+          "type": "row"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 27
+          },
+          "id": 103,
+          "panels": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Cooling-degradation scatter: CPU Tctl (Y) vs CPU utilization (X), per host. A host that over time drifts UP-and-LEFT (hotter at the same load) is losing cooling capacity (dust, dried paste, weak fan). Utilization is the instance:node_cpu_utilization:rate5m recording rule, re-keyed to the thermalscope instance label via node_uname_info. node-exporter covers the 6 Talos nodes only — hestia (bare host, no DaemonSet) has no utilization series and does not appear here.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "pointSize": {
+                      "fixed": 8
+                    }
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 28
+              },
+              "id": 501,
+              "options": {
+                "colorField": {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "instance"
+                  }
+                },
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "pointSize": {
+                  "fixed": 8,
+                  "mode": "fixed"
+                },
+                "series": [
+                  {
+                    "frame": {
+                      "matcher": {
+                        "id": "byIndex",
+                        "options": 0
+                      }
+                    },
+                    "x": {
+                      "matcher": {
+                        "id": "byName",
+                        "options": "cpu_util"
+                      }
+                    },
+                    "y": {
+                      "matcher": {
+                        "id": "byName",
+                        "options": "cpu_temp"
+                      }
+                    }
+                  }
+                ],
+                "seriesMapping": "manual",
+                "tooltip": {
+                  "mode": "single"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "label_replace(thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_cpu_utilization:rate5m, \"__name__\", \"cpu_temp\", \"\", \"\")",
+                  "format": "table",
+                  "instant": true,
+                  "legendFormat": "cpu_temp",
+                  "range": false,
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "label_replace(instance:node_cpu_utilization:rate5m{instance=~\"$instance\"}, \"__name__\", \"cpu_util\", \"\", \"\")",
+                  "format": "table",
+                  "instant": true,
+                  "legendFormat": "cpu_util",
+                  "range": false,
+                  "refId": "B"
+                }
+              ],
+              "title": "CPU temp vs CPU load (degradation scatter)",
+              "transformations": [
+                {
+                  "id": "joinByLabels",
+                  "options": {
+                    "join": [
+                      "instance"
+                    ],
+                    "value": "__name__"
+                  }
+                }
+              ],
+              "type": "xychart"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Secondary degradation scatter: CPU Tctl (Y) vs busy disk fraction (X), per host. Backed by instance:node_disk_busy:rate5m (hottest device per node, re-keyed to the thermalscope instance label). Useful when a host's heat tracks storage I/O rather than CPU. Talos nodes only (no hestia node-exporter series).",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "pointSize": {
+                      "fixed": 8
+                    }
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 28
+              },
+              "id": 502,
+              "options": {
+                "colorField": {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "instance"
+                  }
+                },
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "pointSize": {
+                  "fixed": 8,
+                  "mode": "fixed"
+                },
+                "series": [
+                  {
+                    "frame": {
+                      "matcher": {
+                        "id": "byIndex",
+                        "options": 0
+                      }
+                    },
+                    "x": {
+                      "matcher": {
+                        "id": "byName",
+                        "options": "disk_busy"
+                      }
+                    },
+                    "y": {
+                      "matcher": {
+                        "id": "byName",
+                        "options": "cpu_temp"
+                      }
+                    }
+                  }
+                ],
+                "seriesMapping": "manual",
+                "tooltip": {
+                  "mode": "single"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "label_replace(thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} and on(instance) instance:node_disk_busy:rate5m, \"__name__\", \"cpu_temp\", \"\", \"\")",
+                  "format": "table",
+                  "instant": true,
+                  "legendFormat": "cpu_temp",
+                  "range": false,
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "label_replace(instance:node_disk_busy:rate5m{instance=~\"$instance\"}, \"__name__\", \"disk_busy\", \"\", \"\")",
+                  "format": "table",
+                  "instant": true,
+                  "legendFormat": "disk_busy",
+                  "range": false,
+                  "refId": "B"
+                }
+              ],
+              "title": "CPU temp vs disk busy (degradation scatter)",
+              "transformations": [
+                {
+                  "id": "joinByLabels",
+                  "options": {
+                    "join": [
+                      "instance"
+                    ],
+                    "value": "__name__"
+                  }
+                }
+              ],
+              "type": "xychart"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "Cooling-drift trend: current CPU Tctl minus Tctl 7 days ago, per host. Persistent positive drift = the host runs hotter than a week ago (cooling degradation). Retention is 10d so the offset window is 7d, NOT 30d — this signal DEEPENS as history accumulates and a longer baseline becomes possible. Compares wall-clock-aligned samples (not same-load), so read it alongside the scatter panels. Orange ≥2°C hotter, red ≥5°C.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "custom": {
+                    "lineWidth": 2,
+                    "spanNulls": false
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 2
+                      },
+                      {
+                        "color": "red",
+                        "value": 5
+                      }
+                    ]
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 36
+              },
+              "id": 503,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} - thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=\"Tctl\"} offset 7d",
+                  "legendFormat": "{{instance}} Δ vs 7d ago"
+                }
+              ],
+              "title": "CPU temp drift vs 7d ago (deepens as history grows)",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "hestia fan curve: chassis fan RPM (Y) vs CPU Tctl (X). Shows whether the BMC fan curve ramps sensibly with CPU heat. Fan RPM and temp join on instance=\"hestia\" (ipmi-exporter and thermalscope both label this host literally — no node_uname_info re-key needed). Visualization only; backs the ThermalScopeFanFailing alert qualitatively.",
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "pointSize": {
+                      "fixed": 8
+                    }
+                  },
+                  "unit": "rotrpm"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 36
+              },
+              "id": 504,
+              "options": {
+                "colorField": {
+                  "matcher": {
+                    "id": "byName",
+                    "options": "name"
+                  }
+                },
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom",
+                  "showLegend": true
+                },
+                "pointSize": {
+                  "fixed": 8,
+                  "mode": "fixed"
+                },
+                "series": [
+                  {
+                    "frame": {
+                      "matcher": {
+                        "id": "byIndex",
+                        "options": 0
+                      }
+                    },
+                    "x": {
+                      "matcher": {
+                        "id": "byName",
+                        "options": "fan_tctl"
+                      }
+                    },
+                    "y": {
+                      "matcher": {
+                        "id": "byName",
+                        "options": "fan_rpm"
+                      }
+                    }
+                  }
+                ],
+                "seriesMapping": "manual",
+                "tooltip": {
+                  "mode": "single"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "label_replace(ipmi_fan_speed_rpm{instance=\"hestia\"}, \"__name__\", \"fan_rpm\", \"\", \"\")",
+                  "format": "table",
+                  "instant": true,
+                  "legendFormat": "fan_rpm",
+                  "range": false,
+                  "refId": "A"
+                },
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "label_replace(ipmi_fan_speed_rpm{instance=\"hestia\"} * 0 + on(instance) group_left max by(instance)(thermalscope_cpu_temperature_celsius{instance=\"hestia\", sensor=\"Tctl\"}), \"__name__\", \"fan_tctl\", \"\", \"\")",
+                  "format": "table",
+                  "instant": true,
+                  "legendFormat": "fan_tctl",
+                  "range": false,
+                  "refId": "B"
+                }
+              ],
+              "title": "hestia fan curve (RPM vs CPU Tctl)",
+              "transformations": [
+                {
+                  "id": "joinByLabels",
+                  "options": {
+                    "join": [
+                      "name"
+                    ],
+                    "value": "__name__"
+                  }
+                }
+              ],
+              "type": "xychart"
+            }
+          ],
+          "title": "Degradation analysis (temp vs load)",
+          "type": "row"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 28
+          },
+          "id": 104,
+          "panels": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "lineWidth": 2,
+                    "spanNulls": false
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 29
+              },
+              "id": 2,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_cpu_temperature_celsius{instance=~\"$instance\", sensor=~\"Tccd.*\"}",
+                  "legendFormat": "{{instance}} {{sensor}}"
+                }
+              ],
+              "title": "CPU Die Temperatures (Tccd1–4)",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "fieldConfig": {
+                "defaults": {
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "lineWidth": 2,
+                    "spanNulls": false
+                  },
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "orange",
+                        "value": 80
+                      },
+                      {
+                        "color": "red",
+                        "value": 90
+                      }
+                    ]
+                  },
+                  "unit": "celsius"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 139
+              },
+              "id": 13,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
                   "expr": "thermalscope_amdgpu_temperature_celsius{instance=~\"$instance\"}",
                   "legendFormat": "{{instance}} {{sensor}}"
                 }
@@ -1322,275 +3187,174 @@ data:
               "title": "AMD iGPU Temperature",
               "type": "timeseries"
             }
-          ]
-        },
-        {
-          "collapsed": false,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 120},
-          "id": 104,
-          "title": "Collector Health",
-          "type": "row",
-          "panels": []
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "thresholds"},
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]
-              },
-              "mappings": [{"options": {"0": {"text": "DOWN"}, "1": {"text": "UP"}}, "type": "value"}]
-            }
-          },
-          "gridPos": {"h": 4, "w": 8, "x": 0, "y": 121},
-          "id": 11,
-          "options": {
-            "reduceOptions": {"calcs": ["lastNotNull"]},
-            "orientation": "horizontal",
-            "colorMode": "background"
-          },
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_hwmon_up{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} hwmon"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "thermalscope_gpu_up{instance=~\"$instance\"}",
-              "legendFormat": "{{instance}} gpu"
-            }
           ],
-          "title": "Collector Status",
-          "type": "stat"
-        },
-        {
-          "datasource": {"type": "prometheus", "uid": "${datasource}"},
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "palette-classic"},
-              "custom": {"lineWidth": 1, "spanNulls": false},
-              "unit": "s"
-            }
-          },
-          "gridPos": {"h": 4, "w": 16, "x": 8, "y": 121},
-          "id": 12,
-          "options": {"tooltip": {"mode": "multi"}, "legend": {"displayMode": "list", "placement": "bottom"}},
-          "targets": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "expr": "scrape_duration_seconds{job=\"thermalscope\", instance=~\"$instance\"}",
-              "legendFormat": "{{instance}}"
-            }
-          ],
-          "title": "Scrape Duration",
-          "type": "timeseries"
+          "title": "CPU die and iGPU",
+          "type": "row"
         },
         {
           "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 125},
-          "id": 102,
-          "title": "NVIDIA GPU Thermals & Power (hestia) — collapsed; expand when GPUs in use",
-          "type": "row",
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 29
+          },
+          "id": 105,
           "panels": [
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
               "fieldConfig": {
                 "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
+                  "color": {
+                    "mode": "thresholds"
+                  },
+                  "mappings": [
+                    {
+                      "options": {
+                        "0": {
+                          "text": "DOWN"
+                        },
+                        "1": {
+                          "text": "UP"
+                        }
+                      },
+                      "type": "value"
+                    }
+                  ],
                   "thresholds": {
                     "mode": "absolute",
                     "steps": [
-                      {"color": "green", "value": null},
-                      {"color": "orange", "value": 75},
-                      {"color": "red", "value": 83}
+                      {
+                        "color": "red",
+                        "value": null
+                      },
+                      {
+                        "color": "green",
+                        "value": 1
+                      }
                     ]
+                  }
+                }
+              },
+              "gridPos": {
+                "h": 4,
+                "w": 8,
+                "x": 0,
+                "y": 30
+              },
+              "id": 11,
+              "options": {
+                "colorMode": "background",
+                "orientation": "horizontal",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
                   },
-                  "unit": "celsius"
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 126},
-              "id": 5,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
+                  "expr": "thermalscope_hwmon_up{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} hwmon"
+                },
                 {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_temperature_celsius{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}}"
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "thermalscope_gpu_up{instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}} gpu"
                 }
               ],
-              "title": "NVIDIA GPU Temperature",
-              "type": "timeseries"
+              "title": "Collector Status",
+              "type": "stat"
             },
             {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
               "fieldConfig": {
                 "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "watt",
-                  "max": 500
+                  "color": {
+                    "mode": "palette-classic"
+                  },
+                  "custom": {
+                    "lineWidth": 1,
+                    "spanNulls": false
+                  },
+                  "unit": "s"
                 }
               },
-              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 126},
-              "id": 6,
+              "gridPos": {
+                "h": 4,
+                "w": 16,
+                "x": 8,
+                "y": 30
+              },
+              "id": 12,
               "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
               },
               "targets": [
                 {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_power_draw_watts{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}}"
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "scrape_duration_seconds{job=\"thermalscope\", instance=~\"$instance\"}",
+                  "legendFormat": "{{instance}}"
                 }
               ],
-              "title": "NVIDIA GPU Power Draw",
-              "type": "timeseries"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "percentunit",
-                  "min": 0,
-                  "max": 1
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 126},
-              "id": 7,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_fan_speed_ratio{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}} fan"
-                }
-              ],
-              "title": "NVIDIA GPU Fan Speed",
+              "title": "Scrape Duration",
               "type": "timeseries"
             }
-          ]
-        },
-        {
-          "collapsed": true,
-          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 126},
-          "id": 103,
-          "title": "NVIDIA GPU Utilization & Clock (hestia) — collapsed",
-          "type": "row",
-          "panels": [
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "percentunit",
-                  "min": 0,
-                  "max": 1
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 0, "y": 127},
-              "id": 8,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_sm_utilization_ratio{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}} SM"
-                }
-              ],
-              "title": "NVIDIA GPU SM Utilization",
-              "type": "timeseries"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "percentunit",
-                  "min": 0,
-                  "max": 1
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 8, "y": 127},
-              "id": 9,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_memory_utilization_ratio{instance=~\"$instance\"}",
-                  "legendFormat": "{{instance}} GPU {{gpu}} memory"
-                }
-              ],
-              "title": "NVIDIA GPU Memory Utilization",
-              "type": "timeseries"
-            },
-            {
-              "datasource": {"type": "prometheus", "uid": "${datasource}"},
-              "fieldConfig": {
-                "defaults": {
-                  "color": {"mode": "palette-classic"},
-                  "custom": {"lineWidth": 2, "spanNulls": false},
-                  "unit": "mhz"
-                }
-              },
-              "gridPos": {"h": 8, "w": 8, "x": 16, "y": 127},
-              "id": 10,
-              "options": {
-                "tooltip": {"mode": "multi"},
-                "legend": {"displayMode": "list", "placement": "bottom"}
-              },
-              "targets": [
-                {
-                  "datasource": {"type": "prometheus", "uid": "${datasource}"},
-                  "expr": "thermalscope_gpu_sm_clock_hz{instance=~\"$instance\"} / 1e6",
-                  "legendFormat": "{{instance}} GPU {{gpu}}"
-                }
-              ],
-              "title": "NVIDIA GPU SM Clock",
-              "type": "timeseries"
-            }
-          ]
+          ],
+          "title": "Collector health",
+          "type": "row"
         }
       ],
-      "refresh": "30s",
+      "refresh": "1m",
       "schemaVersion": 39,
-      "tags": ["rack", "thermals", "gpu", "unifi"],
+      "tags": [
+        "thermalscope",
+        "critique-review"
+      ],
       "templating": {
         "list": [
           {
             "current": {},
             "hide": 0,
-            "includeAll": false,
+            "label": "Datasource",
             "name": "datasource",
             "options": [],
             "query": "prometheus",
             "refresh": 1,
-            "type": "datasource",
-            "label": "Datasource"
+            "type": "datasource"
           },
           {
-            "current": {"selected": true, "text": "All", "value": "$__all"},
-            "datasource": {"type": "prometheus", "uid": "${datasource}"},
+            "current": {
+              "selected": true,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": {
+              "type": "prometheus",
+              "uid": "${datasource}"
+            },
             "definition": "label_values(thermalscope_hwmon_up, instance)",
             "hide": 0,
             "includeAll": true,
@@ -1609,8 +3373,12 @@ data:
             "type": "query"
           },
           {
-            "current": {"selected": false, "text": "0.45", "value": "0.45"},
-            "hide": 0,
+            "current": {
+              "selected": false,
+              "text": "0.45",
+              "value": "0.45"
+            },
+            "hide": 2,
             "label": "Electricity rate ($/kWh) — PG&E blended, all-in (bill 5/2026)",
             "name": "cost_per_kwh",
             "query": "0.45",
@@ -1618,8 +3386,12 @@ data:
             "type": "constant"
           },
           {
-            "current": {"selected": false, "text": "95", "value": "95"},
-            "hide": 0,
+            "current": {
+              "selected": false,
+              "text": "95",
+              "value": "95"
+            },
+            "hide": 2,
             "label": "AMD APU Tjmax (°C) — advisory",
             "name": "cpu_tjmax",
             "query": "95",
@@ -1628,10 +3400,11 @@ data:
           }
         ]
       },
-      "time": {"from": "now-3h", "to": "now"},
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
       "timepicker": {},
-      "timezone": "browser",
       "title": "ThermalScope — Rack",
-      "uid": null,
-      "version": 9
+      "uid": "34ae4f48-4436-408b-9721-bb5fd18c1a78"
     }

@@ -523,7 +523,23 @@ replacement is proven first.
 - **Subscription contention:** two more playbooks on the same subscription; `maxTotal` and the
   low measured volume bound it.
 
-## Open questions for George
+## Decisions on the open questions (George, 2026-11-09)
+
+Answered one at a time; each answer is the option George picked.
+
+| # | Question | George's answer |
+|---|---|---|
+| 1 | Does Renovate work bypass Plane and `ready`? | "Both auto-start": renovate-review and renovate-fix start from the GitHub source, no ticket |
+| 2 | What does the review cover? | "Patch/minor, not digests": no digest/pin/pinDigest, no majors |
+| 3 | Do mechanical fixes merge without George? | "Yes, behind all gates": the 2026-09-28 decision 3 stands, all five gates |
+| 4 | Caps | "1 / 2, total 18": renovate-review 1, renovate-fix 2, desk-wide `maxTotal: 18`, Plane before Renovate |
+| 5 | Production namespace | "bench-desk-prod" (staging `bench-desk-stage`); fix the AGENTS.md quality-gate line in A1 |
+| 6 | Leftover agent-desk identities | **"Rename both"**: Plane bot email and the HA secret key `agent_desk_webhook_id` are renamed too (George does the Plane admin change and the SOPS edit; the plan's A5 must carry these steps) |
+| 7 | GitHub token for statuses/labels | "New narrow PAT": PRs/Issues RW, Commit statuses RW, Contents read, eleven repos; revoke renovate-review's PAT at retirement |
+
+The original questions, with their recommendations, are kept below for the record.
+
+## Open questions (answered above) for George
 
 1. **Does Renovate work bypass Plane and `ready`?** The loop plan has your 2026-10-22 decisions 2
    ("neither playbook auto-starts") and 4 (the fixer "opens `dep-hold` tickets ... so all agent work

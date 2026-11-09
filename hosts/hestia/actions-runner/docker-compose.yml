@@ -21,18 +21,25 @@ services:
       # ON — including the strings "false", "no" and "0". The ONLY way to turn
       # one of these OFF is to REMOVE the variable entirely.
       #
-      # This already cost an outage. `DISABLE_AUTO_UPDATE` was set here, so the
-      # runner ran with `--disableupdate` and could not upgrade past GitHub's
-      # mandated minimum version. On 2026-08-19 runner 2.334.0 was deprecated,
-      # GitHub refused to dispatch jobs to it, the runner exited 1, and
-      # `restart: unless-stopped` looped it 13,173 times while every deploy sat
-      # queued. The follow-up "fix" changed the value from "true" to "false"
-      # and changed NOTHING, because "false" is still a non-empty string.
+      # DISABLE_AUTO_UPDATE is SET (auto-update OFF) as of 2026-11-08,
+      # HOMELAB-102. History, because both settings have caused an outage:
       #
-      # So: DO NOT reintroduce `DISABLE_AUTO_UPDATE` here, in any form. Not
-      # "false", not "", not "0". Its ABSENCE below is the fix — it is what
-      # lets the runner self-update at the next deprecation.
+      # - 2026-08-19: it was set, runner 2.334.0 was deprecated, --disableupdate
+      #   blocked the upgrade, and the runner looped 13,173 times. #1324
+      #   removed the variable so the runner could self-update.
+      # - 2026-09-02 and again 2026-10-23: the self-update itself broke the
+      #   runner. It stages the new version in the PERSISTED work dir
+      #   (_update/) and applies it into the container layer; an ephemeral
+      #   restart mid-apply left /actions-runner/bin with 107 files deleted
+      #   (libhostpolicy.so missing). restart: unless-stopped reuses the same
+      #   container, so it looped 24,912 times and never recovered.
+      #
+      # A self-update failure is permanent; a deprecation is fixed by applying
+      # the Renovate digest bump below (this path is excluded from
+      # deploy-hestia.yml, so apply it by hand — see
+      # docs/operations/apps/gha-runner.md §6). Keep the pin current.
       # =====================================================================
+      DISABLE_AUTO_UPDATE: "true"
 
       # Deliberately ON. This container bind-mounts /var/run/docker.sock and is
       # therefore root-equivalent on the host; a fresh runner per job, with its

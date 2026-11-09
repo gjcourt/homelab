@@ -15,6 +15,11 @@ spec:
     metadata:
       labels:
         app: truenas-iscsi-exporter
+      annotations:
+        # script-cm.yaml is a plain ConfigMap (not generated), and the
+        # exporter reads /app/exporter.py once at startup. Bump this when
+        # the script changes so the pod restarts onto the new code.
+        homelab.burntbytes.com/config-revision: "2026-11-08-ws-frame-limit"
     spec:
       serviceAccountName: truenas-iscsi-monitor
       # automountServiceAccountToken left at default (true): the exporter

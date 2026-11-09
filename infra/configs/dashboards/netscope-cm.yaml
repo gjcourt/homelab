@@ -8,393 +8,1290 @@ metadata:
 data:
   netscope.json: |
     {
-      "title": "Netscope (eBPF Network Traffic)",
-      "uid": "netscope-overview",
-      "tags": ["homelab", "netscope", "ebpf"],
-      "schemaVersion": 38,
-      "refresh": "30s",
-      "time": { "from": "now-1h", "to": "now" },
-      "timepicker": {},
+      "annotations": {
+        "list": []
+      },
+      "description": "Is the cluster network healthy right now, compared with its own normal?",
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Modem",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/modemscope-overview"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Thermals",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/34ae4f48-4436-408b-9721-bb5fd18c1a78"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Storage",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/storage"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Bench fleet",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/bench-fleet"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Jobs",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/homelabscope"
+        }
+      ],
       "panels": [
         {
-          "id": 1,
-          "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
-          "type": "stat",
-          "title": "Nodes Reporting",
-          "description": "Count of netscope-agent scrape targets currently up. Should equal the number of nodes in the cluster (6); a smaller number means at least one DaemonSet pod is unhealthy or has lost its scrape endpoint.",
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "count(up{job=\"netscope-agent\"} == 1)",
-              "legendFormat": "up"
-            }
-          ],
-          "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"] },
-            "colorMode": "background",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "value": null, "color": "red" },
-                { "value": 1, "color": "yellow" },
-                { "value": 6, "color": "green" }
-              ]
-            }
-          }
-        },
-        {
-          "id": 2,
-          "gridPos": { "x": 6, "y": 0, "w": 9, "h": 4 },
-          "type": "stat",
-          "title": "Cluster Ingress Rate (B/s)",
-          "description": "sum(rate(netscope_rx_bytes_total[5m])) — total bytes/sec received at tcx ingress across every node's primary interface. Sanity check that all DaemonSet pods are publishing data.",
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "sum(rate(netscope_rx_bytes_total[5m]))",
-              "legendFormat": "cluster B/s"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "Bps"
-            }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
           },
-          "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"] },
-            "colorMode": "value"
-          }
-        },
-        {
-          "id": 3,
-          "gridPos": { "x": 15, "y": 0, "w": 9, "h": 4 },
-          "type": "stat",
-          "title": "Per-Node Scrape Status",
-          "description": "up{job=\"netscope-agent\"} broken out per node. A 0 here means Prometheus has lost a scrape target — investigate before trusting traffic graphs.",
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "up{job=\"netscope-agent\"}",
-              "legendFormat": "{{nodename}}"
-            }
-          ],
-          "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"], "fields": "" },
-            "colorMode": "background",
-            "textMode": "value_and_name",
-            "thresholds": {
-              "mode": "absolute",
-              "steps": [
-                { "value": null, "color": "red" },
-                { "value": 1, "color": "green" }
-              ]
-            }
-          }
-        },
-        {
-          "id": 10,
-          "gridPos": { "x": 0, "y": 4, "w": 24, "h": 10 },
-          "type": "timeseries",
-          "title": "Per-Node Receive Rate (B/s)",
-          "description": "rate(netscope_rx_bytes_total[5m]) by nodename — bytes/sec at tcx ingress on each node's primary interface. The headline panel: one line per node, gaps indicate scrape loss, sustained spikes indicate a noisy node.",
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "sum by (nodename) (rate(netscope_rx_bytes_total[5m]))",
-              "legendFormat": "{{nodename}}"
-            }
-          ],
+          "description": "netscope-agent scrape targets that are down. 0 = every node (and hestia) is reporting. Replaces the old 'Nodes Reporting' tile whose threshold hard-coded 6 nodes (cluster has 5 agents).",
           "fieldConfig": {
             "defaults": {
-              "unit": "Bps",
-              "custom": {
-                "drawStyle": "line",
-                "lineInterpolation": "linear",
-                "fillOpacity": 10
-              }
-            }
-          },
-          "options": {
-            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
-            "tooltip": { "mode": "multi", "sort": "desc" }
-          }
-        },
-        {
-          "id": 11,
-          "gridPos": { "x": 0, "y": 14, "w": 24, "h": 8 },
-          "type": "timeseries",
-          "title": "Total Cluster Ingress Rate (B/s)",
-          "description": "sum(rate(netscope_rx_bytes_total[5m])) — single line view of cluster-wide ingress, useful for capacity-planning.",
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "sum(rate(netscope_rx_bytes_total[5m]))",
-              "legendFormat": "cluster"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "Bps",
-              "custom": {
-                "drawStyle": "line",
-                "lineInterpolation": "linear",
-                "fillOpacity": 20
-              }
-            }
-          },
-          "options": {
-            "legend": { "displayMode": "list", "placement": "bottom" },
-            "tooltip": { "mode": "single" }
-          }
-        },
-        {
-          "id": 19,
-          "gridPos": { "x": 0, "y": 22, "w": 24, "h": 1 },
-          "type": "row",
-          "title": "Phase 2 — TCP depth signals",
-          "collapsed": false,
-          "panels": []
-        },
-        {
-          "id": 20,
-          "gridPos": { "x": 0, "y": 23, "w": 15, "h": 10 },
-          "type": "timeseries",
-          "title": "TCP Retransmit Rate per Node",
-          "description": "rate(netscope_tcp_retransmits_total[5m]) by nodename — TCP retransmit events/sec per node, sampled by the eBPF probe. Headline reliability signal: sustained non-zero on a worker indicates either local NIC trouble or a noisy peer; control-plane nodes typically run a low background rate from kube-apiserver traffic.",
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "sum by (nodename) (rate(netscope_tcp_retransmits_total[5m]))",
-              "legendFormat": "{{nodename}}"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "custom": {
-                "drawStyle": "line",
-                "lineInterpolation": "linear",
-                "fillOpacity": 10
-              }
-            }
-          },
-          "options": {
-            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
-            "tooltip": { "mode": "multi", "sort": "desc" }
-          }
-        },
-        {
-          "id": 21,
-          "gridPos": { "x": 15, "y": 23, "w": 9, "h": 10 },
-          "type": "stat",
-          "title": "Cluster Retransmits (24h)",
-          "description": "sum(increase(netscope_tcp_retransmits_total[24h])) — total retransmits cluster-wide over the last 24 hours. Sits next to the per-node rate panel as a quick at-a-glance regression check.",
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "sum(increase(netscope_tcp_retransmits_total[24h]))",
-              "legendFormat": "retransmits"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  { "value": null, "color": "green" },
-                  { "value": 200000, "color": "yellow" },
-                  { "value": 500000, "color": "red" }
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
                 ]
-              }
-            }
+              },
+              "unit": "none"
+            },
+            "overrides": []
           },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
           "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"] },
-            "colorMode": "value"
-          }
-        },
-        {
-          "id": 22,
-          "gridPos": { "x": 0, "y": 33, "w": 24, "h": 10 },
-          "type": "timeseries",
-          "title": "TCP Smoothed RTT Percentiles",
-          "description": "histogram_quantile over netscope_tcp_srtt_microseconds_bucket aggregated cluster-wide. p50 tracks typical pod-to-pod RTT (expect ~2ms on-cluster), p99 captures the off-cluster tail. Bucket boundaries are seconds (Prometheus convention); the eBPF collector converts from µs before bucketing.",
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
           "targets": [
             {
-              "refId": "A",
-              "expr": "histogram_quantile(0.50, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le))",
-              "legendFormat": "p50"
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "count(up{job=\"netscope-agent\"}) - sum(up{job=\"netscope-agent\"})",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Agents not reporting",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Current cluster retransmit rate divided by its own 7-day average. 1x = normal. Amber 2x, red 4x are PROPOSED (no alert thresholds exist for netscope).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 2
+                  },
+                  {
+                    "color": "red",
+                    "value": 4
+                  }
+                ]
+              },
+              "unit": "x"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 0
+          },
+          "id": 2,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "(sum(rate(netscope_tcp_retransmits_total[5m]))) / avg_over_time((sum(rate(netscope_tcp_retransmits_total[5m])))[7d:1h])",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "TCP retransmits vs 7-day norm",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Smoothed-RTT p95 now / its 7-day average. 1x = normal.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 2
+                  },
+                  {
+                    "color": "red",
+                    "value": 4
+                  }
+                ]
+              },
+              "unit": "x"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 0
+          },
+          "id": 3,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "(histogram_quantile(0.95, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le))) / avg_over_time((histogram_quantile(0.95, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le)))[7d:1h])",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "TCP latency (p95) vs 7-day norm",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "DNS query latency p95 now / its 7-day average. 1x = normal.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 2
+                  },
+                  {
+                    "color": "red",
+                    "value": 4
+                  }
+                ]
+              },
+              "unit": "x"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 0
+          },
+          "id": 4,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "(histogram_quantile(0.95, sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le))) / avg_over_time((histogram_quantile(0.95, sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le)))[7d:1h])",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "DNS latency (p95) vs 7-day norm",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Total bytes/s received across all nodes. Informational.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "Bps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 0,
+            "y": 4
+          },
+          "id": 5,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(rate(netscope_rx_bytes_total[5m]))",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Ingress now",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Segments retransmitted per second, cluster-wide. Informational (see ratio tile for context).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 2,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 6,
+            "y": 4
+          },
+          "id": 6,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(rate(netscope_tcp_retransmits_total[5m]))",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "TCP retransmits now",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Smoothed round-trip time percentiles. Informational.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 12,
+            "y": 4
+          },
+          "id": 7,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.5, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le))",
+              "legendFormat": "p50 ",
+              "refId": "A"
             },
             {
-              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
               "expr": "histogram_quantile(0.95, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le))",
-              "legendFormat": "p95"
-            },
-            {
-              "refId": "C",
-              "expr": "histogram_quantile(0.99, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le))",
-              "legendFormat": "p99"
+              "legendFormat": "p95 ",
+              "refId": "B"
             }
           ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s",
-              "custom": {
-                "drawStyle": "line",
-                "lineInterpolation": "linear",
-                "fillOpacity": 5
-              }
-            }
-          },
-          "options": {
-            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
-            "tooltip": { "mode": "multi", "sort": "desc" }
-          }
+          "title": "TCP RTT p50 / p95",
+          "type": "stat"
         },
         {
-          "id": 23,
-          "gridPos": { "x": 0, "y": 43, "w": 24, "h": 12 },
-          "type": "heatmap",
-          "title": "TCP Smoothed RTT Distribution",
-          "description": "sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le) — cumulative-bucket heatmap of SRTT samples cluster-wide. The percentile panel shows trend, this panel shows shape: a clean horizontal band means stable latency; a vertical smear means new tail behavior. Y-axis is seconds on a log scale because buckets span ~1µs to ~8s.",
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le)",
-              "legendFormat": "{{le}}",
-              "format": "heatmap"
-            }
-          ],
-          "options": {
-            "calculate": false,
-            "yAxis": {
-              "unit": "s",
-              "axisLabel": "SRTT",
-              "scale": { "type": "log", "log": 2 }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "DNS query latency percentiles. Informational.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "s"
             },
-            "color": { "mode": "scheme", "scheme": "Spectral", "steps": 64, "reverse": true },
-            "cellGap": 1,
-            "tooltip": { "show": true, "yHistogram": true },
-            "legend": { "show": true }
+            "overrides": []
           },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "scaleDistribution": { "type": "log", "log": 2 },
-                "hideFrom": { "tooltip": false, "viz": false, "legend": false }
-              }
-            }
-          }
-        },
-        {
-          "id": 29,
-          "gridPos": { "x": 0, "y": 55, "w": 24, "h": 1 },
-          "type": "row",
-          "title": "Phase 2 — DNS query latency",
-          "collapsed": false,
-          "panels": []
-        },
-        {
-          "id": 30,
-          "gridPos": { "x": 0, "y": 56, "w": 24, "h": 10 },
-          "type": "timeseries",
-          "title": "DNS Query Rate per Node",
-          "description": "rate(netscope_dns_query_microseconds_count[5m]) by nodename — DNS queries/sec observed per node by the eBPF probe. Headline volume signal: control-plane nodes typically show higher query rates from kube-apiserver and CoreDNS upstream resolution; sustained spikes on a worker indicate a chatty pod.",
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "sum by (nodename) (rate(netscope_dns_query_microseconds_count[5m]))",
-              "legendFormat": "{{nodename}}"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "ops",
-              "custom": {
-                "drawStyle": "line",
-                "lineInterpolation": "linear",
-                "fillOpacity": 10
-              }
-            }
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 18,
+            "y": 4
           },
+          "id": 8,
           "options": {
-            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
-            "tooltip": { "mode": "multi", "sort": "desc" }
-          }
-        },
-        {
-          "id": 31,
-          "gridPos": { "x": 0, "y": 66, "w": 24, "h": 10 },
-          "type": "timeseries",
-          "title": "DNS Query Latency Percentiles",
-          "description": "histogram_quantile over netscope_dns_query_microseconds_bucket aggregated cluster-wide. p50 tracks the typical in-cluster CoreDNS response (~sub-ms); p95/p99 capture slow resolutions (upstream forwarders, NXDOMAIN retries, cold caches). The eBPF collector measures wall time between query egress and matching response.",
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
           "targets": [
             {
-              "refId": "A",
-              "expr": "histogram_quantile(0.50, sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le))",
-              "legendFormat": "p50"
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.5, sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le))",
+              "legendFormat": "p50 ",
+              "refId": "A"
             },
             {
-              "refId": "B",
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
               "expr": "histogram_quantile(0.95, sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le))",
-              "legendFormat": "p95"
-            },
-            {
-              "refId": "C",
-              "expr": "histogram_quantile(0.99, sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le))",
-              "legendFormat": "p99"
+              "legendFormat": "p95 ",
+              "refId": "B"
             }
           ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s",
-              "custom": {
-                "drawStyle": "line",
-                "lineInterpolation": "linear",
-                "fillOpacity": 5
-              }
-            }
-          },
-          "options": {
-            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] },
-            "tooltip": { "mode": "multi", "sort": "desc" }
-          }
+          "title": "DNS p50 / p95",
+          "type": "stat"
         },
         {
-          "id": 32,
-          "gridPos": { "x": 0, "y": 76, "w": 24, "h": 12 },
-          "type": "heatmap",
-          "title": "DNS Query Latency Distribution",
-          "description": "sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le) — cumulative-bucket heatmap of DNS query latency cluster-wide. The percentile panel shows trend, this panel shows shape: a tight band near 1ms means CoreDNS is handling most queries from cache; a smear up into the 100ms+ band means upstream forwarders or NXDOMAIN retries are showing through. Y-axis is seconds on a log scale because buckets span ~1µs to ~8s.",
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le)",
-              "legendFormat": "{{le}}",
-              "format": "heatmap"
-            }
-          ],
-          "options": {
-            "calculate": false,
-            "yAxis": {
-              "unit": "s",
-              "axisLabel": "DNS latency",
-              "scale": { "type": "log", "log": 2 }
-            },
-            "color": { "mode": "scheme", "scheme": "Spectral", "steps": 64, "reverse": true },
-            "cellGap": 1,
-            "tooltip": { "show": true, "yHistogram": true },
-            "legend": { "show": true }
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
           },
+          "description": "",
           "fieldConfig": {
             "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
               "custom": {
-                "scaleDistribution": { "type": "log", "log": 2 },
-                "hideFrom": { "tooltip": false, "viz": false, "legend": false }
-              }
+                "axisLabel": "",
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false
+              },
+              "min": 0,
+              "noValue": "No data",
+              "unit": "Bps"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 7
+          },
+          "id": 9,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
             }
-          }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum by (nodename) (rate(netscope_rx_bytes_total[5m]))",
+              "legendFormat": "{{nodename}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Receive rate per node",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Retransmitted segments per second. A node standing out from the rest is the interesting one.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false
+              },
+              "min": 0,
+              "noValue": "No data",
+              "unit": "ops"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 7
+          },
+          "id": 10,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "right",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum by (nodename) (rate(netscope_tcp_retransmits_total[5m]))",
+              "legendFormat": "{{nodename}}",
+              "refId": "A"
+            }
+          ],
+          "title": "TCP retransmits per node",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false
+              },
+              "min": 0,
+              "noValue": "No data",
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 16
+          },
+          "id": 11,
+          "options": {
+            "legend": {
+              "calcs": [
+                "mean",
+                "max"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.5, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le))",
+              "legendFormat": "p50",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.95, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le))",
+              "legendFormat": "p95",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.99, sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le))",
+              "legendFormat": "p99",
+              "refId": "C"
+            }
+          ],
+          "title": "TCP latency: p50 / p95 / p99",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false
+              },
+              "min": 0,
+              "noValue": "No data",
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 16
+          },
+          "id": 12,
+          "options": {
+            "legend": {
+              "calcs": [
+                "mean",
+                "max"
+              ],
+              "displayMode": "table",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.5, sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le))",
+              "legendFormat": "p50",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.95, sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le))",
+              "legendFormat": "p95",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "histogram_quantile(0.99, sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le))",
+              "legendFormat": "p99",
+              "refId": "C"
+            }
+          ],
+          "title": "DNS latency: p50 / p95 / p99",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 24
+          },
+          "id": 100,
+          "panels": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "sum(increase(netscope_tcp_retransmits_total[24h])) — total retransmits cluster-wide over the last 24 hours. Sits next to the per-node rate panel as a quick at-a-glance regression check.",
+              "fieldConfig": {
+                "defaults": {
+                  "thresholds": {
+                    "mode": "absolute",
+                    "steps": [
+                      {
+                        "color": "green",
+                        "value": null
+                      },
+                      {
+                        "color": "yellow",
+                        "value": 200000
+                      },
+                      {
+                        "color": "red",
+                        "value": 500000
+                      }
+                    ]
+                  },
+                  "unit": "short"
+                }
+              },
+              "gridPos": {
+                "h": 6,
+                "w": 6,
+                "x": 0,
+                "y": 24
+              },
+              "id": 30,
+              "options": {
+                "colorMode": "value",
+                "reduceOptions": {
+                  "calcs": [
+                    "lastNotNull"
+                  ]
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "sum(increase(netscope_tcp_retransmits_total[24h]))",
+                  "legendFormat": "retransmits",
+                  "refId": "A"
+                }
+              ],
+              "title": "Retransmits, last 24 h (total)",
+              "type": "stat"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le) — cumulative-bucket heatmap of SRTT samples cluster-wide. The percentile panel shows trend, this panel shows shape: a clean horizontal band means stable latency; a vertical smear means new tail behavior. Y-axis is seconds on a log scale because buckets span ~1µs to ~8s.",
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "scaleDistribution": {
+                      "log": 2,
+                      "type": "log"
+                    }
+                  }
+                }
+              },
+              "gridPos": {
+                "h": 10,
+                "w": 18,
+                "x": 6,
+                "y": 24
+              },
+              "id": 31,
+              "options": {
+                "calculate": false,
+                "cellGap": 1,
+                "color": {
+                  "mode": "scheme",
+                  "reverse": true,
+                  "scheme": "Spectral",
+                  "steps": 64
+                },
+                "legend": {
+                  "show": true
+                },
+                "tooltip": {
+                  "show": true,
+                  "yHistogram": true
+                },
+                "yAxis": {
+                  "axisLabel": "SRTT",
+                  "scale": {
+                    "log": 2,
+                    "type": "log"
+                  },
+                  "unit": "s"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "sum(rate(netscope_tcp_srtt_microseconds_bucket[5m])) by (le)",
+                  "format": "heatmap",
+                  "legendFormat": "{{le}}",
+                  "refId": "A"
+                }
+              ],
+              "title": "TCP RTT distribution (heatmap)",
+              "type": "heatmap"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "rate(netscope_dns_query_microseconds_count[5m]) by nodename — DNS queries/sec observed per node by the eBPF probe. Headline volume signal: control-plane nodes typically show higher query rates from kube-apiserver and CoreDNS upstream resolution; sustained spikes on a worker indicate a chatty pod.",
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 10,
+                    "lineInterpolation": "linear"
+                  },
+                  "unit": "ops"
+                }
+              },
+              "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 34
+              },
+              "id": 32,
+              "options": {
+                "legend": {
+                  "calcs": [
+                    "mean",
+                    "max"
+                  ],
+                  "displayMode": "table",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi",
+                  "sort": "desc"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "sum by (nodename) (rate(netscope_dns_query_microseconds_count[5m]))",
+                  "legendFormat": "{{nodename}}",
+                  "refId": "A"
+                }
+              ],
+              "title": "DNS queries per second, per node",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le) — cumulative-bucket heatmap of DNS query latency cluster-wide. The percentile panel shows trend, this panel shows shape: a tight band near 1ms means CoreDNS is handling most queries from cache; a smear up into the 100ms+ band means upstream forwarders or NXDOMAIN retries are showing through. Y-axis is seconds on a log scale because buckets span ~1µs to ~8s.",
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "hideFrom": {
+                      "legend": false,
+                      "tooltip": false,
+                      "viz": false
+                    },
+                    "scaleDistribution": {
+                      "log": 2,
+                      "type": "log"
+                    }
+                  }
+                }
+              },
+              "gridPos": {
+                "h": 10,
+                "w": 12,
+                "x": 12,
+                "y": 34
+              },
+              "id": 33,
+              "options": {
+                "calculate": false,
+                "cellGap": 1,
+                "color": {
+                  "mode": "scheme",
+                  "reverse": true,
+                  "scheme": "Spectral",
+                  "steps": 64
+                },
+                "legend": {
+                  "show": true
+                },
+                "tooltip": {
+                  "show": true,
+                  "yHistogram": true
+                },
+                "yAxis": {
+                  "axisLabel": "DNS latency",
+                  "scale": {
+                    "log": 2,
+                    "type": "log"
+                  },
+                  "unit": "s"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "sum(rate(netscope_dns_query_microseconds_bucket[5m])) by (le)",
+                  "format": "heatmap",
+                  "legendFormat": "{{le}}",
+                  "refId": "A"
+                }
+              ],
+              "title": "DNS latency distribution (heatmap)",
+              "type": "heatmap"
+            }
+          ],
+          "title": "Details: distributions, DNS rate, 24 h retransmit total",
+          "type": "row"
         }
-      ]
+      ],
+      "refresh": "1m",
+      "schemaVersion": 39,
+      "tags": [
+        "netscope",
+        "critique-review"
+      ],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "hide": 0,
+            "label": "Datasource",
+            "name": "datasource",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "type": "datasource"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "title": "Netscope (eBPF Network Traffic)",
+      "uid": "netscope-overview"
     }

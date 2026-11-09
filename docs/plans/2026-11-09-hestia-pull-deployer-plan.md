@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 last_modified: 2026-11-09
 summary: "Replace the hestia self-hosted GitHub runner with a hestia-side Git-pull deployer (gha-runner-watchdog generalised to hestia-deployer); shadow, cut over, then retire the runner, its token, deploy-hestia.yml and the runner canary"
 ---
@@ -19,7 +19,8 @@ That means extending the gha-runner-watchdog into a hestia-side Git-pull deploye
 every hestia app, the way Flux pulls for the cluster, and then retiring the self-hosted
 runner, its `ACCESS_TOKEN`, `deploy-hestia.yml` and the runner canary.
 
-This doc is the plan only. Nothing here is implemented yet.
+Phase 1 (shadow) is implemented in `images/hestia-deployer/` (HOMELAB-111); it reads and reports
+and applies nothing. Phases 2-5 are not implemented yet.
 
 ## What exists today (verified 2026-11-09, `origin/master` at `d65accd3`)
 

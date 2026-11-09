@@ -60,10 +60,11 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (24)
+### In progress (25)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-11-09-hestia-pull-deployer-plan.md](2026-11-09-hestia-pull-deployer-plan.md) | 2026-11-09 | Replace the hestia self-hosted GitHub runner with a hestia-side Git-pull deployer (gha-runner-watchdog generalised to hestia-deployer); shadow, cut over, then retire the runner, its token, deploy-hestia.yml and the runner canary |
 | [2026-11-04-accuraterip-on-import-plan.md](2026-11-04-accuraterip-on-import-plan.md) | 2026-11-04 | AccurateRip-check every CD at import time, record results in the rip ledger, archive EAC logs, and generate a bad-disc tally from the ledger |
 | [2026-11-02-media-load-entrypoints-plan.md](2026-11-02-media-load-entrypoints-plan.md) | 2026-11-03 | One load.ps1 entry point per media type on daedalus, a generated video queue, and Radarr-correct ownership on new movie dirs |
 | [2026-11-01-bench-homelab-paths-plan.md](2026-11-01-bench-homelab-paths-plan.md) | 2026-11-02 | agent-desk Jobs may open homelab PRs in apps/** and docs/**; a required check holds them until George approves the head |
@@ -89,11 +90,10 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (27)
+### Planned (26)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
-| [2026-11-09-hestia-pull-deployer-plan.md](2026-11-09-hestia-pull-deployer-plan.md) | 2026-11-09 | Replace the hestia self-hosted GitHub runner with a hestia-side Git-pull deployer (gha-runner-watchdog generalised to hestia-deployer); shadow, cut over, then retire the runner, its token, deploy-hestia.yml and the runner canary |
 | [2026-11-09-bench-desk-renovate-plan.md](2026-11-09-bench-desk-renovate-plan.md) | 2026-11-09 | Rename agent-desk to bench-desk (Phase A, own PR, zero lost webhooks), then make Renovate PRs a second bench-desk work source: renovate-review and renovate-fix run as bench-cloud tasks, results go back as a sha-bound commit status + held-by-review, renovate-automerge stays the only merger with every 2026-09-28 gate; retire the renovate-review CronJob |
 | [2026-11-08-agent-sessions-plan.md](2026-11-08-agent-sessions-plan.md) | 2026-11-08 | 03-042 phase 2: Devin-style agent sessions (list, live progress, chat); Matrix vs plane-mobile pane, prototype first |
 | [2026-11-07-bench-fleet-dashboard-plan.md](2026-11-07-bench-fleet-dashboard-plan.md) | 2026-11-07 | Grafana dashboard for the bench-cloud agent fleet (Plane HOMELAB, George-only — outside the bench gate): Phase 1 throughput + utilization-vs-cap from kube-state-metrics Job labels, Phase 2 cost/token economics via a new bench-metrics-exporter over the per-run result.json; sliced by playbook/project/model/outcome/time |

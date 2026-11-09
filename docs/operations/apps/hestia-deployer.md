@@ -54,7 +54,7 @@ Every 5 minutes (`INTERVAL_SECONDS=300`) one tick runs in two halves:
 that one app `invalid`; the others carry on. Two active files claiming one
 name are both `invalid`.
 
-**Secrets.** If Git has `KEY: ""` and the stored config has a value, the app
+**Secrets.** If Git has `KEY: ""` (or `KEY:` / a bare `- KEY`) and the stored config has a value, the app
 is `blocked` unless `KEY` is in `preserve-env`. The deployer never blanks a
 stored value. Values are never logged or written anywhere; only `service.KEY`
 names are.
@@ -71,6 +71,12 @@ names are.
 | `missing` | no TrueNAS app of that name (a new app still needs an operator `app.create`) |
 | `invalid` | bad `x-deploy`, unparsable compose, duplicate name, not a Custom App, or an unrecognised `app.config` shape |
 | `failed` | not used until Phase 2 |
+
+An app that is `STOPPED` in SCALE on purpose is still compared (config, and
+the image of any container that exists), but a missing or exited container is
+not drift, and the deployer never starts it. If `docker ps`/`inspect` fails for
+an app, that app has **no** `app_state` series for the tick (logged as
+`unevaluated`), and the tick's heartbeat reports `last_status=1`.
 
 Other series: `homelabscope_deploy_head_info{commit}`,
 `homelabscope_deploy_head_commit_seconds`, `homelabscope_deploy_paused{scope}`,

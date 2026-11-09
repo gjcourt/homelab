@@ -443,8 +443,8 @@ def normalize(compose: dict) -> dict:
 def merge_secrets(desired: dict, stored: dict, preserve: list[str]) -> tuple[dict, list[str]]:
     """Plan D4. Returns (merged desired, blocked "service.KEY" names).
 
-    Both inputs are normalised first. For each env key that is "" in Git and
-    non-empty in stored: listed in preserve -> stored value carried over;
+    Both inputs are normalised first. For each env key that is empty in Git
+    ("" , or None from `FOO:` / a bare `- FOO`) and non-empty in stored: listed in preserve -> stored value carried over;
     not listed -> blocked (the deployer never blanks a stored value). A key
     absent from Git is a removal and is not consulted. Values are never
     returned in the blocked list.
@@ -461,7 +461,7 @@ def merge_secrets(desired: dict, stored: dict, preserve: list[str]) -> tuple[dic
         if not isinstance(s_env, dict):
             continue
         for key, val in env.items():
-            if val != "":
+            if val not in ("", None):
                 continue
             stored_val = s_env.get(key)
             if stored_val in (None, ""):
@@ -510,22 +510,27 @@ def describe_paths(paths: list[str], desired: dict, stored: dict) -> list[str]:
     return out
 
 
-def image_drift(stored: dict, containers: dict[str, dict]) -> list[str]:
+def image_drift(stored: dict, containers: dict[str, dict], stopped: bool = False) -> list[str]:
     """Services whose live container does not run the stored image.
 
     containers: service name -> {"image", "running", "restarting"} or missing.
     A stored image the container does not run is the app.update no-op quirk
     (docs/operations/2026-05-14-truenas-app-update-quirk.md).
+
+    stopped: the TrueNAS app is STOPPED on purpose. The image comparison still
+    applies to any container that exists, but a missing or not-running
+    container is expected, not drift. The deployer never starts a stopped app.
     """
     out = []
     for svc, body in sorted((stored.get("services") or {}).items()):
         want = body.get("image") if isinstance(body, dict) else None
         info = containers.get(svc)
         if not info:
-            out.append(f"{svc}: no container")
+            if not stopped:
+                out.append(f"{svc}: no container")
         elif info.get("image") != want:
             out.append(f"{svc}: container runs {info.get('image')}, stored {want}")
-        elif not info.get("running") or info.get("restarting"):
+        elif not stopped and (not info.get("running") or info.get("restarting")):
             out.append(f"{svc}: container not running")
     return out
 
@@ -537,7 +542,7 @@ def evaluate_app(entry: dict, scale_app: dict | None, stored, containers: dict[s
     values, so the caller must never log or persist it.
     """
     res = {"app": entry["name"], "file": entry["file"], "state": "invalid", "reasons": [],
-           "changes": [], "drift": [], "blocked": [], "merged": None}
+           "changes": [], "drift": [], "blocked": [], "merged": None, "stopped": False}
     status = entry["status"]
     if status == "archived":
         res["state"] = "archived"
@@ -557,13 +562,18 @@ def evaluate_app(entry: dict, scale_app: dict | None, stored, containers: dict[s
         # TrueNAS API drift: an unknown shape is invalid, never a guess (plan Risks).
         res["reasons"] = [f"unrecognised app.config shape ({type(stored).__name__})"]
         return res
+    bad = sorted(str(k) for k, v in stored["services"].items() if not isinstance(v, dict))
+    if bad:
+        res["reasons"] = [f"unrecognised app.config shape: services {', '.join(bad)} not mappings"]
+        return res
 
     merged, blocked = merge_secrets(entry["compose"], stored, entry.get("preserve_env", []))
     stored_n = normalize(stored)
     res["merged"] = merged
     res["blocked"] = blocked
     res["changes"] = describe_paths(diff_paths(merged, stored_n), merged, stored_n)
-    res["drift"] = image_drift(stored, containers)
+    res["stopped"] = scale_app.get("state") == "STOPPED"
+    res["drift"] = image_drift(stored, containers, stopped=res["stopped"])
 
     if entry.get("paused"):
         res["state"] = "paused"
@@ -699,15 +709,20 @@ def apply_app(client: GuardedClient, name: str, payload: dict, *, dry_run: bool)
         raise DryRunViolation(f"refusing to apply {name}: dry-run={dry_run} APPLY_ENABLED={APPLY_ENABLED}")
     stopped = False
     try:
-        client.call("app.stop", name, job=True)
-        stopped = True
+        # An app STOPPED on purpose is updated but never started.
+        was_running = client.call("app.query", [["id", "=", name]])[0]["state"] != "STOPPED"
+        if was_running:
+            client.call("app.stop", name, job=True)
+            stopped = True
         client.call("app.update", name, {"custom_compose_config": payload}, job=True)
         state = client.call("app.query", [["id", "=", name]])[0]["state"]
-        if state != "RUNNING":
+        if was_running and state != "RUNNING":
             client.call("app.start", name, job=True)
         return True
     except Exception as e:  # noqa: BLE001
-        log(f"{name}: apply FAILED: {type(e).__name__}: {e}")
+        # Type only: middleware / pydantic errors can echo submitted values,
+        # and the payload may carry preserved secrets.
+        log(f"{name}: apply FAILED: {type(e).__name__}")
         if stopped:
             try:
                 client.call("app.start", name, job=True)
@@ -743,15 +758,25 @@ def docker_read(*args: str) -> str:
     return subprocess.run(["docker", *args], check=True, capture_output=True, text=True, timeout=60).stdout
 
 
+class DockerUnavailable(RuntimeError):
+    """docker ps / inspect failed: the app cannot be evaluated this tick."""
+
+
 def app_containers(name: str, docker=docker_read) -> dict[str, dict]:
-    """service -> {image, running, restarting} for TrueNAS project ix-<name>."""
+    """service -> {image, running, restarting} for TrueNAS project ix-<name>.
+
+    Raises DockerUnavailable rather than returning {} on a docker error, so a
+    broken docker CLI reads as "unevaluated", not as every service drifting.
+    """
     try:
         ids = docker("ps", "-a", "-q", "--filter", f"label=com.docker.compose.project=ix-{name}").split()
         if not ids:
             return {}
         data = json.loads(docker("inspect", *ids))
-    except (subprocess.SubprocessError, OSError, ValueError):
-        return {}
+        if not isinstance(data, list):
+            raise ValueError("docker inspect did not return a list")
+    except (subprocess.SubprocessError, OSError, ValueError) as e:
+        raise DockerUnavailable(type(e).__name__) from None
     out: dict[str, dict] = {}
     for c in data:
         svc = (c.get("Config", {}).get("Labels") or {}).get("com.docker.compose.service")
@@ -811,22 +836,36 @@ def reconcile(client, *, docker=docker_read, data_dir: str = DATA_DIR, textfile_
     unmanaged = sorted(n for n in scale_by_name if n not in in_git)
 
     results = []
+    unevaluated: list[str] = []
     for e in entries:
         if e["status"] == "excluded":
             continue
         app = scale_by_name.get(e["name"])
-        stored = None
-        containers: dict[str, dict] = {}
-        if e["status"] == "managed" and app is not None and app.get("custom_app"):
-            try:
-                stored = guarded.call("app.config", e["name"])
-            except DryRunViolation:
-                raise
-            except Exception as ex:  # noqa: BLE001
-                log(f"{e['name']}: app.config failed: {type(ex).__name__}")
-                stored = None
-            containers = app_containers(e["name"], docker)
-        results.append(evaluate_app(e, app, stored, containers))
+        try:
+            stored = None
+            containers: dict[str, dict] = {}
+            if e["status"] == "managed" and app is not None and app.get("custom_app"):
+                try:
+                    stored = guarded.call("app.config", e["name"])
+                except DryRunViolation:
+                    raise
+                except Exception as ex:  # noqa: BLE001
+                    log(f"{e['name']}: app.config failed: {type(ex).__name__}")
+                    stored = None
+                containers = app_containers(e["name"], docker)
+            results.append(evaluate_app(e, app, stored, containers))
+        except DryRunViolation:
+            raise
+        except DockerUnavailable as ex:
+            # Neither synced nor pending: no app_state series this tick, and
+            # the heartbeat reports a failed tick (last_status=1).
+            log(f"{e['name']}: unevaluated this tick: docker {ex}")
+            unevaluated.append(e["name"])
+        except Exception as ex:  # noqa: BLE001 - one bad app must not stop the tick
+            # Type only: the exception text could carry a stored value.
+            results.append({"app": e["name"], "file": e["file"], "state": "invalid",
+                            "reasons": [f"evaluation error: {type(ex).__name__}"], "changes": [],
+                            "drift": [], "blocked": [], "merged": None, "stopped": False})
 
     would, deferred = plan_applies(results)
     mode = "DRY-RUN" if dry_run else "APPLY"
@@ -835,7 +874,8 @@ def reconcile(client, *, docker=docker_read, data_dir: str = DATA_DIR, textfile_
         counts[r["state"]] = counts.get(r["state"], 0) + 1
     log(f"tick {mode} sha={sha[:7]} {json.dumps(counts, sort_keys=True)} "
         f"pending={[r['app'] for r in results if r['state'] == 'pending']} "
-        f"would_apply={would} deferred={deferred} global_pause={global_paused} unmanaged={unmanaged}")
+        f"would_apply={would} deferred={deferred} global_pause={global_paused} unmanaged={unmanaged}"
+        + (f" unevaluated={unevaluated}" if unevaluated else ""))
     for r in results:
         if r["state"] in ("synced", "archived"):
             continue
@@ -846,6 +886,8 @@ def reconcile(client, *, docker=docker_read, data_dir: str = DATA_DIR, textfile_
             detail.append("drift: " + "; ".join(r["drift"]))
         if r["reasons"]:
             detail.append("reason: " + "; ".join(r["reasons"]))
+        if r.get("stopped"):
+            detail.append("app STOPPED: would update, never start")
         log(f"  {r['app']} [{r['state']}] ({r['file']}) " + " | ".join(detail))
 
     # Phase 1: nothing is applied. In Phase 2 the apply loop over `would`
@@ -853,15 +895,15 @@ def reconcile(client, *, docker=docker_read, data_dir: str = DATA_DIR, textfile_
 
     state["last_tick"] = {"at": int(started), "sha": sha,
                           "states": {r["app"]: r["state"] for r in results},
-                          "would_apply": would}
+                          "would_apply": would, "unevaluated": unevaluated}
     state["applied"] = applied
     # results carry merged payloads (possibly secret values): persist states only.
     atomic_write(os.path.join(data_dir, "state.json"), json.dumps(state, sort_keys=True), mode=0o600)
     atomic_write(prom, render_metrics(
-        ok=True, now=int(started), prev_success=prev_ok, duration=int(time.time() - started),
+        ok=not unevaluated, now=int(started), prev_success=prev_ok, duration=int(time.time() - started),
         dry_run=dry_run, sha=sha, commit_seconds=desired.get("commit_time"),
         results=results, global_paused=global_paused, unmanaged=len(unmanaged), applied=applied))
-    return 0
+    return 1 if unevaluated else 0
 
 
 def reconcile_main() -> int:

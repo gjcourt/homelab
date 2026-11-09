@@ -675,3 +675,139 @@ def test_host_half_needs_no_yaml():
     src = open(os.path.join(HERE, "..", "deployer.py")).read()
     top = [line for line in src.splitlines() if re.match(r"^(import|from) ", line)]
     assert not any("yaml" in line for line in top)
+
+
+# ------------------------------------------------------------ review fixes (#1879)
+
+
+@pytest.mark.parametrize("git_env", ["{TOKEN: null}", "[TOKEN]", "[TOKEN=]"])
+def test_merge_secrets_none_or_bare_key_also_blanks(git_env):
+    desired = {"services": {"s": {"environment": yaml.safe_load(git_env)}}}
+    stored = {"services": {"s": {"environment": {"TOKEN": SECRET}}}}
+    _, blocked = d.merge_secrets(desired, stored, [])
+    assert blocked == ["s.TOKEN"]
+    merged, blocked = d.merge_secrets(desired, stored, ["TOKEN"])
+    assert blocked == [] and merged["services"]["s"]["environment"]["TOKEN"] == SECRET
+
+
+STOPPED = {"name": "foo", "custom_app": True, "state": "STOPPED"}
+
+
+def test_stopped_app_is_synced_without_containers():
+    c = {"services": {"s": {"image": IMG}}}
+    r = d.evaluate_app(managed(c), STOPPED, c, {})
+    assert r["state"] == "synced" and r["drift"] == [] and r["stopped"] is True
+    exited = {"s": {"image": IMG, "running": False, "restarting": False}}
+    assert d.evaluate_app(managed(c), STOPPED, c, exited)["state"] == "synced"
+
+
+def test_stopped_app_still_compares_images():
+    c = {"services": {"s": {"image": IMG}}}
+    stale = {"s": {"image": OLD, "running": False, "restarting": False}}
+    r = d.evaluate_app(managed(c), STOPPED, c, stale)
+    assert r["state"] == "pending" and r["drift"]
+    # and a running app with no container is still drift
+    assert d.evaluate_app(managed(c), CUSTOM, c, {})["state"] == "pending"
+
+
+class RecordingClient(FakeClient):
+    def __init__(self, state="RUNNING", fail_update=None):
+        super().__init__()
+        self.state = state
+        self.fail_update = fail_update
+
+    def call(self, method, *args, **kwargs):
+        self.calls.append(method)
+        if method == "app.query":
+            return [{"state": self.state}]
+        if method == "app.update" and self.fail_update:
+            raise ValueError(self.fail_update)
+        return None
+
+
+def test_apply_app_never_logs_error_text(monkeypatch, capsys):
+    # Phase 2 path, forced on here only to exercise its error handling.
+    monkeypatch.setattr(d, "APPLY_ENABLED", True)
+    client = RecordingClient(fail_update=f"pydantic: TOKEN={SECRET} is invalid")
+    assert d.apply_app(client, "foo", {"services": {}}, dry_run=False) is False
+    out = capsys.readouterr().out
+    assert SECRET not in out and "ValueError" in out
+    assert client.calls[-1] == "app.start"  # restarted on the previous config
+
+
+def test_apply_app_never_starts_a_stopped_app(monkeypatch):
+    monkeypatch.setattr(d, "APPLY_ENABLED", True)
+    client = RecordingClient(state="STOPPED")
+    assert d.apply_app(client, "foo", {"services": {}}, dry_run=False) is True
+    assert "app.start" not in client.calls and "app.stop" not in client.calls
+
+
+def test_non_mapping_stored_service_is_invalid():
+    c = {"services": {"s": {"image": IMG, "environment": {"T": ""}}}}
+    for bad in (["x"], "str", None):
+        r = d.evaluate_app(managed(c), CUSTOM, {"services": {"s": bad}}, RUNNING)
+        assert r["state"] == "invalid" and "not mappings" in r["reasons"][0]
+
+
+def run_tick(tmp_path, client, docker, **kw):
+    tf = tmp_path / "tf"
+    data = tmp_path / "data"
+    rc = d.reconcile(client, docker=docker, data_dir=str(data), textfile_dir=str(tf), now=1000, **kw)
+    return rc, (tf / d.DEPLOY_TEXTFILE).read_text(), (data / "state.json").read_text()
+
+
+def test_one_bad_app_is_invalid_and_the_tick_still_reports(tmp_path, monkeypatch, capsys):
+    data, client, docker = scenario(tmp_path)
+    real = d.evaluate_app
+
+    def boom(entry, *a, **k):
+        if entry["name"] == "bumped":
+            raise KeyError(f"leaked {SECRET}")
+        return real(entry, *a, **k)
+
+    monkeypatch.setattr(d, "evaluate_app", boom)
+    rc, body, state = run_tick(tmp_path, client, docker)
+    assert rc == 0
+    s = parse_prom(body)
+    assert s['homelabscope_deploy_app_state{app="bumped",state="invalid"}'] == 1
+    assert s['homelabscope_deploy_app_state{app="synced-app",state="synced"}'] == 1
+    out = capsys.readouterr().out
+    assert "evaluation error: KeyError" in out
+    for text in (out, body, state):
+        assert SECRET not in text
+
+
+def test_app_config_error_text_is_never_logged(tmp_path, capsys):
+    data, client, docker = scenario(tmp_path)
+    orig = client.call
+
+    def call(method, *args, **kwargs):
+        if method == "app.config" and args[0] == "kept":
+            raise RuntimeError(f"middleware said TOKEN={SECRET}")
+        return orig(method, *args, **kwargs)
+
+    client.call = call
+    rc, body, state = run_tick(tmp_path, client, docker)
+    out = capsys.readouterr().out
+    assert 'app="kept",state="invalid"' in body
+    for text in (out, body, state):
+        assert SECRET not in text
+
+
+def test_docker_failure_is_unevaluated_not_pending(tmp_path, capsys):
+    data, client, _ = scenario(tmp_path)
+
+    def broken(*args):
+        raise subprocess.CalledProcessError(1, ["docker", *args])
+
+    rc, body, state = run_tick(tmp_path, client, broken)
+    assert rc == 1
+    s = parse_prom(body)
+    assert not any("state=\"pending\"" in k for k in s)
+    assert not any('app="bumped"' in k for k in s)
+    # apps that need no docker look-up still report
+    assert s['homelabscope_deploy_app_state{app="absent",state="missing"}'] == 1
+    assert s['homelabscope_job_last_status{job="hestia-deployer"}'] == 1
+    assert "homelabscope_job_last_success_seconds" not in body
+    assert "unevaluated this tick: docker CalledProcessError" in capsys.readouterr().out
+    assert "bumped" in json.loads(state)["last_tick"]["unevaluated"]

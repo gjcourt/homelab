@@ -118,7 +118,7 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 6,
+            "w": 8,
             "x": 0,
             "y": 1
           },
@@ -196,8 +196,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 6,
-            "x": 6,
+            "w": 8,
+            "x": 8,
             "y": 1
           },
           "id": 3,
@@ -274,8 +274,8 @@ data:
           },
           "gridPos": {
             "h": 4,
-            "w": 6,
-            "x": 12,
+            "w": 8,
+            "x": 16,
             "y": 1
           },
           "id": 4,
@@ -306,115 +306,6 @@ data:
             }
           ],
           "title": "Last failure (age of its start)",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "description": "Running Jobs per playbook with its cap. Replaces '% of slots used, now', which read 0% whenever nothing was running at the instant you looked.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [
-                {
-                  "options": {
-                    "match": "null+nan",
-                    "result": {
-                      "color": "#6c7480",
-                      "index": 99,
-                      "text": "No data"
-                    }
-                  },
-                  "type": "special"
-                }
-              ],
-              "noValue": "No data",
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "#6c7480",
-                    "value": null
-                  },
-                  {
-                    "color": "text",
-                    "value": -1000000000
-                  }
-                ]
-              },
-              "unit": "none"
-            },
-            "overrides": []
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 18,
-            "y": 1
-          },
-          "id": 5,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "center",
-            "orientation": "auto",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "text": {
-              "titleSize": 14,
-              "valueSize": 40
-            },
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "expr": "sum(bench:jobs_active:sum_by_playbook{playbook=\"feature\"}) or (count(bench:job:info)*0)",
-              "legendFormat": "feature (cap 8) ",
-              "refId": "A"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "expr": "sum(bench:jobs_active:sum_by_playbook{playbook=\"docs-fix\"}) or (count(bench:job:info)*0)",
-              "legendFormat": "docs-fix (cap 6) ",
-              "refId": "B"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "expr": "sum(bench:jobs_active:sum_by_playbook{playbook=\"design\"}) or (count(bench:job:info)*0)",
-              "legendFormat": "design (cap 2) ",
-              "refId": "C"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "${datasource}"
-              },
-              "expr": "sum(bench:jobs_active:sum_by_playbook{playbook=\"review\"}) or (count(bench:job:info)*0)",
-              "legendFormat": "review (cap 1) ",
-              "refId": "D"
-            }
-          ],
-          "title": "Slots in use now",
           "type": "stat"
         },
         {

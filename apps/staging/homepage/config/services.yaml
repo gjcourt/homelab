@@ -144,7 +144,7 @@
                 options:
                   maximumFractionDigits: 1
             - label: "PVC (%)"
-              query: '100 * sum(kubelet_volume_stats_used_bytes{persistentvolumeclaim!=""}) / sum(kubelet_volume_stats_capacity_bytes{persistentvolumeclaim!=""})'
+              query: '100 * sum((max by (vol) (label_replace((kubelet_volume_stats_used_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=""},"volumename","$1","persistentvolume","(.*)"),"vol","$1","nfs_path","/mnt/main/(.*)")) or max by (vol) (label_join((kubelet_volume_stats_used_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=""},"volumename","$1","persistentvolume","(.*)"),"vol","/","namespace","persistentvolumeclaim")))) / sum((max by (vol) (label_replace((kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=""},"volumename","$1","persistentvolume","(.*)"),"vol","$1","nfs_path","/mnt/main/(.*)")) or max by (vol) (label_join((kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) label_replace(kube_persistentvolume_info{nfs_path=""},"volumename","$1","persistentvolume","(.*)"),"vol","/","namespace","persistentvolumeclaim"))))'
               format:
                 type: number
                 options:

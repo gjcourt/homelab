@@ -498,39 +498,89 @@ These mirror `deployer.py:7-19`, and each one is tested:
 
 ### Implementation notes (A-Phase 1 PR 2, `compose_backend.py`)
 
-Where the code differs from the design above, and why:
+Where the code differs from the design above, and why. The second round follows the
+review of #1890.
 
-- **No compose text in `desired.json` (A2).** The backend feeds the parsed dict as
-  JSON (JSON is YAML) to `docker compose -f -`, so `desired.json` keeps hestia's
-  format and `DESIRED_VERSION`. The project directory is a fixed, empty
-  `DATA_DIR/compose-project/` (a non-empty one fails the tick: compose reads `.env`
-  from it).
-- **Ownership label injected in memory, not by an override file (A4.5).** Same
-  effect: the label is part of what is hashed and what would be applied.
-- **The interpolation check reads the uninterpolated render (A3).** Comparing
-  `config --no-interpolate` with the interpolated form does not work: compose 5.6.1
-  also normalises the interpolated form (defaults filled in, keys reordered), so
-  they differ for every app. The rule is instead "no string compose read may still
-  hold an unescaped `$`", on top of the same static check in Git. `$$` escapes are
-  allowed. The fingerprint tree is taken from the interpolated, normalised form:
-  what `up` would apply.
-- **`docker inspect --format`** asks for labels, image, state and restart count only,
-  so `Config.Env` never leaves the engine. The docker CLI gets a minimal
-  environment (`PATH`, `HOME`, `DOCKER_*`, `TZ`).
-- **Unmanaged** comes from one `docker ps -a --format` (project label or none), not
-  `compose ls`, which is therefore not on the allowlist.
-- **Also refused in v1:** `build`, `extends`, `include` and `secrets`/`configs` with an
-  `environment` source, for the same reason as `env_file`.
-- **Baseline for "what changed".** In shadow nothing is applied, so the fingerprint
-  baseline is the last tree seen `synced`. At cutover it also becomes the tree last
+- **Validation is an allowlist, in two passes (A3).**
+  1. *On the raw Git file*, for what parsing hides: `${VAR}` interpolation; bare
+     env keys (`environment: [HOME]`), which compose fills from its own environment,
+     the deployer's; the reserved ownership label; and the key allowlists, so
+     `env_file`, `label_file`, `include` and `extends` never reach the compose CLI,
+     which would read those files inside the deployer container.
+  2. *On `docker compose config --format json`*, which is what `up` applies: real
+     long-syntax volume sources, and booleans already converted (`privileged: "true"`
+     becomes `true`).
+
+  Each of these must be on an allowlist: service keys, top-level keys (`name`,
+  `services`, `networks`, `volumes`), mount types (`bind`, `volume`, `tmpfs`), bind
+  options (private propagation only, no SELinux relabel), top-level volumes (local
+  driver, no `driver_opts`, not `external`), top-level networks (bridge, not
+  `external`), `network_mode` (`none`, `bridge` or `service:`) and `deploy` (only
+  `resources` cpus, memory and pids). So `devices`, `volumes_from`, `security_opt`,
+  `userns_mode`, `ipc`, `cgroup`, `pid`, `sysctls`, `cap_add`, `privileged` and GPU
+  reservations are all refused, however they are spelled.
+- **Mounts are an allowlist of roots (A3, replaces the CI port).** A bind source
+  must be one of:
+  - the app's own `/volume1/docker/<name>/...`;
+  - an `x-deploy.allow-host-paths` entry;
+  - for the deployer only, the docker socket.
+
+  An allow-list entry may not overlap (lie under, or contain) a denied root: `/`,
+  `/volume1`, `/volume2`, `/volumeUSB1`, `/etc`, `/proc`, `/sys`, `/boot`, `/dev`,
+  `/var/run`, `/run`, `/root`, `/var/lib`, `/volume1/docker` (every app's subtree),
+  any `/volume1/@*`, or the deployer's `DATA_DIR`. Anything else is refused, which
+  is stricter than the CI guard (an unlisted `/volume1/misc` used to pass).
+- **The allow-list comes from Git, not `desired.json`.** `reconcile` rediscovers
+  every app from the bare git cache at `refs/deployer/head`, which must equal
+  `desired.json`'s sha. `desired.json` only says which commit.
+- **Ownership (A4.5).** The label is injected in memory, not through an override
+  file. The backend also hashes the compose without the label. A project whose
+  containers match that hash but lack the label is `adoptable` ("matches Git apart
+  from the ownership label"), a new state, rather than only `blocked`. This lets the
+  shadow show a hand-made project is in sync before anything is ever deployer-owned.
+- **Baseline for "what changed".** The baseline is recorded on an app's first
+  evaluation, moved whenever live matches Git (`synced` or `adoptable`), and kept
+  for apps that are unevaluated in a tick. At cutover it also becomes the tree last
   applied.
-- **Apply (A5) is not in this PR.** `apply_compose()` refuses while mutations are off
-  and otherwise raises `NotImplementedError`. The pull / up / settle path, the
+- **The interpolation check reads the uninterpolated render.** Comparing it with
+  the interpolated form does not work: compose 5.6.1 normalises the interpolated
+  form, so the two differ for every app. The rule is that no string compose read
+  may still hold an unescaped `$`. `$$` escapes are allowed.
+- **Limits, documented, not detected:**
+  - A mutable image tag that moves on the registry changes no hash. Pin images by
+    digest, as Renovate does.
+  - Top-level `networks` and `volumes` are in no service hash. Changes to them are
+    detected against the baseline and reported as drift, but not on an app's first
+    evaluation.
+  - A host-side symlink in an allowed path is the host's business.
+- **One-off containers** (`compose run`) are excluded with
+  `label=com.docker.compose.oneoff=False`.
+- **No compose text in `desired.json` (A2).** The parsed dict is fed to
+  `docker compose -f -` as JSON, so `desired.json` keeps hestia's format. The project
+  directory is a fixed, empty `DATA_DIR/compose-project/`; a non-empty one fails the
+  tick, because compose reads `.env` from it.
+- **Docker argv shapes are pinned exactly.** `ps` comes in two fixed shapes;
+  `inspect` uses the fixed `--format` (labels, image, state, restart count; never
+  `Config.Env`) with hex ids; `version` uses a fixed format; plus `compose version
+  --short` and `compose ... config` with exactly `--hash *`, `--format json`, or
+  `--format json --no-interpolate`. The CLI gets a minimal environment (`PATH`,
+  `HOME`, `DOCKER_*`, `TZ`).
+- **Unmanaged** comes from one `docker ps -a --format`, not `compose ls`.
+- **The compose version** is fixed per image digest, not pinned in the Dockerfile.
+  One image predicts and applies.
+- **Apply (A5) is not in this PR.** `apply_compose()` refuses while mutations are
+  off, and otherwise raises `NotImplementedError`. The pull / up / settle path, the
   `--mount` preflight and the self-apply helper land before alcatraz's cutover.
 - **Measured end to end** against a real compose 5.6.1 CLI and engine (podman,
-  locally): a project brought up with the owner-labelled compose reads `synced`
-  (the `config --hash` hash equals the container's `config-hash` label), and an
-  image bump reads `pending` with `services.s.image: <old> -> <new>`.
+  locally), with the git cache:
+  - a project brought up with the owner-labelled compose reads `synced`;
+  - one brought up by hand from the same file reads `adoptable`;
+  - after an image bump in Git, the owned one reads `pending` with
+    `services.s.image: <old> -> <new>`.
+
+  The reviewer's bypass probes run as tests through the real `docker compose
+  config`. They are skipped where no compose CLI exists, and they ran in the
+  deployer image.
 
 ## Migration (faster, evidence-gated)
 

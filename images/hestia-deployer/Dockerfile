@@ -14,9 +14,12 @@ FROM alpine:3.24
 # util-linux-misc — nsenter
 # tzdata          — honor TZ for readable log timestamps
 # docker-cli docker-cli-compose — the compose backend (DEPLOYER_BACKEND=compose,
-#                   alcatraz, HOMELAB-118). The image pins the compose version,
-#                   so the version that predicts a change is the one that
-#                   applies it. hestia's TrueNAS path does not use them.
+#                   alcatraz, HOMELAB-118). Not version-pinned here (alpine
+#                   keeps only the current build of a package per branch); the
+#                   compose version is fixed per image DIGEST, and one image
+#                   both predicts and applies, so the hashes agree. A rebuild
+#                   can move it: the startup log prints `compose version`.
+#                   hestia's TrueNAS path does not use them.
 RUN apk add --no-cache bash ca-certificates docker-cli docker-cli-compose git python3 py3-yaml tzdata util-linux-misc
 
 COPY deployer.py /app/deployer.py

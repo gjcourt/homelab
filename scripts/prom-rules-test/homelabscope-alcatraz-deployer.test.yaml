@@ -1,0 +1,132 @@
+# promtool unit tests for the HomelabscopeJobMetricAbsent alcatraz-deployer arm
+# (HOMELAB-118), gated on homelabscope_relay_enabled. Run by lint.yaml's
+# prometheus-rules job: scripts/prom-rules-test/extract.py builds rules.yaml
+# from infra/configs/homelabscope/prometheus-rule.yaml.
+---
+rule_files:
+- rules.yaml
+evaluation_interval: 1m
+tests:
+- name: 'relay off (no relay series): no page'
+  interval: 1m
+  input_series:
+  - series: homelabscope_job_last_success_seconds{job="immich-photos-backup"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="alcatraz-photos-pull"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="zfs-snapshot-main-family"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="zfs-snapshot-main-homes"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="pingo"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="renovate"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="adguard-sync-prod"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="adguard-sync-stage"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="gha-runner-image-apply"}
+    values: 1x120
+  alert_rule_test:
+  - eval_time: 90m
+    alertname: HomelabscopeJobMetricAbsent
+    exp_alerts: []
+- name: 'relay_enabled 0: no page'
+  interval: 1m
+  input_series:
+  - series: homelabscope_job_last_success_seconds{job="immich-photos-backup"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="alcatraz-photos-pull"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="zfs-snapshot-main-family"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="zfs-snapshot-main-homes"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="pingo"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="renovate"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="adguard-sync-prod"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="adguard-sync-stage"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="gha-runner-image-apply"}
+    values: 1x120
+  - series: homelabscope_relay_enabled{source="alcatraz-deploy"}
+    values: '0x120'
+  alert_rule_test:
+  - eval_time: 90m
+    alertname: HomelabscopeJobMetricAbsent
+    exp_alerts: []
+- name: 'relay on, deployer reporting: no page'
+  interval: 1m
+  input_series:
+  - series: homelabscope_job_last_success_seconds{job="immich-photos-backup"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="alcatraz-photos-pull"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="zfs-snapshot-main-family"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="zfs-snapshot-main-homes"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="pingo"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="renovate"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="adguard-sync-prod"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="adguard-sync-stage"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="gha-runner-image-apply"}
+    values: 1x120
+  - series: homelabscope_relay_enabled{source="alcatraz-deploy"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="alcatraz-deployer"}
+    values: 1x120
+  alert_rule_test:
+  - eval_time: 90m
+    alertname: HomelabscopeJobMetricAbsent
+    exp_alerts: []
+- name: 'relay on, deployer series absent: pages after the 1h for'
+  interval: 1m
+  input_series:
+  - series: homelabscope_job_last_success_seconds{job="immich-photos-backup"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="alcatraz-photos-pull"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="zfs-snapshot-main-family"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="zfs-snapshot-main-homes"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="pingo"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="renovate"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="adguard-sync-prod"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="adguard-sync-stage"}
+    values: 1x120
+  - series: homelabscope_job_last_success_seconds{job="gha-runner-image-apply"}
+    values: 1x120
+  - series: homelabscope_relay_enabled{source="alcatraz-deploy"}
+    values: 1x120
+  alert_rule_test:
+  - eval_time: 30m
+    alertname: HomelabscopeJobMetricAbsent
+    exp_alerts: []
+  - eval_time: 90m
+    alertname: HomelabscopeJobMetricAbsent
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: alcatraz-deployer
+      exp_annotations:
+        summary: Homelabscope job alcatraz-deployer heartbeat is absent
+        description: 'No homelabscope_job_last_success_seconds series exists for job alcatraz-deployer
+          for >1h. Its heartbeat has vanished entirely (textfile no longer written / exporter down, or
+          the CronJob was removed) — distinct from "stale", which needs the series to still exist. Check
+          the hestia node-exporter (:9100) and the homelabscope-heartbeat Custom App, or `kubectl get
+          cronjob -A` for the CronJob-backed jobs.
+
+          '

@@ -1030,6 +1030,40 @@ def test_real_parser_accepts_own_named_volume_and_network():
     assert run_both_passes(c) == []
 
 
+SELF_FILE = os.path.join(ROOT, "hosts/alcatraz/alcatraz-deployer/docker-compose.yml")
+
+
+def self_compose():
+    doc = load(open(SELF_FILE).read())
+    meta = doc.pop("x-deploy")
+    return {k: v for k, v in doc.items() if not k.startswith("x-")}, meta
+
+
+def test_the_deployers_own_compose():
+    compose, meta = self_compose()
+    assert meta == {"name": OWNER}
+    body = compose["services"][OWNER]
+    env = d._kv_list_to_map(body["environment"])
+    assert env["DRY_RUN"] == "1" and env["DEPLOYER_BACKEND"] == "compose"
+    assert env["DEPLOYER_HOST"] == "alcatraz" and env["DEPLOYER_HOSTS_PREFIX"] == "hosts/alcatraz/"
+    assert env["DEPLOYER_SELF_NAME"] == env["DEPLOYER_JOB"] == OWNER
+    assert env["DATA_DIR"] == DATA and env["TEXTFILE_DIR"] == DATA + "/metrics"
+    assert "@sha256:" in body["image"] and body["image"].startswith("ghcr.io/gjcourt/hestia-deployer:")
+    assert not body.get("privileged") and "pid" not in body
+    assert set(compose) == {"services"}  # only compose's own default network
+    assert cb.validate_git(compose, meta, DATA) == []
+    # Never managed by itself: excluded by the default prefixes.
+    by = {e["file"]: e for e in cb.discover(alcatraz_files(), load, DATA)}
+    assert by["hosts/alcatraz/alcatraz-deployer/docker-compose.yml"]["status"] == "excluded"
+
+
+@needs_compose
+def test_real_parser_accepts_the_deployers_own_compose_only_as_itself():
+    compose, _ = self_compose()
+    assert run_both_passes(compose, OWNER) == []
+    assert run_both_passes(compose, "not-the-deployer")
+
+
 @needs_compose
 def test_real_parser_accepts_the_real_apps():
     doc = load(alcatraz_files()["hosts/alcatraz/immich-photos-pull/docker-compose.yml"])

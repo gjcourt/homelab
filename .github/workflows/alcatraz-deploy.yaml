@@ -143,6 +143,14 @@ jobs:
               if path.startswith("hosts/alcatraz/actions-runner/"):
                   print(f"skip (runner self-deploy): {path}", file=sys.stderr)
                   continue
+              # alcatraz-deployer (HOMELAB-118) is started by George by hand and
+              # never by this workflow: it mounts /var/run/docker.sock, which the
+              # guard below hard-denies, so without this skip every push to
+              # hosts/alcatraz/** would fail discover. (The deployer does not
+              # manage its own directory either.)
+              if path.startswith("hosts/alcatraz/alcatraz-deployer/"):
+                  print(f"skip (alcatraz-deployer, started by hand): {path}", file=sys.stderr)
+                  continue
 
               try:
                   with open(path) as f:

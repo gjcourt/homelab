@@ -236,6 +236,12 @@ spec:
         # /var/lib/node-exporter/textfile/immich-backup.prom on hestia after a
         # manual run — so the guard is restored below alongside the compose tag
         # bump in the same PR. (the 1h `for` covers the deploy window.)
+        #
+        # alcatraz-deployer (HOMELAB-118) reaches Prometheus only through the
+        # homelabscope-heartbeat relay, which is off until George bootstraps
+        # the deployer on alcatraz. Its arm is therefore gated on the relay
+        # saying it is on (homelabscope_relay_enabled == 1): no page for a
+        # deployer that does not exist yet, and a page once it should.
         - alert: HomelabscopeJobMetricAbsent
           expr: >
             absent(homelabscope_job_last_success_seconds{job="immich-photos-backup"})
@@ -247,6 +253,10 @@ spec:
             or absent(homelabscope_job_last_success_seconds{job="adguard-sync-prod"})
             or absent(homelabscope_job_last_success_seconds{job="adguard-sync-stage"})
             or absent(homelabscope_job_last_success_seconds{job="gha-runner-image-apply"})
+            or (
+              absent(homelabscope_job_last_success_seconds{job="alcatraz-deployer"})
+              and on() (homelabscope_relay_enabled{source="alcatraz-deploy"} == 1)
+            )
           for: 1h
           labels:
             # critical for the same reason as HomelabscopeJobStale: only

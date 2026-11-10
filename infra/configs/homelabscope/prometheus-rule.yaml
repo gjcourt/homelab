@@ -246,6 +246,7 @@ spec:
             or absent(homelabscope_job_last_success_seconds{job="renovate"})
             or absent(homelabscope_job_last_success_seconds{job="adguard-sync-prod"})
             or absent(homelabscope_job_last_success_seconds{job="adguard-sync-stage"})
+            or absent(homelabscope_job_last_success_seconds{job="gha-runner-image-apply"})
           for: 1h
           labels:
             # critical for the same reason as HomelabscopeJobStale: only
@@ -257,6 +258,51 @@ spec:
             summary: "Homelabscope job {{ $labels.job }} heartbeat is absent"
             description: >
               No homelabscope_job_last_success_seconds series exists for job {{ $labels.job }} for >1h. Its heartbeat has vanished entirely (textfile no longer written / exporter down, or the CronJob was removed) — distinct from "stale", which needs the series to still exist. Check the hestia node-exporter (:9100) and the homelabscope-heartbeat Custom App, or `kubectl get cronjob -A` for the CronJob-backed jobs.
+
+        # gha-runner watchdog (HOMELAB-106, moved outside the runner in
+        # HOMELAB-108). The runner cannot redeploy itself, so the
+        # gha-runner-watchdog Custom App on hestia applies the Git pin while
+        # the runner is idle and recreates a runner GitHub reports offline for
+        # 15 min. A failed apply/recovery, a runner still dead after one, or a
+        # rejected token writes last_status=1 for this job. Staleness (6h
+        # budget, 5-minute ticks) is covered by the generic
+        # HomelabscopeJobStale above; this rule is the fast path. The series
+        # is guarded in HomelabscopeJobMetricAbsent.
+        # Runbook: docs/operations/apps/gha-runner.md section 6.
+        - alert: HomelabscopeGhaRunnerApplyFailed
+          expr: homelabscope_job_last_status{job="gha-runner-image-apply"} == 1
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "gha-runner watchdog on hestia could not keep the runner up"
+            description: >
+              The gha-runner watchdog failed to apply the Git runner pin, recreated a dead runner that did not come back, or GitHub rejected the runner's ACCESS_TOKEN. hestia deploys may be stuck. Read the watchdog log (ssh truenas_admin@10.42.2.10 'sudo docker logs --tail 50 gha-runner-watchdog'), check https://github.com/gjcourt/homelab/settings/actions/runners, and follow docs/operations/apps/gha-runner.md section 6.
+
+        # The runner swaps ACCESS_TOKEN for a registration token after every
+        # job, so an expired token stops all hestia deploys at the next job.
+        # Expiry comes from GitHub's github-authentication-token-expiration
+        # header; a token with no expiry has no series and this never fires.
+        # 14 days, critical: only severity=critical reaches the inbox, and two
+        # weeks is room to rotate it calmly (runbook section 6.3).
+        - alert: HomelabscopeGhaRunnerTokenExpiring
+          expr: homelabscope_gha_runner_token_expiry_seconds - time() < 14 * 86400
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "hestia runner ACCESS_TOKEN expires in {{ $value | humanizeDuration }}"
+            description: >
+              The GitHub token the hestia runner registers with expires soon. When it does, the runner cannot register and every hestia deploy queues. Rotate it: docs/operations/apps/gha-runner.md section 6.3.
+        - alert: HomelabscopeGhaRunnerTokenInvalid
+          expr: homelabscope_gha_runner_token_valid == 0
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "GitHub rejects the hestia runner ACCESS_TOKEN"
+            description: >
+              GitHub returned 401 for the hestia runner's ACCESS_TOKEN (expired, revoked, or missing). The runner cannot register, and the watchdog will not recreate it because that cannot help. Rotate it: docs/operations/apps/gha-runner.md section 6.3.
 
     # -----------------------------------------------------------------------
     # Container health on hestia — homelabscope_container_* family.
@@ -350,7 +396,7 @@ spec:
           #
           # Adding a service here is the deliberate act of declaring it
           # must-always-run. Keep it sorted.
-          expr: homelabscope_container_running{name=~"github-mirror|homelabscope-heartbeat|immich-photos-backup|ipmi-exporter|libation|netscope|node-exporter|qbittorrent"} == 0
+          expr: homelabscope_container_running{name=~"gha-runner-watchdog|github-mirror|homelabscope-heartbeat|immich-photos-backup|ipmi-exporter|libation|netscope|node-exporter|qbittorrent"} == 0
           for: 15m
           labels:
             # `lifecycle` splits the two arms of each pair. It is not routed on
@@ -418,7 +464,7 @@ spec:
         # This is the plan's original threshold and it is correct HERE — it is
         # only wrong for the ephemeral runner, which is split out below.
         - alert: HomelabscopeContainerRestartLoop
-          expr: increase(homelabscope_container_restarts_total{name=~"github-mirror|homelabscope-heartbeat|immich-photos-backup|ipmi-exporter|libation|netscope|node-exporter|qbittorrent"}[1h]) > 5
+          expr: increase(homelabscope_container_restarts_total{name=~"gha-runner-watchdog|github-mirror|homelabscope-heartbeat|immich-photos-backup|ipmi-exporter|libation|netscope|node-exporter|qbittorrent"}[1h]) > 5
           for: 10m
           labels:
             lifecycle: long-lived

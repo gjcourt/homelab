@@ -5,7 +5,7 @@
 > this page links out. **Update this file in the same PR whenever** a plan's
 > status changes, an incident postmortem lands, or hardware/topology changes.
 >
-> Last updated: 2026-11-02
+> Last updated: 2026-11-09
 
 ## Cluster at a glance
 
@@ -43,6 +43,8 @@ Active plans (see [docs/plans/](plans/README.md) for the full status-grouped ind
 - [bench-cloud — Claude Code agents in-cluster](plans/2026-09-25-bench-cloud-agent.md) — the console and task Jobs run in-cluster; [agent-desk](plans/2026-10-22-agent-desk-loop.md) turns `ready` Plane tickets into Jobs. Since 2026-11-02 ([HOMELAB-85](plans/2026-11-01-bench-homelab-paths-plan.md)) Jobs may open homelab PRs for Plane HOMELAB and HASS, limited to `apps/**` and `docs/**` by the `bench-paths` check and held by `bench-approval` until George approves the head SHA. Tests T12 and T13 (the homelab tests) have not run yet. The gate replaces bench-watch for homelab; bench-watch is now a nice-to-have. Runbooks: [bench-cloud](operations/apps/bench-cloud.md), [agent-desk](operations/apps/agent-desk.md).
 - [homelabscope — scheduled-job monitoring](plans/2026-07-04-homelabscope.md) — unified `homelabscope_job_*` metric family + hestia node-exporter textfile scraper (fixes the orphaned/unscraped immich-backup metric) + cronjob recording rules + templated staleness/absence alerts + Grafana table. Repo artifacts landed; operator steps remain (deploy node-exporter, build+enable the heartbeat Custom App, bump the immich image digest).
 - [Lab projects and repo plans in Plane](plans/2026-10-21-plane-lab-project-sync.md) — production Plane live at `plane.burntbytes.com` (2026-10-21); lab `Cancelled` status merged (lab#110); API verified on staging (findings in the plan). Next: the `images/plane-sync/` tool PR, staging import for review, then the production import and CronJob.
+- [hestia pull deployer](plans/2026-11-09-hestia-pull-deployer-plan.md) — retire the hestia self-hosted runner for a Git-pull deployer; Phase 1 (shadow, dry-run) `hestia-deployer` built (HOMELAB-111), awaiting operator `app.create` and a 7-day clean shadow before cutover.
+- [alcatraz pull deployer](plans/2026-11-09-alcatraz-pull-deployer-plan.md) — the same `hestia-deployer` image with a compose backend for alcatraz (HOMELAB-118). A-Phase 1 (build, dry-run only) started: shared-code prerequisites first (host parameters from the environment, per-backend `APPLY_ENABLED`, `host` label on `homelabscope_deploy_*`, multi-arch build); then the compose backend, the heartbeat relay and the alcatraz compose. Nothing is deployed to alcatraz until George's bootstrap.
 
 ## Next up
 

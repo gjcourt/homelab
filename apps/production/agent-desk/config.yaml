@@ -41,7 +41,7 @@ repoNotes:
   gjcourt/homelab: |
     This repo has a bench gate (scripts/bench-gate/rules.yaml on master). A
     bench PR may change only files under apps/** and docs/**, and never:
-    apps/*/agent-desk/**, apps/*/bench-cloud/**, clusters/**, infra/**,
+    apps/*/agent-desk/**, apps/*/bench-desk/**, apps/*/bench-cloud/**, clusters/**, infra/**,
     .github/**, scripts/**, images/**, hosts/**, root files, SOPS secrets
     (secret*.yaml or any file with a top-level sops: key), or network
     policies (networkpolicy*.yaml, any NetworkPolicy kind, or a line that

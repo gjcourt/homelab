@@ -56,3 +56,48 @@ jobs:
 
       - name: Only bench-gate.yaml may write commit statuses
         run: python3 scripts/bench-gate/lint_workflows.py .github/workflows
+
+  # HOMELAB-106/108: pure logic of the gha-runner watchdog (pin parsing,
+  # apply/recover decisions, token expiry, textfile metrics and their HELP).
+  gha-runner-watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Unit tests
+        run: python -m pytest -q images/gha-runner-watchdog/tests
+
+      - name: Shell syntax
+        run: bash -n images/gha-runner-watchdog/watchdog.sh
+
+  # HOMELAB-111: hestia-deployer (Phase 1 shadow): discovery, diff, secret
+  # merge, metrics and HELP parity, and the guard that dry-run can never call
+  # app.update / app.stop / app.start / app.create.
+  hestia-deployer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest pyyaml
+
+      - name: Unit tests
+        run: python -m pytest -q images/hestia-deployer/tests
+
+      - name: Shell syntax
+        run: bash -n images/hestia-deployer/deployer.sh

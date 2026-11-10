@@ -238,6 +238,9 @@ PATH_COMPONENT_RE = re.compile(r"^(?!\.\.?$)[A-Za-z0-9._@-]+$")
 
 
 def path_chars_ok(path: str) -> bool:
+    if path.startswith("//"):
+        # POSIX normpath keeps a leading `//` (a UNC-style //server/share).
+        return False
     comps = [c for c in posixpath.normpath(path).split("/") if c]
     return bool(comps) and all(PATH_COMPONENT_RE.match(c) for c in comps)
 
@@ -783,6 +786,8 @@ def preflight_roots(paths) -> list[str]:
     symlink pointing outside them resolves as missing, which fails closed."""
     roots = set()
     for p in paths:
+        if not path_chars_ok(p):
+            continue
         comps = [c for c in posixpath.normpath(p).split("/") if c]
         if not comps:
             continue
@@ -1035,6 +1040,22 @@ def _inspect_tolerant(docker, kind_args: list[str], ids: list[str], relist) -> s
         raise d.DockerUnavailable(type(e).__name__) from None
 
 
+def local_volume_bind_path(opts: dict) -> str | None:
+    """The host path a local-driver volume binds, or None if it is not a plain bind.
+
+    Only `type: none` with `o` containing bind or rbind and an absolute,
+    single-slash `device` is a bind of a host directory. Anything else (nfs
+    with `device=:/path`, cifs with `//server/share`, a block device with
+    `type=ext4`) writes somewhere this code cannot name.
+    """
+    flags = {x.strip() for x in str(opts.get("o", "")).split(",")}
+    dev = opts.get("device")
+    if opts.get("type") == "none" and flags & {"bind", "rbind"} and isinstance(dev, str) \
+            and dev.startswith("/") and not dev.startswith("//"):
+        return posixpath.normpath(dev)
+    return None
+
+
 def live_writable(docker=docker_read) -> list[tuple[str, str]]:
     """(container, host path) of every read-write mount of EVERY container on the host.
 
@@ -1097,8 +1118,17 @@ def live_writable(docker=docker_read) -> list[tuple[str, str]]:
                 users = volumes.get(vname, [])
                 if driver != "local":
                     found += [(f"{u} (volume {vname}, driver {driver}: host path unknown)", "/") for u in users]
-                elif isinstance(opts.get("device"), str) and opts["device"].startswith("/"):
-                    found += [(f"{u} (volume {vname})", posixpath.normpath(opts["device"])) for u in users]
+                elif opts:
+                    real = local_volume_bind_path(opts)
+                    if real is None:
+                        # nfs / cifs / a block device / anything but a plain
+                        # bind: the host path it can write is unknown. Only the
+                        # volume name and `type` are named, never `o` (it can
+                        # hold a password).
+                        kind = opts.get("type") if isinstance(opts.get("type"), str) else "?"
+                        found += [(f"{u} (volume {vname}, local type={kind}: host path unknown)", "/") for u in users]
+                    else:
+                        found += [(f"{u} (volume {vname})", real) for u in users]
         except ValueError as e:
             raise d.DockerUnavailable(type(e).__name__) from None
     return sorted(set(found))

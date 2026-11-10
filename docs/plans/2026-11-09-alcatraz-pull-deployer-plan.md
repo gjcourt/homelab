@@ -588,8 +588,13 @@ PR sets `APPLY_ENABLED["compose"] = True`, which is George's call.
 - **Review round 3 (#1894).**
   - **Named volumes are checked at their real host path.** A local volume with a
     `device` option (`docker volume inspect --format`, a new exact read shape)
-    counts as writable at that device path. A non-local driver hides its path, so
-    it counts as writable at `/`. That makes every bind on the host `invalid`,
+    counts as writable at that device path, but only for a plain bind: `type: none`
+    with `o` containing `bind` or `rbind` (round 4). Any other local volume with
+    options hides where it writes: nfs (`device=:/path`), cifs
+    (`//server/share`), or a block device (`type=ext4`). So does a non-local
+    driver. Both count as writable at `/`. Only the volume name and `type` are
+    logged, never `o`, which can hold a password. UNC-style `//` paths are never
+    mounted by the preflight helper. That makes every bind on the host `invalid`,
     which fails closed; apps without binds are unaffected.
   - **A container vanishing between `ps` and `inspect`** no longer fails the
     tick. The deployer's own `--rm` preflight helper can do this. The backend

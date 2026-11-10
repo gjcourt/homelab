@@ -1486,6 +1486,40 @@ def test_live_writable_non_local_volume_fails_closed():
     assert cb.nested_write_reasons([("v[0]", "/volume1/homes/g/Photos", True)], got)
 
 
+# The reviewer's probe8 cases: only a plain `type: none` + bind/rbind volume
+# has a known host path; nfs, a block device and cifs count as `/`.
+@pytest.mark.parametrize("vname,opts", [
+    ("nfsloop", {"type": "nfs", "o": "addr=127.0.0.1,rw", "device": ":/volume1/homes"}),
+    ("ext4", {"type": "ext4", "device": "/dev/md2"}),
+    ("cifs", {"type": "cifs", "o": "username=u,password=SECRET-9191", "device": "//nas/share"}),
+    ("nfsabs", {"type": "nfs", "o": "addr=10.0.0.1", "device": "/volume1/homes"}),
+    ("bindnotype", {"o": "bind", "device": "/volume1/homes"}),
+    ("noneonly", {"type": "none", "device": "/volume1/homes"}),
+    ("doubleslash", {"type": "none", "o": "bind", "device": "//volume1/homes"}),
+])
+def test_local_volume_that_is_not_a_plain_bind_fails_closed(vname, opts):
+    docker = LiveDocker({"c": [{"Type": "volume", "Name": vname, "Source": f"/volume1/@docker/volumes/{vname}/_data",
+                                "RW": True}]}, volumes={vname: ("local", opts)})
+    got = cb.live_writable(docker)
+    assert ("/" in {p for _, p in got}), got
+    assert all(p in ("/", f"/volume1/@docker/volumes/{vname}/_data") for _, p in got)
+    assert "SECRET" not in json.dumps(got)
+    assert not any(p.startswith("/nas") or p.startswith("/dev") for _, p in got)
+
+
+def test_unc_style_paths_are_never_mounted_by_the_helper():
+    assert not cb.path_chars_ok("//nas/share")
+    assert cb.preflight_roots(["//nas/share", "/volume1/x"]) == ["/volume1"]
+
+
+@pytest.mark.parametrize("o", ["bind", "rbind", "ro,bind", "bind, rw"])
+def test_plain_bind_volume_counts_at_its_device(o):
+    docker = LiveDocker({"c": [{"Type": "volume", "Name": "b", "Source": "/volume1/@docker/volumes/b/_data", "RW": True}]},
+                        volumes={"b": ("local", {"type": "none", "o": o, "device": "/volume1/homes/george"})})
+    assert ("c (volume b)", "/volume1/homes/george") in cb.live_writable(docker)
+    assert "/" not in {p for _, p in cb.live_writable(docker)}
+
+
 def test_live_writable_tolerates_a_container_vanishing():
     docker = LiveDocker({"a": [{"Type": "bind", "Source": "/volume1/x", "RW": True}],
                          "helper": [{"Type": "bind", "Source": "/volume1", "RW": False}]}, vanish={"helper"})

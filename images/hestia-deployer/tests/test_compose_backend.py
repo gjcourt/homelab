@@ -71,14 +71,96 @@ def test_compose_apply_is_disabled():
 def test_apply_compose_refuses_before_any_call(dry_run):
     calls = []
     with pytest.raises(d.DryRunViolation):
-        cb.apply_compose("foo", dry_run=dry_run, docker=lambda *a, **k: calls.append(a))
+        cb.apply_compose({"name": "foo"}, {}, dry_run=dry_run, docker=lambda *a, **k: calls.append(a),
+                         write=lambda *a, **k: calls.append(a))
     assert calls == []
+
+
+@pytest.mark.parametrize("dry_run", [True, False])
+def test_docker_write_refuses_before_any_process(dry_run, monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("subprocess.run called")
+    monkeypatch.setattr(subprocess, "run", boom)
+    for argv in (cb.compose_args("foo", "/d")[:-1] + ["pull", "--quiet"],
+                 cb.compose_args("foo", "/d")[:-1] + list(cb.UP_FLAGS[0])):
+        with pytest.raises(d.DryRunViolation):
+            cb.docker_write(*argv, dry_run=dry_run)
 
 
 def test_arming_truenas_does_not_arm_compose(monkeypatch):
     monkeypatch.setitem(d.APPLY_ENABLED, "truenas", True)
     with pytest.raises(d.DryRunViolation):
-        cb.apply_compose("foo", dry_run=False)
+        cb.apply_compose({"name": "foo"}, {}, dry_run=False)
+    with pytest.raises(d.DryRunViolation):
+        cb.docker_write("compose", "-f", "-", "-p", "foo", "--project-directory", "/d", "pull", "--quiet",
+                        dry_run=False)
+
+
+IMAGE_ID = "sha256:" + "e" * 64
+WRITE_ALLOWED = [
+    cb.preflight_argv(IMAGE_ID, ["/volume1/docker/foo"]),
+    cb.preflight_argv(IMAGE_ID, ["/volume1/docker/foo", "/var/services/homes/x", "/var/log/a.log"]),
+    ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", "pull", "--quiet"],
+    ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", *cb.UP_FLAGS[0]],
+    ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", *cb.UP_FLAGS[1]],
+]
+WRITE_REFUSED = [
+    [],
+    ["rm", "-f", "x"], ["stop", "x"], ["exec", "x", "sh"], ["pull", "x"],
+    ["run", "--rm", "--privileged", "img"],
+    [*cb.PREFLIGHT_RUN, IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],          # no entrypoint
+    [*cb.PREFLIGHT_RUN, *cb.PREFLIGHT_TAIL, "busybox", "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],  # not an id
+    [*cb.PREFLIGHT_RUN, *cb.PREFLIGHT_TAIL, IMAGE_ID, "-c", "import os"],                  # arbitrary python
+    [*cb.PREFLIGHT_RUN, *cb.PREFLIGHT_TAIL, IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "relative"],
+    # the helper's mounts: never /, never /run or /var/run (the socket), always readonly, target = /host<root>
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/,target=/host,readonly", *cb.PREFLIGHT_TAIL, IMAGE_ID,
+     "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/var/run,target=/host/var/run,readonly", *cb.PREFLIGHT_TAIL,
+     IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/run,target=/host/run,readonly", *cb.PREFLIGHT_TAIL,
+     IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/volume1,target=/host/volume1", *cb.PREFLIGHT_TAIL,
+     IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/volume1,target=/host/etc,readonly", *cb.PREFLIGHT_TAIL,
+     IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/..,target=/host/..,readonly", *cb.PREFLIGHT_TAIL, IMAGE_ID,
+     "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/.,target=/host/.,readonly", *cb.PREFLIGHT_TAIL, IMAGE_ID,
+     "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/var/..,target=/host/var/..,readonly", *cb.PREFLIGHT_TAIL,
+     IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/volume1,target=/host/volume1,readonly", "--privileged",
+     *cb.PREFLIGHT_TAIL, IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", "down"],
+    ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", "up", "-d"],          # no --wait / orphans
+    ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", "up", "-d", "--remove-orphans", "--wait",
+     "--wait-timeout", "300", "--force-recreate"],
+    ["compose", "-f", "/etc/x.yml", "-p", "foo", "--project-directory", "/d", "pull", "--quiet"],
+    ["compose", "-f", "-", "-p", "Foo", "--project-directory", "/d", "pull", "--quiet"],
+    ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", "pull"],
+]
+
+
+@pytest.mark.parametrize("argv", WRITE_ALLOWED)
+def test_write_argv_allowed(argv):
+    cb.check_write_argv(argv)
+
+
+@pytest.mark.parametrize("argv", WRITE_REFUSED)
+def test_write_argv_refused(argv, monkeypatch):
+    monkeypatch.setitem(d.APPLY_ENABLED, "compose", True)  # even armed, the shape is refused
+
+    def boom(*a, **k):
+        raise AssertionError("subprocess.run called")
+    monkeypatch.setattr(subprocess, "run", boom)
+    with pytest.raises(d.DryRunViolation):
+        cb.docker_write(*argv, dry_run=False)
+
+
+def test_write_shapes_are_not_read_shapes():
+    for argv in WRITE_ALLOWED:
+        with pytest.raises(d.DryRunViolation):
+            cb.check_read_argv(argv)
 
 
 CID = "0123456789ab" * 4 + "0" * 16
@@ -193,6 +275,21 @@ def test_git_pass_refuses_top_level_keys(top):
     assert any(top in r for r in cb.validate_git(c, {}, DATA))
 
 
+@pytest.mark.parametrize("kind", ["volumes", "networks"])
+def test_underscore_in_top_level_keys_is_refused(kind):
+    c = svc()
+    c[kind] = {"a_b": {}}
+    assert any("`_`" in r for r in cb.validate_git(c, {}, DATA))
+    cfg = parsed(**{kind: {"a_b": {"name": "foo_a_b"}}})
+    assert any("`_`" in r for r in vc(cfg))
+
+
+def test_var_log_whole_directory_is_refused_single_files_are_not():
+    assert cb.validate_git(svc(), {"allow-host-paths": ["/var/log"]}, DATA)
+    assert cb.validate_git(svc(), {"allow-host-paths": ["/var/log/"]}, DATA)
+    assert cb.validate_git(svc(), {"allow-host-paths": ["/var/log/immich-photos-pull.log"]}, DATA) == []
+
+
 def test_git_pass_allows_the_plain_cases():
     assert cb.validate_git(svc(command="echo $$HOME", environment=["TZ=UTC"], mem_limit="64m",
                                restart="unless-stopped", volumes=["/volume1/docker/foo:/d"]), {}, DATA) == []
@@ -219,6 +316,9 @@ def test_git_pass_allows_the_plain_cases():
     {"allow-host-paths": ["/usr/local/bin"]},
     {"allow-host-paths": ["/var/packages/ContainerManager"]},
     {"allow-host-paths": ["/opt"]},
+    {"allow-host-paths": ["/volume3/x"]},
+    {"allow-host-paths": ["/volume10"]},
+    {"allow-host-paths": ["/volumeUSB2/x"]},
 ])
 def test_bad_allow_list_entries_are_refused(meta):
     assert cb.validate_git(svc(), meta, DATA)
@@ -251,7 +351,7 @@ def vc(cfg, name="foo", allow=(), self_name=OWNER):
 
 @pytest.mark.parametrize("src,ok", [
     ("/volume1/docker/foo", True),                    # own subtree
-    ("/volume1/docker/foo/data", True),
+    ("/volume1/docker/foo/data", False),             # sub-path of the own subtree (race: could be swapped)
     ("/volume1/docker", False),                       # every app's subtree (HIGH-2)
     ("/volume1/docker/bar/data", False),              # another app's subtree
     (DATA, False),                                    # the deployer's data dir (HIGH-2)
@@ -272,18 +372,35 @@ def test_bind_sources(src, ok):
 
 def test_allow_list_opens_exactly_what_it_lists():
     allow = ["/volume1/homes/george/Photos"]
-    assert vc(parsed({"volumes": [bind("/volume1/homes/george/Photos/2026")]}), allow=allow) == []
+    assert vc(parsed({"volumes": [bind("/volume1/homes/george/Photos")]}), allow=allow) == []
+    assert vc(parsed({"volumes": [bind("/volume1/homes/george/Photos/2026")]}), allow=allow)  # sub-path: refused
     assert vc(parsed({"volumes": [bind("/volume1/homes/mara/Photos")]}), allow=allow)
 
 
+def test_nothing_may_be_bound_below_a_writable_bind():
+    # Same app: it writes /volume1/homes/george and could swap Photos for a symlink.
+    binds = [("v[0]", "/volume1/homes/george", False), ("v[1]", "/volume1/homes/george/Photos", True)]
+    writable = [("a", "/volume1/homes/george")]
+    assert cb.nested_write_reasons(binds, writable)
+    # Another app writes the parent: also refused.
+    assert cb.nested_write_reasons([("v[0]", "/volume1/homes/george/Photos", True)],
+                                   [("other", "/volume1/homes/george")])
+    # Read-only parents and siblings are fine.
+    assert cb.nested_write_reasons([("v[0]", "/volume1/homes/george/Photos", True)],
+                                   [("other", "/volume1/homes/mara")]) == []
+    assert cb.nested_write_reasons([("v[0]", "/volume1/homes/george", False)], [("a", "/volume1/homes/george")]) == []
+
+
 def test_self_may_mount_the_socket_and_its_data_dir_and_nothing_else():
-    ok = parsed({"volumes": [bind(cb.SELF_SOCKET), bind(DATA), bind(DATA + "/hc-url", read_only=True)]},
+    ok = parsed({"volumes": [bind(cb.SELF_SOCKET), bind(DATA)]},
                 networks={"default": {"name": f"{OWNER}_default", "ipam": {}}})
     assert vc(ok, name=OWNER) == []
     assert vc(parsed({"volumes": [bind(cb.SELF_SOCKET)]}), name="foo")
     assert vc(parsed({"volumes": [bind("/var/run/other.sock")]}), name=OWNER)
     assert vc(parsed({"volumes": [bind("/etc")]}), name=OWNER)
     assert vc(parsed({"privileged": True}), name=OWNER)
+    assert vc(parsed({"volumes": [bind(DATA + "/hc-url")]}, networks={"default": {"name": f"{OWNER}_default"}}),
+              name=OWNER)  # a sub-path, even of its own data dir
 
 
 @pytest.mark.parametrize("service", [
@@ -308,6 +425,9 @@ def test_self_may_mount_the_socket_and_its_data_dir_and_nothing_else():
     {"logging": {"driver": "some/plugin"}},
     {"logging": {"driver": "gelf"}},
     {"logging": "json-file"},
+    {"container_name": "alcatraz-deployer"},
+    {"container_name": "foo-other"},             # only <app> or <app>-<service>
+    {"container_name": "immich-photos-pull"},
 ])
 def test_config_pass_refuses_services(service):
     assert vc(parsed(service))
@@ -337,6 +457,17 @@ def test_config_pass_refuses_top_level(top):
     assert vc(cfg)
 
 
+def test_container_name_app_or_app_service():
+    assert vc(parsed({"container_name": "foo"})) == []
+    assert vc(parsed({"container_name": "foo-s"})) == []
+
+
+@pytest.mark.parametrize("path", ["/my share/x", "/volume1/docker/foo/a b", "/volume1/$x", "/volume1/x;y"])
+def test_unmountable_path_characters_are_invalid_at_validation(path):
+    assert vc(parsed({"volumes": [bind(path)]}), allow=[path])
+    assert cb.validate_git(svc(), {"allow-host-paths": [path]}, DATA)
+
+
 def test_config_pass_allows_the_projects_own_names():
     cfg = parsed({"volumes": [{"type": "volume", "source": "data", "target": "/d", "volume": {}}],
                   "logging": {"driver": "local", "options": {"max-size": "1m"}}},
@@ -345,7 +476,7 @@ def test_config_pass_allows_the_projects_own_names():
 
 
 def test_config_pass_allows_a_realistic_service():
-    cfg = parsed({"restart": "unless-stopped", "container_name": "cc", "cpus": 2, "mem_limit": "268435456",
+    cfg = parsed({"restart": "unless-stopped", "container_name": "foo", "cpus": 2, "mem_limit": "268435456",
                   "environment": {"TZ": "UTC"}, "user": "0:0", "init": True, "read_only": True,
                   "tmpfs": ["/t"], "healthcheck": {"test": ["CMD", "true"]}, "ports": [{"target": 80}],
                   "logging": {"driver": "json-file"}, "network_mode": "none",
@@ -476,9 +607,17 @@ def test_evaluate_top_level_change_is_drift():
     assert r["changes"] == ["networks.n.internal"]
 
 
+def test_top_level_drift_is_not_adoptable():
+    base = cb.fingerprint({"services": {"s": {"image": IMG}}, "networks": {"n": {"internal": False}}})
+    tree = cb.fingerprint({"services": {"s": {"image": IMG}}, "networks": {"n": {"internal": True}}})
+    r = ev(managed(), [ctr(owner=None, h="P1")], tree=tree, baseline=base)
+    assert r["state"] == "blocked"
+    assert ev(managed(), [ctr(owner=None, h="P1")], tree=base, baseline=base)["state"] == "adoptable"
+
+
 def test_evaluate_missing_and_create_note():
     r = ev(managed(create=True), [])
-    assert r["state"] == "missing" and "not acted on until cutover" in r["reasons"][0]
+    assert r["state"] == "missing" and "planned for creation" in r["reasons"][0]
 
 
 def test_evaluate_ownership():
@@ -584,6 +723,10 @@ class FakeDocker:
         self.fail = set(fail)
         self.calls = []
         self.stdins = []
+        self.host = {}
+        self.up_breaks = set()
+        self.loose_mounts = {}
+        self.volumes = {}          # name -> (driver, options)
 
     def _hash(self, project, service, owned):
         c = self.desired[project]
@@ -595,8 +738,21 @@ class FakeDocker:
         self.calls.append(args)
         if stdin is not None:
             self.stdins.append(stdin)
-        if args[0] in self.fail:
+        if args[0] in self.fail and not (args[0] == "inspect" and args[4] == cb.MOUNTS_FORMAT):
             raise subprocess.CalledProcessError(1, ["docker", args[0]])
+        if list(args) == ["ps", "-a", "-q", "--no-trunc"]:
+            ids = [cid(p, i) for p, cs in self.projects.items() for i, _ in enumerate(cs)]
+            return "\n".join(ids + [cid("loose", n) for n in self.loose])
+        if list(args) == ["volume", "ls", "-q"]:
+            return "\n".join(self.volumes)
+        if args[0] == "volume":
+            return "".join(f"{json.dumps(v)}\t{json.dumps(self.volumes[v][0])}\t{json.dumps(self.volumes[v][1])}\n"
+                           for v in args[4:] if v in self.volumes)
+        if args[0] == "inspect" and args[4] == cb.MOUNTS_FORMAT:
+            rows = {cid(p, i): c for p, cs in self.projects.items() for i, c in enumerate(cs)}
+            rows.update({cid("loose", n): {"name": n, "mounts": self.loose_mounts.get(n, [])} for n in self.loose})
+            return "".join(f"{json.dumps('/' + rows[x]['name'])}\t{json.dumps(rows[x].get('mounts', []))}\n"
+                           for x in args[5:])
         if args[0] == "ps" and "--format" in args:
             lines = [f"{c['name']}\t{p}" for p, cs in self.projects.items() for c in cs]
             lines += [f"{n}\t" for n in self.loose]
@@ -604,6 +760,8 @@ class FakeDocker:
         if args[0] == "ps":
             project = args[5].split("=", 2)[2]
             return "\n".join(cid(project, i) for i, _ in enumerate(self.projects.get(project, [])))
+        if args[0] == "inspect" and args[4] == cb.SELF_IMAGE_FORMAT:
+            return IMAGE_ID + "\n"
         if args[0] == "inspect":
             ids = {cid(p, i): (p, c) for p, cs in self.projects.items() for i, c in enumerate(cs)}
             out = []
@@ -612,13 +770,17 @@ class FakeDocker:
                 h = c.get("hash")
                 if h in ("auto", "plain"):
                     h = self._hash(project, c["service"], h == "auto")
+                elif h == "owned-up":
+                    h = self._up_hash[(project, c["service"])]
+                if project in self.up_breaks:
+                    c["restarts"] = c.get("restarts", 0) + 1   # crash-looping: restarts between reads
                 labels = {cb.PROJECT_LABEL: project, cb.SERVICE_LABEL: c["service"], cb.HASH_LABEL: h,
                           "org.example.host-only": HOST_SENTINEL}
                 if c.get("owner"):
                     labels[cb.OWNER_LABEL] = c["owner"]
                 out.append("\t".join([json.dumps("/" + c["name"]), json.dumps(labels), json.dumps(IMG),
                                       json.dumps(c.get("running", True)), json.dumps(c.get("restarting", False)),
-                                      "0"]))
+                                      str(c.get("restarts", 0))]))
             return "\n".join(out) + "\n"
         if args[0] == "compose":
             if "compose" in self.fail:
@@ -633,6 +795,36 @@ class FakeDocker:
                 return json.dumps(compose)
             return json.dumps(fake_parse(compose, project))
         raise AssertionError(f"unexpected docker {args}")
+
+    # The mutating side, behind the backend's real write allowlist and guard.
+    # self.host: path -> [real, kind] the preflight reports (default: itself, a dir);
+    # self.up_breaks: projects whose `up` leaves a container that restarts.
+
+    def write(self, *args, stdin=None, dry_run=True):
+        assert d.mutations_allowed(dry_run, cb.BACKEND), "write without mutations allowed"
+        cb.check_write_argv(args)
+        self.writes = getattr(self, "writes", []) + [args]
+        if args[0] == "run":
+            paths = cb.preflight_paths(args)
+            return json.dumps({p: self.host.get(p, [p, "dir"]) for p in paths})
+        project = args[4]
+        if "pull" in args:
+            if "pull" in self.fail:
+                raise subprocess.CalledProcessError(1, ["docker", "compose", "pull"])
+            return ""
+        self.desired[project] = {k: v for k, v in json.loads(stdin).items()}
+        # what `up` leaves: one owned, desired-hash container per service
+        compose = json.loads(stdin)
+        for svc_name in compose["services"]:
+            self.projects.setdefault(project, [])
+        self.projects[project] = [{"name": f"{project}-{s}-1", "service": s, "hash": "owned-up", "owner": OWNER,
+                                   "running": "--no-start" not in args, "restarts": 0,
+                                   "restarting": project in self.up_breaks}
+                                  for s in compose["services"]]
+        self._up_hash = getattr(self, "_up_hash", {})
+        for s, b in fake_parse(compose, project)["services"].items():
+            self._up_hash[(project, s)] = config_hash(b)
+        return ""
 
 
 def git_env():
@@ -745,7 +937,9 @@ def test_reconcile_only_reads_and_reports(tmp_path, capsys, dry_run):
     assert "evil-priv [invalid]" in out and "evil-mount [invalid]" in out and "is not mountable" in out
     assert oct(os.stat(data / "state.json").st_mode & 0o777) == "0o600"
     st = json.loads(state_text)
-    assert st["last_tick"]["backend"] == "compose" and st["last_tick"]["would_apply"] == []
+    # x-deploy.create is planned like pending (honoured from cutover); nothing applies in shadow.
+    assert st["last_tick"]["backend"] == "compose" and st["last_tick"]["would_apply"] == ["absent"]
+    assert not getattr(docker, "writes", None)
     # Baselines from the first evaluation (MEDIUM-3), invalid apps have none.
     assert set(st["baseline"]) == {"synced-app", "bumped", "handmade", "adoptable-app", "absent", "stopped-app",
                                    "photos"}
@@ -813,7 +1007,7 @@ def test_a_merge_is_predicted_with_its_paths(tmp_path, capsys):
     s = parse_prom(body)
     assert state_of(s, "bumped", "pending") == 1 and state_of(s, "synced-app", "synced") == 1
     out = capsys.readouterr().out
-    assert "would_apply=['bumped']" in out
+    assert "would_apply=['absent', 'bumped']" in out
     assert f"bumped [pending] (hosts/alcatraz/bumped/docker-compose.yml) changes: services.s.image: {IMG} -> {NEW}" in out
 
 
@@ -926,6 +1120,461 @@ def test_one_off_containers_are_filtered():
         return ""
     assert cb.project_containers("foo", docker) == []
     assert cb.ONEOFF_FILTER in calls[0]
+
+
+# ------------------------------------------------------------ apply path: resolve + preflight (A5)
+
+
+def test_resolve_under_follows_links_inside_the_root(tmp_path):
+    root = tmp_path / "host"
+    (root / "volume1/docker/foo/data").mkdir(parents=True)
+    (root / "volume1/homes/george/Photos").mkdir(parents=True)
+    (root / "etc").mkdir()
+    (root / "var/log").mkdir(parents=True)
+    (root / "var/log/pull.log").write_text("x")
+    (root / "var/services").mkdir(parents=True)
+    os.symlink("/volume1/homes", root / "var/services/homes")             # DSM-style absolute link
+    os.symlink("/", root / "volume1/docker/foo/escape")                   # written by the app's container
+    os.symlink("../../../etc", root / "volume1/docker/foo/rel")            # relative escape
+    os.symlink("loop", root / "volume1/docker/foo/loop")
+    r = str(root)
+    assert cb.resolve_under(r, "/volume1/docker/foo/data") == ("/volume1/docker/foo/data", "dir")
+    assert cb.resolve_under(r, "/var/services/homes/george/Photos") == ("/volume1/homes/george/Photos", "dir")
+    assert cb.resolve_under(r, "/volume1/docker/foo/escape") == ("/", "dir")   # absolute target stays in root
+    assert cb.resolve_under(r, "/volume1/docker/foo/escape/etc") == ("/etc", "dir")
+    assert cb.resolve_under(r, "/volume1/docker/foo/rel") == ("/etc", "dir")
+    assert cb.resolve_under(r, "/volume1/docker/foo/loop") == (None, "loop")
+    assert cb.resolve_under(r, "/volume1/docker/foo/nope") == (None, "missing")
+    assert cb.resolve_under(r, "/var/log/pull.log") == ("/var/log/pull.log", "file")
+    assert cb.resolve_under(r, "/../../etc") == ("/etc", "dir")                  # .. never leaves the root
+
+
+def pf(entry_kw, binds, host):
+    e = managed(name="foo", **entry_kw)
+
+    def write(*args, stdin=None):
+        cb.check_write_argv(args)
+        paths = cb.preflight_paths(args)
+        return json.dumps({p: host.get(p, [p, "dir"]) for p in paths})
+    return cb.preflight(e, binds, image=IMAGE_ID, write=write, self_name=OWNER, data_dir=DATA)
+
+
+def test_preflight_passes_plain_own_subtree():
+    assert pf({}, [("v[0]", "/volume1/docker/foo", False)], {}) == []
+
+
+def test_preflight_refuses_a_symlink_out_of_the_own_subtree():
+    r = pf({}, [("v[0]", "/volume1/docker/foo", False)], {"/volume1/docker/foo": ["/", "dir"]})
+    assert r and "is not its own realpath (/)" in r[0]
+
+
+def test_preflight_refuses_own_subtree_that_is_itself_a_link():
+    r = pf({}, [("v[0]", "/volume1/docker/foo", False)], {"/volume1/docker/foo": ["/etc", "dir"]})
+    assert r
+
+
+def test_preflight_missing_source_blocks():
+    r = pf({}, [("v[0]", "/volume1/docker/foo", False)], {"/volume1/docker/foo": [None, "missing"]})
+    assert r and "missing on the host" in r[0]
+
+
+def test_preflight_requires_allow_entries_and_sources_to_be_their_own_realpath():
+    # DSM's /var/services/homes -> /volume1/homes: list the real path instead.
+    allow = ["/var/services/homes/george/Photos"]
+    host = {"/var/services/homes/george/Photos": ["/volume1/homes/george/Photos", "dir"]}
+    r = pf({"allow_host_paths": allow}, [("v[0]", "/var/services/homes/george/Photos", True)], host)
+    assert r and any("not its own realpath" in x for x in r)
+    real = ["/volume1/homes/george/Photos"]
+    assert pf({"allow_host_paths": real}, [("v[0]", real[0], True)], {}) == []
+
+
+def test_preflight_nested_check_uses_resolved_live_writable_paths():
+    # A live container writes /volume1/shares/g, which is really /volume1/homes/george:
+    # lexically unrelated to the source, but its parent once resolved.
+    allow = ["/volume1/homes/george/Photos"]
+    e = managed(name="foo", allow_host_paths=allow)
+
+    def write(*args, stdin=None):
+        cb.check_write_argv(args)
+        host = {"/volume1/shares/g": ["/volume1/homes/george", "dir"]}
+        return json.dumps({p: host.get(p, [p, "dir"]) for p in cb.preflight_paths(args)})
+    r = cb.preflight(e, [("v[0]", allow[0], True)], image=IMAGE_ID, write=write, self_name=OWNER, data_dir=DATA,
+                     writable=[("smb-tool", "/volume1/shares/g")])
+    assert r and "smb-tool mounts writable" in r[0]
+
+
+def test_preflight_allow_entry_linking_into_a_denied_root_is_dropped():
+    allow = ["/var/services/evil"]
+    host = {"/var/services/evil": ["/etc", "dir"]}
+    assert pf({"allow_host_paths": allow}, [("v[0]", "/var/services/evil", True)], host)
+
+
+def test_preflight_var_log_single_files_only():
+    allow = ["/var/log/pull.log", "/var/log/nginx"]
+    ok = pf({"allow_host_paths": allow}, [("v[0]", "/var/log/pull.log", False)],
+            {"/var/log/pull.log": ["/var/log/pull.log", "file"]})
+    assert ok == []
+    bad = pf({"allow_host_paths": allow}, [("v[0]", "/var/log/nginx", False)],
+             {"/var/log/nginx": ["/var/log/nginx", "dir"]})
+    assert bad and "single files only" in bad[0]
+
+
+@pytest.mark.parametrize("kind", ["other", "loop", "error"])
+def test_preflight_refuses_devices_fifos_sockets_and_unresolvable(kind):
+    real = "/volume1/docker/foo" if kind == "other" else None
+    assert pf({}, [("v[0]", "/volume1/docker/foo", False)], {"/volume1/docker/foo": [real, kind]})
+
+
+def test_preflight_helper_mounts_only_the_needed_roots():
+    argv = cb.preflight_argv(IMAGE_ID, ["/volume1/docker/foo", "/var/services/homes/g", "/var/log/a.log",
+                                        "/var/run/docker.sock", "/run/x", "/volume1/homes/g"])
+    mounts = [argv[i + 1] for i, x in enumerate(argv) if x == "--mount"]
+    assert mounts == ["type=bind,source=/var/log,target=/host/var/log,readonly",
+                      "type=bind,source=/var/services,target=/host/var/services,readonly",
+                      "type=bind,source=/volume1,target=/host/volume1,readonly"]
+    assert not any("source=/," in m or "run" in m for m in mounts)
+    cb.check_write_argv(argv)
+
+
+def test_preflight_with_no_binds_runs_nothing():
+    calls = []
+    e = managed(name="foo")
+    assert cb.preflight(e, [], image=IMAGE_ID, write=lambda *a, **k: calls.append(a), self_name=OWNER,
+                        data_dir=DATA) == []
+    assert calls == []
+
+
+# ------------------------------------------------------------ apply path: the loop (mutations forced on)
+
+
+@pytest.fixture
+def armed(monkeypatch):
+    """Arm the compose backend for one test: what the cutover will do."""
+    monkeypatch.setitem(d.APPLY_ENABLED, "compose", True)
+    monkeypatch.setenv("HOSTNAME", "abcdef012345")
+
+
+def apply_tick(tmp_path, docker, data, **kw):
+    return tick(tmp_path, docker, data, dry_run=False, write=docker.write, sleep=lambda s: None, **kw)
+
+
+@needs_git
+def test_apply_bumped_and_created_apps(tmp_path, capsys, armed):
+    data, docker = scenario(tmp_path)
+    tick(tmp_path, docker, data)                    # shadow tick: baselines
+    bumped = {"services": {"s": {"image": NEW}}}
+    commit(tmp_path / "remote", {"hosts/alcatraz/bumped/docker-compose.yml": dump(bumped)})
+    fetch(tmp_path, data)
+    capsys.readouterr()
+    rc, body, state = apply_tick(tmp_path, docker, data)
+    s = parse_prom(body)
+    assert state_of(s, "bumped", "synced") == 1 and state_of(s, "absent", "synced") == 1
+    assert s['homelabscope_deploy_dry_run{host="alcatraz"}'] == 0
+    out = capsys.readouterr().out
+    assert "tick APPLY" in out and "absent: applied" in out and "bumped: applied" in out
+    kinds = [w[7] if w[0] == "compose" else w[0] for w in docker.writes]
+    assert kinds == ["pull", "up", "pull", "up"]      # absent and bumped have no binds: no preflight run
+    st = json.loads(state)
+    assert set(st["applied"]) == {"absent", "bumped"}
+    # Nothing else was touched: blocked / adoptable / invalid apps never appear in writes.
+    assert {w[4] for w in docker.writes} == {"absent", "bumped"}
+    # Next tick: all quiet.
+    rc, body, _ = apply_tick(tmp_path, docker, data)
+    assert 'state="pending"' not in body and len(docker.writes) == 4
+
+
+@needs_git
+def test_apply_preflight_runs_for_binds_and_blocks_an_escape(tmp_path, capsys, armed):
+    apps = {"withbind": ({"services": {"s": {"image": IMG, "volumes": ["/volume1/docker/withbind:/d"]}}},
+                         {"create": True})}
+    data, docker = scenario(tmp_path, apps)
+    docker.host = {"/volume1/docker/withbind": ["/volume1/homes", "dir"]}        # a planted symlink
+    rc, body, state = apply_tick(tmp_path, docker, data)
+    assert state_of(parse_prom(body), "withbind", "failed") == 1
+    # pull first, then the preflight immediately before `up`, which it stops
+    assert [w[7] if w[0] == "compose" else w[0] for w in docker.writes] == ["pull", "run"]
+    assert "is not its own realpath (/volume1/homes)" in capsys.readouterr().out
+
+
+@needs_git
+def test_apply_failure_backs_off_per_sha(tmp_path, capsys, armed):
+    apps = {"flaky": ({"services": {"s": {"image": IMG}}}, {"create": True})}
+    data, docker = scenario(tmp_path, apps)
+    docker.up_breaks = {"flaky"}
+    _, body, state = apply_tick(tmp_path, docker, data)
+    assert state_of(parse_prom(body), "flaky", "failed") == 1
+    out = capsys.readouterr().out
+    assert "flaky: apply FAILED: verify:" in out
+    n = len(docker.writes)
+    _, body, _ = apply_tick(tmp_path, docker, data)                # same sha, within 1 h: held
+    assert state_of(parse_prom(body), "flaky", "failed") == 1 and len(docker.writes) == n
+    commit(tmp_path / "remote", {"hosts/alcatraz/flaky/docker-compose.yml": dump(
+        {"services": {"s": {"image": NEW}}}, {"create": True})})
+    fetch(tmp_path, data)
+    docker.up_breaks = set()
+    _, body, _ = apply_tick(tmp_path, docker, data)                # new sha retries at once
+    assert state_of(parse_prom(body), "flaky", "synced") == 1
+
+
+@needs_git
+def test_apply_pull_failure_stops_before_up(tmp_path, capsys, armed):
+    apps = {"noimg": ({"services": {"s": {"image": IMG}}}, {"create": True})}
+    data, docker = scenario(tmp_path, apps)
+    docker.fail = {"pull"}
+    _, body, _ = apply_tick(tmp_path, docker, data)
+    assert state_of(parse_prom(body), "noimg", "failed") == 1
+    assert [w[7] for w in docker.writes] == ["pull"]
+    assert "apply step failed: CalledProcessError" in capsys.readouterr().out
+
+
+@needs_git
+def test_apply_respects_global_pause_and_dry_run(tmp_path, armed):
+    data, docker = scenario(tmp_path)
+    (data / "PAUSE").write_text("")
+    apply_tick(tmp_path, docker, data)
+    assert not getattr(docker, "writes", None)
+    (data / "PAUSE").unlink()
+    tick(tmp_path, docker, data, dry_run=True, write=docker.write, sleep=lambda s: None)
+    assert not getattr(docker, "writes", None)
+
+
+@needs_git
+def test_shadow_never_writes_even_with_a_permissive_writer(tmp_path):
+    # APPLY_ENABLED["compose"] is False here: reconcile never calls apply.
+    data, docker = scenario(tmp_path)
+    tick(tmp_path, docker, data, dry_run=False, write=docker.write, sleep=lambda s: None)
+    assert not getattr(docker, "writes", None)
+
+
+def test_settle_catches_a_restart(armed, monkeypatch):
+    # A container that is running at every read but restarted during settle.
+    e = managed(name="foo")
+    reads = iter([[ctr(h="H1")], [{**ctr(h="H1"), "restart_count": 2}]])
+    monkeypatch.setattr(cb, "project_containers", lambda name, docker=None: next(reads))
+    monkeypatch.setattr(cb, "self_image", lambda docker=None: IMAGE_ID)
+    ok, why = cb.apply_compose(e, {}, dry_run=False, write=lambda *a, **k: "", owner=OWNER, self_name=OWNER,
+                               project_dir="/d", data_dir=DATA, binds=[], hashes={"s": "H1"}, sleep=lambda s: None)
+    assert not ok and "restarted within" in why
+
+
+@needs_git
+def test_nested_bind_across_apps_is_invalid_in_the_shadow(tmp_path):
+    apps = {"writer": ({"services": {"s": {"image": IMG, "volumes": ["/volume1/homes/george:/g"]}}},
+                       {"allow-host-paths": ["/volume1/homes/george"]}),
+            "reader": ({"services": {"s": {"image": IMG, "volumes": ["/volume1/homes/george/Photos:/p:ro"]}}},
+                       {"allow-host-paths": ["/volume1/homes/george/Photos"]})}
+    data, docker = scenario(tmp_path, apps)
+    _, body, _ = tick(tmp_path, docker, data)
+    s = parse_prom(body)
+    assert state_of(s, "reader", "invalid") == 1 and state_of(s, "writer", "invalid") is None
+
+
+@needs_git
+def test_apply_exception_is_recorded_with_backoff_and_state_still_written(tmp_path, capsys, armed, monkeypatch):
+    apps = {"boom": ({"services": {"s": {"image": IMG}}}, {"create": True})}
+    data, docker = scenario(tmp_path, apps)
+    monkeypatch.setattr(cb, "self_image", lambda *a, **k: (_ for _ in ()).throw(KeyError("x")))
+    rc, body, state = apply_tick(tmp_path, docker, data)
+    assert state_of(parse_prom(body), "boom", "failed") == 1
+    assert "apply step failed: KeyError" in capsys.readouterr().out
+    assert "boom" in json.loads(state)["failures"]
+
+
+@needs_git
+def test_failures_survive_an_unevaluated_tick(tmp_path, armed):
+    apps = {"flaky": ({"services": {"s": {"image": IMG}}}, {"create": True})}
+    data, docker = scenario(tmp_path, apps)
+    docker.up_breaks = {"flaky"}
+    apply_tick(tmp_path, docker, data)
+    docker.fail = {"inspect"}
+    _, _, state = apply_tick(tmp_path, docker, data)
+    assert "flaky" in json.loads(state)["failures"]
+
+
+def test_bad_settle_seconds_is_a_config_error():
+    env = {k: v for k, v in os.environ.items() if not k.startswith("DEPLOYER_")}
+    p = subprocess.run([sys.executable, "-c", f"import sys; sys.path.insert(0, {SRC!r}); import compose_backend"],
+                       env={**env, "SETTLE_SECONDS": "sixty"}, capture_output=True, text=True)
+    assert p.returncode != 0 and "ConfigError" in p.stderr and "SETTLE_SECONDS" in p.stderr and "sixty" not in p.stderr
+
+
+@needs_git
+def test_live_writable_mount_of_a_hand_made_container_invalidates_a_nested_bind(tmp_path):
+    apps = {"reader": ({"services": {"s": {"image": IMG, "volumes": ["/volume1/homes/george/Photos:/p:ro"]}}},
+                       {"allow-host-paths": ["/volume1/homes/george/Photos"]})}
+    data, docker = scenario(tmp_path, apps)
+    docker.loose_mounts = {"portainer": [{"Type": "bind", "Source": "/volume1/homes/george", "RW": True},
+                                         {"Type": "bind", "Source": "/volume1/homes", "RW": False}]}
+    _, body, _ = tick(tmp_path, docker, data)
+    assert state_of(parse_prom(body), "reader", "invalid") == 1
+    docker.loose_mounts = {"portainer": [{"Type": "bind", "Source": "/volume1/homes/george", "RW": False}]}
+    _, body, _ = tick(tmp_path, docker, data)
+    assert state_of(parse_prom(body), "reader", "invalid") is None
+
+
+@needs_git
+def test_container_name_equal_to_another_app_is_invalid(tmp_path):
+    apps = {"a": ({"services": {"b": {"image": IMG, "container_name": "a-b"}}}, None),
+            "a-b": ({"services": {"s": {"image": IMG}}}, None)}
+    data, docker = scenario(tmp_path, apps)
+    _, body, _ = tick(tmp_path, docker, data)
+    s = parse_prom(body)
+    assert state_of(s, "a", "invalid") == 1 and state_of(s, "a-b", "invalid") is None
+
+
+@needs_git
+def test_a_preflight_the_guard_refuses_fails_only_that_app(tmp_path, capsys, armed, monkeypatch):
+    apps = {"odd": ({"services": {"s": {"image": IMG, "volumes": ["/volume1/docker/odd:/d"]}}}, {"create": True}),
+            "plain": ({"services": {"s": {"image": IMG}}}, {"create": True})}
+    data, docker = scenario(tmp_path, apps)
+    monkeypatch.setattr(cb, "preflight_roots", lambda paths: ["/"])     # a helper mount the guard refuses
+    rc, body, state = apply_tick(tmp_path, docker, data)
+    s = parse_prom(body)
+    assert state_of(s, "odd", "failed") == 1 and state_of(s, "plain", "synced") == 1
+    assert "preflight refused by the argv guard" in capsys.readouterr().out
+    assert "odd" in json.loads(state)["failures"]
+
+
+class LiveDocker:
+    """A minimal docker for live_writable(): containers -> mounts, volumes, vanishing ids."""
+
+    def __init__(self, containers, volumes=None, vanish=(), raw=None):
+        self.containers, self.volumes, self.vanish, self.raw = containers, volumes or {}, set(vanish), raw
+        self.calls = []
+
+    def __call__(self, *args, stdin=None):
+        cb.check_read_argv(args)
+        self.calls.append(args)
+        if list(args) == ["ps", "-a", "-q", "--no-trunc"]:
+            ids = [cid("c", n) for n in self.containers]
+            if len([a for a in self.calls if a[0] == "ps"]) > 1:      # the re-list after a failure
+                ids = [cid("c", n) for n in self.containers if n not in self.vanish]
+            return "\n".join(ids)
+        if args[0] == "inspect":
+            by = {cid("c", n): n for n in self.containers}
+            if any(by[x] in self.vanish for x in args[5:]):
+                raise subprocess.CalledProcessError(1, ["docker", "inspect"])
+            if self.raw is not None:
+                return self.raw
+            return "".join(f"{json.dumps('/' + by[x])}\t{json.dumps(self.containers[by[x]])}\n" for x in args[5:])
+        if list(args) == ["volume", "ls", "-q"]:
+            return "\n".join(self.volumes)
+        if args[0] == "volume":
+            if any(v not in self.volumes for v in args[4:]):
+                raise subprocess.CalledProcessError(1, ["docker", "volume", "inspect"])
+            return "".join(f"{json.dumps(v)}\t{json.dumps(self.volumes[v][0])}\t{json.dumps(self.volumes[v][1])}\n"
+                           for v in args[4:])
+        raise AssertionError(args)
+
+
+def test_live_writable_reads_bind_and_volume_paths():
+    docker = LiveDocker(
+        {"a": [{"Type": "bind", "Source": "/volume1/homes/g", "RW": True},
+               {"Type": "bind", "Source": "/volume1/ro", "RW": False}],
+         "b": [{"Type": "volume", "Name": "dev", "Source": "/volume1/@docker/volumes/dev/_data", "RW": True}],
+         "c": [{"Type": "volume", "Name": "plain", "Source": "/volume1/@docker/volumes/plain/_data", "RW": True}]},
+        volumes={"dev": ("local", {"type": "none", "o": "bind", "device": "/volume1/homes"}),
+                 "plain": ("local", {})})
+    got = cb.live_writable(docker)
+    assert ("a", "/volume1/homes/g") in got
+    assert ("b (volume dev)", "/volume1/homes") in got       # a local device volume counts at its device
+    assert not any(p == "/volume1/ro" for _, p in got)
+    assert all(p != "/" for _, p in got)
+
+
+def test_live_writable_non_local_volume_fails_closed():
+    docker = LiveDocker({"b": [{"Type": "volume", "Name": "nfsvol", "Source": "", "RW": True}]},
+                        volumes={"nfsvol": ("some/plugin", {})})
+    got = cb.live_writable(docker)
+    assert got == [("b (volume nfsvol, driver some/plugin: host path unknown)", "/")]
+    assert cb.nested_write_reasons([("v[0]", "/volume1/homes/g/Photos", True)], got)
+
+
+# The reviewer's probe8 cases: only a plain `type: none` + bind/rbind volume
+# has a known host path; nfs, a block device and cifs count as `/`.
+@pytest.mark.parametrize("vname,opts", [
+    ("nfsloop", {"type": "nfs", "o": "addr=127.0.0.1,rw", "device": ":/volume1/homes"}),
+    ("ext4", {"type": "ext4", "device": "/dev/md2"}),
+    ("cifs", {"type": "cifs", "o": "username=u,password=SECRET-9191", "device": "//nas/share"}),
+    ("nfsabs", {"type": "nfs", "o": "addr=10.0.0.1", "device": "/volume1/homes"}),
+    ("bindnotype", {"o": "bind", "device": "/volume1/homes"}),
+    ("noneonly", {"type": "none", "device": "/volume1/homes"}),
+    ("doubleslash", {"type": "none", "o": "bind", "device": "//volume1/homes"}),
+])
+def test_local_volume_that_is_not_a_plain_bind_fails_closed(vname, opts):
+    docker = LiveDocker({"c": [{"Type": "volume", "Name": vname, "Source": f"/volume1/@docker/volumes/{vname}/_data",
+                                "RW": True}]}, volumes={vname: ("local", opts)})
+    got = cb.live_writable(docker)
+    assert ("/" in {p for _, p in got}), got
+    assert all(p in ("/", f"/volume1/@docker/volumes/{vname}/_data") for _, p in got)
+    assert "SECRET" not in json.dumps(got)
+    assert not any(p.startswith("/nas") or p.startswith("/dev") for _, p in got)
+
+
+def test_unc_style_paths_are_never_mounted_by_the_helper():
+    assert not cb.path_chars_ok("//nas/share")
+    assert cb.preflight_roots(["//nas/share", "/volume1/x"]) == ["/volume1"]
+
+
+@pytest.mark.parametrize("o", ["bind", "rbind", "ro,bind", "bind, rw"])
+def test_plain_bind_volume_counts_at_its_device(o):
+    docker = LiveDocker({"c": [{"Type": "volume", "Name": "b", "Source": "/volume1/@docker/volumes/b/_data", "RW": True}]},
+                        volumes={"b": ("local", {"type": "none", "o": o, "device": "/volume1/homes/george"})})
+    assert ("c (volume b)", "/volume1/homes/george") in cb.live_writable(docker)
+    assert "/" not in {p for _, p in cb.live_writable(docker)}
+
+
+def test_live_writable_tolerates_a_container_vanishing():
+    docker = LiveDocker({"a": [{"Type": "bind", "Source": "/volume1/x", "RW": True}],
+                         "helper": [{"Type": "bind", "Source": "/volume1", "RW": False}]}, vanish={"helper"})
+    assert cb.live_writable(docker) == [("a", "/volume1/x")]
+
+
+@pytest.mark.parametrize("raw", ['"/a"\t{"not": "a list"}\n', '"/a"\t[1, 2]\n', '"/a"\tnot json\n', 'no tab\n'])
+def test_live_writable_malformed_mounts_is_docker_unavailable(raw):
+    with pytest.raises(d.DockerUnavailable):
+        cb.live_writable(LiveDocker({"a": []}, raw=raw))
+
+
+@needs_git
+def test_a_non_local_volume_on_the_host_blocks_binds_but_the_tick_runs(tmp_path):
+    apps = {"photos": ({"services": {"s": {"image": IMG, "volumes": ["/volume1/homes/george/Photos:/p:ro"]}}},
+                       {"allow-host-paths": ["/volume1/homes/george/Photos"]}),
+            "nobind": ({"services": {"s": {"image": IMG}}}, None)}
+    data, docker = scenario(tmp_path, apps)
+    docker.loose_mounts = {"portainer": [{"Type": "volume", "Name": "remote", "RW": True}]}
+    docker.volumes = {"remote": ("rclone", {})}
+    rc, body, _ = tick(tmp_path, docker, data)
+    s = parse_prom(body)
+    assert rc == 0 and state_of(s, "photos", "invalid") == 1 and state_of(s, "nobind", "missing") == 1
+
+
+@needs_git
+def test_two_apps_cannot_claim_the_same_container_name(tmp_path):
+    # foo + service bar-x and foo-bar + service x both default to foo-bar-x-1.
+    apps = {"foo": ({"services": {"bar-x": {"image": IMG}}}, None),
+            "foo-bar": ({"services": {"x": {"image": IMG}}}, None),
+            "ok": ({"services": {"s": {"image": IMG}}}, None)}
+    data, docker = scenario(tmp_path, apps)
+    _, body, _ = tick(tmp_path, docker, data)
+    s = parse_prom(body)
+    assert state_of(s, "foo", "invalid") == 1 and state_of(s, "foo-bar", "invalid") == 1
+    assert state_of(s, "ok", "missing") == 1
+
+
+@needs_git
+def test_container_name_taken_by_a_live_container_outside_the_project(tmp_path):
+    apps = {"pull": ({"services": {"s": {"image": IMG, "container_name": "pull"}}}, None)}
+    data, docker = scenario(tmp_path, apps)
+    docker.loose = ["pull"]                       # a hand-made `docker run --name pull`
+    _, body, _ = tick(tmp_path, docker, data)
+    assert state_of(parse_prom(body), "pull", "invalid") == 1
+
+
+def test_self_apply_is_refused(armed):
+    ok, why = cb.apply_compose(managed(name=OWNER), {}, dry_run=False, write=lambda *a, **k: None,
+                               self_name=OWNER, owner=OWNER)
+    assert not ok and "self-apply is not implemented" in why
 
 
 # ------------------------------------------------------------ the REAL compose parser
@@ -1074,7 +1723,7 @@ def test_real_parser_accepts_the_real_apps():
     self_compose = {"services": {OWNER: {
         "image": IMG, "container_name": OWNER, "restart": "unless-stopped", "user": "0:0", "mem_limit": "256m",
         "environment": ["DEPLOYER_BACKEND=compose", "DRY_RUN=1", "TZ=America/New_York"],
-        "volumes": [f"{cb.SELF_SOCKET}:{cb.SELF_SOCKET}", f"{DATA}:{DATA}", f"{DATA}/hc-url:/run/hc-url:ro"]}}}
+        "volumes": [f"{cb.SELF_SOCKET}:{cb.SELF_SOCKET}", f"{DATA}:{DATA}"]}}}
     assert run_both_passes(self_compose, OWNER) == []
     assert run_both_passes(self_compose, "not-the-deployer")
 

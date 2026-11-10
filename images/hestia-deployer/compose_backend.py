@@ -21,8 +21,51 @@ structural:
     of EXACT argv shapes (check_read_argv). Anything else (compose pull,
     compose up, run, rm, stop, ...) raises DryRunViolation before a process
     starts.
+  - Every MUTATING docker call (preflight run, compose pull, compose up) goes
+    through docker_write(), which refuses before a process starts unless
+    mutations are allowed for this backend, and then allows only its own
+    exact argv shapes (check_write_argv).
   - apply_compose() raises before its first subprocess call while mutations
-    are off, and reconcile() never calls it.
+    are off, and reconcile() only calls it when they are on.
+
+THE APPLY PATH (plan A5; off until the cutover flips APPLY_ENABLED["compose"]).
+Per app, one at a time, in plan_applies() order (cap 3, self last):
+  1. `compose pull`: a wrong-arch or missing image fails here, before
+     anything is stopped.
+  2. preflight, immediately before `up` (after the pull, so the window
+     between check and use is as short as it can be): a throwaway helper
+     container from the deployer's own image, with only the needed host
+     roots bind-mounted read-only under /host (never /run or /var/run, so the
+     docker socket is not reachable), no network, a read-only root, every
+     capability dropped except DAC_READ_SEARCH and no-new-privileges, resolves
+     every bind source, allow-list entry and DATA_DIR to its REAL path on the
+     host (resolve_under). Each resolved source is re-checked against the same
+     mount policy. A missing, unreadable, looping or non-file/dir source
+     blocks the app; so does a /var/log source that is not a single file.
+  3. `compose up -d --remove-orphans --wait --wait-timeout 300`, or
+     `up --no-start --remove-orphans` for a project stopped on purpose.
+  4. settle: SETTLE_SECONDS later, every service's containers must carry the
+     desired hash, be running (unless stopped on purpose) and not have
+     restarted. A one-shot service (one that exits by design) therefore
+     FAILS the settle check: v1 supports long-running services only.
+The race the preflight cannot close by itself (a container swapping a path it
+can write for a symlink between the check and `up`) is closed by the mount
+policy: a bind source must be EXACTLY the app's own /volume1/docker/<name> or
+EXACTLY an allow-list entry, and no source may lie under any writable bind of
+any app (nested_write_reasons). So no app can write to the parent of anything
+that is bind-mounted. The writable set is LIVE: every read-write mount of
+EVERY container on the host (live_writable), including a named volume's real
+host path when its local driver binds a `device`; a non-local volume driver
+hides its path, so it counts as writable at `/` and blocks every bind (fails
+closed). The tick's planned mounts are added, and the preflight re-checks the
+rule on resolved real paths, with every bind source and allow-list entry
+required to equal its own realpath. TRUST BOUNDARY: host users with
+SMB/NFS/SSH access to the shares are trusted; the policy defends against
+containers writing their way out, not against people writing the host
+filesystem directly. A failure makes the app `failed`, with a per-(app, sha)
+backoff of 1 h; a new SHA retries at once. There is no automatic rollback.
+Self-apply (the detached helper of plan A5) is not implemented: the deployer
+refuses to apply its own project.
 
 VALIDATION IS AN ALLOWLIST, ON WHAT COMPOSE PARSED (plan A3). Two passes:
 
@@ -99,7 +142,13 @@ ONEOFF_FILTER = "label=com.docker.compose.oneoff=False"
 # Everything else is refused, including other apps' subtrees.
 OWN_ROOT = "/volume1/docker"
 SELF_SOCKET = "/var/run/docker.sock"
-DENY_EXACT = frozenset({"/", "/volume1", "/volume2", "/volumeUSB1"})
+# /var/log as a whole: an allow-list entry may name a single log file under
+# it (immich-photos-pull does), never the directory; the preflight also
+# requires a /var/log source to resolve to a regular file.
+DENY_EXACT = frozenset({"/", "/volume1", "/volume2", "/volumeUSB1", "/var/log"})
+FILES_ONLY_ROOTS = ("/var/log",)
+# Every DSM volume but /volume1 (and USB volumes): not this repo's to mount.
+OTHER_VOLUME_RE = re.compile(r"^/volume(?!1(/|$))[^/]*(/|$)")
 DENY_ROOTS = ("/etc", "/proc", "/sys", "/boot", "/dev", "/var/run", "/run", "/root", "/var/lib",
               "/usr", "/usr/syno", "/opt", "/var/packages",
               "/volume1/docker", "/volume2", "/volumeUSB1", "/volume1/@iSCSI", "/volume1/@docker",
@@ -137,6 +186,12 @@ INSPECT_FORMAT = ("{{json .Name}}\t{{json .Config.Labels}}\t{{json .Config.Image
                   "{{json .State.Running}}\t{{json .State.Restarting}}\t{{.RestartCount}}")
 PS_FORMAT = '{{.Names}}\t{{.Label "' + PROJECT_LABEL + '"}}'
 VERSION_FORMAT = "{{.Client.Version}} {{.Server.Version}}"
+SELF_IMAGE_FORMAT = "{{.Image}}"
+# Mount sources and RW flags of every container (never Env): who can write what.
+MOUNTS_FORMAT = "{{json .Name}}\t{{json .Mounts}}"
+# A named volume's driver and options: where a local `device` volume really lives.
+VOLUME_FORMAT = "{{json .Name}}\t{{json .Driver}}\t{{json .Options}}"
+VOLUME_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{12,64}$")
 CONFIG_FLAGS = (["--hash", "*"], ["--format", "json"], ["--format", "json", "--no-interpolate"])
 
@@ -175,12 +230,30 @@ def _strings(node, path=""):
 # ================================================================ validation (pure)
 
 
+# Path components the preflight helper can mount (its argv guard uses the same
+# rule): no spaces or shell-ish characters, and never `.` or `..`. Checked at
+# validation time, so such a path makes the app `invalid` instead of tripping
+# the guard during an armed tick.
+PATH_COMPONENT_RE = re.compile(r"^(?!\.\.?$)[A-Za-z0-9._@-]+$")
+
+
+def path_chars_ok(path: str) -> bool:
+    if path.startswith("//"):
+        # POSIX normpath keeps a leading `//` (a UNC-style //server/share).
+        return False
+    comps = [c for c in posixpath.normpath(path).split("/") if c]
+    return bool(comps) and all(PATH_COMPONENT_RE.match(c) for c in comps)
+
+
 def allow_entry_reasons(entry, data_dir: str) -> list[str]:
     """Reasons an x-deploy.allow-host-paths entry is itself unacceptable."""
     if not isinstance(entry, str) or not entry.startswith("/"):
         return ["x-deploy.allow-host-paths entries must be absolute paths"]
+    if not path_chars_ok(entry):
+        return ["x-deploy.allow-host-paths entries may use only [A-Za-z0-9._@-] path components"]
     p = posixpath.normpath(entry)
     if p in DENY_EXACT or p.startswith("/volume1/@") or any(_overlaps(p, r) for r in DENY_ROOTS) \
+            or OTHER_VOLUME_RE.match(p) \
             or _overlaps(p, posixpath.normpath(data_dir)):
         return [f"x-deploy.allow-host-paths: {p} overlaps a denied root (never mountable)"]
     return []
@@ -206,6 +279,22 @@ def validate_meta(meta: dict, data_dir: str) -> tuple[list[str], list[str]]:
     return reasons, allow
 
 
+def _underscore_keys(doc: dict) -> list[str]:
+    """Top-level volume / network keys may not contain `_`.
+
+    Their names must be <project>_<key>, and with `_` in a key that name is
+    ambiguous: project `foo` key `a_b` and project `foo_a` key `b` are both
+    `foo_a_b`, so one app could claim another's resource.
+    """
+    out = []
+    for kind in ("volumes", "networks"):
+        block = doc.get(kind)
+        if isinstance(block, dict):
+            out.extend(f"{kind}.{k}: `_` is not allowed in a top-level {kind[:-1]} key"
+                       for k in sorted(block, key=str) if "_" in str(k))
+    return out
+
+
 def validate_git(compose: dict, meta: dict, data_dir: str | None = None) -> list[str]:
     """Pass 1, on the raw Git compose (x-* stripped): what parsing would hide.
 
@@ -218,6 +307,7 @@ def validate_git(compose: dict, meta: dict, data_dir: str | None = None) -> list
             reasons.append(f"{p}: ${{VAR}} interpolation is refused in v1")
     for k in sorted(set(compose) - TOP_KEYS, key=str):
         reasons.append(f"{k}: top-level key not allowed in v1")
+    reasons.extend(_underscore_keys(compose))
     for svc, body in sorted((compose.get("services") or {}).items()):
         if not isinstance(body, dict):
             continue
@@ -248,14 +338,36 @@ def mount_reasons(where: str, src, name: str, self_name: str, allow: list[str], 
     hp = posixpath.normpath(src)
     if name == self_name and hp == SELF_SOCKET:
         return []
+    if not path_chars_ok(hp):
+        return [f"{where}: bind source path components may use only [A-Za-z0-9._@-]"]
     own = f"{OWN_ROOT}/{name}"
-    if _is_under(hp, own):
+    if hp == own:
         if name != self_name and _overlaps(hp, posixpath.normpath(data_dir)):
             return [f"{where}: {hp} is the deployer's data directory"]
         return []
-    if any(_is_under(hp, a) for a in allow):
+    if hp in allow:
         return []
-    return [f"{where}: {hp} is not mountable (only {own}/... and x-deploy.allow-host-paths)"]
+    if _is_under(hp, own):
+        # A sub-path of a tree the app writes could be swapped for a symlink
+        # between the preflight and `up`.
+        return [f"{where}: {hp} is a sub-path of the app's own subtree; bind {own} itself"]
+    return [f"{where}: {hp} is not mountable (only {own} itself or an exact x-deploy.allow-host-paths entry)"]
+
+
+def nested_write_reasons(binds: list, writable: list[tuple[str, str]]) -> list[str]:
+    """Sources that lie under a WRITABLE bind of any app (incl. this one).
+
+    writable: (app, path) for every non-read-only bind source in the tick. A
+    container that can write a directory can replace anything below it with
+    a symlink, so nothing below it may be bind-mounted.
+    """
+    out = []
+    for where, src, _ro in binds:
+        p = posixpath.normpath(src)
+        for app, w in writable:
+            if p != w and _is_under(p, w):
+                out.append(f"{where}: {p} lies under {w}, which {app} mounts writable")
+    return out
 
 
 def validate_config(cfg: dict, name: str, allow: list[str], self_name: str | None = None,
@@ -268,6 +380,7 @@ def validate_config(cfg: dict, name: str, allow: list[str], self_name: str | Non
         return ["docker compose config: unrecognised shape"]
     for k in sorted(set(cfg) - TOP_KEYS, key=str):
         reasons.append(f"{k}: top-level key not allowed in v1")
+    reasons.extend(_underscore_keys(cfg))
     top_volumes = cfg.get("volumes") or {}
     for vname, v in sorted(top_volumes.items()):
         v = v or {}
@@ -296,6 +409,11 @@ def validate_config(cfg: dict, name: str, allow: list[str], self_name: str | Non
         if logging is not None and (not isinstance(logging, dict) or logging.get("driver") not in LOGGING_DRIVERS
                                     or set(logging) - {"driver", "options"}):
             reasons.append(f"{w}.logging: only the json-file or local driver")
+        cn = body.get("container_name")
+        if cn is not None and cn not in (name, f"{name}-{svc}"):
+            # A name another app (or the deployer) uses would make `up` fight
+            # it; reconcile also refuses one equal to another app's name.
+            reasons.append(f"{w}.container_name: must be {name} or {name}-{svc}")
         nm = body.get("network_mode")
         if nm is not None and nm not in NETWORK_MODES and not str(nm).startswith("service:"):
             reasons.append(f"{w}.network_mode: only none, bridge or service:<name>")
@@ -428,7 +546,8 @@ def evaluate_compose_app(entry: dict, hashes: dict[str, str] | None, containers:
     if not containers:
         res["state"] = "missing"
         res["reasons"] = ["no containers for this compose project" +
-                          ("; x-deploy.create is not acted on until cutover" if entry.get("create") else "")]
+                          ("; x-deploy.create: planned for creation (applied only once the compose backend "
+                           "is armed at cutover)" if entry.get("create") else "")]
         return res
     plain_hashes = plain_hashes or {}
 
@@ -466,8 +585,10 @@ def evaluate_compose_app(entry: dict, hashes: dict[str, str] | None, containers:
         paths = d.diff_paths(tree, baseline)
         top = [p for p in paths if not p.startswith("services.") and p != "services"]
         if top:
-            # No service hash covers top-level networks/volumes.
+            # No service hash covers top-level networks/volumes. Live does not
+            # match Git then, so the project is not `adoptable` either.
             drift.append("top-level config changed (no service hash covers it): " + ", ".join(top))
+            plain_match = False
         if drift:
             res["changes"] = d.describe_paths(paths, tree, baseline)
     res["drift"] = drift
@@ -504,7 +625,7 @@ def check_read_argv(args) -> None:
     if not a:
         refuse("no subcommand")
     if a[0] == "ps":
-        if a == ["ps", "-a", "--no-trunc", "--format", PS_FORMAT]:
+        if a in (["ps", "-a", "--no-trunc", "--format", PS_FORMAT], ["ps", "-a", "-q", "--no-trunc"]):
             return
         if len(a) == 8 and a[:5] == ["ps", "-a", "-q", "--no-trunc", "--filter"] \
                 and a[5].startswith(f"label={PROJECT_LABEL}=") \
@@ -515,11 +636,24 @@ def check_read_argv(args) -> None:
         if a[:5] == ["inspect", "--type", "container", "--format", INSPECT_FORMAT] and len(a) > 5 \
                 and all(CONTAINER_ID_RE.match(x) for x in a[5:]):
             return
+        if a[:5] == ["inspect", "--type", "container", "--format", MOUNTS_FORMAT] and len(a) > 5 \
+                and all(CONTAINER_ID_RE.match(x) for x in a[5:]):
+            return
+        if len(a) == 6 and a[:5] == ["inspect", "--type", "container", "--format", SELF_IMAGE_FORMAT] \
+                and CONTAINER_ID_RE.match(a[5]):
+            return
         refuse("unexpected inspect shape")
     if a[0] == "version":
         if a == ["version", "--format", VERSION_FORMAT]:
             return
         refuse("unexpected version shape")
+    if a[0] == "volume":
+        if a == ["volume", "ls", "-q"]:
+            return
+        if a[:4] == ["volume", "inspect", "--format", VOLUME_FORMAT] and len(a) > 4 \
+                and all(VOLUME_NAME_RE.match(x) for x in a[4:]):
+            return
+        refuse("unexpected volume shape")
     if a[0] != "compose":
         refuse()
     if a == ["compose", "version", "--short"]:
@@ -542,16 +676,290 @@ def docker_read(*args: str, stdin: str | None = None) -> str:
                           timeout=120, env=_child_env(), cwd="/").stdout
 
 
-def apply_compose(name: str, *, dry_run: bool, docker=docker_read) -> bool:
-    """pull -> up -d --remove-orphans --wait -> settle (plan A5). Cutover only.
+# ------------------------------------------------------------------ mutating calls
 
-    Refuses before any subprocess call while mutations are off. The apply
-    sequence itself lands before alcatraz's cutover (A-Phase 3).
+HOST_ROOT = "/host"
+RESOLVE_SCRIPT = "/app/compose_backend.py"
+# Every capability dropped except DAC_READ_SEARCH: enough to lstat/readlink
+# through DSM's 0700 home directories, nothing that writes. Host roots are
+# mounted one by one, each read-only (preflight_roots); `/` itself is never
+# mounted, because a plain read-only bind is not recursive on Docker < 25 or
+# kernels < 5.12, and /run and /var/run (the docker socket) never are.
+PREFLIGHT_RUN = ["run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
+                 "--cap-add", "DAC_READ_SEARCH", "--security-opt", "no-new-privileges"]
+PREFLIGHT_TAIL = ["--entrypoint", "python3"]
+PREFLIGHT_NEVER_ROOTS = ("/run", "/var/run", "/proc", "/sys", "/dev")
+_ROOT_COMPONENT = r"(?!\.\.?(?:/|,))[A-Za-z0-9._@-]+"
+PREFLIGHT_MOUNT_RE = re.compile(rf"^type=bind,source=(/{_ROOT_COMPONENT}(?:/{_ROOT_COMPONENT})?),"
+                                rf"target={HOST_ROOT}\1,readonly$")
+IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+WAIT_TIMEOUT_SECONDS = 300
+SETTLE_SECONDS = int(d.env_param("SETTLE_SECONDS", "60", re.compile(r"^[0-9]{1,4}$")))
+BACKOFF_SECONDS = 3600
+UP_FLAGS = (["up", "-d", "--remove-orphans", "--wait", "--wait-timeout", str(WAIT_TIMEOUT_SECONDS)],
+            ["up", "--no-start", "--remove-orphans"])
+
+
+def check_write_argv(args) -> None:
+    """Raise DryRunViolation unless args is EXACTLY one of the mutating shapes."""
+    a = [str(x) for x in args]
+    if a[:len(PREFLIGHT_RUN)] == PREFLIGHT_RUN:
+        rest = a[len(PREFLIGHT_RUN):]
+        while rest[:1] == ["--mount"] and len(rest) >= 2:
+            m = PREFLIGHT_MOUNT_RE.match(rest[1])
+            if not m or any(_overlaps(m.group(1), r) for r in PREFLIGHT_NEVER_ROOTS):
+                raise d.DryRunViolation("refusing docker run: preflight mount not allowed")
+            rest = rest[2:]
+        if rest[:2] == PREFLIGHT_TAIL and len(rest) >= 7 and IMAGE_ID_RE.match(rest[2]) \
+                and rest[3:7] == ["-I", "-B", RESOLVE_SCRIPT, "resolve"] and all(p.startswith("/") for p in rest[7:]):
+            return
+        raise d.DryRunViolation("refusing docker run: not the preflight shape")
+    if len(a) >= 8 and a[:4] == ["compose", "-f", "-", "-p"] and d.APP_NAME_RE.match(a[4]) \
+            and a[5] == "--project-directory" and a[6].startswith("/") \
+            and (a[7:] == ["pull", "--quiet"] or a[7:] in [list(u) for u in UP_FLAGS]):
+        return
+    raise d.DryRunViolation(f"refusing docker {a[0] if a else ''}: not an apply shape")
+
+
+def docker_write(*args: str, stdin: str | None = None, dry_run: bool = True) -> str:
+    """The only way this file runs a MUTATING docker command.
+
+    Refuses before any process while mutations are off for this backend.
     """
+    if not d.mutations_allowed(dry_run, BACKEND):
+        raise d.DryRunViolation(f"refusing docker {args[:1]}: mutations are off "
+                                f"(dry-run={dry_run} APPLY_ENABLED={d.apply_enabled(BACKEND)})")
+    check_write_argv(args)
+    return subprocess.run(["docker", *args], input=stdin, check=True, capture_output=True, text=True,
+                          timeout=WAIT_TIMEOUT_SECONDS + 120, env=_child_env(), cwd="/").stdout
+
+
+def resolve_under(root: str, path: str, max_links: int = 40) -> tuple[str | None, str]:
+    """(real path, kind) of `path` as the host sees it, with the host's / at `root`.
+
+    Symlinks are followed inside `root`: an absolute target restarts at
+    root, never at this process's own /. kind: file | dir | other |
+    missing | loop | error. Runs in the preflight helper container.
+    """
+    import stat as st_
+
+    parts = [x for x in path.split("/") if x]
+    done: list[str] = []
+    links = 0
+    while parts:
+        c = parts.pop(0)
+        if c == ".":
+            continue
+        if c == "..":
+            if done:
+                done.pop()
+            continue
+        full = os.path.join(root, *done, c)
+        try:
+            info = os.lstat(full)
+        except FileNotFoundError:
+            return None, "missing"
+        except OSError:
+            return None, "error"
+        if st_.S_ISLNK(info.st_mode):
+            links += 1
+            if links > max_links:
+                return None, "loop"
+            target = os.readlink(full)
+            if target.startswith("/"):
+                done = []
+            parts = [x for x in target.split("/") if x] + parts
+            continue
+        done.append(c)
+    real = "/" + "/".join(done)
+    try:
+        info = os.stat(os.path.join(root, *done))
+    except OSError:
+        return None, "error"
+    kind = "dir" if st_.S_ISDIR(info.st_mode) else "file" if st_.S_ISREG(info.st_mode) else "other"
+    return real, kind
+
+
+def preflight_roots(paths) -> list[str]:
+    """The host roots the helper needs: the first path component (two under
+    /var and /usr), deduplicated, never one of PREFLIGHT_NEVER_ROOTS. A
+    symlink pointing outside them resolves as missing, which fails closed."""
+    roots = set()
+    for p in paths:
+        if not path_chars_ok(p):
+            continue
+        comps = [c for c in posixpath.normpath(p).split("/") if c]
+        if not comps:
+            continue
+        r = "/" + "/".join(comps[:2] if comps[0] in ("var", "usr") and len(comps) > 1 else comps[:1])
+        if not any(_overlaps(r, n) for n in PREFLIGHT_NEVER_ROOTS):
+            roots.add(r)
+    return sorted(r for r in roots if not any(o != r and _is_under(r, o) for o in roots))
+
+
+def preflight_argv(image: str, paths: list[str]) -> list[str]:
+    mounts = []
+    for r in preflight_roots(paths):
+        mounts += ["--mount", f"type=bind,source={r},target={HOST_ROOT}{r},readonly"]
+    return [*PREFLIGHT_RUN, *mounts, *PREFLIGHT_TAIL, image, "-I", "-B", RESOLVE_SCRIPT, "resolve", *paths]
+
+
+def preflight_paths(args) -> list[str]:
+    """The paths a preflight argv asks about (for fakes and logs)."""
+    a = list(args)
+    return a[a.index("resolve") + 1:]
+
+
+def resolve_main(paths: list[str]) -> int:
+    print(json.dumps({p: resolve_under(HOST_ROOT, p) for p in paths}))
+    return 0
+
+
+def bind_sources(cfg: dict) -> list[tuple[str, str, bool]]:
+    """(where, source, read_only) of every bind mount in a parsed config."""
+    out = []
+    for svc, body in sorted((cfg.get("services") or {}).items()):
+        for i, m in enumerate((body or {}).get("volumes") or []):
+            if isinstance(m, dict) and m.get("type") == "bind":
+                out.append((f"services.{svc}.volumes[{i}]", m.get("source"), m.get("read_only") is True))
+    return out
+
+
+def self_image(docker=docker_read) -> str:
+    """The image ID of the running deployer container (the preflight's image)."""
+    cid = os.environ.get("HOSTNAME", "")
+    if not CONTAINER_ID_RE.match(cid):
+        raise ValueError("HOSTNAME is not a container id")
+    image = docker("inspect", "--type", "container", "--format", SELF_IMAGE_FORMAT, cid).strip()
+    if not IMAGE_ID_RE.match(image):
+        raise ValueError("unexpected image id")
+    return image
+
+
+def preflight(entry: dict, binds: list, *, image: str, write, self_name: str,
+              data_dir: str, writable: list | None = None) -> list[str]:
+    """Plan A5 preflight: resolve on the host, re-check the policy. [] = go.
+
+    Every bind source and allow-list entry must EQUAL its own realpath (no
+    symlink anywhere in it), so the lexical policy is the real one. The
+    nested-write rule is then re-checked against the RESOLVED sources of
+    every live read-write mount (`writable`, from live_writable()).
+    """
+    allow = list(entry.get("allow_host_paths") or [])
+    sources = sorted({posixpath.normpath(b[1]) for b in binds if isinstance(b[1], str)})
+    if not sources:
+        return []
+    others = sorted({w for _, w in (writable or []) if path_chars_ok(w)})
+    asked = sorted(set(sources) | set(allow) | {posixpath.normpath(data_dir)} | set(others))
+    out = write(*preflight_argv(image, asked))
+    resolved = json.loads(out)
+    if not isinstance(resolved, dict):
+        raise ValueError("unexpected preflight output")
+
+    def real(p):
+        r = resolved.get(p) or [None, "error"]
+        return r[0], r[1]
+
+    real_allow = []
+    reasons = []
+    for a in allow:
+        ra, _ = real(a)
+        if ra != a:
+            # A symlink in an allow-list entry (DSM's /var/services/homes, say):
+            # list the real path instead.
+            reasons.append(f"x-deploy.allow-host-paths: {a} is not its own realpath ({ra}); list the real path")
+        elif not allow_entry_reasons(ra, data_dir):
+            real_allow.append(ra)
+    real_data = real(posixpath.normpath(data_dir))[0] or posixpath.normpath(data_dir)
+    real_writable = []
+    for c, w in (writable or []):
+        rw = real(w)[0] if w in others else None
+        real_writable.append((c, rw or w))
+    for where, src, *_ in binds:
+        p = posixpath.normpath(src)
+        rp, kind = real(p)
+        if rp is None:
+            reasons.append(f"{where}: bind source {p} is {kind} on the host")
+            continue
+        if kind not in ("file", "dir"):
+            reasons.append(f"{where}: bind source {p} is a {kind} (device, fifo or socket), not a file or directory")
+            continue
+        if rp != p:
+            reasons.append(f"{where}: {p} is not its own realpath ({rp}): bind the real path")
+            continue
+        if any(_is_under(rp, r) for r in FILES_ONLY_ROOTS) and kind != "file":
+            reasons.append(f"{where}: {p} resolves to a {kind} under /var/log (single files only)")
+        # The own-subtree rule stays lexical on the RESOLVED path: if
+        # /volume1/docker/<name> is itself a link elsewhere, its target is
+        # not the app's own subtree.
+        bad = mount_reasons(where, rp, entry["name"], self_name, real_allow, real_data)
+        if bad:
+            reasons.append(f"{where}: {p} resolves to {rp}, which the mount policy refuses")
+            continue
+        reasons.extend(nested_write_reasons([(where, rp, True)], real_writable))
+    return reasons
+
+
+def apply_compose(entry: dict, result: dict, *, dry_run: bool, docker=docker_read, write=docker_write,
+                  project_dir: str = "", owner: str = "", self_name: str = "", data_dir: str = "",
+                  binds: list | None = None, hashes: dict | None = None, sleep=time.sleep,
+                  writable: list | None = None) -> tuple[bool, str]:
+    """preflight -> pull -> up -> settle for one app (plan A5). (ok, reason).
+
+    Refuses before any subprocess call while mutations are off.
+    """
+    name = entry["name"] if isinstance(entry, dict) else str(entry)
     if not d.mutations_allowed(dry_run, BACKEND):
         raise d.DryRunViolation(f"refusing to apply {name}: dry-run={dry_run} "
                                 f"APPLY_ENABLED={d.apply_enabled(BACKEND)}")
-    raise NotImplementedError("the compose apply path lands before alcatraz's cutover (A-Phase 3)")
+    if name == self_name:
+        return False, "self-apply is not implemented (plan A5): George re-runs the bootstrap command"
+
+    def w(*args, stdin=None):
+        return write(*args, stdin=stdin, dry_run=dry_run)
+
+    try:
+        image = self_image(docker)
+        body = json.dumps(with_owner_label(entry["compose"], owner), sort_keys=True)
+        base = ["compose", "-f", "-", "-p", name, "--project-directory", project_dir]
+        w(*base, "pull", "--quiet", stdin=body)
+        # Preflight AFTER the pull, immediately before `up`: the shortest
+        # window between check and use.
+        try:
+            reasons = preflight(entry, binds or [], image=image, write=w, self_name=self_name,
+                                data_dir=data_dir, writable=writable)
+        except d.DryRunViolation:
+            if not d.mutations_allowed(dry_run, BACKEND):
+                raise
+            # Armed, so this is the argv guard refusing this app's preflight
+            # (a path it cannot mount): this app fails, the tick goes on.
+            return False, "preflight refused by the argv guard"
+        if reasons:
+            return False, "preflight: " + "; ".join(reasons)
+        w(*base, *(UP_FLAGS[1] if result.get("stopped") else UP_FLAGS[0]), stdin=body)
+        before = {c["name"]: c["restart_count"] for c in project_containers(name, docker)}
+        sleep(SETTLE_SECONDS)
+        after = project_containers(name, docker)
+    except d.DryRunViolation:
+        raise
+    except Exception as e:  # noqa: BLE001 - any failure is this app's, recorded with backoff
+        # Type only: compose's stderr can quote the file.
+        return False, f"apply step failed: {type(e).__name__}"
+    by_svc: dict[str, list[dict]] = {}
+    for c in after:
+        by_svc.setdefault(c.get("service") or "", []).append(c)
+    for svc, want in sorted((hashes or {}).items()):
+        cs = by_svc.get(svc) or []
+        if not cs:
+            return False, f"verify: {svc} has no container"
+        for c in cs:
+            if c.get("hash") != want or c.get("owner") != owner:
+                return False, f"verify: {svc} ({c['name']}) does not carry the desired config"
+            if not result.get("stopped") and (not c["running"] or c["restarting"]):
+                return False, f"verify: {svc} ({c['name']}) is not running"
+            if c["restart_count"] > before.get(c["name"], c["restart_count"]):
+                return False, f"verify: {svc} ({c['name']}) restarted within {SETTLE_SECONDS}s"
+    return True, ""
 
 
 def compose_args(name: str, project_dir: str, *config_flags: str) -> list[str]:
@@ -560,7 +968,7 @@ def compose_args(name: str, project_dir: str, *config_flags: str) -> list[str]:
 
 def render_config(entry: dict, docker, project_dir: str, owner: str, *, allow: list[str],
                   self_name: str | None = None, data_dir: str | None = None):
-    """(hashes, plain hashes, fingerprint tree, config_error) for one entry.
+    """(hashes, plain hashes, fingerprint tree, bind sources, config_error) for one entry.
 
     Order matters: validate_git() has already passed, so compose never sees a
     file reference. The rendered config stays in this function's locals; only
@@ -581,17 +989,17 @@ def render_config(entry: dict, docker, project_dir: str, owner: str, *, allow: l
         raise d.DockerUnavailable(type(e).__name__) from None
     except (subprocess.SubprocessError, OSError, ValueError) as e:
         # Type only: compose's stderr can quote the file.
-        return None, None, None, f"docker compose config failed: {type(e).__name__}"
+        return None, None, None, None, f"docker compose config failed: {type(e).__name__}"
     # The interpolated and uninterpolated forms are not comparable whole: the
     # interpolated one is also normalised (compose 5.6.1). The rule is on the
     # uninterpolated form, as compose read it: no unescaped $ (plan A3).
     leaked = [p for p, v in _strings(raw) if "$" in v.replace("$$", "")]
     if leaked:
-        return None, None, None, f"interpolation refused in v1 ({', '.join(sorted(leaked)[:3])})"
+        return None, None, None, None, f"interpolation refused in v1 ({', '.join(sorted(leaked)[:3])})"
     reasons = validate_config(cfg, name, allow, self_name, data_dir)
     if reasons:
-        return None, None, None, "; ".join(reasons)
-    return hashes, plain_hashes, fingerprint(cfg), None
+        return None, None, None, None, "; ".join(reasons)
+    return hashes, plain_hashes, fingerprint(cfg), bind_sources(cfg), None
 
 
 def _container_info(line: str) -> dict:
@@ -616,22 +1024,134 @@ def project_containers(name: str, docker=docker_read) -> list[dict]:
         raise d.DockerUnavailable(type(e).__name__) from None
 
 
-def inventory(docker=docker_read) -> tuple[set[str], list[str]]:
-    """(compose project names, names of containers with no project label)."""
+def _inspect_tolerant(docker, kind_args: list[str], ids: list[str], relist) -> str:
+    """inspect `ids`; if that fails, drop the ones a fresh listing no longer
+    has (they vanished between list and inspect, as the deployer's own --rm
+    preflight helper can) and retry once. Anything else is DockerUnavailable."""
+    try:
+        return docker(*kind_args, *ids)
+    except (subprocess.SubprocessError, OSError):
+        pass
+    try:
+        still = set(relist())
+        keep = [x for x in ids if x in still]
+        return docker(*kind_args, *keep) if keep else ""
+    except (subprocess.SubprocessError, OSError) as e:
+        raise d.DockerUnavailable(type(e).__name__) from None
+
+
+def local_volume_bind_path(opts: dict) -> str | None:
+    """The host path a local-driver volume binds, or None if it is not a plain bind.
+
+    Only `type: none` with `o` containing bind or rbind and an absolute,
+    single-slash `device` is a bind of a host directory. Anything else (nfs
+    with `device=:/path`, cifs with `//server/share`, a block device with
+    `type=ext4`) writes somewhere this code cannot name.
+    """
+    flags = {x.strip() for x in str(opts.get("o", "")).split(",")}
+    dev = opts.get("device")
+    if opts.get("type") == "none" and flags & {"bind", "rbind"} and isinstance(dev, str) \
+            and dev.startswith("/") and not dev.startswith("//"):
+        return posixpath.normpath(dev)
+    return None
+
+
+def live_writable(docker=docker_read) -> list[tuple[str, str]]:
+    """(container, host path) of every read-write mount of EVERY container on the host.
+
+    The nested-write rule needs what can be written NOW, not only what this
+    tick's Git context plans: any running container (hand-made ones too) that
+    can write a directory could swap a path below it for a symlink. A named
+    volume counts at its real host path when its local driver binds a
+    `device`; a non-local driver hides its path, so it counts as `/` (every
+    bind then lies under it: fail closed). Raises DockerUnavailable on any
+    docker error or unexpected shape.
+    """
+    def ps_ids():
+        return docker("ps", "-a", "-q", "--no-trunc").split()
+
+    try:
+        ids = ps_ids()
+    except (subprocess.SubprocessError, OSError) as e:
+        raise d.DockerUnavailable(type(e).__name__) from None
+    if not ids:
+        return []
+    out = _inspect_tolerant(docker, ["inspect", "--type", "container", "--format", MOUNTS_FORMAT], ids, ps_ids)
+    found: list[tuple[str, str]] = []
+    volumes: dict[str, list[str]] = {}
+    try:
+        for line in out.splitlines():
+            if not line.strip():
+                continue
+            name, mounts = line.split("\t", 1)
+            name = json.loads(name)
+            mounts = json.loads(mounts) or []
+            if not isinstance(name, str) or not isinstance(mounts, list):
+                raise ValueError("unexpected .Mounts shape")
+            name = name.lstrip("/")
+            for m in mounts:
+                if not isinstance(m, dict):
+                    raise ValueError("unexpected mount shape")
+                if m.get("RW") is not True:
+                    continue
+                if m.get("Type") == "volume" and isinstance(m.get("Name"), str):
+                    volumes.setdefault(m["Name"], []).append(name)
+                src = m.get("Source")
+                if isinstance(src, str) and src.startswith("/"):
+                    found.append((name, posixpath.normpath(src)))
+    except ValueError as e:  # json errors are ValueErrors too
+        raise d.DockerUnavailable(type(e).__name__) from None
+    if volumes:
+        names = sorted(v for v in volumes if VOLUME_NAME_RE.match(v))
+        if len(names) != len(volumes):
+            raise d.DockerUnavailable("unexpected volume name")
+        vout = _inspect_tolerant(docker, ["volume", "inspect", "--format", VOLUME_FORMAT], names,
+                                 lambda: docker("volume", "ls", "-q").split())
+        try:
+            for line in vout.splitlines():
+                if not line.strip():
+                    continue
+                vname, driver, opts = (json.loads(x) for x in line.split("\t"))
+                opts = opts or {}
+                if not isinstance(vname, str) or not isinstance(opts, dict):
+                    raise ValueError("unexpected volume shape")
+                users = volumes.get(vname, [])
+                if driver != "local":
+                    found += [(f"{u} (volume {vname}, driver {driver}: host path unknown)", "/") for u in users]
+                elif opts:
+                    real = local_volume_bind_path(opts)
+                    if real is None:
+                        # nfs / cifs / a block device / anything but a plain
+                        # bind: the host path it can write is unknown. Only the
+                        # volume name and `type` are named, never `o` (it can
+                        # hold a password).
+                        kind = opts.get("type") if isinstance(opts.get("type"), str) else "?"
+                        found += [(f"{u} (volume {vname}, local type={kind}: host path unknown)", "/") for u in users]
+                    else:
+                        found += [(f"{u} (volume {vname})", real) for u in users]
+        except ValueError as e:
+            raise d.DockerUnavailable(type(e).__name__) from None
+    return sorted(set(found))
+
+
+def inventory(docker=docker_read) -> tuple[set[str], list[str], dict[str, str]]:
+    """(compose project names, names of containers with no project label,
+    every container name -> its project or "")."""
     try:
         out = docker("ps", "-a", "--no-trunc", "--format", PS_FORMAT)
     except (subprocess.SubprocessError, OSError) as e:
         raise d.DockerUnavailable(type(e).__name__) from None
-    projects, loose = set(), []
+    projects, loose, owner_of = set(), [], {}
     for line in out.splitlines():
         if not line.strip():
             continue
         cname, _, project = line.partition("\t")
+        owner_of[cname.strip()] = project.strip()
         if project.strip():
             projects.add(project.strip())
         else:
             loose.append(cname.strip())
-    return projects, sorted(loose)
+    return projects, sorted(loose), owner_of
 
 
 def ensure_project_dir(data_dir: str) -> str:
@@ -663,7 +1183,7 @@ def entries_from_cache(data_dir: str, sha: str) -> list[dict]:
 
 def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: str = d.TEXTFILE_DIR,
               dry_run: bool = True, now: float | None = None, owner: str | None = None,
-              self_name: str | None = None) -> int:
+              self_name: str | None = None, write=docker_write, sleep=time.sleep) -> int:
     """One shadow tick: read the evaluated commit and the engine, report."""
     owner = d.SELF_NAME if owner is None else owner
     self_name = d.SELF_NAME if self_name is None else self_name
@@ -705,7 +1225,8 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
     except (OSError, ValueError) as e:
         return fail(f"compose project directory unusable: {type(e).__name__}")
     try:
-        projects, loose = inventory(docker)
+        projects, loose, owner_of = inventory(docker)
+        live_rw = live_writable(docker)
     except d.DockerUnavailable as e:
         return fail(f"docker ps failed: {e}")
 
@@ -714,6 +1235,7 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
 
     results = []
     unevaluated: list[str] = []
+    ctx: dict[str, dict] = {}
     for e in entries:
         if e["status"] == "excluded":
             continue
@@ -721,8 +1243,9 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
             if e["status"] != "managed":
                 results.append(evaluate_compose_app(e, None, [], owner=owner))
                 continue
-            hashes, plain, tree, err = render_config(e, docker, project_dir, owner, allow=e["allow_host_paths"],
-                                                     self_name=self_name, data_dir=data_dir)
+            hashes, plain, tree, binds, err = render_config(e, docker, project_dir, owner,
+                                                            allow=e["allow_host_paths"], self_name=self_name,
+                                                            data_dir=data_dir)
             containers = project_containers(e["name"], docker) if not err else []
             base = (baselines.get(e["name"]) or {}).get("tree")
             r = evaluate_compose_app(e, hashes, containers, owner=owner, plain_hashes=plain, tree=tree,
@@ -734,6 +1257,12 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
             # unowned: that would hide a top-level change behind the move.
             if tree is not None and (base is None or r["state"] == "synced"):
                 baselines[e["name"]] = {"sha": sha, "tree": tree}
+            ctx[e["name"]] = {"entry": e, "binds": binds, "hashes": hashes, "tree": tree,
+                              # The names `up` would create: container_name, or
+                              # compose's default <project>-<service>-1.
+                              "container_names": {svc: (b.get("container_name") or f"{e['name']}-{svc}-1")
+                                                  for svc, b in (e["compose"].get("services") or {}).items()
+                                                  if isinstance(b, dict)}}
             results.append(r)
         except d.DryRunViolation:
             raise
@@ -745,13 +1274,72 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
                             "reasons": [f"evaluation error: {type(ex).__name__}"], "changes": [],
                             "drift": [], "blocked": [], "merged": None, "stopped": False})
 
-    would, deferred = d.plan_applies(results)
+    # Cross-app: nothing may be bind-mounted below a writable mount. Writable =
+    # every LIVE read-write mount on the host (any container) plus what this
+    # tick plans; the preflight re-checks it on resolved real paths.
+    writable = live_rw + [(n, posixpath.normpath(b[1])) for n, c in ctx.items() for b in (c["binds"] or [])
+                          if isinstance(b[1], str) and not b[2]]
+    names = {e["name"] for e in all_entries} | {self_name}
+    claimed: dict[str, list[str]] = {}
+    for n, c in ctx.items():
+        for cn in (c.get("container_names") or {}).values():
+            claimed.setdefault(cn, []).append(n)
+    for r in results:
+        c = ctx.get(r["app"])
+        bad = nested_write_reasons(c["binds"] or [], writable) if c else []
+        if c:
+            for svc, cn in sorted((c.get("container_names") or {}).items()):
+                if cn in names and cn != r["app"]:
+                    bad.append(f"services.{svc}: container name {cn} is another app's name")
+                elif len(set(claimed.get(cn, []))) > 1:
+                    bad.append(f"services.{svc}: container name {cn} is also claimed by "
+                               + ", ".join(sorted(set(claimed[cn]) - {r['app']})))
+                elif cn in owner_of and owner_of[cn] != r["app"]:
+                    bad.append(f"services.{svc}: container name {cn} is taken by a live container "
+                               f"outside this project ({owner_of[cn] or 'no project'})")
+        if bad:
+            r.update(state="invalid", reasons=bad, drift=[], changes=[])
+            ctx.pop(r["app"])
+
+    # x-deploy.create is honoured from cutover (open question 2): a missing app
+    # that opts in is planned like a pending one.
+    plan_input = [{**r, "state": "pending"} if r["state"] == "missing" and (ctx.get(r["app"]) or {}).get(
+        "entry", {}).get("create") else r for r in results]
+    failures = state.get("failures") or {}
+    held = [n for n, f in failures.items() if f.get("sha") == sha and started - f.get("at", 0) < BACKOFF_SECONDS]
+    would, deferred = d.plan_applies([r for r in plan_input if r["app"] not in held])
+    by_app = {r["app"]: r for r in results}
+    for n in held:
+        if n in by_app and by_app[n]["state"] in ("pending", "missing"):
+            by_app[n].update(state="failed", reasons=[f"backoff: the apply of {sha[:7]} failed less than "
+                                                      f"{BACKOFF_SECONDS // 60} min ago"])
     d.log_tick(dry_run=dry_run, sha=sha, results=results, would=would, deferred=deferred,
                global_paused=global_paused, unmanaged=unmanaged, unevaluated=unevaluated,
                stopped_note="project STOPPED: would update with up --no-start, never start")
 
-    # A-Phase 1: nothing is applied. At cutover the apply loop over `would`
-    # (apply_compose + verify + per-(app, sha) backoff + self-apply) goes here.
+    if d.mutations_allowed(dry_run, BACKEND) and not global_paused:
+        for n in would:
+            c = ctx[n]
+            try:
+                ok, why = apply_compose(c["entry"], by_app[n], dry_run=dry_run, docker=docker, write=write,
+                                        project_dir=project_dir, owner=owner, self_name=self_name,
+                                        data_dir=data_dir, binds=c["binds"], hashes=c["hashes"], sleep=sleep,
+                                        writable=writable)
+            except d.DryRunViolation:
+                raise
+            except Exception as ex:  # noqa: BLE001 - record it, keep the tick
+                ok, why = False, f"apply error: {type(ex).__name__}"
+            if ok:
+                log(f"  {n}: applied {sha[:7]}")
+                applied[n] = {"commit": sha, "at": int(time.time())}
+                baselines[n] = {"sha": sha, "tree": c["tree"]}
+                failures.pop(n, None)
+                by_app[n].update(state="synced", reasons=[], drift=[], changes=[])
+            else:
+                log(f"  {n}: apply FAILED: {why}")
+                failures[n] = {"sha": sha, "at": int(started)}
+                by_app[n].update(state="failed", reasons=[why])
+    state["failures"] = {k: v for k, v in failures.items() if k in by_app or k in unevaluated}
 
     live = {r["app"] for r in results} | set(unevaluated)
     state["last_tick"] = {"at": int(started), "sha": sha, "backend": BACKEND,
@@ -795,5 +1383,8 @@ if __name__ == "__main__":
         sys.exit(reconcile_main())
     if cmd == "version":
         sys.exit(version_main())
-    print("usage: compose_backend.py fetch|reconcile|version", file=sys.stderr)
+    if cmd == "resolve":
+        # Runs only inside the preflight helper container (host / at /host).
+        sys.exit(resolve_main(sys.argv[2:]))
+    print("usage: compose_backend.py fetch|reconcile|version|resolve", file=sys.stderr)
     sys.exit(2)

@@ -620,6 +620,20 @@ review of #1890.
   - blank lines, and a file of at most 256 KiB.
 
   The log names the line number, never the line.
+- **Turning it off disarms it.** With `ALCATRAZ_DEPLOY_RELAY` not `1`, the relay
+  deletes `homelabscope-deploy-alcatraz.prom` and `homelabscope-relay.prom`. That
+  way neither `HomelabscopeJobStale` (on the relayed `job_*` series) nor the gated
+  absent arm can page.
+- **More refusals (review of #1891):**
+  - NUL bytes;
+  - a duplicate label name within a sample;
+  - a second HELP or TYPE for a family, or one that comes after that family's
+    samples;
+  - a duplicate series.
+- **promtool unit tests run in CI** (`lint.yaml` job `prometheus-rules`, using
+  `quay.io/prometheus/prometheus:v3.5.0`, the cluster's version). They cover four
+  cases: relay off, `relay_enabled 0`, the deployer series present, and the series
+  absent (fires at 90 m, not at 30 m). Removing the gate makes the first two fail.
 - **Status as a gauge, not a counter.** `homelabscope_relay_last_status{source="alcatraz-deploy"}`
   is 0 (accepted), 1 (rejected) or 2 (fetch failed). `homelabscope_relay_enabled`
   and `homelabscope_relay_last_success_seconds` go in `homelabscope-relay.prom`.

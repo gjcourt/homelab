@@ -181,10 +181,16 @@ collect_alcatraz_pull() {
 # On the first bad line prints "line N: <why>" to stderr (never the line: it is
 # untrusted input) and returns 1. Blank lines are allowed.
 validate_relay() {
-  local f="$1" n=0 line name size
+  local f="$1" n=0 line name size labels series lname
+  local -A seen_help=() seen_type=() seen_sample=() seen_series=() seen_label=()
   size="$(wc -c < "${f}")" || return 1
   if (( size > RELAY_MAX_BYTES )); then
     echo "file larger than ${RELAY_MAX_BYTES} bytes" >&2
+    return 1
+  fi
+  # `read` silently drops NUL bytes, so count them first.
+  if [[ "$(tr -d '\000' < "${f}" | wc -c)" != "${size}" ]]; then
+    echo "file contains NUL bytes" >&2
     return 1
   fi
   while IFS= read -r line || [[ -n "${line}" ]]; do
@@ -196,16 +202,49 @@ validate_relay() {
         echo "line ${n}: HELP for an unknown family or with unexpected text" >&2
         return 1
       fi
+      if [[ -n "${seen_help[${name}]+x}" || -n "${seen_sample[${name}]+x}" ]]; then
+        echo "line ${n}: second HELP for a family, or HELP after its samples" >&2
+        return 1
+      fi
+      seen_help[${name}]=1
     elif [[ "${line}" =~ ${RELAY_TYPE_RE} ]]; then
-      if [[ -z "${RELAY_HELP[${BASH_REMATCH[1]}]+x}" ]]; then
+      name="${BASH_REMATCH[1]}"
+      if [[ -z "${RELAY_HELP[${name}]+x}" ]]; then
         echo "line ${n}: TYPE for an unknown family" >&2
         return 1
       fi
+      if [[ -n "${seen_type[${name}]+x}" || -n "${seen_sample[${name}]+x}" ]]; then
+        echo "line ${n}: second TYPE for a family, or TYPE after its samples" >&2
+        return 1
+      fi
+      seen_type[${name}]=1
     elif [[ "${line}" =~ ${RELAY_DEPLOY_RE} || "${line}" =~ ${RELAY_JOB_RE} ]]; then
-      if [[ -z "${RELAY_HELP[${BASH_REMATCH[1]}]+x}" ]]; then
+      name="${BASH_REMATCH[1]}"
+      if [[ -z "${RELAY_HELP[${name}]+x}" ]]; then
         echo "line ${n}: sample of an unknown family" >&2
         return 1
       fi
+      series="${line% *}"
+      labels="${series#*\{}"
+      labels="${labels%\}}"
+      seen_label=()
+      while [[ -n "${labels}" ]]; do
+        lname="${labels%%=*}"
+        if [[ -n "${seen_label[${lname}]+x}" ]]; then
+          echo "line ${n}: duplicate label name in a sample" >&2
+          return 1
+        fi
+        seen_label[${lname}]=1
+        # Values match [A-Za-z0-9._-]* (the sample regex), so the next comma
+        # always starts the next label.
+        if [[ "${labels}" == *,* ]]; then labels="${labels#*,}"; else labels=""; fi
+      done
+      if [[ -n "${seen_series[${series}]+x}" ]]; then
+        echo "line ${n}: duplicate series" >&2
+        return 1
+      fi
+      seen_series[${series}]=1
+      seen_sample[${name}]=1
     else
       echo "line ${n}: not a line the relay accepts" >&2
       return 1
@@ -249,8 +288,28 @@ relay_fetch() {
 # or a rejected file leaves the LAST accepted file in place, so
 # homelabscope_job_last_success_seconds{job="alcatraz-deployer"} ages and
 # HomelabscopeJobStale fires, rather than the series going absent.
+# relay_disarm: with the relay off, nothing it once published may linger. The
+# relayed job_* series would age into HomelabscopeJobStale, and a stale
+# relay_enabled 1 would keep the gated absent() arm armed. Both files go;
+# with homelabscope-relay.prom gone the gated arm has nothing to match.
+relay_disarm() {
+  local f removed=0
+  for f in "${TEXTFILE_DIR}/homelabscope-deploy-${RELAY_HOST}.prom" "${TEXTFILE_DIR}/homelabscope-relay.prom"; do
+    if [[ -e "${f}" ]]; then
+      rm -f "${f}" && removed=1
+    fi
+  done
+  if (( removed )); then
+    log "relay ${RELAY_SOURCE}: off; removed the relayed and status files"
+  fi
+  RELAY_LAST_STATUS=""
+}
+
 collect_alcatraz_deploy() {
-  [[ "${ALCATRAZ_DEPLOY_RELAY}" == "1" ]] || return 0
+  if [[ "${ALCATRAZ_DEPLOY_RELAY}" != "1" ]]; then
+    relay_disarm
+    return 0
+  fi
   local out="${TEXTFILE_DIR}/homelabscope-deploy-${RELAY_HOST}.prom" tmp status why
   # Not *.prom: node-exporter never reads the unvalidated copy.
   tmp="$(mktemp "${TEXTFILE_DIR}/.relay-${RELAY_HOST}.XXXXXX")" || return 1

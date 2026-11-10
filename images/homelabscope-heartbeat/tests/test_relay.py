@@ -103,6 +103,48 @@ def test_rejected_lines(tmp_path, case):
     assert REJECT[case].strip() not in p.stderr  # never echoes the untrusted line
 
 
+def with_line(body, at, line):
+    lines = body.splitlines()
+    lines.insert(at, line)
+    return "\n".join(lines) + "\n"
+
+
+def first_index(body, prefix):
+    return next(i for i, ln in enumerate(body.splitlines()) if ln.startswith(prefix))
+
+
+def test_structural_rejections(tmp_path):
+    body = alcatraz_body()
+    lines = body.splitlines()
+    help_dry = next(ln for ln in lines if ln.startswith("# HELP homelabscope_deploy_dry_run"))
+    type_dry = next(ln for ln in lines if ln.startswith("# TYPE homelabscope_deploy_dry_run"))
+    sample_dry = next(ln for ln in lines if ln.startswith("homelabscope_deploy_dry_run{"))
+    i = first_index(body, "homelabscope_deploy_dry_run{")
+    cases = {
+        "second HELP": with_line(body, i, help_dry),                    # HELP, TYPE, HELP, sample
+        "second TYPE": with_line(body, i, type_dry),
+        "HELP after samples": with_line(body, i + 1, help_dry),
+        "TYPE after samples": with_line(body, i + 1, type_dry),
+        "duplicate series": with_line(body, i + 1, sample_dry),
+        "duplicate series, other value": with_line(body, i + 1, sample_dry.rsplit(" ", 1)[0] + " 0"),
+        "duplicate label name": with_line(body, len(lines),
+                                          'homelabscope_deploy_app_state{host="alcatraz",app="a",app="b",state="x"} 1'),
+        "duplicate host label": with_line(body, len(lines), 'homelabscope_deploy_paused{host="alcatraz",scope="g",scope="h"} 1'),
+    }
+    for case, text in cases.items():
+        p = validate(tmp_path, text)
+        assert p.returncode == 1, case
+        assert p.stderr.startswith("line "), (case, p.stderr)
+
+
+def test_nul_bytes_are_rejected(tmp_path):
+    f = tmp_path / "in.prom"
+    body = alcatraz_body()
+    f.write_bytes(body.encode().replace(b'host="alcatraz"', b'host="alca\x00traz"', 1))
+    p = bash(f"validate_relay {str(f)!r}", tmp_path)
+    assert p.returncode == 1 and "NUL" in p.stderr
+
+
 def test_oversized_file_is_rejected(tmp_path):
     p = bash(f"RELAY_MAX_BYTES=100; f={str(tmp_path / 'big')!r}; head -c 101 /dev/zero | tr '\\0' 'x' > \"$f\"; "
              "validate_relay \"$f\"", tmp_path)
@@ -128,6 +170,19 @@ def collect(tmp_path, enabled="1"):
 def relay_status(tmp_path):
     text = (tmp_path / "tf" / "homelabscope-relay.prom").read_text()
     return int(re.search(r'homelabscope_relay_last_status\{source="alcatraz-deploy"\} (\d)', text).group(1)), text
+
+
+def test_turning_the_relay_off_disarms_it(tmp_path):
+    # On, then off: neither the relayed job_* series (HomelabscopeJobStale)
+    # nor relay_enabled 1 (the gated absent() arm) may linger.
+    stub_ssh(tmp_path, alcatraz_body())
+    collect(tmp_path)
+    assert sorted(os.listdir(tmp_path / "tf")) == ["homelabscope-deploy-alcatraz.prom", "homelabscope-relay.prom"]
+    p = collect(tmp_path, enabled="0")
+    assert "rc=0" in p.stdout and "removed the relayed and status files" in p.stdout
+    assert os.listdir(tmp_path / "tf") == []
+    p = collect(tmp_path, enabled="0")      # idempotent, and quiet the second time
+    assert "removed" not in p.stdout
 
 
 def test_relay_is_off_by_default(tmp_path):

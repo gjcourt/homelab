@@ -1,0 +1,28 @@
+# deploy-canary — the smallest possible app on alcatraz, for the pull deployer
+# (HOMELAB-118, plan docs/plans/2026-11-09-alcatraz-pull-deployer-plan.md,
+# open question 4: "Yes, add it").
+#
+# Why it exists: alcatraz has almost no real merges, so without it the
+# deployer's dry-run soak has nothing to predict, and after cutover nothing
+# would exercise the apply path between rare real changes. Its own Renovate
+# digest bumps make it a recurring end-to-end test: a bump must show up as
+# `pending` with `services.deploy-canary.image: <old> -> <new>`.
+#
+# It does nothing: busybox `sleep infinity`, 16 MB, no mounts, no ports, the
+# default network only. `x-deploy.create: true` is honoured from cutover (open
+# question 2: "From switch-over"); until then the deployer reports it
+# `missing`. alcatraz-deploy.yaml skips it: no runner exists to deploy it, and
+# a queued job would wait for one forever.
+x-deploy:
+  name: deploy-canary
+  create: true
+
+services:
+  deploy-canary:
+    image: docker.io/library/busybox:1.37.0@sha256:a7dbc319b1438115a207e11930dc4bb3e643dcb3ec0bdd694bb36cd8fad289ec
+    container_name: deploy-canary
+    restart: unless-stopped
+    command: ["sleep", "infinity"]
+    mem_limit: 16m
+    read_only: true
+    network_mode: none

@@ -302,7 +302,8 @@ backend computes the following:
    generated override (`-f - -f <override>`). It is part of the hash on both the predict
    side and the apply side.
    - A project whose containers lack the label is `blocked` with the reason
-     "project exists and is not deployer-owned". The deployer will not `up
+     "project exists and is not deployer-owned". If it matches Git apart from the
+     label it is `adoptable` instead (implementation notes below). The deployer will not `up
      --remove-orphans` over a project someone made by hand in Container Manager.
    - To adopt such a project, add `x-deploy.adopt: true` for one deploy.
 6. **Unmanaged** = compose projects (from `docker compose ls -a`) and unlabelled
@@ -402,6 +403,8 @@ gets `host="hestia"` or `host="alcatraz"`. The heartbeat is
 - **Alerts.** These are the hestia D9 set (hestia plan `:364-371`), written **once**,
   host-generic: `HomelabDeployAppFailed`, `...Blocked`, `...Lagging`, `...Missing`,
   `...Paused`, with `{{ $labels.host }}` in the summary.
+  - `adoptable` (compose backend only) is expected during the soak and gets no alert of
+    its own. Any rule that lists states must include it.
   - If HOMELAB-112 has already added them as `HestiaDeploy*`, alcatraz's cutover PR
     renames them and adds `host` to their grouping, rather than copying them as
     `AlcatrazDeploy*`.
@@ -527,9 +530,22 @@ review of #1890.
 
   An allow-list entry may not overlap (lie under, or contain) a denied root: `/`,
   `/volume1`, `/volume2`, `/volumeUSB1`, `/etc`, `/proc`, `/sys`, `/boot`, `/dev`,
-  `/var/run`, `/run`, `/root`, `/var/lib`, `/volume1/docker` (every app's subtree),
-  any `/volume1/@*`, or the deployer's `DATA_DIR`. Anything else is refused, which
+  `/var/run`, `/run`, `/root`, `/var/lib`, `/usr` (with `/usr/syno`), `/opt`,
+  `/var/packages`, `/volume1/docker` (every app's subtree), any `/volume1/@*`, or
+  the deployer's `DATA_DIR`. Anything else is refused, which
   is stricter than the CI guard (an unlisted `/volume1/misc` used to pass).
+- **No borrowed volumes or networks.** A top-level volume or network may carry
+  `name` only as compose's own default, `<project>_<key>`. Any other name would
+  attach an existing volume or network: another project's, a hand-made bind volume
+  that would get past the mount allowlist, or `host`. Logging is limited to the
+  `json-file` and `local` drivers.
+- **HARD REQUIREMENT for the apply-path PR (A5): symlinks.** A container can write a
+  symlink inside its own `/volume1/docker/<name>` (for example `x -> /`), and a later
+  commit can then bind `x`. The policy here checks the path lexically, so it cannot
+  see this. The A5 `--mount` preflight must therefore resolve every bind source on
+  the host with `realpath` and re-check the resolved path against this same policy
+  before `up`. A source that resolves elsewhere makes the app `blocked`. Cutover
+  must not happen without it.
 - **The allow-list comes from Git, not `desired.json`.** `reconcile` rediscovers
   every app from the bare git cache at `refs/deployer/head`, which must equal
   `desired.json`'s sha. `desired.json` only says which commit.
@@ -539,8 +555,9 @@ review of #1890.
   from the ownership label"), a new state, rather than only `blocked`. This lets the
   shadow show a hand-made project is in sync before anything is ever deployer-owned.
 - **Baseline for "what changed".** The baseline is recorded on an app's first
-  evaluation, moved whenever live matches Git (`synced` or `adoptable`), and kept
-  for apps that are unevaluated in a tick. At cutover it also becomes the tree last
+  evaluation, moved only when the project is deployer-owned and `synced`, and kept
+  for apps that are unevaluated in a tick. It never moves while an app is
+  `adoptable` or unowned, so a top-level change stays visible. At cutover it also becomes the tree last
   applied.
 - **The interpolation check reads the uninterpolated render.** Comparing it with
   the interpolated form does not work: compose 5.6.1 normalises the interpolated
@@ -552,7 +569,7 @@ review of #1890.
   - Top-level `networks` and `volumes` are in no service hash. Changes to them are
     detected against the baseline and reported as drift, but not on an app's first
     evaluation.
-  - A host-side symlink in an allowed path is the host's business.
+  - A symlink in an allowed path is not seen in shadow; see the A5 requirement above.
 - **One-off containers** (`compose run`) are excluded with
   `label=com.docker.compose.oneoff=False`.
 - **No compose text in `desired.json` (A2).** The parsed dict is fed to

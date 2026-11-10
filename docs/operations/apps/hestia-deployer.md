@@ -70,6 +70,7 @@ names are.
 | `archived` | `x-deploy.archived: true` |
 | `missing` | no TrueNAS app of that name (a new app still needs an operator `app.create`) |
 | `invalid` | bad `x-deploy`, unparsable compose, duplicate name, not a Custom App, or an unrecognised `app.config` shape |
+| `adoptable` | compose backend (alcatraz) only, never on hestia: a hand-made project that matches Git apart from the deployer's ownership label |
 | `failed` | not used until Phase 2 |
 
 An app that is `STOPPED` in SCALE on purpose is still compared (config, and

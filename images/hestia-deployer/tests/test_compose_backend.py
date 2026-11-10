@@ -215,6 +215,10 @@ def test_git_pass_allows_the_plain_cases():
     {"allow-host-paths": ["/volume1/@anything"]},
     {"allow-host-paths": ["/volume2/x"]},
     {"allow-host-paths": ["/etc/../etc"]},
+    {"allow-host-paths": ["/usr/syno"]},
+    {"allow-host-paths": ["/usr/local/bin"]},
+    {"allow-host-paths": ["/var/packages/ContainerManager"]},
+    {"allow-host-paths": ["/opt"]},
 ])
 def test_bad_allow_list_entries_are_refused(meta):
     assert cb.validate_git(svc(), meta, DATA)
@@ -255,6 +259,7 @@ def vc(cfg, name="foo", allow=(), self_name=OWNER):
     ("/volume1/docker/foo/../alcatraz-deployer", False),
     ("/volume1/misc", False),                          # not allow-listed: refused (allowlist of roots)
     ("/root", False), ("/var/lib/docker", False), ("/volume1/@docker", False), ("/volume1/@appstore", False),
+    ("/usr/syno/etc", False), ("/var/packages/x", False), ("/usr", False), ("/opt/x", False),
     ("/volume2/x", False), ("/", False), ("/volume1", False), ("/etc/passwd", False),
     ("/var/run/docker.sock", False), ("/run/x", False), ("/volume1/@iSCSI/lun", False),
     ("/volume1/homes/george", False),
@@ -272,7 +277,8 @@ def test_allow_list_opens_exactly_what_it_lists():
 
 
 def test_self_may_mount_the_socket_and_its_data_dir_and_nothing_else():
-    ok = parsed({"volumes": [bind(cb.SELF_SOCKET), bind(DATA), bind(DATA + "/hc-url", read_only=True)]})
+    ok = parsed({"volumes": [bind(cb.SELF_SOCKET), bind(DATA), bind(DATA + "/hc-url", read_only=True)]},
+                networks={"default": {"name": f"{OWNER}_default", "ipam": {}}})
     assert vc(ok, name=OWNER) == []
     assert vc(parsed({"volumes": [bind(cb.SELF_SOCKET)]}), name="foo")
     assert vc(parsed({"volumes": [bind("/var/run/other.sock")]}), name=OWNER)
@@ -298,6 +304,10 @@ def test_self_may_mount_the_socket_and_its_data_dir_and_nothing_else():
     {"volumes": [bind("/volume1/docker/foo", bind={"propagation": "rshared"})]},
     {"volumes": [bind("/volume1/docker/foo", bind={"selinux": "z"})]},
     {"volumes": [{"type": "volume", "source": "undeclared", "target": "/x", "volume": {}}]},
+    {"logging": {"driver": "syslog", "options": {"syslog-address": "tcp://203.0.113.1:514"}}},
+    {"logging": {"driver": "some/plugin"}},
+    {"logging": {"driver": "gelf"}},
+    {"logging": "json-file"},
 ])
 def test_config_pass_refuses_services(service):
     assert vc(parsed(service))
@@ -314,10 +324,24 @@ def test_config_pass_refuses_services(service):
     {"networks": {"n": {"name": "foo_n", "driver_opts": {"parent": "eth0"}}}},
     {"secrets": {"k": {"file": "/etc/shadow"}}},
     {"configs": {"k": {"file": "/etc/shadow"}}},
+    # Round 2 HIGH: `name` borrows an existing volume / network.
+    {"volumes": {"x": {"name": "other-project_data"}}},
+    {"volumes": {"x": {"name": "hand-made-bind-volume"}}},
+    {"volumes": {"x": {"name": "foo_other"}}},
+    {"networks": {"default": {"name": "other_default", "ipam": {}}}},
+    {"networks": {"default": {"name": "host", "ipam": {}}}},
+    {"networks": {"default": {"name": "bridge", "ipam": {}}}},
 ])
 def test_config_pass_refuses_top_level(top):
     cfg = parsed({"volumes": [{"type": "volume", "source": "x", "target": "/x", "volume": {}}]}, **top)
     assert vc(cfg)
+
+
+def test_config_pass_allows_the_projects_own_names():
+    cfg = parsed({"volumes": [{"type": "volume", "source": "data", "target": "/d", "volume": {}}],
+                  "logging": {"driver": "local", "options": {"max-size": "1m"}}},
+                 volumes={"data": {"name": "foo_data"}}, networks={"default": {"name": "foo_default", "ipam": {}}})
+    assert vc(cfg) == []
 
 
 def test_config_pass_allows_a_realistic_service():
@@ -468,7 +492,7 @@ def test_evaluate_ownership():
     # an unowned project missing a service is not adoptable
     r = ev(managed(), [ctr(owner=None, h="P1")], hashes={"s": "H1", "t": "H2"}, plain={"s": "P1", "t": "P2"})
     assert r["state"] == "blocked"
-    assert "adoptable" in cb.STATES
+    assert "adoptable" in cb.STATES and set(d.STATES) < set(cb.STATES)
 
 
 def test_evaluate_orphan_and_missing_service_and_not_running():
@@ -790,6 +814,27 @@ def test_a_merge_is_predicted_with_its_paths(tmp_path, capsys):
 
 
 @needs_git
+def test_baseline_does_not_move_while_adoptable(tmp_path, capsys):
+    # A top-level change behind an unowned project must stay visible.
+    apps = {"hand": ({"services": {"s": {"image": IMG}}}, None)}
+    data, docker = scenario(tmp_path, apps)
+    docker.projects["hand"] = [{"name": "hand-s-1", "service": "s", "hash": "plain"}]
+    tick(tmp_path, docker, data)
+    first = json.loads((data / "state.json").read_text())["baseline"]["hand"]
+    commit(tmp_path / "remote", {"hosts/alcatraz/hand/docker-compose.yml": dump(
+        {"services": {"s": {"image": IMG}}, "networks": {"default": {"internal": True}}})})
+    fetch(tmp_path, data)
+    docker.desired = {e["name"]: e["compose"] for e in json.loads((data / "desired.json").read_text())["apps"]
+                      if e["name"] == "hand"}
+    capsys.readouterr()
+    _, body, state = tick(tmp_path, docker, data)
+    assert json.loads(state)["baseline"]["hand"] == first
+    assert "top-level config changed (no service hash covers it): networks" in capsys.readouterr().out
+    tick(tmp_path, docker, data)
+    assert json.loads((data / "state.json").read_text())["baseline"]["hand"] == first
+
+
+@needs_git
 def test_unchanged_sha_twice_reports_no_pending(tmp_path):
     data, docker = scenario(tmp_path)
     tick(tmp_path, docker, data)
@@ -931,6 +976,16 @@ PROBES = {
     "selinux relabel": svc(volumes=["/volume1/docker/foo:/d:z"]),
     "rshared propagation": svc(volumes=[{"type": "bind", "source": "/volume1/docker/foo", "target": "/d",
                                          "bind": {"propagation": "rshared"}}]),
+    # Round 2 HIGH: borrowing an existing volume or network by name.
+    "foreign volume": {**svc(volumes=["data:/x"]), "volumes": {"data": {"name": "other-project_data"}}},
+    "hand-made bind volume": {**svc(volumes=["data:/x"]), "volumes": {"data": {"name": "rootfs"}}},
+    "foreign network": {**svc(networks=["n"]), "networks": {"n": {"name": "other_default"}}},
+    "network named host": {**svc(networks=["n"]), "networks": {"n": {"name": "host"}}},
+    "default network renamed": {**svc(), "networks": {"default": {"name": "host"}}},
+    "syslog remote": svc(logging={"driver": "syslog", "options": {"syslog-address": "tcp://203.0.113.1:514"}}),
+    "logging plugin": svc(logging={"driver": "some/plugin"}),
+    "/usr/syno": svc(volumes=["/usr/syno:/s"]),
+    "/var/packages": svc(volumes=["/var/packages:/p"]),
 }
 
 
@@ -955,11 +1010,20 @@ def test_probe_is_refused_by_the_real_parser_path(case):
 @needs_compose
 @pytest.mark.parametrize("case", ["privileged string", "network HOST", "bind type BIND /etc", "/volume1/docker",
                                   "deployer DATA_DIR", "traversal to homes", "rshared propagation",
-                                  "external host network", "rbind driver_opts /"])
+                                  "external host network", "rbind driver_opts /", "foreign volume",
+                                  "hand-made bind volume", "foreign network", "network named host",
+                                  "default network renamed", "syslog remote", "logging plugin"])
 def test_probe_is_refused_by_the_config_pass_alone(case, monkeypatch):
     # Even with pass 1 bypassed, pass 2 (on what compose parsed) refuses.
     monkeypatch.setattr(cb, "validate_git", lambda *a, **k: [])
     assert run_both_passes(PROBES[case]), case
+
+
+@needs_compose
+def test_real_parser_accepts_own_named_volume_and_network():
+    c = {**svc(volumes=["data:/x"], networks=["n"], logging={"driver": "local"}),
+         "volumes": {"data": {}}, "networks": {"n": {}}}
+    assert run_both_passes(c) == []
 
 
 @needs_compose

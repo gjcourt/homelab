@@ -101,6 +101,7 @@ OWN_ROOT = "/volume1/docker"
 SELF_SOCKET = "/var/run/docker.sock"
 DENY_EXACT = frozenset({"/", "/volume1", "/volume2", "/volumeUSB1"})
 DENY_ROOTS = ("/etc", "/proc", "/sys", "/boot", "/dev", "/var/run", "/run", "/root", "/var/lib",
+              "/usr", "/usr/syno", "/opt", "/var/packages",
               "/volume1/docker", "/volume2", "/volumeUSB1", "/volume1/@iSCSI", "/volume1/@docker",
               "/volume1/@appstore")
 
@@ -124,8 +125,12 @@ MOUNT_KEYS = {"bind": frozenset({"type", "source", "target", "read_only", "bind"
 BIND_OPTS = frozenset({"create_host_path", "propagation"})
 BIND_PROPAGATION = (None, "rprivate", "private")
 VOLUME_OPTS = frozenset({"nocopy", "subpath"})
+# `name` is allowed only as compose's own default, <project>_<key>: any other
+# name borrows an existing volume or network (another project's, a hand-made
+# bind volume, `host`). Checked in validate_config().
 TOP_VOLUME_KEYS = frozenset({"name", "labels", "driver"})
 TOP_NETWORK_KEYS = frozenset({"name", "ipam", "labels", "internal", "driver", "enable_ipv6", "attachable"})
+LOGGING_DRIVERS = (None, "json-file", "local")
 
 # docker inspect fields the deployer reads (plan A4.2). Never .Config.Env.
 INSPECT_FORMAT = ("{{json .Name}}\t{{json .Config.Labels}}\t{{json .Config.Image}}\t"
@@ -270,12 +275,16 @@ def validate_config(cfg: dict, name: str, allow: list[str], self_name: str | Non
             reasons.append(f"volumes.{vname}.{k}: not allowed in v1 (driver_opts, external, ...)")
         if v.get("driver") not in (None, "local"):
             reasons.append(f"volumes.{vname}.driver: only the local driver")
+        if "name" in v and v["name"] != f"{name}_{vname}":
+            reasons.append(f"volumes.{vname}.name: only the project's own volume ({name}_{vname})")
     for nname, n in sorted((cfg.get("networks") or {}).items()):
         n = n or {}
         for k in sorted(set(n) - TOP_NETWORK_KEYS, key=str):
             reasons.append(f"networks.{nname}.{k}: not allowed in v1 (external, driver_opts, ...)")
         if n.get("driver") not in (None, "bridge"):
             reasons.append(f"networks.{nname}.driver: only bridge")
+        if "name" in n and n["name"] != f"{name}_{nname}":
+            reasons.append(f"networks.{nname}.name: only the project's own network ({name}_{nname})")
     for svc, body in sorted(cfg["services"].items()):
         w = f"services.{svc}"
         if not isinstance(body, dict):
@@ -283,6 +292,10 @@ def validate_config(cfg: dict, name: str, allow: list[str], self_name: str | Non
             continue
         for k in sorted(set(body) - SERVICE_KEYS, key=str):
             reasons.append(f"{w}.{k}: not on the v1 service-key allowlist")
+        logging = body.get("logging")
+        if logging is not None and (not isinstance(logging, dict) or logging.get("driver") not in LOGGING_DRIVERS
+                                    or set(logging) - {"driver", "options"}):
+            reasons.append(f"{w}.logging: only the json-file or local driver")
         nm = body.get("network_mode")
         if nm is not None and nm not in NETWORK_MODES and not str(nm).startswith("service:"):
             reasons.append(f"{w}.network_mode: only none, bridge or service:<name>")
@@ -714,9 +727,12 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
             base = (baselines.get(e["name"]) or {}).get("tree")
             r = evaluate_compose_app(e, hashes, containers, owner=owner, plain_hashes=plain, tree=tree,
                                      baseline=base, config_error=err)
-            # Baseline: recorded on first evaluation, moved whenever live
-            # matches Git (synced, or adoptable: same config, not yet owned).
-            if tree is not None and (base is None or r["state"] in ("synced", "adoptable")):
+            if r["state"] not in STATES:
+                raise ValueError("unknown state")
+            # Baseline: recorded on first evaluation, moved only when live is
+            # deployer-owned and matches Git (synced). Not while adoptable or
+            # unowned: that would hide a top-level change behind the move.
+            if tree is not None and (base is None or r["state"] == "synced"):
                 baselines[e["name"]] = {"sha": sha, "tree": tree}
             results.append(r)
         except d.DryRunViolation:

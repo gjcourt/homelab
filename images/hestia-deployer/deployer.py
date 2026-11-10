@@ -82,7 +82,9 @@ def apply_enabled(backend: str = "truenas") -> bool:
 
 
 # Host parameters (alcatraz plan A1). Every default is hestia's value, so a
-# container with none of these set behaves exactly as before. They reach the
+# container with none of these set behaves exactly as before. The env names
+# carry a DEPLOYER_ prefix: bare HOST / JOB are set by shells (zsh) and some
+# base images, and a stray value would stop the deployer at import. They reach the
 # reconcile half on the host through nsenter, like DRY_RUN and DATA_DIR.
 _HOST_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
 _PREFIX_RE = re.compile(r"^hosts/[a-z0-9]([a-z0-9-]*[a-z0-9])?/$")
@@ -109,13 +111,13 @@ def env_param(name: str, default: str, pattern, env=None) -> str:
 
 
 def excluded_prefixes_from_env(hosts_prefix: str, self_name: str, env=None) -> tuple[str, ...]:
-    """EXCLUDED_PREFIXES: comma-separated repo paths under hosts_prefix.
+    """DEPLOYER_EXCLUDED_PREFIXES: comma-separated repo paths under hosts_prefix.
 
     Default: the host's runner directory and the deployer's own directory,
     which for hestia is exactly the pre-HOMELAB-118 constant.
     """
     env = os.environ if env is None else env
-    raw = env.get("EXCLUDED_PREFIXES")
+    raw = env.get("DEPLOYER_EXCLUDED_PREFIXES")
     if raw is None or raw.strip() == "":
         return (f"{hosts_prefix}actions-runner/", f"{hosts_prefix}{self_name}/")
     out = []
@@ -124,7 +126,7 @@ def excluded_prefixes_from_env(hosts_prefix: str, self_name: str, env=None) -> t
         if not part:
             continue
         if not part.startswith(hosts_prefix) or not part.endswith("/") or ".." in part.split("/"):
-            raise ConfigError(f"EXCLUDED_PREFIXES entries must be directories under {hosts_prefix}")
+            raise ConfigError(f"DEPLOYER_EXCLUDED_PREFIXES entries must be directories under {hosts_prefix}")
         out.append(part)
     return tuple(out)
 
@@ -132,11 +134,11 @@ def excluded_prefixes_from_env(hosts_prefix: str, self_name: str, env=None) -> t
 REPO_URL = os.environ.get("REPO_URL", "https://github.com/gjcourt/homelab")
 BRANCH_REF = "refs/heads/master"
 # The `host` label on every homelabscope_deploy_* sample (alcatraz plan A6).
-HOST = env_param("HOST", "hestia", _HOST_RE)
-HOSTS_PREFIX = env_param("HOSTS_PREFIX", "hosts/hestia/", _PREFIX_RE)
+HOST = env_param("DEPLOYER_HOST", "hestia", _HOST_RE)
+HOSTS_PREFIX = env_param("DEPLOYER_HOSTS_PREFIX", "hosts/hestia/", _PREFIX_RE)
 COMPOSE_GLOB = "docker-compose*.yml"
 
-SELF_NAME = env_param("SELF_NAME", "hestia-deployer", _HOST_RE)
+SELF_NAME = env_param("DEPLOYER_SELF_NAME", "hestia-deployer", _HOST_RE)
 # Never managed: the runner (it deploys itself; deploy-hestia.yml excludes it
 # too) and this deployer (self-apply is Phase 2, plan D5).
 EXCLUDED_PREFIXES = excluded_prefixes_from_env(HOSTS_PREFIX, SELF_NAME)
@@ -150,7 +152,7 @@ DATA_DIR = os.environ.get("DATA_DIR", "/mnt/main/apps/hestia-deployer")
 TEXTFILE_DIR = os.environ.get("TEXTFILE_DIR", "/var/lib/node-exporter/textfile")
 DEPLOY_TEXTFILE = "homelabscope-deploy.prom"
 
-JOB = env_param("JOB", "hestia-deployer", _HOST_RE)
+JOB = env_param("DEPLOYER_JOB", "hestia-deployer", _HOST_RE)
 # Plan D9: max_age 1800s (6 ticks of 300s).
 MAX_AGE_SECONDS = 1800
 # Plan D5 / open question 5: at most 3 apps per tick, in name order.

@@ -535,7 +535,8 @@ def test_hestia_textfile_golden():
 
 # ------------------------------------------------------------ host parameters (alcatraz plan A1)
 
-HOST_VARS = ("HOST", "HOSTS_PREFIX", "SELF_NAME", "JOB", "DATA_DIR", "TEXTFILE_DIR", "EXCLUDED_PREFIXES")
+HOST_VARS = ("DEPLOYER_HOST", "DEPLOYER_HOSTS_PREFIX", "DEPLOYER_SELF_NAME", "DEPLOYER_JOB", "DATA_DIR",
+             "TEXTFILE_DIR", "DEPLOYER_EXCLUDED_PREFIXES")
 
 
 def import_with_env(extra, expr):
@@ -557,9 +558,20 @@ def test_host_parameter_defaults_are_hestias_previous_constants():
                    ["hestia-deployer"], ["gha-runner", "hestia-deployer"]]
 
 
+
+def test_bare_generic_env_names_are_ignored():
+    # zsh and some images export HOST; a stray (even malformed) value must
+    # neither change the deployer nor stop it at import.
+    rc, got, err = import_with_env({"HOST": "Some Box.local", "JOB": "x y", "SELF_NAME": "?", "HOSTS_PREFIX": "/",
+                                    "EXCLUDED_PREFIXES": "nope"},
+                                   "[d.HOST, d.HOSTS_PREFIX, d.SELF_NAME, d.JOB, list(d.EXCLUDED_PREFIXES)]")
+    assert rc == 0, err
+    assert got == ["hestia", "hosts/hestia/", "hestia-deployer", "hestia-deployer",
+                   ["hosts/hestia/actions-runner/", "hosts/hestia/hestia-deployer/"]]
+
 def test_host_parameters_from_env():
-    env = {"HOST": "alcatraz", "HOSTS_PREFIX": "hosts/alcatraz/", "SELF_NAME": "alcatraz-deployer",
-           "JOB": "alcatraz-deployer"}
+    env = {"DEPLOYER_HOST": "alcatraz", "DEPLOYER_HOSTS_PREFIX": "hosts/alcatraz/",
+           "DEPLOYER_SELF_NAME": "alcatraz-deployer", "DEPLOYER_JOB": "alcatraz-deployer"}
     rc, got, err = import_with_env(env, "[d.HOST, d.HOSTS_PREFIX, d.SELF_NAME, d.JOB, list(d.EXCLUDED_PREFIXES), "
                                         "d.is_compose_path('hosts/alcatraz/a/docker-compose.yml'), "
                                         "d.is_compose_path('hosts/hestia/a/docker-compose.yml'), "
@@ -581,19 +593,21 @@ def test_host_parameters_from_env():
 
 
 def test_excluded_prefixes_from_env():
-    assert d.excluded_prefixes_from_env("hosts/alcatraz/", "x", {"EXCLUDED_PREFIXES": "hosts/alcatraz/a/, hosts/alcatraz/b/"}) \
+    assert d.excluded_prefixes_from_env("hosts/alcatraz/", "x", {"DEPLOYER_EXCLUDED_PREFIXES": "hosts/alcatraz/a/, hosts/alcatraz/b/"}) \
         == ("hosts/alcatraz/a/", "hosts/alcatraz/b/")
     for bad in ("hosts/hestia/a/", "hosts/alcatraz/a", "hosts/alcatraz/../hestia/"):
         with pytest.raises(d.ConfigError):
-            d.excluded_prefixes_from_env("hosts/alcatraz/", "x", {"EXCLUDED_PREFIXES": bad})
+            d.excluded_prefixes_from_env("hosts/alcatraz/", "x", {"DEPLOYER_EXCLUDED_PREFIXES": bad})
 
 
 SENTINEL = "s3cr3t-value-never-printed"
 
 
-@pytest.mark.parametrize("var,bad", [("HOST", f"Hestia {SENTINEL}"), ("HOSTS_PREFIX", f"hosts/{SENTINEL}"),
-                                     ("HOSTS_PREFIX", "hosts/../"), ("SELF_NAME", f'x"{SENTINEL}'),
-                                     ("JOB", f"job\n{SENTINEL}")])
+@pytest.mark.parametrize("var,bad", [("DEPLOYER_HOST", f"Hestia {SENTINEL}"),
+                                     ("DEPLOYER_HOSTS_PREFIX", f"hosts/{SENTINEL}"),
+                                     ("DEPLOYER_HOSTS_PREFIX", "hosts/../"),
+                                     ("DEPLOYER_SELF_NAME", f'x"{SENTINEL}'),
+                                     ("DEPLOYER_JOB", f"job\n{SENTINEL}")])
 def test_malformed_host_parameter_is_refused_without_echoing_it(var, bad):
     rc, _, err = import_with_env({var: bad}, "1")
     assert rc != 0

@@ -93,8 +93,10 @@ node-exporter. Queries without a `host` matcher keep matching; add
 their `job`-only label set.
 
 **Host parameters** (all default to hestia's values; the compose sets none of
-them): `HOST`, `HOSTS_PREFIX`, `SELF_NAME`, `JOB`, `DATA_DIR`, `TEXTFILE_DIR`,
-`EXCLUDED_PREFIXES` (comma-separated directories under `HOSTS_PREFIX`). A
+them): `DEPLOYER_HOST`, `DEPLOYER_HOSTS_PREFIX`, `DEPLOYER_SELF_NAME`,
+`DEPLOYER_JOB`, `DATA_DIR`, `TEXTFILE_DIR`, `DEPLOYER_EXCLUDED_PREFIXES`
+(comma-separated directories under the hosts prefix). The `DEPLOYER_` prefix
+keeps a shell's or image's bare `HOST` / `JOB` from reaching the deployer. A
 malformed value stops the deployer with `ConfigError`, naming the variable,
 never its value. `APPLY_ENABLED` is per backend: hestia's cutover flips
 `APPLY_ENABLED["truenas"]` only; `"compose"` (alcatraz) stays `False`.

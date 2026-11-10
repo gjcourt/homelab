@@ -176,7 +176,7 @@ has never happened, because nothing has ever applied. The deployer drops that st
 ### A1. Same image, a second backend; not a fork
 
 **Decision: one source tree and one image (`images/hestia-deployer/`), with a new
-`compose` backend.** alcatraz runs it with `BACKEND=compose HOST=alcatraz`. hestia
+`compose` backend.** alcatraz runs it with `DEPLOYER_BACKEND=compose DEPLOYER_HOST=alcatraz`. hestia
 keeps the `truenas` default.
 
 Why the same image:
@@ -194,11 +194,13 @@ What changes in the code:
   so hestia's `nsenter ... python3 - reconcile < deployer.py` path (`deployer.sh:29`) is
   untouched. The compose reconcile half runs **in the container**: no nsenter, no host
   python.
-- **`deployer.sh` branches on `BACKEND`.** With `compose`, it runs
+- **`deployer.sh` branches on `DEPLOYER_BACKEND`.** With `compose`, it runs
   `python3 /app/compose_backend.py reconcile` in the container.
 - **Host parameters come from the environment**, with today's values as defaults:
-  `HOSTS_PREFIX`, `SELF_NAME`, `JOB`, `DATA_DIR`, `TEXTFILE_DIR`,
-  `EXCLUDED_PREFIXES`.
+  `DEPLOYER_HOSTS_PREFIX`, `DEPLOYER_SELF_NAME`, `DEPLOYER_JOB`, `DATA_DIR`,
+  `TEXTFILE_DIR`, `DEPLOYER_EXCLUDED_PREFIXES`. The new names carry a
+  `DEPLOYER_` prefix because bare `HOST` / `JOB` are set by shells and some
+  images (#1889 review).
 - **The Dockerfile adds `docker-cli` and `docker-cli-compose`**, both from alpine
   (`Dockerfile:16`). The image pins the compose version, so the version that predicts a
   change is the version that applies it.
@@ -226,7 +228,7 @@ Each such bump is also one more real exercise of hestia's self-apply path.
 
 ### A2. Fetch: one commit per tick
 
-This is the hestia fetch half unchanged, with `HOSTS_PREFIX=hosts/alcatraz/`:
+This is the hestia fetch half unchanged, with `DEPLOYER_HOSTS_PREFIX=hosts/alcatraz/`:
 
 - `ls-remote` every tick
 - a depth-1 fetch only when the SHA moves
@@ -475,8 +477,9 @@ These mirror `deployer.py:7-19`, and each one is tested:
   same exposure the runner design accepted (`actions-runner/README.md:119-127`). The
   difference is that it runs this repo's code, with no GitHub credential.
 - **Environment.**
-  - `BACKEND=compose`, `HOST=alcatraz`, `HOSTS_PREFIX=hosts/alcatraz/`
-  - `SELF_NAME=alcatraz-deployer`, `JOB=alcatraz-deployer`
+  - `DEPLOYER_BACKEND=compose`, `DEPLOYER_HOST=alcatraz`,
+    `DEPLOYER_HOSTS_PREFIX=hosts/alcatraz/`
+  - `DEPLOYER_SELF_NAME=alcatraz-deployer`, `DEPLOYER_JOB=alcatraz-deployer`
   - `DATA_DIR=/volume1/docker/alcatraz-deployer`
   - `TEXTFILE_DIR=/volume1/docker/alcatraz-deployer/metrics`
   - `DRY_RUN=1`, `INTERVAL_SECONDS=300`

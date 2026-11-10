@@ -119,9 +119,10 @@ they are public.
 
    ```bash
    sudo install -d -m 0700 /volume1/docker/alcatraz-deployer/bootstrap
-   # copy the file there, then:
-   cd /volume1/docker/alcatraz-deployer/bootstrap
-   sudo docker compose -f docker-compose.yml -p alcatraz-deployer up -d
+   # root-owned 0700: copy with sudo (here from a file you scp'd to your home dir)
+   sudo install -m 0600 ~/docker-compose.yml /volume1/docker/alcatraz-deployer/bootstrap/docker-compose.yml
+   # no `cd` (the directory is root-only); compose takes the absolute path
+   sudo docker compose -f /volume1/docker/alcatraz-deployer/bootstrap/docker-compose.yml -p alcatraz-deployer up -d
    sudo docker logs -f alcatraz-deployer   # first tick within a minute
    ```
 

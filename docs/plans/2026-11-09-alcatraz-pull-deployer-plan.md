@@ -302,7 +302,8 @@ backend computes the following:
    generated override (`-f - -f <override>`). It is part of the hash on both the predict
    side and the apply side.
    - A project whose containers lack the label is `blocked` with the reason
-     "project exists and is not deployer-owned". The deployer will not `up
+     "project exists and is not deployer-owned". If it matches Git apart from the
+     label it is `adoptable` instead (implementation notes below). The deployer will not `up
      --remove-orphans` over a project someone made by hand in Container Manager.
    - To adopt such a project, add `x-deploy.adopt: true` for one deploy.
 6. **Unmanaged** = compose projects (from `docker compose ls -a`) and unlabelled
@@ -402,6 +403,8 @@ gets `host="hestia"` or `host="alcatraz"`. The heartbeat is
 - **Alerts.** These are the hestia D9 set (hestia plan `:364-371`), written **once**,
   host-generic: `HomelabDeployAppFailed`, `...Blocked`, `...Lagging`, `...Missing`,
   `...Paused`, with `{{ $labels.host }}` in the summary.
+  - `adoptable` (compose backend only) is expected during the soak and gets no alert of
+    its own. Any rule that lists states must include it.
   - If HOMELAB-112 has already added them as `HestiaDeploy*`, alcatraz's cutover PR
     renames them and adds `host` to their grouping, rather than copying them as
     `AlcatrazDeploy*`.
@@ -495,6 +498,106 @@ These mirror `deployer.py:7-19`, and each one is tested:
     next to `:143`. Without it, its guard hard-denies `/var/run` (`:95-96`) and **fails
     `discover` on every push** to `hosts/alcatraz/**`.
   - The CI lint guard gets the same one exemption as A3.
+
+### Implementation notes (A-Phase 1 PR 2, `compose_backend.py`)
+
+Where the code differs from the design above, and why. The second round follows the
+review of #1890.
+
+- **Validation is an allowlist, in two passes (A3).**
+  1. *On the raw Git file*, for what parsing hides: `${VAR}` interpolation; bare
+     env keys (`environment: [HOME]`), which compose fills from its own environment,
+     the deployer's; the reserved ownership label; and the key allowlists, so
+     `env_file`, `label_file`, `include` and `extends` never reach the compose CLI,
+     which would read those files inside the deployer container.
+  2. *On `docker compose config --format json`*, which is what `up` applies: real
+     long-syntax volume sources, and booleans already converted (`privileged: "true"`
+     becomes `true`).
+
+  Each of these must be on an allowlist: service keys, top-level keys (`name`,
+  `services`, `networks`, `volumes`), mount types (`bind`, `volume`, `tmpfs`), bind
+  options (private propagation only, no SELinux relabel), top-level volumes (local
+  driver, no `driver_opts`, not `external`), top-level networks (bridge, not
+  `external`), `network_mode` (`none`, `bridge` or `service:`) and `deploy` (only
+  `resources` cpus, memory and pids). So `devices`, `volumes_from`, `security_opt`,
+  `userns_mode`, `ipc`, `cgroup`, `pid`, `sysctls`, `cap_add`, `privileged` and GPU
+  reservations are all refused, however they are spelled.
+- **Mounts are an allowlist of roots (A3, replaces the CI port).** A bind source
+  must be one of:
+  - the app's own `/volume1/docker/<name>/...`;
+  - an `x-deploy.allow-host-paths` entry;
+  - for the deployer only, the docker socket.
+
+  An allow-list entry may not overlap (lie under, or contain) a denied root: `/`,
+  `/volume1`, `/volume2`, `/volumeUSB1`, `/etc`, `/proc`, `/sys`, `/boot`, `/dev`,
+  `/var/run`, `/run`, `/root`, `/var/lib`, `/usr` (with `/usr/syno`), `/opt`,
+  `/var/packages`, `/volume1/docker` (every app's subtree), any `/volume1/@*`, or
+  the deployer's `DATA_DIR`. Anything else is refused, which
+  is stricter than the CI guard (an unlisted `/volume1/misc` used to pass).
+- **No borrowed volumes or networks.** A top-level volume or network may carry
+  `name` only as compose's own default, `<project>_<key>`. Any other name would
+  attach an existing volume or network: another project's, a hand-made bind volume
+  that would get past the mount allowlist, or `host`. Logging is limited to the
+  `json-file` and `local` drivers.
+- **HARD REQUIREMENT for the apply-path PR (A5): symlinks.** A container can write a
+  symlink inside its own `/volume1/docker/<name>` (for example `x -> /`), and a later
+  commit can then bind `x`. The policy here checks the path lexically, so it cannot
+  see this. The A5 `--mount` preflight must therefore resolve every bind source on
+  the host with `realpath` and re-check the resolved path against this same policy
+  before `up`. A source that resolves elsewhere makes the app `blocked`. Cutover
+  must not happen without it.
+- **The allow-list comes from Git, not `desired.json`.** `reconcile` rediscovers
+  every app from the bare git cache at `refs/deployer/head`, which must equal
+  `desired.json`'s sha. `desired.json` only says which commit.
+- **Ownership (A4.5).** The label is injected in memory, not through an override
+  file. The backend also hashes the compose without the label. A project whose
+  containers match that hash but lack the label is `adoptable` ("matches Git apart
+  from the ownership label"), a new state, rather than only `blocked`. This lets the
+  shadow show a hand-made project is in sync before anything is ever deployer-owned.
+- **Baseline for "what changed".** The baseline is recorded on an app's first
+  evaluation, moved only when the project is deployer-owned and `synced`, and kept
+  for apps that are unevaluated in a tick. It never moves while an app is
+  `adoptable` or unowned, so a top-level change stays visible. At cutover it also becomes the tree last
+  applied.
+- **The interpolation check reads the uninterpolated render.** Comparing it with
+  the interpolated form does not work: compose 5.6.1 normalises the interpolated
+  form, so the two differ for every app. The rule is that no string compose read
+  may still hold an unescaped `$`. `$$` escapes are allowed.
+- **Limits, documented, not detected:**
+  - A mutable image tag that moves on the registry changes no hash. Pin images by
+    digest, as Renovate does.
+  - Top-level `networks` and `volumes` are in no service hash. Changes to them are
+    detected against the baseline and reported as drift, but not on an app's first
+    evaluation.
+  - A symlink in an allowed path is not seen in shadow; see the A5 requirement above.
+- **One-off containers** (`compose run`) are excluded with
+  `label=com.docker.compose.oneoff=False`.
+- **No compose text in `desired.json` (A2).** The parsed dict is fed to
+  `docker compose -f -` as JSON, so `desired.json` keeps hestia's format. The project
+  directory is a fixed, empty `DATA_DIR/compose-project/`; a non-empty one fails the
+  tick, because compose reads `.env` from it.
+- **Docker argv shapes are pinned exactly.** `ps` comes in two fixed shapes;
+  `inspect` uses the fixed `--format` (labels, image, state, restart count; never
+  `Config.Env`) with hex ids; `version` uses a fixed format; plus `compose version
+  --short` and `compose ... config` with exactly `--hash *`, `--format json`, or
+  `--format json --no-interpolate`. The CLI gets a minimal environment (`PATH`,
+  `HOME`, `DOCKER_*`, `TZ`).
+- **Unmanaged** comes from one `docker ps -a --format`, not `compose ls`.
+- **The compose version** is fixed per image digest, not pinned in the Dockerfile.
+  One image predicts and applies.
+- **Apply (A5) is not in this PR.** `apply_compose()` refuses while mutations are
+  off, and otherwise raises `NotImplementedError`. The pull / up / settle path, the
+  `--mount` preflight and the self-apply helper land before alcatraz's cutover.
+- **Measured end to end** against a real compose 5.6.1 CLI and engine (podman,
+  locally), with the git cache:
+  - a project brought up with the owner-labelled compose reads `synced`;
+  - one brought up by hand from the same file reads `adoptable`;
+  - after an image bump in Git, the owned one reads `pending` with
+    `services.s.image: <old> -> <new>`.
+
+  The reviewer's bypass probes run as tests through the real `docker compose
+  config`. They are skipped where no compose CLI exists, and they ran in the
+  deployer image.
 
 ## Migration (faster, evidence-gated)
 

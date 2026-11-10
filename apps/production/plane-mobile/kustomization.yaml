@@ -51,15 +51,15 @@ configMapGenerator:
       - PLANE_READ=on
       - PLANE_API_URL=http://plane-api.plane-prod.svc.cluster.local:8000
       - PLANE_WORKSPACE=home
-      # bench-desk's projects (apps/production/bench-desk/config.yaml,
-      # `projects:`), so every notification link bench-desk sends after C6
+      # agent-desk's projects (apps/production/agent-desk/config.yaml,
+      # `projects:`), so every notification link agent-desk sends after C6
       # opens in the app. Keep the two lists in sync. An identifier Plane
       # doesn't know (or that the token's user can't see) keeps /readyz at
       # 503, so check them all exist before adding one.
       - PROJECTS=SANDBOX,PLANEMOBILE,DOMESTIQUE,TOPPINGCTL,MODEMSCOPE,FAX,VIBRATO,HOMELAB,HASS
       - OWNER_EMAIL=gjcourt@gmail.com
-      # The bench-desk bot (apps/production/bench-desk/config.yaml, botEmail).
-      - BOT_EMAIL=gjcourt+bench-desk@gmail.com
+      # The agent-desk bot (apps/production/agent-desk/config.yaml, botEmail).
+      - BOT_EMAIL=gjcourt+agent-desk@gmail.com
 
 patches:
   - target:

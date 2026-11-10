@@ -101,3 +101,27 @@ jobs:
 
       - name: Shell syntax
         run: bash -n images/hestia-deployer/deployer.sh
+
+  # HOMELAB-118: homelabscope-heartbeat's alcatraz deploy relay: line
+  # validation (only host="alcatraz" deploy samples, only job="alcatraz-deployer"
+  # heartbeats, HELP text equal to deployer.py's), atomic publish, and that a
+  # rejected or failed fetch keeps the last accepted file.
+  homelabscope-heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest pyyaml
+
+      - name: Unit tests
+        run: python -m pytest -q images/homelabscope-heartbeat/tests
+
+      - name: Shell syntax
+        run: bash -n images/homelabscope-heartbeat/heartbeat.sh

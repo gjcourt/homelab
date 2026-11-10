@@ -599,6 +599,32 @@ review of #1890.
   config`. They are skipped where no compose CLI exists, and they ran in the
   deployer image.
 
+### Implementation notes (A-Phase 1 PR 3, the relay)
+
+- **Off by default.** `ALCATRAZ_DEPLOY_RELAY=1` in hestia's heartbeat compose turns it
+  on, as a one-line PR after George bootstraps alcatraz-deployer. Until then
+  hestia's heartbeat behaves exactly as before and writes no new file.
+- **The `JobMetricAbsent` arm is gated on the relay.** It reads
+  `absent(...{job="alcatraz-deployer"}) and on() (homelabscope_relay_enabled == 1)`,
+  so a deployer that does not exist yet never pages, and turning the relay on arms
+  it. This was checked with `promtool test rules` for three cases: relay off, relay
+  on with the series absent, and relay on with the series present.
+- **Validation** accepts only the following, and rejects the whole file on any
+  other line:
+  - `# HELP` lines whose text equals `deployer.py`'s byte for byte (a test pins
+    the parity);
+  - `# TYPE ... gauge` lines;
+  - `homelabscope_deploy_*{host="alcatraz",...}` samples, with label names from
+    `commit`, `app`, `state` and `scope`, and values from `[A-Za-z0-9._-]`;
+  - `homelabscope_job_*{job="alcatraz-deployer"}` samples;
+  - blank lines, and a file of at most 256 KiB.
+
+  The log names the line number, never the line.
+- **Status as a gauge, not a counter.** `homelabscope_relay_last_status{source="alcatraz-deploy"}`
+  is 0 (accepted), 1 (rejected) or 2 (fetch failed). `homelabscope_relay_enabled`
+  and `homelabscope_relay_last_success_seconds` go in `homelabscope-relay.prom`.
+  The cutover's `HomelabDeployRelayRejected` reads `last_status == 1`.
+
 ## Migration (faster, evidence-gated)
 
 Each phase is its own PR, and nothing is retired until the step before it has run clean.

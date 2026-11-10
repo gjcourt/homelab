@@ -37,6 +37,15 @@
 #
 # Runs as a long-lived container looping every INTERVAL_SECONDS so freshness
 # stays current between the once-a-day jobs it watches.
+#
+# It also RELAYS alcatraz's deployer textfile (HOMELAB-118, plan
+# docs/plans/2026-11-09-alcatraz-pull-deployer-plan.md A6), off by default
+# (ALCATRAZ_DEPLOY_RELAY=1 turns it on). alcatraz has no metrics path, so the
+# heartbeat reads its homelabscope-deploy.prom over the same SSH credential and
+# re-publishes it here as homelabscope-deploy-alcatraz.prom, but ONLY after
+# validate_relay() accepts every line: alcatraz must not be able to write
+# hestia-labelled or arbitrary series, or a HELP text that would make
+# node-exporter drop hestia's own family. See collect_alcatraz_deploy.
 
 set -uo pipefail
 
@@ -61,6 +70,47 @@ ZFS_SNAP_TZ="${ZFS_SNAP_TZ:-America/Los_Angeles}"
 # Staleness budgets (seconds). All watched jobs here are daily → 30h tolerates
 # one fully-missed window before HomelabscopeJobStale fires.
 MAX_AGE_DAILY="${MAX_AGE_DAILY:-108000}"
+# ----------------------------------------------------------------------------
+
+# ---- alcatraz deploy relay (HOMELAB-118) -------------------------------------
+# Off until George bootstraps alcatraz-deployer (runbook
+# docs/operations/apps/alcatraz-deployer.md): the absent() alert arm for
+# job="alcatraz-deployer" is gated on homelabscope_relay_enabled, so turning
+# this on is also what arms that alert.
+ALCATRAZ_DEPLOY_RELAY="${ALCATRAZ_DEPLOY_RELAY:-0}"
+ALCATRAZ_DEPLOY_PROM="${ALCATRAZ_DEPLOY_PROM:-/volume1/docker/alcatraz-deployer/metrics/homelabscope-deploy.prom}"
+RELAY_MAX_BYTES="${RELAY_MAX_BYTES:-262144}"
+RELAY_HOST="alcatraz"
+RELAY_JOB="alcatraz-deployer"
+RELAY_SOURCE="alcatraz-deploy"
+# HELP text per family the relay accepts, byte for byte. These MUST equal what
+# images/hestia-deployer/deployer.py renders (JOB_HELP / DEPLOY_HELP): one
+# node-exporter serves hestia's and alcatraz's files, and it drops a family
+# whose HELP differs between files (PR #1864). A test pins the parity.
+declare -A RELAY_HELP=(
+  [homelabscope_job_last_success_seconds]="Unix timestamp of the job's last successful run."
+  [homelabscope_job_last_duration_seconds]="Wall-clock duration of the job's last run (seconds)."
+  [homelabscope_job_last_status]="Last run status (0=ok, 1=fail)."
+  [homelabscope_job_max_age_seconds]="Staleness budget for this job (seconds)."
+  [homelabscope_deploy_head_info]="master commit the last deployer tick evaluated."
+  [homelabscope_deploy_head_commit_seconds]="Commit time of the master commit the last deployer tick evaluated."
+  [homelabscope_deploy_app_state]="Deployer state of each app on the host (1 for the current state)."
+  [homelabscope_deploy_app_applied_info]="Last commit the deployer successfully applied to the app."
+  [homelabscope_deploy_app_last_apply_seconds]="Unix timestamp of the deployer's last successful apply of the app."
+  [homelabscope_deploy_paused]="1 when the deployer is paused (scope=global: PAUSE file; otherwise x-deploy.paused)."
+  [homelabscope_deploy_unmanaged_apps]="Count of apps on the host with no compose file in Git."
+  [homelabscope_deploy_dry_run]="1 when the deployer runs in dry-run (shadow) mode and applies nothing."
+)
+# A sample's value, and the only label shapes allowed after host= on a deploy
+# sample. Label values: lowercase/uppercase alnum and . _ - only (app names,
+# states, commit hex, "global"): no quotes, so no label injection.
+RELAY_NUM='-?[0-9]+(\.[0-9]+)?([eE][-+]?[0-9]+)?'
+RELAY_DEPLOY_RE="^(homelabscope_deploy_[a-z_]+)\{host=\"${RELAY_HOST}\"(,(commit|app|state|scope)=\"[A-Za-z0-9._-]*\")*\} ${RELAY_NUM}\$"
+RELAY_JOB_RE="^(homelabscope_job_[a-z_]+)\{job=\"${RELAY_JOB}\"\} ${RELAY_NUM}\$"
+RELAY_HELP_RE='^# HELP ([a-z_]+) (.*)$'
+RELAY_TYPE_RE='^# TYPE ([a-z_]+) gauge$'
+RELAY_LAST_STATUS=""
+RELAY_LAST_SUCCESS=""
 # ----------------------------------------------------------------------------
 
 # ---- Container probe (Docker socket) ---------------------------------------
@@ -125,6 +175,106 @@ collect_alcatraz_pull() {
   fi
   emit_job "${job}" "${epoch}" "${dur:-0}" 0 "${MAX_AGE_DAILY}"
   log "alcatraz-pull: last success ${ts} (epoch ${epoch}, ${dur:-?}s)"
+}
+
+# validate_relay <file>: 0 if every line is one the relay may publish.
+# On the first bad line prints "line N: <why>" to stderr (never the line: it is
+# untrusted input) and returns 1. Blank lines are allowed.
+validate_relay() {
+  local f="$1" n=0 line name size
+  size="$(wc -c < "${f}")" || return 1
+  if (( size > RELAY_MAX_BYTES )); then
+    echo "file larger than ${RELAY_MAX_BYTES} bytes" >&2
+    return 1
+  fi
+  while IFS= read -r line || [[ -n "${line}" ]]; do
+    n=$((n + 1))
+    [[ -z "${line}" ]] && continue
+    if [[ "${line}" =~ ${RELAY_HELP_RE} ]]; then
+      name="${BASH_REMATCH[1]}"
+      if [[ -z "${RELAY_HELP[${name}]+x}" || "${BASH_REMATCH[2]}" != "${RELAY_HELP[${name}]}" ]]; then
+        echo "line ${n}: HELP for an unknown family or with unexpected text" >&2
+        return 1
+      fi
+    elif [[ "${line}" =~ ${RELAY_TYPE_RE} ]]; then
+      if [[ -z "${RELAY_HELP[${BASH_REMATCH[1]}]+x}" ]]; then
+        echo "line ${n}: TYPE for an unknown family" >&2
+        return 1
+      fi
+    elif [[ "${line}" =~ ${RELAY_DEPLOY_RE} || "${line}" =~ ${RELAY_JOB_RE} ]]; then
+      if [[ -z "${RELAY_HELP[${BASH_REMATCH[1]}]+x}" ]]; then
+        echo "line ${n}: sample of an unknown family" >&2
+        return 1
+      fi
+    else
+      echo "line ${n}: not a line the relay accepts" >&2
+      return 1
+    fi
+  done < "${f}"
+  return 0
+}
+
+# emit_relay_status <status 0|1|2>: homelabscope_relay_* for the alcatraz
+# relay (0=accepted, 1=rejected by validation, 2=fetch failed). The cutover's
+# HomelabDeployRelayRejected alert reads last_status == 1.
+emit_relay_status() {
+  local status="$1" out="${TEXTFILE_DIR}/homelabscope-relay.prom"
+  {
+    echo "# HELP homelabscope_relay_enabled 1 when the heartbeat relays another host's deployer textfile."
+    echo "# TYPE homelabscope_relay_enabled gauge"
+    echo "homelabscope_relay_enabled{source=\"${RELAY_SOURCE}\"} 1"
+    echo "# HELP homelabscope_relay_last_status Last relay attempt (0=accepted, 1=rejected by validation, 2=fetch failed)."
+    echo "# TYPE homelabscope_relay_last_status gauge"
+    echo "homelabscope_relay_last_status{source=\"${RELAY_SOURCE}\"} ${status}"
+    if [[ -n "${RELAY_LAST_SUCCESS}" ]]; then
+      echo "# HELP homelabscope_relay_last_success_seconds Unix timestamp of the last accepted relay."
+      echo "# TYPE homelabscope_relay_last_success_seconds gauge"
+      echo "homelabscope_relay_last_success_seconds{source=\"${RELAY_SOURCE}\"} ${RELAY_LAST_SUCCESS}"
+    fi
+  } > "${out}.tmp"
+  mv "${out}.tmp" "${out}"
+}
+
+# relay_fetch <dest>: the remote textfile, at most RELAY_MAX_BYTES+1 bytes.
+relay_fetch() {
+  ssh -T -x -i "${ALCATRAZ_KEY}" \
+      -o StrictHostKeyChecking=accept-new \
+      -o UserKnownHostsFile="${ALCATRAZ_KNOWN_HOSTS}" \
+      -o ConnectTimeout=15 -o BatchMode=yes \
+      "${ALCATRAZ_SSH}" \
+      "head -c $((RELAY_MAX_BYTES + 1)) -- '${ALCATRAZ_DEPLOY_PROM}'" > "$1"
+}
+
+# collect_alcatraz_deploy: fetch, validate, publish atomically. A failed fetch
+# or a rejected file leaves the LAST accepted file in place, so
+# homelabscope_job_last_success_seconds{job="alcatraz-deployer"} ages and
+# HomelabscopeJobStale fires, rather than the series going absent.
+collect_alcatraz_deploy() {
+  [[ "${ALCATRAZ_DEPLOY_RELAY}" == "1" ]] || return 0
+  local out="${TEXTFILE_DIR}/homelabscope-deploy-${RELAY_HOST}.prom" tmp status why
+  # Not *.prom: node-exporter never reads the unvalidated copy.
+  tmp="$(mktemp "${TEXTFILE_DIR}/.relay-${RELAY_HOST}.XXXXXX")" || return 1
+  if ! relay_fetch "${tmp}" 2>/dev/null; then
+    status=2
+  elif ! why="$(validate_relay "${tmp}" 2>&1)"; then
+    status=1
+  else
+    chmod 0644 "${tmp}"
+    mv "${tmp}" "${out}"
+    status=0
+    RELAY_LAST_SUCCESS="$(date +%s)"
+  fi
+  rm -f "${tmp}"
+  if [[ "${status}" != "${RELAY_LAST_STATUS}" ]]; then
+    case "${status}" in
+      0) log "relay ${RELAY_SOURCE}: accepted" ;;
+      1) log "relay ${RELAY_SOURCE}: REJECTED (${why}); keeping the last accepted file" ;;
+      2) log "relay ${RELAY_SOURCE}: fetch failed (ssh, or no file yet); keeping the last accepted file" ;;
+    esac
+    RELAY_LAST_STATUS="${status}"
+  fi
+  emit_relay_status "${status}"
+  [[ "${status}" == "0" ]]
 }
 
 # newest_snapshot_epoch <dataset> <mountpoint> -> echoes epoch, or empty.
@@ -348,9 +498,11 @@ collect_containers() {
   mv "${out}.tmp" "${out}"
 }
 
+main() {
 mkdir -p "${TEXTFILE_DIR}"
 log "homelabscope-heartbeat starting; interval=${INTERVAL_SECONDS}s textfile=${TEXTFILE_DIR}"
 log "container-probe: enabled=${CONTAINER_PROBE_ENABLED} interval=${CONTAINER_INTERVAL_SECONDS}s sock=${DOCKER_SOCK}"
+log "alcatraz deploy relay: enabled=${ALCATRAZ_DEPLOY_RELAY}"
 
 # Two cadences in one loop: the SSH/ZFS jobs watch once-a-day work and stay on
 # INTERVAL_SECONDS; the container probe is local socket calls and runs on the
@@ -363,6 +515,7 @@ while true; do
   if (( now - last_slow >= INTERVAL_SECONDS )); then
     collect_alcatraz_pull || true
     collect_zfs_snapshots || true
+    collect_alcatraz_deploy || true
     last_slow="${now}"
   fi
   if [[ "${CONTAINER_PROBE_ENABLED}" == "1" ]]; then
@@ -370,3 +523,9 @@ while true; do
   fi
   sleep "${CONTAINER_INTERVAL_SECONDS}"
 done
+}
+
+# Sourcing the file (the relay tests do) defines the functions only.
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  main
+fi

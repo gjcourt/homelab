@@ -21,8 +21,34 @@ structural:
     of EXACT argv shapes (check_read_argv). Anything else (compose pull,
     compose up, run, rm, stop, ...) raises DryRunViolation before a process
     starts.
+  - Every MUTATING docker call (preflight run, compose pull, compose up) goes
+    through docker_write(), which refuses before a process starts unless
+    mutations are allowed for this backend, and then allows only its own
+    exact argv shapes (check_write_argv).
   - apply_compose() raises before its first subprocess call while mutations
-    are off, and reconcile() never calls it.
+    are off, and reconcile() only calls it when they are on.
+
+THE APPLY PATH (plan A5; off until the cutover flips APPLY_ENABLED["compose"]).
+Per app, one at a time, in plan_applies() order (cap 3, self last):
+  1. preflight: a throwaway helper container from the deployer's own image,
+     with the host's / mounted read-only at /host, no network, no
+     capabilities, resolves every bind source (and every allow-list entry and
+     DATA_DIR) to its REAL path on the host, following symlinks inside
+     /host (resolve_under). Each resolved source is re-checked against the
+     same mount policy, so a symlink in an app's own subtree (`x -> /`) or a
+     DSM link such as /var/services/homes cannot widen it. A missing source
+     blocks the app; so does a /var/log source that is not a single file.
+  2. `compose pull`: a wrong-arch or missing image fails here, before
+     anything is stopped.
+  3. `compose up -d --remove-orphans --wait --wait-timeout 300`, or
+     `up --no-start --remove-orphans` for a project stopped on purpose.
+  4. settle: SETTLE_SECONDS later, every service's containers must carry the
+     desired hash, be running (unless stopped on purpose) and not have
+     restarted.
+A failure makes the app `failed`, with a per-(app, sha) backoff of 1 h; a
+new SHA retries at once. There is no automatic rollback. Self-apply (the
+detached helper of plan A5) is not implemented: the deployer refuses to
+apply its own project.
 
 VALIDATION IS AN ALLOWLIST, ON WHAT COMPOSE PARSED (plan A3). Two passes:
 
@@ -99,7 +125,11 @@ ONEOFF_FILTER = "label=com.docker.compose.oneoff=False"
 # Everything else is refused, including other apps' subtrees.
 OWN_ROOT = "/volume1/docker"
 SELF_SOCKET = "/var/run/docker.sock"
-DENY_EXACT = frozenset({"/", "/volume1", "/volume2", "/volumeUSB1"})
+# /var/log as a whole: an allow-list entry may name a single log file under
+# it (immich-photos-pull does), never the directory; the preflight also
+# requires a /var/log source to resolve to a regular file.
+DENY_EXACT = frozenset({"/", "/volume1", "/volume2", "/volumeUSB1", "/var/log"})
+FILES_ONLY_ROOTS = ("/var/log",)
 DENY_ROOTS = ("/etc", "/proc", "/sys", "/boot", "/dev", "/var/run", "/run", "/root", "/var/lib",
               "/usr", "/usr/syno", "/opt", "/var/packages",
               "/volume1/docker", "/volume2", "/volumeUSB1", "/volume1/@iSCSI", "/volume1/@docker",
@@ -137,6 +167,7 @@ INSPECT_FORMAT = ("{{json .Name}}\t{{json .Config.Labels}}\t{{json .Config.Image
                   "{{json .State.Running}}\t{{json .State.Restarting}}\t{{.RestartCount}}")
 PS_FORMAT = '{{.Names}}\t{{.Label "' + PROJECT_LABEL + '"}}'
 VERSION_FORMAT = "{{.Client.Version}} {{.Server.Version}}"
+SELF_IMAGE_FORMAT = "{{.Image}}"
 CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{12,64}$")
 CONFIG_FLAGS = (["--hash", "*"], ["--format", "json"], ["--format", "json", "--no-interpolate"])
 
@@ -206,6 +237,22 @@ def validate_meta(meta: dict, data_dir: str) -> tuple[list[str], list[str]]:
     return reasons, allow
 
 
+def _underscore_keys(doc: dict) -> list[str]:
+    """Top-level volume / network keys may not contain `_`.
+
+    Their names must be <project>_<key>, and with `_` in a key that name is
+    ambiguous: project `foo` key `a_b` and project `foo_a` key `b` are both
+    `foo_a_b`, so one app could claim another's resource.
+    """
+    out = []
+    for kind in ("volumes", "networks"):
+        block = doc.get(kind)
+        if isinstance(block, dict):
+            out.extend(f"{kind}.{k}: `_` is not allowed in a top-level {kind[:-1]} key"
+                       for k in sorted(block, key=str) if "_" in str(k))
+    return out
+
+
 def validate_git(compose: dict, meta: dict, data_dir: str | None = None) -> list[str]:
     """Pass 1, on the raw Git compose (x-* stripped): what parsing would hide.
 
@@ -218,6 +265,7 @@ def validate_git(compose: dict, meta: dict, data_dir: str | None = None) -> list
             reasons.append(f"{p}: ${{VAR}} interpolation is refused in v1")
     for k in sorted(set(compose) - TOP_KEYS, key=str):
         reasons.append(f"{k}: top-level key not allowed in v1")
+    reasons.extend(_underscore_keys(compose))
     for svc, body in sorted((compose.get("services") or {}).items()):
         if not isinstance(body, dict):
             continue
@@ -268,6 +316,7 @@ def validate_config(cfg: dict, name: str, allow: list[str], self_name: str | Non
         return ["docker compose config: unrecognised shape"]
     for k in sorted(set(cfg) - TOP_KEYS, key=str):
         reasons.append(f"{k}: top-level key not allowed in v1")
+    reasons.extend(_underscore_keys(cfg))
     top_volumes = cfg.get("volumes") or {}
     for vname, v in sorted(top_volumes.items()):
         v = v or {}
@@ -428,7 +477,8 @@ def evaluate_compose_app(entry: dict, hashes: dict[str, str] | None, containers:
     if not containers:
         res["state"] = "missing"
         res["reasons"] = ["no containers for this compose project" +
-                          ("; x-deploy.create is not acted on until cutover" if entry.get("create") else "")]
+                          ("; x-deploy.create: planned for creation (applied only once the compose backend "
+                           "is armed at cutover)" if entry.get("create") else "")]
         return res
     plain_hashes = plain_hashes or {}
 
@@ -466,8 +516,10 @@ def evaluate_compose_app(entry: dict, hashes: dict[str, str] | None, containers:
         paths = d.diff_paths(tree, baseline)
         top = [p for p in paths if not p.startswith("services.") and p != "services"]
         if top:
-            # No service hash covers top-level networks/volumes.
+            # No service hash covers top-level networks/volumes. Live does not
+            # match Git then, so the project is not `adoptable` either.
             drift.append("top-level config changed (no service hash covers it): " + ", ".join(top))
+            plain_match = False
         if drift:
             res["changes"] = d.describe_paths(paths, tree, baseline)
     res["drift"] = drift
@@ -515,6 +567,9 @@ def check_read_argv(args) -> None:
         if a[:5] == ["inspect", "--type", "container", "--format", INSPECT_FORMAT] and len(a) > 5 \
                 and all(CONTAINER_ID_RE.match(x) for x in a[5:]):
             return
+        if len(a) == 6 and a[:5] == ["inspect", "--type", "container", "--format", SELF_IMAGE_FORMAT] \
+                and CONTAINER_ID_RE.match(a[5]):
+            return
         refuse("unexpected inspect shape")
     if a[0] == "version":
         if a == ["version", "--format", VERSION_FORMAT]:
@@ -542,16 +597,215 @@ def docker_read(*args: str, stdin: str | None = None) -> str:
                           timeout=120, env=_child_env(), cwd="/").stdout
 
 
-def apply_compose(name: str, *, dry_run: bool, docker=docker_read) -> bool:
-    """pull -> up -d --remove-orphans --wait -> settle (plan A5). Cutover only.
+# ------------------------------------------------------------------ mutating calls
 
-    Refuses before any subprocess call while mutations are off. The apply
-    sequence itself lands before alcatraz's cutover (A-Phase 3).
+HOST_ROOT = "/host"
+RESOLVE_SCRIPT = "/app/compose_backend.py"
+# DAC_READ_SEARCH only: enough to lstat/readlink through DSM's 0700 home
+# directories, nothing that writes (and / is mounted read-only anyway).
+PREFLIGHT_RUN = ["run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
+                 "--cap-add", "DAC_READ_SEARCH", "--security-opt", "no-new-privileges", "--mount", f"type=bind,source=/,target={HOST_ROOT},readonly",
+                 "--entrypoint", "python3"]
+IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+WAIT_TIMEOUT_SECONDS = 300
+SETTLE_SECONDS = int(os.environ.get("SETTLE_SECONDS", "60"))
+BACKOFF_SECONDS = 3600
+UP_FLAGS = (["up", "-d", "--remove-orphans", "--wait", "--wait-timeout", str(WAIT_TIMEOUT_SECONDS)],
+            ["up", "--no-start", "--remove-orphans"])
+
+
+def check_write_argv(args) -> None:
+    """Raise DryRunViolation unless args is EXACTLY one of the mutating shapes."""
+    a = [str(x) for x in args]
+    if a[:len(PREFLIGHT_RUN)] == PREFLIGHT_RUN:
+        rest = a[len(PREFLIGHT_RUN):]
+        if len(rest) >= 5 and IMAGE_ID_RE.match(rest[0]) and rest[1:5] == ["-I", "-B", RESOLVE_SCRIPT, "resolve"] \
+                and all(p.startswith("/") for p in rest[5:]):
+            return
+        raise d.DryRunViolation("refusing docker run: not the preflight shape")
+    if len(a) >= 8 and a[:4] == ["compose", "-f", "-", "-p"] and d.APP_NAME_RE.match(a[4]) \
+            and a[5] == "--project-directory" and a[6].startswith("/") \
+            and (a[7:] == ["pull", "--quiet"] or a[7:] in [list(u) for u in UP_FLAGS]):
+        return
+    raise d.DryRunViolation(f"refusing docker {a[0] if a else ''}: not an apply shape")
+
+
+def docker_write(*args: str, stdin: str | None = None, dry_run: bool = True) -> str:
+    """The only way this file runs a MUTATING docker command.
+
+    Refuses before any process while mutations are off for this backend.
     """
+    if not d.mutations_allowed(dry_run, BACKEND):
+        raise d.DryRunViolation(f"refusing docker {args[:1]}: mutations are off "
+                                f"(dry-run={dry_run} APPLY_ENABLED={d.apply_enabled(BACKEND)})")
+    check_write_argv(args)
+    return subprocess.run(["docker", *args], input=stdin, check=True, capture_output=True, text=True,
+                          timeout=WAIT_TIMEOUT_SECONDS + 120, env=_child_env(), cwd="/").stdout
+
+
+def resolve_under(root: str, path: str, max_links: int = 40) -> tuple[str | None, str]:
+    """(real path, kind) of `path` as the host sees it, with the host's / at `root`.
+
+    Symlinks are followed inside `root`: an absolute target restarts at
+    root, never at this process's own /. kind: file | dir | other |
+    missing | loop | error. Runs in the preflight helper container.
+    """
+    import stat as st_
+
+    parts = [x for x in path.split("/") if x]
+    done: list[str] = []
+    links = 0
+    while parts:
+        c = parts.pop(0)
+        if c == ".":
+            continue
+        if c == "..":
+            if done:
+                done.pop()
+            continue
+        full = os.path.join(root, *done, c)
+        try:
+            info = os.lstat(full)
+        except FileNotFoundError:
+            return None, "missing"
+        except OSError:
+            return None, "error"
+        if st_.S_ISLNK(info.st_mode):
+            links += 1
+            if links > max_links:
+                return None, "loop"
+            target = os.readlink(full)
+            if target.startswith("/"):
+                done = []
+            parts = [x for x in target.split("/") if x] + parts
+            continue
+        done.append(c)
+    real = "/" + "/".join(done)
+    try:
+        info = os.stat(os.path.join(root, *done))
+    except OSError:
+        return None, "error"
+    kind = "dir" if st_.S_ISDIR(info.st_mode) else "file" if st_.S_ISREG(info.st_mode) else "other"
+    return real, kind
+
+
+def resolve_main(paths: list[str]) -> int:
+    print(json.dumps({p: resolve_under(HOST_ROOT, p) for p in paths}))
+    return 0
+
+
+def bind_sources(cfg: dict) -> list[tuple[str, str]]:
+    """(where, source) of every bind mount in a parsed config."""
+    out = []
+    for svc, body in sorted((cfg.get("services") or {}).items()):
+        for i, m in enumerate((body or {}).get("volumes") or []):
+            if isinstance(m, dict) and m.get("type") == "bind":
+                out.append((f"services.{svc}.volumes[{i}]", m.get("source")))
+    return out
+
+
+def self_image(docker=docker_read) -> str:
+    """The image ID of the running deployer container (the preflight's image)."""
+    cid = os.environ.get("HOSTNAME", "")
+    if not CONTAINER_ID_RE.match(cid):
+        raise ValueError("HOSTNAME is not a container id")
+    image = docker("inspect", "--type", "container", "--format", SELF_IMAGE_FORMAT, cid).strip()
+    if not IMAGE_ID_RE.match(image):
+        raise ValueError("unexpected image id")
+    return image
+
+
+def preflight(entry: dict, binds: list[tuple[str, str]], *, image: str, write, self_name: str,
+              data_dir: str) -> list[str]:
+    """Plan A5 preflight: resolve on the host, re-check the policy. [] = go."""
+    allow = list(entry.get("allow_host_paths") or [])
+    sources = sorted({posixpath.normpath(s) for _, s in binds if isinstance(s, str)})
+    asked = sorted(set(sources) | set(allow) | {posixpath.normpath(data_dir)})
+    if not sources:
+        return []
+    out = write(*PREFLIGHT_RUN, image, "-I", "-B", RESOLVE_SCRIPT, "resolve", *asked)
+    resolved = json.loads(out)
+    if not isinstance(resolved, dict):
+        raise ValueError("unexpected preflight output")
+
+    def real(p):
+        r = resolved.get(p) or [None, "error"]
+        return r[0], r[1]
+
+    real_allow = []
+    for a in allow:
+        ra, _ = real(a)
+        # An allow-list entry that is itself a link into a denied root is dropped.
+        if ra and not allow_entry_reasons(ra, data_dir):
+            real_allow.append(ra)
+    real_data = real(posixpath.normpath(data_dir))[0] or posixpath.normpath(data_dir)
+    reasons = []
+    for where, src in binds:
+        p = posixpath.normpath(src)
+        rp, kind = real(p)
+        if rp is None:
+            reasons.append(f"{where}: bind source {p} is {kind} on the host")
+            continue
+        if any(_is_under(rp, r) for r in FILES_ONLY_ROOTS) and kind != "file":
+            reasons.append(f"{where}: {p} resolves to a {kind} under /var/log (single files only)")
+        # The own-subtree rule stays lexical on the RESOLVED path: if
+        # /volume1/docker/<name> is itself a link elsewhere, its target is
+        # not the app's own subtree.
+        bad = mount_reasons(where, rp, entry["name"], self_name, real_allow, real_data)
+        if bad:
+            reasons.append(f"{where}: {p} resolves to {rp}, which the mount policy refuses")
+    return reasons
+
+
+def apply_compose(entry: dict, result: dict, *, dry_run: bool, docker=docker_read, write=docker_write,
+                  project_dir: str = "", owner: str = "", self_name: str = "", data_dir: str = "",
+                  binds: list | None = None, hashes: dict | None = None, sleep=time.sleep) -> tuple[bool, str]:
+    """preflight -> pull -> up -> settle for one app (plan A5). (ok, reason).
+
+    Refuses before any subprocess call while mutations are off.
+    """
+    name = entry["name"] if isinstance(entry, dict) else str(entry)
     if not d.mutations_allowed(dry_run, BACKEND):
         raise d.DryRunViolation(f"refusing to apply {name}: dry-run={dry_run} "
                                 f"APPLY_ENABLED={d.apply_enabled(BACKEND)}")
-    raise NotImplementedError("the compose apply path lands before alcatraz's cutover (A-Phase 3)")
+    if name == self_name:
+        return False, "self-apply is not implemented (plan A5): George re-runs the bootstrap command"
+
+    def w(*args, stdin=None):
+        return write(*args, stdin=stdin, dry_run=dry_run)
+
+    try:
+        reasons = preflight(entry, binds or [], image=self_image(docker), write=w, self_name=self_name,
+                            data_dir=data_dir)
+        if reasons:
+            return False, "preflight: " + "; ".join(reasons)
+        body = json.dumps(with_owner_label(entry["compose"], owner), sort_keys=True)
+        base = ["compose", "-f", "-", "-p", name, "--project-directory", project_dir]
+        w(*base, "pull", "--quiet", stdin=body)
+        w(*base, *(UP_FLAGS[1] if result.get("stopped") else UP_FLAGS[0]), stdin=body)
+        before = {c["name"]: c["restart_count"] for c in project_containers(name, docker)}
+        sleep(SETTLE_SECONDS)
+        after = project_containers(name, docker)
+    except d.DryRunViolation:
+        raise
+    except (subprocess.SubprocessError, OSError, ValueError, d.DockerUnavailable) as e:
+        # Type only: compose's stderr can quote the file.
+        return False, f"apply step failed: {type(e).__name__}"
+    by_svc: dict[str, list[dict]] = {}
+    for c in after:
+        by_svc.setdefault(c.get("service") or "", []).append(c)
+    for svc, want in sorted((hashes or {}).items()):
+        cs = by_svc.get(svc) or []
+        if not cs:
+            return False, f"verify: {svc} has no container"
+        for c in cs:
+            if c.get("hash") != want or c.get("owner") != owner:
+                return False, f"verify: {svc} ({c['name']}) does not carry the desired config"
+            if not result.get("stopped") and (not c["running"] or c["restarting"]):
+                return False, f"verify: {svc} ({c['name']}) is not running"
+            if c["restart_count"] > before.get(c["name"], c["restart_count"]):
+                return False, f"verify: {svc} ({c['name']}) restarted within {SETTLE_SECONDS}s"
+    return True, ""
 
 
 def compose_args(name: str, project_dir: str, *config_flags: str) -> list[str]:
@@ -560,7 +814,7 @@ def compose_args(name: str, project_dir: str, *config_flags: str) -> list[str]:
 
 def render_config(entry: dict, docker, project_dir: str, owner: str, *, allow: list[str],
                   self_name: str | None = None, data_dir: str | None = None):
-    """(hashes, plain hashes, fingerprint tree, config_error) for one entry.
+    """(hashes, plain hashes, fingerprint tree, bind sources, config_error) for one entry.
 
     Order matters: validate_git() has already passed, so compose never sees a
     file reference. The rendered config stays in this function's locals; only
@@ -581,17 +835,17 @@ def render_config(entry: dict, docker, project_dir: str, owner: str, *, allow: l
         raise d.DockerUnavailable(type(e).__name__) from None
     except (subprocess.SubprocessError, OSError, ValueError) as e:
         # Type only: compose's stderr can quote the file.
-        return None, None, None, f"docker compose config failed: {type(e).__name__}"
+        return None, None, None, None, f"docker compose config failed: {type(e).__name__}"
     # The interpolated and uninterpolated forms are not comparable whole: the
     # interpolated one is also normalised (compose 5.6.1). The rule is on the
     # uninterpolated form, as compose read it: no unescaped $ (plan A3).
     leaked = [p for p, v in _strings(raw) if "$" in v.replace("$$", "")]
     if leaked:
-        return None, None, None, f"interpolation refused in v1 ({', '.join(sorted(leaked)[:3])})"
+        return None, None, None, None, f"interpolation refused in v1 ({', '.join(sorted(leaked)[:3])})"
     reasons = validate_config(cfg, name, allow, self_name, data_dir)
     if reasons:
-        return None, None, None, "; ".join(reasons)
-    return hashes, plain_hashes, fingerprint(cfg), None
+        return None, None, None, None, "; ".join(reasons)
+    return hashes, plain_hashes, fingerprint(cfg), bind_sources(cfg), None
 
 
 def _container_info(line: str) -> dict:
@@ -663,7 +917,7 @@ def entries_from_cache(data_dir: str, sha: str) -> list[dict]:
 
 def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: str = d.TEXTFILE_DIR,
               dry_run: bool = True, now: float | None = None, owner: str | None = None,
-              self_name: str | None = None) -> int:
+              self_name: str | None = None, write=docker_write, sleep=time.sleep) -> int:
     """One shadow tick: read the evaluated commit and the engine, report."""
     owner = d.SELF_NAME if owner is None else owner
     self_name = d.SELF_NAME if self_name is None else self_name
@@ -714,6 +968,7 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
 
     results = []
     unevaluated: list[str] = []
+    ctx: dict[str, dict] = {}
     for e in entries:
         if e["status"] == "excluded":
             continue
@@ -721,8 +976,9 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
             if e["status"] != "managed":
                 results.append(evaluate_compose_app(e, None, [], owner=owner))
                 continue
-            hashes, plain, tree, err = render_config(e, docker, project_dir, owner, allow=e["allow_host_paths"],
-                                                     self_name=self_name, data_dir=data_dir)
+            hashes, plain, tree, binds, err = render_config(e, docker, project_dir, owner,
+                                                            allow=e["allow_host_paths"], self_name=self_name,
+                                                            data_dir=data_dir)
             containers = project_containers(e["name"], docker) if not err else []
             base = (baselines.get(e["name"]) or {}).get("tree")
             r = evaluate_compose_app(e, hashes, containers, owner=owner, plain_hashes=plain, tree=tree,
@@ -734,6 +990,7 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
             # unowned: that would hide a top-level change behind the move.
             if tree is not None and (base is None or r["state"] == "synced"):
                 baselines[e["name"]] = {"sha": sha, "tree": tree}
+            ctx[e["name"]] = {"entry": e, "binds": binds, "hashes": hashes, "tree": tree}
             results.append(r)
         except d.DryRunViolation:
             raise
@@ -745,13 +1002,39 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
                             "reasons": [f"evaluation error: {type(ex).__name__}"], "changes": [],
                             "drift": [], "blocked": [], "merged": None, "stopped": False})
 
-    would, deferred = d.plan_applies(results)
+    # x-deploy.create is honoured from cutover (open question 2): a missing app
+    # that opts in is planned like a pending one.
+    plan_input = [{**r, "state": "pending"} if r["state"] == "missing" and (ctx.get(r["app"]) or {}).get(
+        "entry", {}).get("create") else r for r in results]
+    failures = state.get("failures") or {}
+    held = [n for n, f in failures.items() if f.get("sha") == sha and started - f.get("at", 0) < BACKOFF_SECONDS]
+    would, deferred = d.plan_applies([r for r in plan_input if r["app"] not in held])
+    by_app = {r["app"]: r for r in results}
+    for n in held:
+        if n in by_app and by_app[n]["state"] in ("pending", "missing"):
+            by_app[n].update(state="failed", reasons=[f"backoff: the apply of {sha[:7]} failed less than "
+                                                      f"{BACKOFF_SECONDS // 60} min ago"])
     d.log_tick(dry_run=dry_run, sha=sha, results=results, would=would, deferred=deferred,
                global_paused=global_paused, unmanaged=unmanaged, unevaluated=unevaluated,
                stopped_note="project STOPPED: would update with up --no-start, never start")
 
-    # A-Phase 1: nothing is applied. At cutover the apply loop over `would`
-    # (apply_compose + verify + per-(app, sha) backoff + self-apply) goes here.
+    if d.mutations_allowed(dry_run, BACKEND) and not global_paused:
+        for n in would:
+            c = ctx[n]
+            ok, why = apply_compose(c["entry"], by_app[n], dry_run=dry_run, docker=docker, write=write,
+                                    project_dir=project_dir, owner=owner, self_name=self_name, data_dir=data_dir,
+                                    binds=c["binds"], hashes=c["hashes"], sleep=sleep)
+            if ok:
+                log(f"  {n}: applied {sha[:7]}")
+                applied[n] = {"commit": sha, "at": int(time.time())}
+                baselines[n] = {"sha": sha, "tree": c["tree"]}
+                failures.pop(n, None)
+                by_app[n].update(state="synced", reasons=[], drift=[], changes=[])
+            else:
+                log(f"  {n}: apply FAILED: {why}")
+                failures[n] = {"sha": sha, "at": int(started)}
+                by_app[n].update(state="failed", reasons=[why])
+    state["failures"] = {k: v for k, v in failures.items() if k in by_app}
 
     live = {r["app"] for r in results} | set(unevaluated)
     state["last_tick"] = {"at": int(started), "sha": sha, "backend": BACKEND,
@@ -795,5 +1078,8 @@ if __name__ == "__main__":
         sys.exit(reconcile_main())
     if cmd == "version":
         sys.exit(version_main())
-    print("usage: compose_backend.py fetch|reconcile|version", file=sys.stderr)
+    if cmd == "resolve":
+        # Runs only inside the preflight helper container (host / at /host).
+        sys.exit(resolve_main(sys.argv[2:]))
+    print("usage: compose_backend.py fetch|reconcile|version|resolve", file=sys.stderr)
     sys.exit(2)

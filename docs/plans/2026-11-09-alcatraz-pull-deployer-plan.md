@@ -599,6 +599,69 @@ review of #1890.
   config`. They are skipped where no compose CLI exists, and they ran in the
   deployer image.
 
+### Implementation notes (the apply-path PR, before cutover)
+
+The compose apply path (A5) is now in code. It stays unreachable until the cutover
+PR sets `APPLY_ENABLED["compose"] = True`, which is George's call.
+
+- **Mutations get their own guard.** `docker_write()` refuses before any process
+  unless mutations are allowed for the compose backend. Even then it allows only
+  exact shapes:
+  - the preflight `run`;
+  - `compose ... pull --quiet`;
+  - `compose ... up -d --remove-orphans --wait --wait-timeout 300`;
+  - `compose ... up --no-start --remove-orphans`.
+
+  `reconcile` calls `apply_compose()` only when mutations are on and there is no
+  global PAUSE.
+- **Preflight: the symlink requirement above is met.**
+  - A helper container from the deployer's own image (found through
+    `inspect --format {{.Image}}` on its own container id) runs `compose_backend.py
+    resolve`. The host's `/` is mounted read-only at `/host`. The helper has no
+    network, a read-only root, only `CAP_DAC_READ_SEARCH` (to traverse DSM's 0700
+    homes), and `no-new-privileges`.
+  - `resolve_under()` follows symlinks inside `/host`. An absolute target restarts
+    at `/host`, never at the helper's own `/`, and `..` never leaves the root.
+  - It resolves every bind source, every allow-list entry and `DATA_DIR`, then
+    re-checks each resolved source against the same mount policy. An allow-list
+    entry that resolves into a denied root is dropped, which covers
+    `/var/services/homes`-style links.
+  - The own-subtree rule is applied lexically to the resolved path, so a
+    `/volume1/docker/<name>` that is itself a link elsewhere does not count.
+  - A missing, unreadable or looping source blocks the app (fails closed). On a
+    host with SELinux the helper may be denied; it then fails closed too.
+    alcatraz has no SELinux.
+- **`/var/log`.** An allow-list entry may not be `/var/log` itself, and a source
+  under `/var/log` must resolve to a regular file.
+- **Top-level volume and network keys may not contain `_`.** `<project>_<key>` is
+  otherwise ambiguous: project `foo` with key `a_b`, and project `foo_a` with key
+  `b`, are both `foo_a_b`.
+- **A top-level change makes a project not `adoptable`.**
+- **`x-deploy.create: true`** is planned like `pending`, so the shadow's
+  `would_apply` now lists the canary. It is applied only once the backend is
+  armed.
+- **The per-app sequence:** preflight, then pull, then `up`, then settle.
+  - Settle waits `SETTLE_SECONDS` (60) and then checks each service. Every service
+    must have containers carrying the desired hash and the ownership label. They
+    must be running, unless the project is stopped on purpose, and must not have
+    restarted during the settle.
+  - A failure makes the app `failed`, with a 1 h backoff per (app, sha). A new
+    SHA retries at once.
+  - Apply errors are logged by exception type only.
+- **Self-apply (the detached helper) is still not implemented.** The deployer
+  refuses its own project, and George re-runs the bootstrap command. It must exist
+  before the cutover's self-apply test.
+- **Measured end to end** with the apply path forced on in a local test harness
+  against the podman engine, not alcatraz:
+  - a bind app and a no-bind app were created, then `synced` on the next tick;
+  - a `mem_limit` change read `pending` with `services.s.mem_limit` and was
+    applied;
+  - an app binding a symlink to `/` was refused at the preflight and held as
+    `failed`.
+
+  Run by hand in the helper, the resolver mapped `esc -> /` to `/`,
+  `esc/etc/passwd` to `/etc/passwd`, and `/home` to `/var/home`.
+
 ## Migration (faster, evidence-gated)
 
 Each phase is its own PR, and nothing is retired until the step before it has run clean.

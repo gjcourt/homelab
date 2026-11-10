@@ -1,0 +1,49 @@
+# hestia-deployer — Git-pull deployer for hestia's TrueNAS Custom Apps
+# (HOMELAB-111). Source: images/hestia-deployer/. Plan:
+# docs/plans/2026-11-09-hestia-pull-deployer-plan.md. Runbook:
+# docs/operations/apps/hestia-deployer.md.
+#
+# PHASE 1: SHADOW. DRY_RUN=1 below, and APPLY_ENABLED=False in deployer.py:
+# every 5 min it reads master (git ls-remote + a depth-1 fetch of one commit),
+# diffs every hestia app against TrueNAS's stored config and live containers,
+# and reports what it WOULD do in `docker logs hestia-deployer` and in
+# homelabscope_deploy_* metrics. It never calls app.update / app.stop /
+# app.start / app.create. deploy-hestia.yml and the gha-runner keep deploying.
+#
+# PRIVILEGE. privileged + pid: host so deployer.sh can `nsenter -t 1` into the
+# host and run the reconcile half with hestia's python3 (truenas_api_client,
+# docker CLI). That is host root, the same as gha-runner-watchdog. It holds no
+# credential at all: Git is read anonymously, TrueNAS over its local socket.
+#
+# DATA_DIR is bind-mounted at the SAME path in the container and on the host,
+# so the container's fetch half and the host's reconcile half see one
+# desired.json. It holds the bare git cache, desired.json, state.json (0600)
+# and the break-glass PAUSE file. Operator prerequisite before app.create:
+#   install -d -m 0700 -o root -g root /mnt/main/apps/hestia-deployer
+#
+# The deployer never manages hosts/hestia/actions-runner/ or this file.
+#
+# Image: build-hestia-deployer.yml publishes a date-sha tag on every push of
+# images/hestia-deployer/**; pin its digest here in a follow-up PR. First
+# install was an operator app.create (HOMELAB-111, 2026-11-09); deploy-hestia.yml
+# rolls later digest bumps until the deployer takes over (phase 2).
+x-deploy:
+  name: hestia-deployer
+
+services:
+  hestia-deployer:
+    image: ghcr.io/gjcourt/hestia-deployer:2026-11-09-551bf91@sha256:7d009fed74d16b30a0ef4f0f02f1a785bc9ad73de259f0e47739458970702033
+    container_name: hestia-deployer
+    restart: unless-stopped
+    privileged: true
+    pid: host
+    user: "0:0"
+    environment:
+      # Shadow mode. Phase 2 removes this line in the same PR that flips
+      # APPLY_ENABLED in deployer.py; either one alone still applies nothing.
+      - DRY_RUN=1
+      - INTERVAL_SECONDS=300
+      - DATA_DIR=/mnt/main/apps/hestia-deployer
+      - TZ=America/Los_Angeles
+    volumes:
+      - /mnt/main/apps/hestia-deployer:/mnt/main/apps/hestia-deployer

@@ -33,6 +33,7 @@ resources:
   - navidrome
   - openwebui
   - plane
+  - plane-mobile
   - plane-sync
   - snapcast
   - thermalscope

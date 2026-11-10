@@ -646,7 +646,21 @@ mostly *confirm nothing exists*:
   repo code. Anyone who can merge to `master` can already deploy to alcatraz by design,
   exactly as with Flux and hestia.
 
-## Open questions for George
+## Decisions on the open questions (George, 2026-11-09)
+
+Answered one at a time; each answer is the option George picked.
+
+| # | Question | George's answer |
+|---|---|---|
+| 1 | Still build the deployer for alcatraz? | "Yes, build it" |
+| 2 | Honour `x-deploy.create: true` from cutover? | "From switch-over": opt-in per file, mount preflight, ownership label |
+| 3 | Metrics path | "Relay via hestia": heartbeat fetch over the existing SSH key, plus a healthchecks.io ping |
+| 4 | Add the `deploy-canary` app? | "Yes, add it" |
+| 5 | When to delete the dead runner files | "7 days after": separate deletion PR after 7 clean days |
+
+The original questions, with their recommendations, are kept below for the record.
+
+## Open questions (answered above) for George
 
 1. **The alcatraz runner was never registered and has deployed nothing (122 runs, every
    `apply` skipped). Still build the deployer?**

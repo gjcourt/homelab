@@ -183,6 +183,13 @@ jobs:
                   default_name = os.path.basename(os.path.dirname(path))
               name = deploy_meta.get("name") or default_name
 
+              # deploy-canary (HOMELAB-118) is for the pull deployer only. No
+              # alcatraz runner exists, so an apply job here would sit queued
+              # waiting for one.
+              if name == "deploy-canary":
+                  print(f"skip (deploy-canary, pull deployer only): {path}", file=sys.stderr)
+                  continue
+
               # Protected-path guard runs on the non-archived, to-be-deployed set.
               v = guard(path, name, deploy_meta)
               if v:

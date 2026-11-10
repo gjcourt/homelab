@@ -375,6 +375,10 @@ def test_real_alcatraz_composes():
     assert by["hosts/alcatraz/immich-photos-pull/docker-compose.yml"]["status"] == "archived"
     assert by["hosts/alcatraz/actions-runner/docker-compose.yml"]["status"] == "excluded"
     assert not [e for e in by.values() if e["status"] == "invalid"], by
+    canary = by["hosts/alcatraz/deploy-canary/docker-compose.yml"]
+    assert canary["status"] == "managed" and canary["create"] is True and canary["name"] == "deploy-canary"
+    svc_ = canary["compose"]["services"]["deploy-canary"]
+    assert "@sha256:" in svc_["image"] and "volumes" not in svc_ and svc_["mem_limit"] == "16m"
     doc = load(files["hosts/alcatraz/immich-photos-pull/docker-compose.yml"])
     meta = doc.pop("x-deploy")
     compose = {k: v for k, v in doc.items() if not k.startswith("x-")}
@@ -1073,6 +1077,18 @@ def test_real_parser_accepts_the_real_apps():
         "volumes": [f"{cb.SELF_SOCKET}:{cb.SELF_SOCKET}", f"{DATA}:{DATA}", f"{DATA}/hc-url:/run/hc-url:ro"]}}}
     assert run_both_passes(self_compose, OWNER) == []
     assert run_both_passes(self_compose, "not-the-deployer")
+
+
+@needs_compose
+def test_real_parser_accepts_the_canary():
+    doc = load(alcatraz_files()["hosts/alcatraz/deploy-canary/docker-compose.yml"])
+    meta = doc.pop("x-deploy")
+    compose = {k: v for k, v in doc.items() if not k.startswith("x-")}
+    assert run_both_passes(compose, "deploy-canary", meta) == []
+    # Before cutover it reads `missing` with the create note.
+    r = cb.evaluate_compose_app({**managed(compose, name="deploy-canary"), "create": True}, {"deploy-canary": "h"},
+                                [], owner=OWNER)
+    assert r["state"] == "missing" and "x-deploy.create" in r["reasons"][0]
 
 
 # ------------------------------------------------------------ fetch (needs git) and entrypoint

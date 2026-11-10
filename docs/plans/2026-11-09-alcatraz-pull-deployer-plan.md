@@ -517,9 +517,10 @@ PR sets `APPLY_ENABLED["compose"] = True`, which is George's call.
 - **Preflight: the symlink requirement above is met.**
   - A helper container from the deployer's own image (found through
     `inspect --format {{.Image}}` on its own container id) runs `compose_backend.py
-    resolve`. The host's `/` is mounted read-only at `/host`. The helper has no
-    network, a read-only root, only `CAP_DAC_READ_SEARCH` (to traverse DSM's 0700
-    homes), and `no-new-privileges`.
+    resolve`. The host roots it needs are mounted read-only under `/host` (see the
+    review round below). The helper has no network and a read-only root. Every
+    capability is dropped except `CAP_DAC_READ_SEARCH` (to traverse DSM's 0700
+    homes), and it runs with `no-new-privileges`.
   - `resolve_under()` follows symlinks inside `/host`. An absolute target restarts
     at `/host`, never at the helper's own `/`, and `..` never leaves the root.
   - It resolves every bind source, every allow-list entry and `DATA_DIR`, then
@@ -531,6 +532,32 @@ PR sets `APPLY_ENABLED["compose"] = True`, which is George's call.
   - A missing, unreadable or looping source blocks the app (fails closed). On a
     host with SELinux the helper may be denied; it then fails closed too.
     alcatraz has no SELinux.
+- **Review round (#1894).**
+  - **Mount paths are exact.** A bind source must be *exactly* the app's own
+    `/volume1/docker/<name>`, or *exactly* an `x-deploy.allow-host-paths` entry.
+    Sub-paths are refused. In addition, no source may lie under any app's writable
+    bind (`nested_write_reasons`, checked across all apps in the tick).
+    - The reason is a race. A container that can write a directory could replace a
+      path below it with a symlink between the preflight and `up`. With these rules
+      no app can write the parent of anything that is bind-mounted.
+    - `immich-photos-pull`'s allow-list now names each mounted file.
+  - **The preflight runs after `pull`**, immediately before `up`.
+  - **The helper mounts only the roots it needs.** That is the first path
+    component, or the first two under `/var` and `/usr`. Each is mounted read-only,
+    never `/` (a plain read-only bind is not recursive on Docker < 25 or kernels
+    < 5.12), and never `/run`, `/var/run`, `/proc`, `/sys` or `/dev`, so the docker
+    socket is unreachable. A link that points outside those roots resolves as
+    missing, and fails closed.
+  - **Sources must be a file or a directory.** A device, fifo or socket is refused.
+  - **Other refusals.** `container_name` must be the app's name or start with
+    `<name>-`. Every volume other than `/volume1` (and `/volumeUSB*`) is denied.
+  - **Failures are kept** for apps that are unevaluated in a tick. Any exception in
+    `apply_compose` makes the app `failed`, with backoff, and the tick still writes
+    state.
+  - **A bad `SETTLE_SECONDS`** raises `ConfigError` (naming the variable, never
+    the value).
+  - **One-shot services** (ones that exit by design) fail the settle check. v1
+    supports long-running services only.
 - **`/var/log`.** An allow-list entry may not be `/var/log` itself, and a source
   under `/var/log` must resolve to a regular file.
 - **Top-level volume and network keys may not contain `_`.** `<project>_<key>` is

@@ -30,25 +30,33 @@ structural:
 
 THE APPLY PATH (plan A5; off until the cutover flips APPLY_ENABLED["compose"]).
 Per app, one at a time, in plan_applies() order (cap 3, self last):
-  1. preflight: a throwaway helper container from the deployer's own image,
-     with the host's / mounted read-only at /host, no network, no
-     capabilities, resolves every bind source (and every allow-list entry and
-     DATA_DIR) to its REAL path on the host, following symlinks inside
-     /host (resolve_under). Each resolved source is re-checked against the
-     same mount policy, so a symlink in an app's own subtree (`x -> /`) or a
-     DSM link such as /var/services/homes cannot widen it. A missing source
-     blocks the app; so does a /var/log source that is not a single file.
-  2. `compose pull`: a wrong-arch or missing image fails here, before
+  1. `compose pull`: a wrong-arch or missing image fails here, before
      anything is stopped.
+  2. preflight, immediately before `up` (after the pull, so the window
+     between check and use is as short as it can be): a throwaway helper
+     container from the deployer's own image, with only the needed host
+     roots bind-mounted read-only under /host (never /run or /var/run, so the
+     docker socket is not reachable), no network, a read-only root, every
+     capability dropped except DAC_READ_SEARCH and no-new-privileges, resolves
+     every bind source, allow-list entry and DATA_DIR to its REAL path on the
+     host (resolve_under). Each resolved source is re-checked against the same
+     mount policy. A missing, unreadable, looping or non-file/dir source
+     blocks the app; so does a /var/log source that is not a single file.
   3. `compose up -d --remove-orphans --wait --wait-timeout 300`, or
      `up --no-start --remove-orphans` for a project stopped on purpose.
   4. settle: SETTLE_SECONDS later, every service's containers must carry the
      desired hash, be running (unless stopped on purpose) and not have
-     restarted.
-A failure makes the app `failed`, with a per-(app, sha) backoff of 1 h; a
-new SHA retries at once. There is no automatic rollback. Self-apply (the
-detached helper of plan A5) is not implemented: the deployer refuses to
-apply its own project.
+     restarted. A one-shot service (one that exits by design) therefore
+     FAILS the settle check: v1 supports long-running services only.
+The race the preflight cannot close by itself (a container swapping a path it
+can write for a symlink between the check and `up`) is closed by the mount
+policy: a bind source must be EXACTLY the app's own /volume1/docker/<name> or
+EXACTLY an allow-list entry, and no source may lie under any writable bind of
+any app (nested_write_reasons). So no app can write to the parent of anything
+that is bind-mounted. A failure makes the app `failed`, with a per-(app, sha)
+backoff of 1 h; a new SHA retries at once. There is no automatic rollback.
+Self-apply (the detached helper of plan A5) is not implemented: the deployer
+refuses to apply its own project.
 
 VALIDATION IS AN ALLOWLIST, ON WHAT COMPOSE PARSED (plan A3). Two passes:
 
@@ -130,6 +138,8 @@ SELF_SOCKET = "/var/run/docker.sock"
 # requires a /var/log source to resolve to a regular file.
 DENY_EXACT = frozenset({"/", "/volume1", "/volume2", "/volumeUSB1", "/var/log"})
 FILES_ONLY_ROOTS = ("/var/log",)
+# Every DSM volume but /volume1 (and USB volumes): not this repo's to mount.
+OTHER_VOLUME_RE = re.compile(r"^/volume(?!1(/|$))[^/]*(/|$)")
 DENY_ROOTS = ("/etc", "/proc", "/sys", "/boot", "/dev", "/var/run", "/run", "/root", "/var/lib",
               "/usr", "/usr/syno", "/opt", "/var/packages",
               "/volume1/docker", "/volume2", "/volumeUSB1", "/volume1/@iSCSI", "/volume1/@docker",
@@ -212,6 +222,7 @@ def allow_entry_reasons(entry, data_dir: str) -> list[str]:
         return ["x-deploy.allow-host-paths entries must be absolute paths"]
     p = posixpath.normpath(entry)
     if p in DENY_EXACT or p.startswith("/volume1/@") or any(_overlaps(p, r) for r in DENY_ROOTS) \
+            or OTHER_VOLUME_RE.match(p) \
             or _overlaps(p, posixpath.normpath(data_dir)):
         return [f"x-deploy.allow-host-paths: {p} overlaps a denied root (never mountable)"]
     return []
@@ -297,13 +308,33 @@ def mount_reasons(where: str, src, name: str, self_name: str, allow: list[str], 
     if name == self_name and hp == SELF_SOCKET:
         return []
     own = f"{OWN_ROOT}/{name}"
-    if _is_under(hp, own):
+    if hp == own:
         if name != self_name and _overlaps(hp, posixpath.normpath(data_dir)):
             return [f"{where}: {hp} is the deployer's data directory"]
         return []
-    if any(_is_under(hp, a) for a in allow):
+    if hp in allow:
         return []
-    return [f"{where}: {hp} is not mountable (only {own}/... and x-deploy.allow-host-paths)"]
+    if _is_under(hp, own):
+        # A sub-path of a tree the app writes could be swapped for a symlink
+        # between the preflight and `up`.
+        return [f"{where}: {hp} is a sub-path of the app's own subtree; bind {own} itself"]
+    return [f"{where}: {hp} is not mountable (only {own} itself or an exact x-deploy.allow-host-paths entry)"]
+
+
+def nested_write_reasons(binds: list, writable: list[tuple[str, str]]) -> list[str]:
+    """Sources that lie under a WRITABLE bind of any app (incl. this one).
+
+    writable: (app, path) for every non-read-only bind source in the tick. A
+    container that can write a directory can replace anything below it with
+    a symlink, so nothing below it may be bind-mounted.
+    """
+    out = []
+    for where, src, _ro in binds:
+        p = posixpath.normpath(src)
+        for app, w in writable:
+            if p != w and _is_under(p, w):
+                out.append(f"{where}: {p} lies under {w}, which {app} mounts writable")
+    return out
 
 
 def validate_config(cfg: dict, name: str, allow: list[str], self_name: str | None = None,
@@ -345,6 +376,10 @@ def validate_config(cfg: dict, name: str, allow: list[str], self_name: str | Non
         if logging is not None and (not isinstance(logging, dict) or logging.get("driver") not in LOGGING_DRIVERS
                                     or set(logging) - {"driver", "options"}):
             reasons.append(f"{w}.logging: only the json-file or local driver")
+        cn = body.get("container_name")
+        if cn is not None and cn != name and not str(cn).startswith(f"{name}-"):
+            # A name another app (or the deployer) uses would make `up` fight it.
+            reasons.append(f"{w}.container_name: must be {name} or start with {name}-")
         nm = body.get("network_mode")
         if nm is not None and nm not in NETWORK_MODES and not str(nm).startswith("service:"):
             reasons.append(f"{w}.network_mode: only none, bridge or service:<name>")
@@ -601,14 +636,21 @@ def docker_read(*args: str, stdin: str | None = None) -> str:
 
 HOST_ROOT = "/host"
 RESOLVE_SCRIPT = "/app/compose_backend.py"
-# DAC_READ_SEARCH only: enough to lstat/readlink through DSM's 0700 home
-# directories, nothing that writes (and / is mounted read-only anyway).
+# Every capability dropped except DAC_READ_SEARCH: enough to lstat/readlink
+# through DSM's 0700 home directories, nothing that writes. Host roots are
+# mounted one by one, each read-only (preflight_roots); `/` itself is never
+# mounted, because a plain read-only bind is not recursive on Docker < 25 or
+# kernels < 5.12, and /run and /var/run (the docker socket) never are.
 PREFLIGHT_RUN = ["run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
-                 "--cap-add", "DAC_READ_SEARCH", "--security-opt", "no-new-privileges", "--mount", f"type=bind,source=/,target={HOST_ROOT},readonly",
-                 "--entrypoint", "python3"]
+                 "--cap-add", "DAC_READ_SEARCH", "--security-opt", "no-new-privileges"]
+PREFLIGHT_TAIL = ["--entrypoint", "python3"]
+PREFLIGHT_NEVER_ROOTS = ("/run", "/var/run", "/proc", "/sys", "/dev")
+_ROOT_COMPONENT = r"[A-Za-z0-9._@-]+"
+PREFLIGHT_MOUNT_RE = re.compile(rf"^type=bind,source=(/{_ROOT_COMPONENT}(?:/{_ROOT_COMPONENT})?),"
+                                rf"target={HOST_ROOT}\1,readonly$")
 IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 WAIT_TIMEOUT_SECONDS = 300
-SETTLE_SECONDS = int(os.environ.get("SETTLE_SECONDS", "60"))
+SETTLE_SECONDS = int(d.env_param("SETTLE_SECONDS", "60", re.compile(r"^[0-9]{1,4}$")))
 BACKOFF_SECONDS = 3600
 UP_FLAGS = (["up", "-d", "--remove-orphans", "--wait", "--wait-timeout", str(WAIT_TIMEOUT_SECONDS)],
             ["up", "--no-start", "--remove-orphans"])
@@ -619,8 +661,13 @@ def check_write_argv(args) -> None:
     a = [str(x) for x in args]
     if a[:len(PREFLIGHT_RUN)] == PREFLIGHT_RUN:
         rest = a[len(PREFLIGHT_RUN):]
-        if len(rest) >= 5 and IMAGE_ID_RE.match(rest[0]) and rest[1:5] == ["-I", "-B", RESOLVE_SCRIPT, "resolve"] \
-                and all(p.startswith("/") for p in rest[5:]):
+        while rest[:1] == ["--mount"] and len(rest) >= 2:
+            m = PREFLIGHT_MOUNT_RE.match(rest[1])
+            if not m or any(_overlaps(m.group(1), r) for r in PREFLIGHT_NEVER_ROOTS):
+                raise d.DryRunViolation("refusing docker run: preflight mount not allowed")
+            rest = rest[2:]
+        if rest[:2] == PREFLIGHT_TAIL and len(rest) >= 7 and IMAGE_ID_RE.match(rest[2]) \
+                and rest[3:7] == ["-I", "-B", RESOLVE_SCRIPT, "resolve"] and all(p.startswith("/") for p in rest[7:]):
             return
         raise d.DryRunViolation("refusing docker run: not the preflight shape")
     if len(a) >= 8 and a[:4] == ["compose", "-f", "-", "-p"] and d.APP_NAME_RE.match(a[4]) \
@@ -689,18 +736,46 @@ def resolve_under(root: str, path: str, max_links: int = 40) -> tuple[str | None
     return real, kind
 
 
+def preflight_roots(paths) -> list[str]:
+    """The host roots the helper needs: the first path component (two under
+    /var and /usr), deduplicated, never one of PREFLIGHT_NEVER_ROOTS. A
+    symlink pointing outside them resolves as missing, which fails closed."""
+    roots = set()
+    for p in paths:
+        comps = [c for c in posixpath.normpath(p).split("/") if c]
+        if not comps:
+            continue
+        r = "/" + "/".join(comps[:2] if comps[0] in ("var", "usr") and len(comps) > 1 else comps[:1])
+        if not any(_overlaps(r, n) for n in PREFLIGHT_NEVER_ROOTS):
+            roots.add(r)
+    return sorted(r for r in roots if not any(o != r and _is_under(r, o) for o in roots))
+
+
+def preflight_argv(image: str, paths: list[str]) -> list[str]:
+    mounts = []
+    for r in preflight_roots(paths):
+        mounts += ["--mount", f"type=bind,source={r},target={HOST_ROOT}{r},readonly"]
+    return [*PREFLIGHT_RUN, *mounts, *PREFLIGHT_TAIL, image, "-I", "-B", RESOLVE_SCRIPT, "resolve", *paths]
+
+
+def preflight_paths(args) -> list[str]:
+    """The paths a preflight argv asks about (for fakes and logs)."""
+    a = list(args)
+    return a[a.index("resolve") + 1:]
+
+
 def resolve_main(paths: list[str]) -> int:
     print(json.dumps({p: resolve_under(HOST_ROOT, p) for p in paths}))
     return 0
 
 
-def bind_sources(cfg: dict) -> list[tuple[str, str]]:
-    """(where, source) of every bind mount in a parsed config."""
+def bind_sources(cfg: dict) -> list[tuple[str, str, bool]]:
+    """(where, source, read_only) of every bind mount in a parsed config."""
     out = []
     for svc, body in sorted((cfg.get("services") or {}).items()):
         for i, m in enumerate((body or {}).get("volumes") or []):
             if isinstance(m, dict) and m.get("type") == "bind":
-                out.append((f"services.{svc}.volumes[{i}]", m.get("source")))
+                out.append((f"services.{svc}.volumes[{i}]", m.get("source"), m.get("read_only") is True))
     return out
 
 
@@ -715,15 +790,15 @@ def self_image(docker=docker_read) -> str:
     return image
 
 
-def preflight(entry: dict, binds: list[tuple[str, str]], *, image: str, write, self_name: str,
+def preflight(entry: dict, binds: list, *, image: str, write, self_name: str,
               data_dir: str) -> list[str]:
     """Plan A5 preflight: resolve on the host, re-check the policy. [] = go."""
     allow = list(entry.get("allow_host_paths") or [])
-    sources = sorted({posixpath.normpath(s) for _, s in binds if isinstance(s, str)})
+    sources = sorted({posixpath.normpath(b[1]) for b in binds if isinstance(b[1], str)})
     asked = sorted(set(sources) | set(allow) | {posixpath.normpath(data_dir)})
     if not sources:
         return []
-    out = write(*PREFLIGHT_RUN, image, "-I", "-B", RESOLVE_SCRIPT, "resolve", *asked)
+    out = write(*preflight_argv(image, asked))
     resolved = json.loads(out)
     if not isinstance(resolved, dict):
         raise ValueError("unexpected preflight output")
@@ -740,11 +815,14 @@ def preflight(entry: dict, binds: list[tuple[str, str]], *, image: str, write, s
             real_allow.append(ra)
     real_data = real(posixpath.normpath(data_dir))[0] or posixpath.normpath(data_dir)
     reasons = []
-    for where, src in binds:
+    for where, src, *_ in binds:
         p = posixpath.normpath(src)
         rp, kind = real(p)
         if rp is None:
             reasons.append(f"{where}: bind source {p} is {kind} on the host")
+            continue
+        if kind not in ("file", "dir"):
+            reasons.append(f"{where}: bind source {p} is a {kind} (device, fifo or socket), not a file or directory")
             continue
         if any(_is_under(rp, r) for r in FILES_ONLY_ROOTS) and kind != "file":
             reasons.append(f"{where}: {p} resolves to a {kind} under /var/log (single files only)")
@@ -775,20 +853,22 @@ def apply_compose(entry: dict, result: dict, *, dry_run: bool, docker=docker_rea
         return write(*args, stdin=stdin, dry_run=dry_run)
 
     try:
-        reasons = preflight(entry, binds or [], image=self_image(docker), write=w, self_name=self_name,
-                            data_dir=data_dir)
-        if reasons:
-            return False, "preflight: " + "; ".join(reasons)
+        image = self_image(docker)
         body = json.dumps(with_owner_label(entry["compose"], owner), sort_keys=True)
         base = ["compose", "-f", "-", "-p", name, "--project-directory", project_dir]
         w(*base, "pull", "--quiet", stdin=body)
+        # Preflight AFTER the pull, immediately before `up`: the shortest
+        # window between check and use.
+        reasons = preflight(entry, binds or [], image=image, write=w, self_name=self_name, data_dir=data_dir)
+        if reasons:
+            return False, "preflight: " + "; ".join(reasons)
         w(*base, *(UP_FLAGS[1] if result.get("stopped") else UP_FLAGS[0]), stdin=body)
         before = {c["name"]: c["restart_count"] for c in project_containers(name, docker)}
         sleep(SETTLE_SECONDS)
         after = project_containers(name, docker)
     except d.DryRunViolation:
         raise
-    except (subprocess.SubprocessError, OSError, ValueError, d.DockerUnavailable) as e:
+    except Exception as e:  # noqa: BLE001 - any failure is this app's, recorded with backoff
         # Type only: compose's stderr can quote the file.
         return False, f"apply step failed: {type(e).__name__}"
     by_svc: dict[str, list[dict]] = {}
@@ -1002,6 +1082,16 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
                             "reasons": [f"evaluation error: {type(ex).__name__}"], "changes": [],
                             "drift": [], "blocked": [], "merged": None, "stopped": False})
 
+    # Cross-app: nothing may be bind-mounted below a writable bind of any app.
+    writable = [(n, posixpath.normpath(b[1])) for n, c in ctx.items() for b in (c["binds"] or [])
+                if isinstance(b[1], str) and not b[2]]
+    for r in results:
+        c = ctx.get(r["app"])
+        bad = nested_write_reasons(c["binds"] or [], writable) if c else []
+        if bad:
+            r.update(state="invalid", reasons=bad, drift=[], changes=[])
+            ctx.pop(r["app"])
+
     # x-deploy.create is honoured from cutover (open question 2): a missing app
     # that opts in is planned like a pending one.
     plan_input = [{**r, "state": "pending"} if r["state"] == "missing" and (ctx.get(r["app"]) or {}).get(
@@ -1021,9 +1111,14 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
     if d.mutations_allowed(dry_run, BACKEND) and not global_paused:
         for n in would:
             c = ctx[n]
-            ok, why = apply_compose(c["entry"], by_app[n], dry_run=dry_run, docker=docker, write=write,
-                                    project_dir=project_dir, owner=owner, self_name=self_name, data_dir=data_dir,
-                                    binds=c["binds"], hashes=c["hashes"], sleep=sleep)
+            try:
+                ok, why = apply_compose(c["entry"], by_app[n], dry_run=dry_run, docker=docker, write=write,
+                                        project_dir=project_dir, owner=owner, self_name=self_name,
+                                        data_dir=data_dir, binds=c["binds"], hashes=c["hashes"], sleep=sleep)
+            except d.DryRunViolation:
+                raise
+            except Exception as ex:  # noqa: BLE001 - record it, keep the tick
+                ok, why = False, f"apply error: {type(ex).__name__}"
             if ok:
                 log(f"  {n}: applied {sha[:7]}")
                 applied[n] = {"commit": sha, "at": int(time.time())}
@@ -1034,7 +1129,7 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
                 log(f"  {n}: apply FAILED: {why}")
                 failures[n] = {"sha": sha, "at": int(started)}
                 by_app[n].update(state="failed", reasons=[why])
-    state["failures"] = {k: v for k, v in failures.items() if k in by_app}
+    state["failures"] = {k: v for k, v in failures.items() if k in by_app or k in unevaluated}
 
     live = {r["app"] for r in results} | set(unevaluated)
     state["last_tick"] = {"at": int(started), "sha": sha, "backend": BACKEND,

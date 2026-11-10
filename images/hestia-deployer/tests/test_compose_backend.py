@@ -98,7 +98,8 @@ def test_arming_truenas_does_not_arm_compose(monkeypatch):
 
 IMAGE_ID = "sha256:" + "e" * 64
 WRITE_ALLOWED = [
-    [*cb.PREFLIGHT_RUN, IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/volume1/docker/foo"],
+    cb.preflight_argv(IMAGE_ID, ["/volume1/docker/foo"]),
+    cb.preflight_argv(IMAGE_ID, ["/volume1/docker/foo", "/var/services/homes/x", "/var/log/a.log"]),
     ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", "pull", "--quiet"],
     ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", *cb.UP_FLAGS[0]],
     ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", *cb.UP_FLAGS[1]],
@@ -107,11 +108,23 @@ WRITE_REFUSED = [
     [],
     ["rm", "-f", "x"], ["stop", "x"], ["exec", "x", "sh"], ["pull", "x"],
     ["run", "--rm", "--privileged", "img"],
-    [*cb.PREFLIGHT_RUN[:-2], IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/"],      # no entrypoint
-    [*cb.PREFLIGHT_RUN, "busybox", "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],         # not an image id
-    [*cb.PREFLIGHT_RUN, IMAGE_ID, "-c", "import os"],                                       # arbitrary python
-    [*cb.PREFLIGHT_RUN, IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "relative"],
-    [*[x.replace(",readonly", "") for x in cb.PREFLIGHT_RUN], IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],          # no entrypoint
+    [*cb.PREFLIGHT_RUN, *cb.PREFLIGHT_TAIL, "busybox", "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],  # not an id
+    [*cb.PREFLIGHT_RUN, *cb.PREFLIGHT_TAIL, IMAGE_ID, "-c", "import os"],                  # arbitrary python
+    [*cb.PREFLIGHT_RUN, *cb.PREFLIGHT_TAIL, IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "relative"],
+    # the helper's mounts: never /, never /run or /var/run (the socket), always readonly, target = /host<root>
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/,target=/host,readonly", *cb.PREFLIGHT_TAIL, IMAGE_ID,
+     "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/var/run,target=/host/var/run,readonly", *cb.PREFLIGHT_TAIL,
+     IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/run,target=/host/run,readonly", *cb.PREFLIGHT_TAIL,
+     IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/volume1,target=/host/volume1", *cb.PREFLIGHT_TAIL,
+     IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/volume1,target=/host/etc,readonly", *cb.PREFLIGHT_TAIL,
+     IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
+    [*cb.PREFLIGHT_RUN, "--mount", "type=bind,source=/volume1,target=/host/volume1,readonly", "--privileged",
+     *cb.PREFLIGHT_TAIL, IMAGE_ID, "-I", "-B", cb.RESOLVE_SCRIPT, "resolve", "/x"],
     ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", "down"],
     ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", "up", "-d"],          # no --wait / orphans
     ["compose", "-f", "-", "-p", "foo", "--project-directory", "/d", "up", "-d", "--remove-orphans", "--wait",
@@ -297,6 +310,9 @@ def test_git_pass_allows_the_plain_cases():
     {"allow-host-paths": ["/usr/local/bin"]},
     {"allow-host-paths": ["/var/packages/ContainerManager"]},
     {"allow-host-paths": ["/opt"]},
+    {"allow-host-paths": ["/volume3/x"]},
+    {"allow-host-paths": ["/volume10"]},
+    {"allow-host-paths": ["/volumeUSB2/x"]},
 ])
 def test_bad_allow_list_entries_are_refused(meta):
     assert cb.validate_git(svc(), meta, DATA)
@@ -329,7 +345,7 @@ def vc(cfg, name="foo", allow=(), self_name=OWNER):
 
 @pytest.mark.parametrize("src,ok", [
     ("/volume1/docker/foo", True),                    # own subtree
-    ("/volume1/docker/foo/data", True),
+    ("/volume1/docker/foo/data", False),             # sub-path of the own subtree (race: could be swapped)
     ("/volume1/docker", False),                       # every app's subtree (HIGH-2)
     ("/volume1/docker/bar/data", False),              # another app's subtree
     (DATA, False),                                    # the deployer's data dir (HIGH-2)
@@ -350,18 +366,35 @@ def test_bind_sources(src, ok):
 
 def test_allow_list_opens_exactly_what_it_lists():
     allow = ["/volume1/homes/george/Photos"]
-    assert vc(parsed({"volumes": [bind("/volume1/homes/george/Photos/2026")]}), allow=allow) == []
+    assert vc(parsed({"volumes": [bind("/volume1/homes/george/Photos")]}), allow=allow) == []
+    assert vc(parsed({"volumes": [bind("/volume1/homes/george/Photos/2026")]}), allow=allow)  # sub-path: refused
     assert vc(parsed({"volumes": [bind("/volume1/homes/mara/Photos")]}), allow=allow)
 
 
+def test_nothing_may_be_bound_below_a_writable_bind():
+    # Same app: it writes /volume1/homes/george and could swap Photos for a symlink.
+    binds = [("v[0]", "/volume1/homes/george", False), ("v[1]", "/volume1/homes/george/Photos", True)]
+    writable = [("a", "/volume1/homes/george")]
+    assert cb.nested_write_reasons(binds, writable)
+    # Another app writes the parent: also refused.
+    assert cb.nested_write_reasons([("v[0]", "/volume1/homes/george/Photos", True)],
+                                   [("other", "/volume1/homes/george")])
+    # Read-only parents and siblings are fine.
+    assert cb.nested_write_reasons([("v[0]", "/volume1/homes/george/Photos", True)],
+                                   [("other", "/volume1/homes/mara")]) == []
+    assert cb.nested_write_reasons([("v[0]", "/volume1/homes/george", False)], [("a", "/volume1/homes/george")]) == []
+
+
 def test_self_may_mount_the_socket_and_its_data_dir_and_nothing_else():
-    ok = parsed({"volumes": [bind(cb.SELF_SOCKET), bind(DATA), bind(DATA + "/hc-url", read_only=True)]},
+    ok = parsed({"volumes": [bind(cb.SELF_SOCKET), bind(DATA)]},
                 networks={"default": {"name": f"{OWNER}_default", "ipam": {}}})
     assert vc(ok, name=OWNER) == []
     assert vc(parsed({"volumes": [bind(cb.SELF_SOCKET)]}), name="foo")
     assert vc(parsed({"volumes": [bind("/var/run/other.sock")]}), name=OWNER)
     assert vc(parsed({"volumes": [bind("/etc")]}), name=OWNER)
     assert vc(parsed({"privileged": True}), name=OWNER)
+    assert vc(parsed({"volumes": [bind(DATA + "/hc-url")]}, networks={"default": {"name": f"{OWNER}_default"}}),
+              name=OWNER)  # a sub-path, even of its own data dir
 
 
 @pytest.mark.parametrize("service", [
@@ -386,6 +419,8 @@ def test_self_may_mount_the_socket_and_its_data_dir_and_nothing_else():
     {"logging": {"driver": "some/plugin"}},
     {"logging": {"driver": "gelf"}},
     {"logging": "json-file"},
+    {"container_name": "alcatraz-deployer"},
+    {"container_name": "immich-photos-pull"},
 ])
 def test_config_pass_refuses_services(service):
     assert vc(parsed(service))
@@ -423,7 +458,7 @@ def test_config_pass_allows_the_projects_own_names():
 
 
 def test_config_pass_allows_a_realistic_service():
-    cfg = parsed({"restart": "unless-stopped", "container_name": "cc", "cpus": 2, "mem_limit": "268435456",
+    cfg = parsed({"restart": "unless-stopped", "container_name": "foo", "cpus": 2, "mem_limit": "268435456",
                   "environment": {"TZ": "UTC"}, "user": "0:0", "init": True, "read_only": True,
                   "tmpfs": ["/t"], "healthcheck": {"test": ["CMD", "true"]}, "ports": [{"target": 80}],
                   "logging": {"driver": "json-file"}, "network_mode": "none",
@@ -733,7 +768,7 @@ class FakeDocker:
         cb.check_write_argv(args)
         self.writes = getattr(self, "writes", []) + [args]
         if args[0] == "run":
-            paths = args[len(cb.PREFLIGHT_RUN) + 5:]
+            paths = cb.preflight_paths(args)
             return json.dumps({p: self.host.get(p, [p, "dir"]) for p in paths})
         project = args[4]
         if "pull" in args:
@@ -1082,50 +1117,67 @@ def pf(entry_kw, binds, host):
 
     def write(*args, stdin=None):
         cb.check_write_argv(args)
-        paths = args[len(cb.PREFLIGHT_RUN) + 5:]
+        paths = cb.preflight_paths(args)
         return json.dumps({p: host.get(p, [p, "dir"]) for p in paths})
     return cb.preflight(e, binds, image=IMAGE_ID, write=write, self_name=OWNER, data_dir=DATA)
 
 
 def test_preflight_passes_plain_own_subtree():
-    assert pf({}, [("v[0]", "/volume1/docker/foo/data")], {}) == []
+    assert pf({}, [("v[0]", "/volume1/docker/foo", False)], {}) == []
 
 
 def test_preflight_refuses_a_symlink_out_of_the_own_subtree():
-    r = pf({}, [("v[0]", "/volume1/docker/foo/x")], {"/volume1/docker/foo/x": ["/", "dir"]})
+    r = pf({}, [("v[0]", "/volume1/docker/foo", False)], {"/volume1/docker/foo": ["/", "dir"]})
     assert r and "resolves to /" in r[0]
 
 
 def test_preflight_refuses_own_subtree_that_is_itself_a_link():
-    r = pf({}, [("v[0]", "/volume1/docker/foo")], {"/volume1/docker/foo": ["/etc", "dir"]})
+    r = pf({}, [("v[0]", "/volume1/docker/foo", False)], {"/volume1/docker/foo": ["/etc", "dir"]})
     assert r
 
 
 def test_preflight_missing_source_blocks():
-    r = pf({}, [("v[0]", "/volume1/docker/foo/data")], {"/volume1/docker/foo/data": [None, "missing"]})
+    r = pf({}, [("v[0]", "/volume1/docker/foo", False)], {"/volume1/docker/foo": [None, "missing"]})
     assert r and "missing on the host" in r[0]
 
 
 def test_preflight_dsm_homes_link_matches_its_resolved_allow_entry():
     allow = ["/var/services/homes/george/Photos"]
-    host = {"/var/services/homes/george/Photos": ["/volume1/homes/george/Photos", "dir"],
-            "/var/services/homes/george/Photos/2026": ["/volume1/homes/george/Photos/2026", "dir"]}
-    assert pf({"allow_host_paths": allow}, [("v[0]", "/var/services/homes/george/Photos/2026")], host) == []
+    host = {"/var/services/homes/george/Photos": ["/volume1/homes/george/Photos", "dir"]}
+    assert pf({"allow_host_paths": allow}, [("v[0]", "/var/services/homes/george/Photos", True)], host) == []
 
 
 def test_preflight_allow_entry_linking_into_a_denied_root_is_dropped():
     allow = ["/var/services/evil"]
-    host = {"/var/services/evil": ["/etc", "dir"], "/var/services/evil/x": ["/etc/x", "dir"]}
-    assert pf({"allow_host_paths": allow}, [("v[0]", "/var/services/evil/x")], host)
+    host = {"/var/services/evil": ["/etc", "dir"]}
+    assert pf({"allow_host_paths": allow}, [("v[0]", "/var/services/evil", True)], host)
 
 
 def test_preflight_var_log_single_files_only():
     allow = ["/var/log/pull.log", "/var/log/nginx"]
-    ok = pf({"allow_host_paths": allow}, [("v[0]", "/var/log/pull.log")], {"/var/log/pull.log": ["/var/log/pull.log",
-                                                                                                    "file"]})
+    ok = pf({"allow_host_paths": allow}, [("v[0]", "/var/log/pull.log", False)],
+            {"/var/log/pull.log": ["/var/log/pull.log", "file"]})
     assert ok == []
-    bad = pf({"allow_host_paths": allow}, [("v[0]", "/var/log/nginx")], {"/var/log/nginx": ["/var/log/nginx", "dir"]})
+    bad = pf({"allow_host_paths": allow}, [("v[0]", "/var/log/nginx", False)],
+             {"/var/log/nginx": ["/var/log/nginx", "dir"]})
     assert bad and "single files only" in bad[0]
+
+
+@pytest.mark.parametrize("kind", ["other", "loop", "error"])
+def test_preflight_refuses_devices_fifos_sockets_and_unresolvable(kind):
+    real = "/volume1/docker/foo" if kind == "other" else None
+    assert pf({}, [("v[0]", "/volume1/docker/foo", False)], {"/volume1/docker/foo": [real, kind]})
+
+
+def test_preflight_helper_mounts_only_the_needed_roots():
+    argv = cb.preflight_argv(IMAGE_ID, ["/volume1/docker/foo", "/var/services/homes/g", "/var/log/a.log",
+                                        "/var/run/docker.sock", "/run/x", "/volume1/homes/g"])
+    mounts = [argv[i + 1] for i, x in enumerate(argv) if x == "--mount"]
+    assert mounts == ["type=bind,source=/var/log,target=/host/var/log,readonly",
+                      "type=bind,source=/var/services,target=/host/var/services,readonly",
+                      "type=bind,source=/volume1,target=/host/volume1,readonly"]
+    assert not any("source=/," in m or "run" in m for m in mounts)
+    cb.check_write_argv(argv)
 
 
 def test_preflight_with_no_binds_runs_nothing():
@@ -1177,13 +1229,14 @@ def test_apply_bumped_and_created_apps(tmp_path, capsys, armed):
 
 @needs_git
 def test_apply_preflight_runs_for_binds_and_blocks_an_escape(tmp_path, capsys, armed):
-    apps = {"withbind": ({"services": {"s": {"image": IMG, "volumes": ["/volume1/docker/withbind/data:/d"]}}},
+    apps = {"withbind": ({"services": {"s": {"image": IMG, "volumes": ["/volume1/docker/withbind:/d"]}}},
                          {"create": True})}
     data, docker = scenario(tmp_path, apps)
-    docker.host = {"/volume1/docker/withbind/data": ["/volume1/homes", "dir"]}   # a planted symlink
+    docker.host = {"/volume1/docker/withbind": ["/volume1/homes", "dir"]}        # a planted symlink
     rc, body, state = apply_tick(tmp_path, docker, data)
     assert state_of(parse_prom(body), "withbind", "failed") == 1
-    assert [w[0] for w in docker.writes] == ["run"]                              # stopped at the preflight
+    # pull first, then the preflight immediately before `up`, which it stops
+    assert [w[7] if w[0] == "compose" else w[0] for w in docker.writes] == ["pull", "run"]
     assert "which the mount policy refuses" in capsys.readouterr().out
 
 
@@ -1246,6 +1299,47 @@ def test_settle_catches_a_restart(armed, monkeypatch):
     ok, why = cb.apply_compose(e, {}, dry_run=False, write=lambda *a, **k: "", owner=OWNER, self_name=OWNER,
                                project_dir="/d", data_dir=DATA, binds=[], hashes={"s": "H1"}, sleep=lambda s: None)
     assert not ok and "restarted within" in why
+
+
+@needs_git
+def test_nested_bind_across_apps_is_invalid_in_the_shadow(tmp_path):
+    apps = {"writer": ({"services": {"s": {"image": IMG, "volumes": ["/volume1/homes/george:/g"]}}},
+                       {"allow-host-paths": ["/volume1/homes/george"]}),
+            "reader": ({"services": {"s": {"image": IMG, "volumes": ["/volume1/homes/george/Photos:/p:ro"]}}},
+                       {"allow-host-paths": ["/volume1/homes/george/Photos"]})}
+    data, docker = scenario(tmp_path, apps)
+    _, body, _ = tick(tmp_path, docker, data)
+    s = parse_prom(body)
+    assert state_of(s, "reader", "invalid") == 1 and state_of(s, "writer", "invalid") is None
+
+
+@needs_git
+def test_apply_exception_is_recorded_with_backoff_and_state_still_written(tmp_path, capsys, armed, monkeypatch):
+    apps = {"boom": ({"services": {"s": {"image": IMG}}}, {"create": True})}
+    data, docker = scenario(tmp_path, apps)
+    monkeypatch.setattr(cb, "self_image", lambda *a, **k: (_ for _ in ()).throw(KeyError("x")))
+    rc, body, state = apply_tick(tmp_path, docker, data)
+    assert state_of(parse_prom(body), "boom", "failed") == 1
+    assert "apply step failed: KeyError" in capsys.readouterr().out
+    assert "boom" in json.loads(state)["failures"]
+
+
+@needs_git
+def test_failures_survive_an_unevaluated_tick(tmp_path, armed):
+    apps = {"flaky": ({"services": {"s": {"image": IMG}}}, {"create": True})}
+    data, docker = scenario(tmp_path, apps)
+    docker.up_breaks = {"flaky"}
+    apply_tick(tmp_path, docker, data)
+    docker.fail = {"inspect"}
+    _, _, state = apply_tick(tmp_path, docker, data)
+    assert "flaky" in json.loads(state)["failures"]
+
+
+def test_bad_settle_seconds_is_a_config_error():
+    env = {k: v for k, v in os.environ.items() if not k.startswith("DEPLOYER_")}
+    p = subprocess.run([sys.executable, "-c", f"import sys; sys.path.insert(0, {SRC!r}); import compose_backend"],
+                       env={**env, "SETTLE_SECONDS": "sixty"}, capture_output=True, text=True)
+    assert p.returncode != 0 and "ConfigError" in p.stderr and "SETTLE_SECONDS" in p.stderr and "sixty" not in p.stderr
 
 
 def test_self_apply_is_refused(armed):
@@ -1366,7 +1460,7 @@ def test_real_parser_accepts_the_real_apps():
     self_compose = {"services": {OWNER: {
         "image": IMG, "container_name": OWNER, "restart": "unless-stopped", "user": "0:0", "mem_limit": "256m",
         "environment": ["DEPLOYER_BACKEND=compose", "DRY_RUN=1", "TZ=America/New_York"],
-        "volumes": [f"{cb.SELF_SOCKET}:{cb.SELF_SOCKET}", f"{DATA}:{DATA}", f"{DATA}/hc-url:/run/hc-url:ro"]}}}
+        "volumes": [f"{cb.SELF_SOCKET}:{cb.SELF_SOCKET}", f"{DATA}:{DATA}"]}}}
     assert run_both_passes(self_compose, OWNER) == []
     assert run_both_passes(self_compose, "not-the-deployer")
 

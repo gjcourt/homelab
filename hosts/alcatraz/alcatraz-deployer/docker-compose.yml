@@ -1,0 +1,66 @@
+# alcatraz-deployer — Git-pull deployer for alcatraz's docker-compose apps
+# (HOMELAB-118). The same image as hestia-deployer, with the compose backend.
+# Source: images/hestia-deployer/ (compose_backend.py). Plan:
+# docs/plans/2026-11-09-alcatraz-pull-deployer-plan.md (A9). Runbook:
+# docs/operations/apps/alcatraz-deployer.md.
+#
+# A-PHASE 1: SHADOW. DRY_RUN=1 below, and APPLY_ENABLED["compose"] is False in
+# deployer.py: either one alone applies nothing. Every 5 min it reads master
+# (git ls-remote + a depth-1 fetch of one commit), compares every
+# hosts/alcatraz/** compose with the running containers through
+# `docker compose config --hash`, and reports what it WOULD do in
+# `docker logs alcatraz-deployer` and in homelabscope_deploy_*{host="alcatraz"}
+# metrics. Its docker CLI is limited to read calls (ps / inspect / version /
+# compose config); it never pulls, creates, starts or stops a container.
+#
+# PRIVILEGE. Not privileged, no pid: host (less than hestia-deployer, which
+# needs both for nsenter). It is still root-equivalent through the docker
+# socket, the exposure the runner design accepted. It holds no credential:
+# Git is read anonymously.
+#
+# FIRST START IS GEORGE'S OPERATOR STEP (runbook section 5). Nothing deploys
+# this file: the deployer never manages its own directory, and
+# alcatraz-deploy.yaml skips it. A digest bump here (Renovate) only lands on
+# alcatraz when George re-runs the same `docker compose up -d`, until
+# self-apply exists (plan A5, cutover).
+#
+# DATA_DIR is bind-mounted at the same path inside and out. It holds the bare
+# git cache, desired.json, state.json (0600), the empty compose-project/
+# directory, the break-glass PAUSE file, and metrics/, whose
+# homelabscope-deploy.prom (0644) hestia's homelabscope-heartbeat reads over
+# SSH and relays. Operator prerequisite (runbook):
+#   sudo install -d -m 0711 /volume1/docker/alcatraz-deployer
+#   sudo install -d -m 0755 /volume1/docker/alcatraz-deployer/metrics
+#
+# No top-level volumes or networks: the project's only resource is compose's
+# own default network, alcatraz-deployer_default (the compose backend's name
+# rule allows only <project>_<key>).
+x-deploy:
+  name: alcatraz-deployer
+
+services:
+  alcatraz-deployer:
+    # Multi-arch (linux/amd64 + linux/arm64): alcatraz's CPU arch is unconfirmed.
+    image: ghcr.io/gjcourt/hestia-deployer:2026-11-10-e59ae1c@sha256:373ef37c42cce4467e10e49370c683d8eddd23d40456e261b4930ecec3011ab4
+    container_name: alcatraz-deployer
+    restart: unless-stopped
+    # root for the docker socket.
+    user: "0:0"
+    environment:
+      - DEPLOYER_BACKEND=compose
+      - DEPLOYER_HOST=alcatraz
+      - DEPLOYER_HOSTS_PREFIX=hosts/alcatraz/
+      - DEPLOYER_SELF_NAME=alcatraz-deployer
+      - DEPLOYER_JOB=alcatraz-deployer
+      - DATA_DIR=/volume1/docker/alcatraz-deployer
+      - TEXTFILE_DIR=/volume1/docker/alcatraz-deployer/metrics
+      # Shadow mode. The cutover PR removes this line in the same PR that sets
+      # APPLY_ENABLED["compose"] = True; either one alone still applies nothing.
+      - DRY_RUN=1
+      - INTERVAL_SECONDS=300
+      - TZ=America/New_York
+    # Resource ceiling (alcatraz GitOps plan, security rule 3).
+    mem_limit: 256m
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /volume1/docker/alcatraz-deployer:/volume1/docker/alcatraz-deployer

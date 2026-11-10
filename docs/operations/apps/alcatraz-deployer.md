@@ -44,10 +44,15 @@ Every 5 minutes (`INTERVAL_SECONDS=300`), both halves of a tick run in the conta
 An app is `invalid`, alone, if any of these fail. The full list is in the plan's
 implementation notes.
 
-- **Mounts:** only `/volume1/docker/<name>/...` or a path listed in
-  `x-deploy.allow-host-paths`. An allow-list entry may not overlap a denied root:
-  system paths, `/volume1/docker`, `/volume1/@*`, `/usr/syno`, `/var/packages`, or this
-  deployer's data dir.
+- **Mounts.** A bind source must be one of:
+  - exactly the app's own `/volume1/docker/<name>`;
+  - exactly an `x-deploy.allow-host-paths` entry.
+
+  Sub-paths are refused, and so is anything under another app's writable bind. An
+  app could swap a path it can write for a symlink between the check and `up`
+  (#1894). An allow-list entry may not overlap a denied root: system paths,
+  `/volume1/docker`, `/volume1/@*`, `/usr/syno`, `/var/packages`, any volume but
+  `/volume1`, or this deployer's data dir.
 - **No** `privileged`, `devices`, `cap_add`, `security_opt`, host `pid`/`ipc`/`userns`/`cgroup`,
   host or container networking, `sysctls`, `env_file`, `label_file`, `build`,
   `extends` or `include`.
@@ -83,7 +88,7 @@ sudo docker logs --tail 50 alcatraz-deployer
 ```text
 compose backend: docker client/engine <client> <engine>, compose <version>
 tick DRY-RUN sha=1a2b3c4 {"archived": 1, "missing": 1} pending=[] would_apply=[] deferred=[] global_pause=False unmanaged=[...]
-  deploy-canary [missing] (hosts/alcatraz/deploy-canary/docker-compose.yml) reason: no containers for this compose project; x-deploy.create is not acted on until cutover
+  deploy-canary [missing] (hosts/alcatraz/deploy-canary/docker-compose.yml) reason: no containers for this compose project; x-deploy.create: planned for creation (applied only once the compose backend is armed at cutover)
 ```
 
 Paths are printed, never values. Image references are the one exception, because
@@ -108,15 +113,29 @@ they are public.
    and write its URL to `/volume1/docker/alcatraz-deployer/hc-url` (mode 0600). The ping
    code lands in a later PR. Until then the file only waits.
 4. **First start:** copy `hosts/alcatraz/alcatraz-deployer/docker-compose.yml` from
-   `master` to alcatraz, then:
+   `master` to exactly
+   **`/volume1/docker/alcatraz-deployer/bootstrap/docker-compose.yml`**, and run
+   compose from there:
 
    ```bash
+   sudo install -d -m 0700 /volume1/docker/alcatraz-deployer/bootstrap
+   # copy the file there, then:
+   cd /volume1/docker/alcatraz-deployer/bootstrap
    sudo docker compose -f docker-compose.yml -p alcatraz-deployer up -d
    sudo docker logs -f alcatraz-deployer   # first tick within a minute
    ```
 
+   - **Never `DATA_DIR/compose-project/`.** The deployer requires that directory to
+     be empty, because compose reads `.env` from it. A compose file there makes
+     every tick fail with "compose project directory is not empty".
+   - **No `.env` in `bootstrap/`.** The file needs none.
+
    The same command applies a later digest bump of this file. Nothing else will,
    until self-apply.
+
+   **Cutover needs a newer image.** The pin here (`2026-11-10-e59ae1c`) predates the
+   compose apply path (#1894). It is fine for the shadow, which never applies. The
+   cutover PR must pin a digest built from a commit that includes #1894.
 5. **Turn the relay on:** a one-line PR sets `ALCATRAZ_DEPLOY_RELAY=1` in
    `hosts/hestia/monitoring/docker-compose-homelabscope-heartbeat.yml`. That also arms
    the gated `HomelabscopeJobMetricAbsent` arm for `job="alcatraz-deployer"`. Then

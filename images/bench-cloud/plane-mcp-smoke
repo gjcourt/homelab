@@ -1,0 +1,85 @@
+#!/usr/bin/env python3
+"""Build-time smoke test for the Plane MCP server.
+
+Starts /opt/plane-mcp/bin/plane-mcp-server stdio exactly the way bench-task's
+.mcp.json does, speaks MCP to it (initialize, then tools/list) and fails unless
+every Plane tool a ticket Job allows is listed. `import plane_mcp` is not enough:
+on 2026-11-08 it passed while the server died importing pydantic, so every
+ticket Job saw "Connection closed" from the plane MCP server.
+
+Plane is never contacted: tools/list needs no API call, and the base URL points
+at a closed local port so a stray request fails fast instead of reaching out.
+Stdlib only; runs under the system python3.
+"""
+import json
+import os
+import subprocess
+import sys
+import threading
+
+SERVER = ["/opt/plane-mcp/bin/plane-mcp-server", "stdio"]
+# The tools bench-task allows in ticket mode (its tools+=(mcp__plane__...) line).
+REQUIRED = {"workitem", "workitem_comment", "workitem_link", "state", "workitem_activity"}
+TIMEOUT = 60
+
+
+def main():
+    env = dict(os.environ,
+               PLANE_BASE_URL="http://127.0.0.1:9",
+               PLANE_API_KEY="build-smoke-test-not-a-key",
+               PLANE_WORKSPACE_SLUG="smoke")
+    proc = subprocess.Popen(SERVER, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, env=env, text=True)
+    stderr = []
+    threading.Thread(target=lambda: stderr.extend(proc.stderr), daemon=True).start()
+
+    def send(msg):
+        proc.stdin.write(json.dumps(msg) + "\n")
+        proc.stdin.flush()
+
+    def reply(want_id):
+        for line in proc.stdout:
+            line = line.strip()
+            if not line:
+                continue
+            msg = json.loads(line)
+            if msg.get("id") == want_id:
+                return msg
+        return None
+
+    def fail(why):
+        proc.kill()
+        proc.wait()
+        sys.stderr.write("plane-mcp smoke test FAILED: " + why + "\n" + "".join(stderr[-40:]))
+        sys.exit(1)
+
+    timer = threading.Timer(TIMEOUT, proc.kill)
+    timer.start()
+    try:
+        send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2025-06-18", "capabilities": {},
+            "clientInfo": {"name": "bench-cloud-build", "version": "0"}}})
+        init = reply(1)
+        if not init or "result" not in init:
+            fail(f"no initialize result (server exit {proc.poll()}): {init}")
+        send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        send({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        listed = reply(2)
+        if not listed or "result" not in listed:
+            fail(f"no tools/list result (server exit {proc.poll()}): {listed}")
+    finally:
+        timer.cancel()
+
+    names = {t["name"] for t in listed["result"].get("tools", [])}
+    missing = REQUIRED - names
+    if missing:
+        fail("tools missing: " + ", ".join(sorted(missing)))
+    proc.stdin.close()
+    proc.terminate()
+    proc.wait(timeout=10)
+    server = init["result"].get("serverInfo", {})
+    print(f"plane-mcp smoke test ok: {server.get('name')} {server.get('version')}, {len(names)} tools")
+
+
+if __name__ == "__main__":
+    main()

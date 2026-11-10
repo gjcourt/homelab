@@ -1,0 +1,67 @@
+# Production front door: https://desk.burntbytes.com via app-gateway-production.
+#
+# LAN and WireGuard only (plane-mobile plan, decision Q-B). The host is NOT in
+# the Cloudflare tunnel (apps/production/cloudflare-tunnel/config.yaml) and has
+# no public DNS record. It resolves through AdGuard's split-horizon wildcard
+# *.burntbytes.com -> 10.42.2.40 (docs/architecture/dns-strategy.md), on the
+# LAN and for WireGuard clients that use AdGuard for DNS, so it needs no DNS
+# change of its own.
+#
+# No Authelia forward-auth: the app does its own OIDC sign-in against
+# auth.burntbytes.com and enforces it on /api/*; the static shell (/,
+# manifest.webmanifest, sw.js, /static/) is served without sign-in (George,
+# 2026-10-26). The explicit bypass rule for this host is in
+# apps/production/authelia/configuration.yaml.
+#
+# /plane (the Plane webhook) is not routed: production Plane delivers it
+# in-cluster to the Service, never through the gateway. The /plane rule has no
+# backendRefs, so Cilium answers it with a direct 500, and PathPrefix /plane
+# beats / as the longer match (same as staging).
+#
+# No `timeouts` yet. The listener's stream idle timeout is 300 s and the app
+# pings every 25 s; the step-8 SSE hold test in
+# docs/operations/apps/plane-mobile.md decides whether /api/events needs
+# `timeouts: {request: "0s"}`.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: plane-mobile-http
+  namespace: plane-mobile-prod
+spec:
+  hostnames:
+    - desk.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: plane-mobile-https
+  namespace: plane-mobile-prod
+spec:
+  hostnames:
+    - desk.burntbytes.com
+  parentRefs:
+    - name: app-gateway-production
+      namespace: default
+      sectionName: https
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /plane
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: plane-mobile
+          port: 80

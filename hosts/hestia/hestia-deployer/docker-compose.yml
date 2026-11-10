@@ -23,20 +23,16 @@
 #
 # The deployer never manages hosts/hestia/actions-runner/ or this file.
 #
-# ARCHIVED until the image is built. build-hestia-deployer.yml publishes
-# ghcr.io/gjcourt/hestia-deployer on the first push of images/hestia-deployer/**
-# to master. Then, in a follow-up PR: pin the digest below and flip archived to
-# false. The first install of a new app is an operator app.create
-# (hosts/hestia/README.md); after that deploy-hestia.yml rolls digest bumps.
+# Image: build-hestia-deployer.yml publishes a date-sha tag on every push of
+# images/hestia-deployer/**; pin its digest here in a follow-up PR. First
+# install was an operator app.create (HOMELAB-111, 2026-11-09); deploy-hestia.yml
+# rolls later digest bumps until the deployer takes over (phase 2).
 x-deploy:
   name: hestia-deployer
-  archived: true
-  archived-at: "2026-11-09"
-  archived-reason: "image not built yet (HOMELAB-111 bootstrap)"
 
 services:
   hestia-deployer:
-    image: ghcr.io/gjcourt/hestia-deployer:latest
+    image: ghcr.io/gjcourt/hestia-deployer:2026-11-09-551bf91@sha256:7d009fed74d16b30a0ef4f0f02f1a785bc9ad73de259f0e47739458970702033
     container_name: hestia-deployer
     restart: unless-stopped
     privileged: true

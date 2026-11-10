@@ -9,12 +9,15 @@ it WOULD do, and reports it in logs and metrics. It never changes an app.
 deploy-hestia.yml and the self-hosted runner keep deploying until Phase 2.
 "Never changes an app" is structural, not a convention:
 
-  - APPLY_ENABLED is False in this file. Phase 2 flips it in its own PR.
+  - APPLY_ENABLED["truenas"] is False in this file. Phase 2 flips it in its
+    own PR. Each backend has its own switch (alcatraz plan A1): arming the
+    TrueNAS backend never arms the compose one.
   - Every middleware call goes through GuardedClient, which allows only the
     read methods in READ_METHODS unless mutations were enabled at construction.
-    Nothing in this file enables them while APPLY_ENABLED is False.
+    Nothing in this file enables them while APPLY_ENABLED["truenas"] is False.
   - apply_app() raises DryRunViolation before touching the client when
-    DRY_RUN is on or APPLY_ENABLED is False, and reconcile() never calls it.
+    DRY_RUN is on or APPLY_ENABLED["truenas"] is False, and reconcile() never
+    calls it.
   - Docker is reached only through docker_read(), which allows `ps` / `inspect`.
   - DRY_RUN defaults to ON: only DRY_RUN=0 (or false) turns it off.
 
@@ -65,20 +68,78 @@ import time
 
 # ------------------------------------------------------------------ constants
 
-# Phase 1 (shadow). Phase 2 flips this, in the same PR that sets DRY_RUN=0 in
-# hosts/hestia/hestia-deployer/docker-compose.yml and moves deploy-hestia.yml
-# to workflow_dispatch. Tests assert it is False.
-APPLY_ENABLED = False
+# One switch per backend (alcatraz plan A1, HOMELAB-118). Phase 1 (shadow).
+# hestia's Phase 2 (HOMELAB-112) flips "truenas" only, in the same PR that sets
+# DRY_RUN=0 in hosts/hestia/hestia-deployer/docker-compose.yml and moves
+# deploy-hestia.yml to workflow_dispatch. "compose" (alcatraz) stays False
+# until alcatraz's own cutover PR. Tests assert both are False.
+APPLY_ENABLED = {"truenas": False, "compose": False}
+
+
+def apply_enabled(backend: str = "truenas") -> bool:
+    """The per-backend switch. An unknown backend is never enabled."""
+    return APPLY_ENABLED.get(backend) is True
+
+
+# Host parameters (alcatraz plan A1). Every default is hestia's value, so a
+# container with none of these set behaves exactly as before. They reach the
+# reconcile half on the host through nsenter, like DRY_RUN and DATA_DIR.
+_HOST_RE = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+_PREFIX_RE = re.compile(r"^hosts/[a-z0-9]([a-z0-9-]*[a-z0-9])?/$")
+
+
+class ConfigError(ValueError):
+    """A host parameter from the environment is malformed."""
+
+
+def env_param(name: str, default: str, pattern, env=None) -> str:
+    """os.environ[name] or default, checked against pattern.
+
+    The value ends up in metric labels, log lines and git pathspecs, so it is
+    validated rather than escaped. The error names the variable, never the
+    value (an operator could have pasted something private into it).
+    """
+    env = os.environ if env is None else env
+    val = env.get(name)
+    if val is None or val == "":
+        return default
+    if not pattern.match(val):
+        raise ConfigError(f"{name} is malformed (want {pattern.pattern})")
+    return val
+
+
+def excluded_prefixes_from_env(hosts_prefix: str, self_name: str, env=None) -> tuple[str, ...]:
+    """EXCLUDED_PREFIXES: comma-separated repo paths under hosts_prefix.
+
+    Default: the host's runner directory and the deployer's own directory,
+    which for hestia is exactly the pre-HOMELAB-118 constant.
+    """
+    env = os.environ if env is None else env
+    raw = env.get("EXCLUDED_PREFIXES")
+    if raw is None or raw.strip() == "":
+        return (f"{hosts_prefix}actions-runner/", f"{hosts_prefix}{self_name}/")
+    out = []
+    for part in raw.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if not part.startswith(hosts_prefix) or not part.endswith("/") or ".." in part.split("/"):
+            raise ConfigError(f"EXCLUDED_PREFIXES entries must be directories under {hosts_prefix}")
+        out.append(part)
+    return tuple(out)
+
 
 REPO_URL = os.environ.get("REPO_URL", "https://github.com/gjcourt/homelab")
 BRANCH_REF = "refs/heads/master"
-HOSTS_PREFIX = "hosts/hestia/"
+# The `host` label on every homelabscope_deploy_* sample (alcatraz plan A6).
+HOST = env_param("HOST", "hestia", _HOST_RE)
+HOSTS_PREFIX = env_param("HOSTS_PREFIX", "hosts/hestia/", _PREFIX_RE)
 COMPOSE_GLOB = "docker-compose*.yml"
 
-SELF_NAME = "hestia-deployer"
+SELF_NAME = env_param("SELF_NAME", "hestia-deployer", _HOST_RE)
 # Never managed: the runner (it deploys itself; deploy-hestia.yml excludes it
 # too) and this deployer (self-apply is Phase 2, plan D5).
-EXCLUDED_PREFIXES = ("hosts/hestia/actions-runner/", "hosts/hestia/hestia-deployer/")
+EXCLUDED_PREFIXES = excluded_prefixes_from_env(HOSTS_PREFIX, SELF_NAME)
 EXCLUDED_NAMES = (SELF_NAME,)
 # SCALE names of the excluded apps whose compose does not carry them
 # (hosts/hestia/actions-runner/ derives "actions-runner"; the app is gha-runner).
@@ -89,7 +150,7 @@ DATA_DIR = os.environ.get("DATA_DIR", "/mnt/main/apps/hestia-deployer")
 TEXTFILE_DIR = os.environ.get("TEXTFILE_DIR", "/var/lib/node-exporter/textfile")
 DEPLOY_TEXTFILE = "homelabscope-deploy.prom"
 
-JOB = "hestia-deployer"
+JOB = env_param("JOB", "hestia-deployer", _HOST_RE)
 # Plan D9: max_age 1800s (6 ticks of 300s).
 MAX_AGE_SECONDS = 1800
 # Plan D5 / open question 5: at most 3 apps per tick, in name order.
@@ -116,16 +177,19 @@ JOB_HELP = {
     "homelabscope_job_last_status": "Last run status (0=ok, 1=fail).",
     "homelabscope_job_max_age_seconds": "Staleness budget for this job (seconds).",
 }
-# Only this file writes these families. Fixed once (plan D9); a test pins them.
+# Only this file writes these families. A test pins them. They are
+# host-neutral (alcatraz plan A6): hestia's file and alcatraz's relayed file
+# land in ONE node-exporter, which needs identical HELP text and identical
+# label names per family. Every sample carries host="<HOST>".
 DEPLOY_HELP = {
-    "homelabscope_deploy_head_info": "master commit the last hestia-deployer tick evaluated.",
-    "homelabscope_deploy_head_commit_seconds": "Commit time of the master commit the last hestia-deployer tick evaluated.",
-    "homelabscope_deploy_app_state": "hestia-deployer state of each hestia app (1 for the current state).",
-    "homelabscope_deploy_app_applied_info": "Last commit hestia-deployer successfully applied to the app.",
-    "homelabscope_deploy_app_last_apply_seconds": "Unix timestamp of hestia-deployer's last successful apply of the app.",
-    "homelabscope_deploy_paused": "1 when hestia-deployer is paused (scope=global: PAUSE file; otherwise x-deploy.paused).",
-    "homelabscope_deploy_unmanaged_apps": "Count of TrueNAS apps on hestia with no compose file in Git.",
-    "homelabscope_deploy_dry_run": "1 when hestia-deployer runs in dry-run (shadow) mode and applies nothing.",
+    "homelabscope_deploy_head_info": "master commit the last deployer tick evaluated.",
+    "homelabscope_deploy_head_commit_seconds": "Commit time of the master commit the last deployer tick evaluated.",
+    "homelabscope_deploy_app_state": "Deployer state of each app on the host (1 for the current state).",
+    "homelabscope_deploy_app_applied_info": "Last commit the deployer successfully applied to the app.",
+    "homelabscope_deploy_app_last_apply_seconds": "Unix timestamp of the deployer's last successful apply of the app.",
+    "homelabscope_deploy_paused": "1 when the deployer is paused (scope=global: PAUSE file; otherwise x-deploy.paused).",
+    "homelabscope_deploy_unmanaged_apps": "Count of apps on the host with no compose file in Git.",
+    "homelabscope_deploy_dry_run": "1 when the deployer runs in dry-run (shadow) mode and applies nothing.",
 }
 
 
@@ -139,8 +203,8 @@ def dry_run_from_env(env=None) -> bool:
     return str(env.get("DRY_RUN", "1")).strip().lower() not in ("0", "false")
 
 
-def mutations_allowed(dry_run: bool) -> bool:
-    return APPLY_ENABLED and not dry_run
+def mutations_allowed(dry_run: bool, backend: str = "truenas") -> bool:
+    return apply_enabled(backend) and not dry_run
 
 
 # ================================================================ discovery
@@ -634,11 +698,19 @@ def render_metrics(*, ok: bool, now: int, prev_success: int | None, duration: in
     job("homelabscope_job_last_status", 0 if ok else 1)
     job("homelabscope_job_max_age_seconds", MAX_AGE_SECONDS)
 
-    fams.append(("homelabscope_deploy_dry_run", [("", 1 if dry_run else 0)]))
+    # alcatraz plan A6: host="<HOST>" first on every homelabscope_deploy_*
+    # sample (the relay's validator keys on it). homelabscope_job_* keeps its
+    # job-only label set: other textfile writers share those families.
+    h = f'host="{_esc(HOST)}"'
+
+    def dep(name, samples):
+        fams.append((name, [(f"{h},{labels}" if labels else h, value) for labels, value in samples]))
+
+    dep("homelabscope_deploy_dry_run", [("", 1 if dry_run else 0)])
     if sha:
-        fams.append(("homelabscope_deploy_head_info", [(f'commit="{_esc(sha[:7])}"', 1)]))
+        dep("homelabscope_deploy_head_info", [(f'commit="{_esc(sha[:7])}"', 1)])
     if commit_seconds is not None:
-        fams.append(("homelabscope_deploy_head_commit_seconds", [("", commit_seconds)]))
+        dep("homelabscope_deploy_head_commit_seconds", [("", commit_seconds)])
 
     # One series per app. Duplicate-name files are all `invalid`, so a clash
     # resolves to invalid; never emit the same label set twice.
@@ -654,15 +726,15 @@ def render_metrics(*, ok: bool, now: int, prev_success: int | None, duration: in
         states.append((f'app="{_esc(app)}",state="{st}"', 1))
         if st == "paused":
             paused.append((f'scope="{_esc(app)}"', 1))
-    fams.append(("homelabscope_deploy_app_state", states))
-    fams.append(("homelabscope_deploy_paused", paused))
+    dep("homelabscope_deploy_app_state", states)
+    dep("homelabscope_deploy_paused", paused)
 
-    fams.append(("homelabscope_deploy_app_applied_info",
-                 [(f'app="{_esc(a)}",commit="{_esc(v["commit"][:7])}"', 1) for a, v in sorted(applied.items())]))
-    fams.append(("homelabscope_deploy_app_last_apply_seconds",
-                 [(f'app="{_esc(a)}"', int(v["at"])) for a, v in sorted(applied.items())]))
+    dep("homelabscope_deploy_app_applied_info",
+        [(f'app="{_esc(a)}",commit="{_esc(v["commit"][:7])}"', 1) for a, v in sorted(applied.items())])
+    dep("homelabscope_deploy_app_last_apply_seconds",
+        [(f'app="{_esc(a)}"', int(v["at"])) for a, v in sorted(applied.items())])
     if unmanaged is not None:
-        fams.append(("homelabscope_deploy_unmanaged_apps", [("", unmanaged)]))
+        dep("homelabscope_deploy_unmanaged_apps", [("", unmanaged)])
 
     out = []
     for name, samples in fams:
@@ -688,8 +760,8 @@ class GuardedClient:
     """Wraps truenas_api_client.Client. Default-deny for anything but reads."""
 
     def __init__(self, client, allow_mutations: bool = False):
-        if allow_mutations and not APPLY_ENABLED:
-            raise DryRunViolation("mutations requested but APPLY_ENABLED is False (Phase 1 shadow)")
+        if allow_mutations and not apply_enabled("truenas"):
+            raise DryRunViolation('mutations requested but APPLY_ENABLED["truenas"] is False (Phase 1 shadow)')
         self._client = client
         self._allow = allow_mutations
 
@@ -702,11 +774,12 @@ class GuardedClient:
 def apply_app(client: GuardedClient, name: str, payload: dict, *, dry_run: bool) -> bool:
     """app.stop -> app.update(payload) -> app.start (plan D5). Phase 2 only.
 
-    Refuses outright in dry-run or while APPLY_ENABLED is False, before any
-    call is made. reconcile() does not call this in Phase 1.
+    Refuses outright in dry-run or while APPLY_ENABLED["truenas"] is False,
+    before any call is made. reconcile() does not call this in Phase 1.
     """
-    if dry_run or not APPLY_ENABLED:
-        raise DryRunViolation(f"refusing to apply {name}: dry-run={dry_run} APPLY_ENABLED={APPLY_ENABLED}")
+    if dry_run or not apply_enabled("truenas"):
+        raise DryRunViolation(f"refusing to apply {name}: dry-run={dry_run} "
+                              f"APPLY_ENABLED={apply_enabled('truenas')}")
     stopped = False
     try:
         # An app STOPPED on purpose is updated but never started.
@@ -795,7 +868,7 @@ def reconcile(client, *, docker=docker_read, data_dir: str = DATA_DIR, textfile_
               dry_run: bool = True, now: float | None = None) -> int:
     """Host half of a tick. `client` is anything with .call(method, *args)."""
     started = time.time() if now is None else now
-    dry_run = dry_run or not APPLY_ENABLED
+    dry_run = dry_run or not apply_enabled("truenas")
     guarded = client if isinstance(client, GuardedClient) else GuardedClient(client, mutations_allowed(dry_run))
     prom = os.path.join(textfile_dir, DEPLOY_TEXTFILE)
     prev_text = ""

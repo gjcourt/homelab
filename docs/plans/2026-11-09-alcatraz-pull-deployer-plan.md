@@ -1,5 +1,5 @@
 ---
-status: planned
+status: in-progress
 last_modified: 2026-11-09
 summary: "Give alcatraz the hestia pull model: the same hestia-deployer image with a docker-compose backend (one commit per tick, config-hash diff, compose up -d per project), dry-run beside hestia's, a 24h evidence-gated soak, cutover about a week after hestia's (HOMELAB-112), then delete the never-registered alcatraz runner path (HOMELAB-118)"
 ---

@@ -33,7 +33,7 @@ Every 5 minutes (`INTERVAL_SECONDS=300`) one tick runs in two halves:
 
 ### Why it cannot apply in Phase 1
 
-- `APPLY_ENABLED = False` in `deployer.py`, and the compose sets `DRY_RUN=1`.
+- `APPLY_ENABLED["truenas"] = False` in `deployer.py`, and the compose sets `DRY_RUN=1`.
   Either one alone keeps it read-only; Phase 2 flips both in one PR.
 - All middleware calls go through `GuardedClient`, which allows only
   `app.query` and `app.config`; any other method raises.
@@ -84,6 +84,20 @@ Other series: `homelabscope_deploy_head_info{commit}`,
 heartbeat `homelabscope_job_*{job="hestia-deployer"}` (`max_age` 1800 s; the
 existing generic `HomelabscopeJobStale` rule covers it). No new alert rules in
 Phase 1; they land with cutover.
+
+Every `homelabscope_deploy_*` sample carries `host="hestia"`, and their HELP
+text is host-neutral (HOMELAB-118): alcatraz's deployer, relayed through the
+heartbeat, writes the same families with `host="alcatraz"` into the same
+node-exporter. Queries without a `host` matcher keep matching; add
+`host="hestia"` once alcatraz reports. The `homelabscope_job_*` series keep
+their `job`-only label set.
+
+**Host parameters** (all default to hestia's values; the compose sets none of
+them): `HOST`, `HOSTS_PREFIX`, `SELF_NAME`, `JOB`, `DATA_DIR`, `TEXTFILE_DIR`,
+`EXCLUDED_PREFIXES` (comma-separated directories under `HOSTS_PREFIX`). A
+malformed value stops the deployer with `ConfigError`, naming the variable,
+never its value. `APPLY_ENABLED` is per backend: hestia's cutover flips
+`APPLY_ENABLED["truenas"]` only; `"compose"` (alcatraz) stays `False`.
 
 ## 4. Reading the shadow
 

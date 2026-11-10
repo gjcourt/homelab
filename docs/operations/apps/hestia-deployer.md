@@ -101,6 +101,12 @@ malformed value stops the deployer with `ConfigError`, naming the variable,
 never its value. `APPLY_ENABLED` is per backend: hestia's cutover flips
 `APPLY_ENABLED["truenas"]` only; `"compose"` (alcatraz) stays `False`.
 
+**Compose backend.** The same image carries `compose_backend.py` and the
+`docker-cli` / `docker-cli-compose` packages for alcatraz (HOMELAB-118),
+selected with `DEPLOYER_BACKEND=compose`. Unset (hestia) means `truenas`: the
+loop in `deployer.sh` and everything above are unchanged. Any other value
+stops the entrypoint with exit 2.
+
 ## 4. Reading the shadow
 
 ```bash

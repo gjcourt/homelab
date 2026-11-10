@@ -496,6 +496,42 @@ These mirror `deployer.py:7-19`, and each one is tested:
     `discover` on every push** to `hosts/alcatraz/**`.
   - The CI lint guard gets the same one exemption as A3.
 
+### Implementation notes (A-Phase 1 PR 2, `compose_backend.py`)
+
+Where the code differs from the design above, and why:
+
+- **No compose text in `desired.json` (A2).** The backend feeds the parsed dict as
+  JSON (JSON is YAML) to `docker compose -f -`, so `desired.json` keeps hestia's
+  format and `DESIRED_VERSION`. The project directory is a fixed, empty
+  `DATA_DIR/compose-project/` (a non-empty one fails the tick: compose reads `.env`
+  from it).
+- **Ownership label injected in memory, not by an override file (A4.5).** Same
+  effect: the label is part of what is hashed and what would be applied.
+- **The interpolation check reads the uninterpolated render (A3).** Comparing
+  `config --no-interpolate` with the interpolated form does not work: compose 5.6.1
+  also normalises the interpolated form (defaults filled in, keys reordered), so
+  they differ for every app. The rule is instead "no string compose read may still
+  hold an unescaped `$`", on top of the same static check in Git. `$$` escapes are
+  allowed. The fingerprint tree is taken from the interpolated, normalised form:
+  what `up` would apply.
+- **`docker inspect --format`** asks for labels, image, state and restart count only,
+  so `Config.Env` never leaves the engine. The docker CLI gets a minimal
+  environment (`PATH`, `HOME`, `DOCKER_*`, `TZ`).
+- **Unmanaged** comes from one `docker ps -a --format` (project label or none), not
+  `compose ls`, which is therefore not on the allowlist.
+- **Also refused in v1:** `build`, `extends`, `include` and `secrets`/`configs` with an
+  `environment` source, for the same reason as `env_file`.
+- **Baseline for "what changed".** In shadow nothing is applied, so the fingerprint
+  baseline is the last tree seen `synced`. At cutover it also becomes the tree last
+  applied.
+- **Apply (A5) is not in this PR.** `apply_compose()` refuses while mutations are off
+  and otherwise raises `NotImplementedError`. The pull / up / settle path, the
+  `--mount` preflight and the self-apply helper land before alcatraz's cutover.
+- **Measured end to end** against a real compose 5.6.1 CLI and engine (podman,
+  locally): a project brought up with the owner-labelled compose reads `synced`
+  (the `config --hash` hash equals the container's `config-hash` label), and an
+  image bump reads `pending` with `services.s.image: <old> -> <new>`.
+
 ## Migration (faster, evidence-gated)
 
 Each phase is its own PR, and nothing is retired until the step before it has run clean.

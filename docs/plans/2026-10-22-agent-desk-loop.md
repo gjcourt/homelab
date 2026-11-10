@@ -103,8 +103,10 @@ A small service, `agent-desk`, in its own namespace.
 - **Webhook** at `http://agent-desk.agent-desk.svc.cluster.local:<port>/plane`, registered as a Plane
   workspace webhook for work items and comments.
   - Verify `X-Plane-Signature` (HMAC) against a SOPS secret; reject anything unsigned or wrong.
-  - Production's `WEBHOOK_ALLOWED_HOSTS` gets exactly that one name, in `apps/production/plane/release-patch.yaml`,
-    which already reserves the spot. Never a CIDR.
+  - Production's `WEBHOOK_ALLOWED_HOSTS` gets that name, in `apps/production/plane/release-patch.yaml`,
+    which already reserves the spot. Never a CIDR. Since plane-mobile's production deploy it also lists
+    `plane-mobile.plane-mobile-prod.svc.cluster.local`, a second receiver with its own webhook and secret
+    (plane-mobile plan, decision Q-E); each entry is one exact name.
 - **Backstop poll** every 10 minutes: list items in the allowlisted projects and re-evaluate.
   Plane retries a delivery up to 5 times and then drops it, so this is what catches an outage.
 - **GitHub poll** every 5 minutes:

@@ -188,7 +188,7 @@ identity_providers:
       # `kustomize build apps/production` failing until then.
       - client_id: plane-mobile
         client_name: plane-mobile
-        client_secret: '$pbkdf2-sha512$310000$REPLACE-ME$REPLACE-ME'
+        client_secret: '$pbkdf2-sha512$310000$Qfj726QToJ86ziTudG3CxQ$tHncdRRcbEaydsb8kMQCa5bxaNxa4AdYSuHFmf5QsFPNyORxASmZ7QSbAS/WGLYPP7vTozee6kfZobPYNtbjqA'
         public: false
         authorization_policy: two_factor
         require_pkce: true

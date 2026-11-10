@@ -178,6 +178,8 @@ INSPECT_FORMAT = ("{{json .Name}}\t{{json .Config.Labels}}\t{{json .Config.Image
 PS_FORMAT = '{{.Names}}\t{{.Label "' + PROJECT_LABEL + '"}}'
 VERSION_FORMAT = "{{.Client.Version}} {{.Server.Version}}"
 SELF_IMAGE_FORMAT = "{{.Image}}"
+# Mount sources and RW flags of every container (never Env): who can write what.
+MOUNTS_FORMAT = "{{json .Name}}\t{{json .Mounts}}"
 CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{12,64}$")
 CONFIG_FLAGS = (["--hash", "*"], ["--format", "json"], ["--format", "json", "--no-interpolate"])
 
@@ -216,10 +218,24 @@ def _strings(node, path=""):
 # ================================================================ validation (pure)
 
 
+# Path components the preflight helper can mount (its argv guard uses the same
+# rule): no spaces or shell-ish characters, and never `.` or `..`. Checked at
+# validation time, so such a path makes the app `invalid` instead of tripping
+# the guard during an armed tick.
+PATH_COMPONENT_RE = re.compile(r"^(?!\.\.?$)[A-Za-z0-9._@-]+$")
+
+
+def path_chars_ok(path: str) -> bool:
+    comps = [c for c in posixpath.normpath(path).split("/") if c]
+    return bool(comps) and all(PATH_COMPONENT_RE.match(c) for c in comps)
+
+
 def allow_entry_reasons(entry, data_dir: str) -> list[str]:
     """Reasons an x-deploy.allow-host-paths entry is itself unacceptable."""
     if not isinstance(entry, str) or not entry.startswith("/"):
         return ["x-deploy.allow-host-paths entries must be absolute paths"]
+    if not path_chars_ok(entry):
+        return ["x-deploy.allow-host-paths entries may use only [A-Za-z0-9._@-] path components"]
     p = posixpath.normpath(entry)
     if p in DENY_EXACT or p.startswith("/volume1/@") or any(_overlaps(p, r) for r in DENY_ROOTS) \
             or OTHER_VOLUME_RE.match(p) \
@@ -307,6 +323,8 @@ def mount_reasons(where: str, src, name: str, self_name: str, allow: list[str], 
     hp = posixpath.normpath(src)
     if name == self_name and hp == SELF_SOCKET:
         return []
+    if not path_chars_ok(hp):
+        return [f"{where}: bind source path components may use only [A-Za-z0-9._@-]"]
     own = f"{OWN_ROOT}/{name}"
     if hp == own:
         if name != self_name and _overlaps(hp, posixpath.normpath(data_dir)):
@@ -377,9 +395,10 @@ def validate_config(cfg: dict, name: str, allow: list[str], self_name: str | Non
                                     or set(logging) - {"driver", "options"}):
             reasons.append(f"{w}.logging: only the json-file or local driver")
         cn = body.get("container_name")
-        if cn is not None and cn != name and not str(cn).startswith(f"{name}-"):
-            # A name another app (or the deployer) uses would make `up` fight it.
-            reasons.append(f"{w}.container_name: must be {name} or start with {name}-")
+        if cn is not None and cn not in (name, f"{name}-{svc}"):
+            # A name another app (or the deployer) uses would make `up` fight
+            # it; reconcile also refuses one equal to another app's name.
+            reasons.append(f"{w}.container_name: must be {name} or {name}-{svc}")
         nm = body.get("network_mode")
         if nm is not None and nm not in NETWORK_MODES and not str(nm).startswith("service:"):
             reasons.append(f"{w}.network_mode: only none, bridge or service:<name>")
@@ -591,7 +610,7 @@ def check_read_argv(args) -> None:
     if not a:
         refuse("no subcommand")
     if a[0] == "ps":
-        if a == ["ps", "-a", "--no-trunc", "--format", PS_FORMAT]:
+        if a in (["ps", "-a", "--no-trunc", "--format", PS_FORMAT], ["ps", "-a", "-q", "--no-trunc"]):
             return
         if len(a) == 8 and a[:5] == ["ps", "-a", "-q", "--no-trunc", "--filter"] \
                 and a[5].startswith(f"label={PROJECT_LABEL}=") \
@@ -600,6 +619,9 @@ def check_read_argv(args) -> None:
         refuse("unexpected ps shape")
     if a[0] == "inspect":
         if a[:5] == ["inspect", "--type", "container", "--format", INSPECT_FORMAT] and len(a) > 5 \
+                and all(CONTAINER_ID_RE.match(x) for x in a[5:]):
+            return
+        if a[:5] == ["inspect", "--type", "container", "--format", MOUNTS_FORMAT] and len(a) > 5 \
                 and all(CONTAINER_ID_RE.match(x) for x in a[5:]):
             return
         if len(a) == 6 and a[:5] == ["inspect", "--type", "container", "--format", SELF_IMAGE_FORMAT] \
@@ -645,7 +667,7 @@ PREFLIGHT_RUN = ["run", "--rm", "--network", "none", "--read-only", "--cap-drop"
                  "--cap-add", "DAC_READ_SEARCH", "--security-opt", "no-new-privileges"]
 PREFLIGHT_TAIL = ["--entrypoint", "python3"]
 PREFLIGHT_NEVER_ROOTS = ("/run", "/var/run", "/proc", "/sys", "/dev")
-_ROOT_COMPONENT = r"[A-Za-z0-9._@-]+"
+_ROOT_COMPONENT = r"(?!\.\.?(?:/|,))[A-Za-z0-9._@-]+"
 PREFLIGHT_MOUNT_RE = re.compile(rf"^type=bind,source=(/{_ROOT_COMPONENT}(?:/{_ROOT_COMPONENT})?),"
                                 rf"target={HOST_ROOT}\1,readonly$")
 IMAGE_ID_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -791,13 +813,20 @@ def self_image(docker=docker_read) -> str:
 
 
 def preflight(entry: dict, binds: list, *, image: str, write, self_name: str,
-              data_dir: str) -> list[str]:
-    """Plan A5 preflight: resolve on the host, re-check the policy. [] = go."""
+              data_dir: str, writable: list | None = None) -> list[str]:
+    """Plan A5 preflight: resolve on the host, re-check the policy. [] = go.
+
+    Every bind source and allow-list entry must EQUAL its own realpath (no
+    symlink anywhere in it), so the lexical policy is the real one. The
+    nested-write rule is then re-checked against the RESOLVED sources of
+    every live read-write mount (`writable`, from live_writable()).
+    """
     allow = list(entry.get("allow_host_paths") or [])
     sources = sorted({posixpath.normpath(b[1]) for b in binds if isinstance(b[1], str)})
-    asked = sorted(set(sources) | set(allow) | {posixpath.normpath(data_dir)})
     if not sources:
         return []
+    others = sorted({w for _, w in (writable or []) if path_chars_ok(w)})
+    asked = sorted(set(sources) | set(allow) | {posixpath.normpath(data_dir)} | set(others))
     out = write(*preflight_argv(image, asked))
     resolved = json.loads(out)
     if not isinstance(resolved, dict):
@@ -808,13 +837,20 @@ def preflight(entry: dict, binds: list, *, image: str, write, self_name: str,
         return r[0], r[1]
 
     real_allow = []
+    reasons = []
     for a in allow:
         ra, _ = real(a)
-        # An allow-list entry that is itself a link into a denied root is dropped.
-        if ra and not allow_entry_reasons(ra, data_dir):
+        if ra != a:
+            # A symlink in an allow-list entry (DSM's /var/services/homes, say):
+            # list the real path instead.
+            reasons.append(f"x-deploy.allow-host-paths: {a} is not its own realpath ({ra}); list the real path")
+        elif not allow_entry_reasons(ra, data_dir):
             real_allow.append(ra)
     real_data = real(posixpath.normpath(data_dir))[0] or posixpath.normpath(data_dir)
-    reasons = []
+    real_writable = []
+    for c, w in (writable or []):
+        rw = real(w)[0] if w in others else None
+        real_writable.append((c, rw or w))
     for where, src, *_ in binds:
         p = posixpath.normpath(src)
         rp, kind = real(p)
@@ -824,6 +860,9 @@ def preflight(entry: dict, binds: list, *, image: str, write, self_name: str,
         if kind not in ("file", "dir"):
             reasons.append(f"{where}: bind source {p} is a {kind} (device, fifo or socket), not a file or directory")
             continue
+        if rp != p:
+            reasons.append(f"{where}: {p} is not its own realpath ({rp}): bind the real path")
+            continue
         if any(_is_under(rp, r) for r in FILES_ONLY_ROOTS) and kind != "file":
             reasons.append(f"{where}: {p} resolves to a {kind} under /var/log (single files only)")
         # The own-subtree rule stays lexical on the RESOLVED path: if
@@ -832,12 +871,15 @@ def preflight(entry: dict, binds: list, *, image: str, write, self_name: str,
         bad = mount_reasons(where, rp, entry["name"], self_name, real_allow, real_data)
         if bad:
             reasons.append(f"{where}: {p} resolves to {rp}, which the mount policy refuses")
+            continue
+        reasons.extend(nested_write_reasons([(where, rp, True)], real_writable))
     return reasons
 
 
 def apply_compose(entry: dict, result: dict, *, dry_run: bool, docker=docker_read, write=docker_write,
                   project_dir: str = "", owner: str = "", self_name: str = "", data_dir: str = "",
-                  binds: list | None = None, hashes: dict | None = None, sleep=time.sleep) -> tuple[bool, str]:
+                  binds: list | None = None, hashes: dict | None = None, sleep=time.sleep,
+                  writable: list | None = None) -> tuple[bool, str]:
     """preflight -> pull -> up -> settle for one app (plan A5). (ok, reason).
 
     Refuses before any subprocess call while mutations are off.
@@ -859,7 +901,15 @@ def apply_compose(entry: dict, result: dict, *, dry_run: bool, docker=docker_rea
         w(*base, "pull", "--quiet", stdin=body)
         # Preflight AFTER the pull, immediately before `up`: the shortest
         # window between check and use.
-        reasons = preflight(entry, binds or [], image=image, write=w, self_name=self_name, data_dir=data_dir)
+        try:
+            reasons = preflight(entry, binds or [], image=image, write=w, self_name=self_name,
+                                data_dir=data_dir, writable=writable)
+        except d.DryRunViolation:
+            if not d.mutations_allowed(dry_run, BACKEND):
+                raise
+            # Armed, so this is the argv guard refusing this app's preflight
+            # (a path it cannot mount): this app fails, the tick goes on.
+            return False, "preflight refused by the argv guard"
         if reasons:
             return False, "preflight: " + "; ".join(reasons)
         w(*base, *(UP_FLAGS[1] if result.get("stopped") else UP_FLAGS[0]), stdin=body)
@@ -948,6 +998,32 @@ def project_containers(name: str, docker=docker_read) -> list[dict]:
         return [_container_info(ln) for ln in out.splitlines() if ln.strip()]
     except (subprocess.SubprocessError, OSError, ValueError, KeyError) as e:
         raise d.DockerUnavailable(type(e).__name__) from None
+
+
+def live_writable(docker=docker_read) -> list[tuple[str, str]]:
+    """(container, source) of every read-write mount of EVERY container on the host.
+
+    The nested-write rule needs what can be written NOW, not only what this
+    tick's Git context plans: any running container (hand-made ones too) that
+    can write a directory could swap a path below it for a symlink.
+    """
+    try:
+        ids = docker("ps", "-a", "-q", "--no-trunc").split()
+        if not ids:
+            return []
+        out = docker("inspect", "--type", "container", "--format", MOUNTS_FORMAT, *ids)
+    except (subprocess.SubprocessError, OSError) as e:
+        raise d.DockerUnavailable(type(e).__name__) from None
+    found = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        name, mounts = line.split("\t", 1)
+        for m in json.loads(mounts) or []:
+            src = m.get("Source") if isinstance(m, dict) else None
+            if m.get("RW") is True and isinstance(src, str) and src.startswith("/"):
+                found.append((json.loads(name).lstrip("/"), posixpath.normpath(src)))
+    return sorted(set(found))
 
 
 def inventory(docker=docker_read) -> tuple[set[str], list[str]]:
@@ -1040,6 +1116,7 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
         return fail(f"compose project directory unusable: {type(e).__name__}")
     try:
         projects, loose = inventory(docker)
+        live_rw = live_writable(docker)
     except d.DockerUnavailable as e:
         return fail(f"docker ps failed: {e}")
 
@@ -1070,7 +1147,10 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
             # unowned: that would hide a top-level change behind the move.
             if tree is not None and (base is None or r["state"] == "synced"):
                 baselines[e["name"]] = {"sha": sha, "tree": tree}
-            ctx[e["name"]] = {"entry": e, "binds": binds, "hashes": hashes, "tree": tree}
+            ctx[e["name"]] = {"entry": e, "binds": binds, "hashes": hashes, "tree": tree,
+                              "container_names": {svc: b.get("container_name") for svc, b in
+                                                  (e["compose"].get("services") or {}).items()
+                                                  if isinstance(b, dict) and b.get("container_name")}}
             results.append(r)
         except d.DryRunViolation:
             raise
@@ -1082,12 +1162,19 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
                             "reasons": [f"evaluation error: {type(ex).__name__}"], "changes": [],
                             "drift": [], "blocked": [], "merged": None, "stopped": False})
 
-    # Cross-app: nothing may be bind-mounted below a writable bind of any app.
-    writable = [(n, posixpath.normpath(b[1])) for n, c in ctx.items() for b in (c["binds"] or [])
-                if isinstance(b[1], str) and not b[2]]
+    # Cross-app: nothing may be bind-mounted below a writable mount. Writable =
+    # every LIVE read-write mount on the host (any container) plus what this
+    # tick plans; the preflight re-checks it on resolved real paths.
+    writable = live_rw + [(n, posixpath.normpath(b[1])) for n, c in ctx.items() for b in (c["binds"] or [])
+                          if isinstance(b[1], str) and not b[2]]
+    names = {e["name"] for e in all_entries} | {self_name}
     for r in results:
         c = ctx.get(r["app"])
         bad = nested_write_reasons(c["binds"] or [], writable) if c else []
+        if c:
+            bad += [f"services.{svc}.container_name: {cn} is another app's name"
+                    for svc, cn in sorted((c.get("container_names") or {}).items())
+                    if cn in names and cn != r["app"]]
         if bad:
             r.update(state="invalid", reasons=bad, drift=[], changes=[])
             ctx.pop(r["app"])
@@ -1114,7 +1201,8 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
             try:
                 ok, why = apply_compose(c["entry"], by_app[n], dry_run=dry_run, docker=docker, write=write,
                                         project_dir=project_dir, owner=owner, self_name=self_name,
-                                        data_dir=data_dir, binds=c["binds"], hashes=c["hashes"], sleep=sleep)
+                                        data_dir=data_dir, binds=c["binds"], hashes=c["hashes"], sleep=sleep,
+                                        writable=writable)
             except d.DryRunViolation:
                 raise
             except Exception as ex:  # noqa: BLE001 - record it, keep the tick

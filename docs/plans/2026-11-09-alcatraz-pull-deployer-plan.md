@@ -558,6 +558,33 @@ PR sets `APPLY_ENABLED["compose"] = True`, which is George's call.
     the value).
   - **One-shot services** (ones that exit by design) fail the settle check. v1
     supports long-running services only.
+- **Review round 2 (#1894).**
+  - **The writable set is live.** It is built from every container on the host:
+    `docker inspect --format '{{json .Name}}\t{{json .Mounts}}'` over
+    `ps -a -q`, taking every mount with `RW: true`. Hand-made containers count
+    too. The mounts this tick plans are added to it.
+  - **Every path must be its own realpath.** In the preflight, each bind source
+    and allow-list entry must equal its realpath, so the lexical policy is the
+    real one. DSM's `/var/services/homes/...` must therefore be listed as
+    `/volume1/homes/...`.
+  - **The nested-write check runs again in the preflight**, against the
+    *resolved* paths of the live writable mounts.
+  - **Path components must match `[A-Za-z0-9._@-]` and are never `.` or `..`.**
+    This is checked when the compose is validated, so such a path makes the app
+    `invalid` instead of tripping the helper's argv guard. The guard uses the
+    same rule.
+  - **An armed tick survives a guard refusal.** If the argv guard refuses an
+    app's preflight while the backend is armed, that one app fails (with
+    backoff) and the tick carries on.
+  - **`container_name`** must be exactly `<app>` or `<app>-<service>`, and must not
+    equal another app's name or the deployer's.
+  - **Trust boundary: host users with SMB, NFS or SSH access to alcatraz's
+    shares are trusted.**
+    - They can create or swap symlinks and directories at any time. The
+      preflight checks paths as they are at check time; it cannot defend against
+      someone writing the host filesystem directly.
+    - The policy guards against *containers* writing their way out, not against
+      people with share access, who are George's household.
 - **`/var/log`.** An allow-list entry may not be `/var/log` itself, and a source
   under `/var/log` must resolve to a regular file.
 - **Top-level volume and network keys may not contain `_`.** `<project>_<key>` is

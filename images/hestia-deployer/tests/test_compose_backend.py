@@ -1054,7 +1054,7 @@ def test_real_parser_accepts_the_canary():
     # Before cutover it reads `missing` with the create note.
     r = cb.evaluate_compose_app({**managed(compose, name="deploy-canary"), "create": True}, {"deploy-canary": "h"},
                                 [], owner=OWNER)
-    assert r["state"] == "missing" and "not acted on until cutover" in r["reasons"][0]
+    assert r["state"] == "missing" and "x-deploy.create" in r["reasons"][0]
 
 
 # ------------------------------------------------------------ fetch (needs git) and entrypoint

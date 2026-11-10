@@ -53,7 +53,16 @@ can write for a symlink between the check and `up`) is closed by the mount
 policy: a bind source must be EXACTLY the app's own /volume1/docker/<name> or
 EXACTLY an allow-list entry, and no source may lie under any writable bind of
 any app (nested_write_reasons). So no app can write to the parent of anything
-that is bind-mounted. A failure makes the app `failed`, with a per-(app, sha)
+that is bind-mounted. The writable set is LIVE: every read-write mount of
+EVERY container on the host (live_writable), including a named volume's real
+host path when its local driver binds a `device`; a non-local volume driver
+hides its path, so it counts as writable at `/` and blocks every bind (fails
+closed). The tick's planned mounts are added, and the preflight re-checks the
+rule on resolved real paths, with every bind source and allow-list entry
+required to equal its own realpath. TRUST BOUNDARY: host users with
+SMB/NFS/SSH access to the shares are trusted; the policy defends against
+containers writing their way out, not against people writing the host
+filesystem directly. A failure makes the app `failed`, with a per-(app, sha)
 backoff of 1 h; a new SHA retries at once. There is no automatic rollback.
 Self-apply (the detached helper of plan A5) is not implemented: the deployer
 refuses to apply its own project.
@@ -180,6 +189,9 @@ VERSION_FORMAT = "{{.Client.Version}} {{.Server.Version}}"
 SELF_IMAGE_FORMAT = "{{.Image}}"
 # Mount sources and RW flags of every container (never Env): who can write what.
 MOUNTS_FORMAT = "{{json .Name}}\t{{json .Mounts}}"
+# A named volume's driver and options: where a local `device` volume really lives.
+VOLUME_FORMAT = "{{json .Name}}\t{{json .Driver}}\t{{json .Options}}"
+VOLUME_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 CONTAINER_ID_RE = re.compile(r"^[0-9a-f]{12,64}$")
 CONFIG_FLAGS = (["--hash", "*"], ["--format", "json"], ["--format", "json", "--no-interpolate"])
 
@@ -632,6 +644,13 @@ def check_read_argv(args) -> None:
         if a == ["version", "--format", VERSION_FORMAT]:
             return
         refuse("unexpected version shape")
+    if a[0] == "volume":
+        if a == ["volume", "ls", "-q"]:
+            return
+        if a[:4] == ["volume", "inspect", "--format", VOLUME_FORMAT] and len(a) > 4 \
+                and all(VOLUME_NAME_RE.match(x) for x in a[4:]):
+            return
+        refuse("unexpected volume shape")
     if a[0] != "compose":
         refuse()
     if a == ["compose", "version", "--short"]:
@@ -1000,48 +1019,109 @@ def project_containers(name: str, docker=docker_read) -> list[dict]:
         raise d.DockerUnavailable(type(e).__name__) from None
 
 
+def _inspect_tolerant(docker, kind_args: list[str], ids: list[str], relist) -> str:
+    """inspect `ids`; if that fails, drop the ones a fresh listing no longer
+    has (they vanished between list and inspect, as the deployer's own --rm
+    preflight helper can) and retry once. Anything else is DockerUnavailable."""
+    try:
+        return docker(*kind_args, *ids)
+    except (subprocess.SubprocessError, OSError):
+        pass
+    try:
+        still = set(relist())
+        keep = [x for x in ids if x in still]
+        return docker(*kind_args, *keep) if keep else ""
+    except (subprocess.SubprocessError, OSError) as e:
+        raise d.DockerUnavailable(type(e).__name__) from None
+
+
 def live_writable(docker=docker_read) -> list[tuple[str, str]]:
-    """(container, source) of every read-write mount of EVERY container on the host.
+    """(container, host path) of every read-write mount of EVERY container on the host.
 
     The nested-write rule needs what can be written NOW, not only what this
     tick's Git context plans: any running container (hand-made ones too) that
-    can write a directory could swap a path below it for a symlink.
+    can write a directory could swap a path below it for a symlink. A named
+    volume counts at its real host path when its local driver binds a
+    `device`; a non-local driver hides its path, so it counts as `/` (every
+    bind then lies under it: fail closed). Raises DockerUnavailable on any
+    docker error or unexpected shape.
     """
+    def ps_ids():
+        return docker("ps", "-a", "-q", "--no-trunc").split()
+
     try:
-        ids = docker("ps", "-a", "-q", "--no-trunc").split()
-        if not ids:
-            return []
-        out = docker("inspect", "--type", "container", "--format", MOUNTS_FORMAT, *ids)
+        ids = ps_ids()
     except (subprocess.SubprocessError, OSError) as e:
         raise d.DockerUnavailable(type(e).__name__) from None
-    found = []
-    for line in out.splitlines():
-        if not line.strip():
-            continue
-        name, mounts = line.split("\t", 1)
-        for m in json.loads(mounts) or []:
-            src = m.get("Source") if isinstance(m, dict) else None
-            if m.get("RW") is True and isinstance(src, str) and src.startswith("/"):
-                found.append((json.loads(name).lstrip("/"), posixpath.normpath(src)))
+    if not ids:
+        return []
+    out = _inspect_tolerant(docker, ["inspect", "--type", "container", "--format", MOUNTS_FORMAT], ids, ps_ids)
+    found: list[tuple[str, str]] = []
+    volumes: dict[str, list[str]] = {}
+    try:
+        for line in out.splitlines():
+            if not line.strip():
+                continue
+            name, mounts = line.split("\t", 1)
+            name = json.loads(name)
+            mounts = json.loads(mounts) or []
+            if not isinstance(name, str) or not isinstance(mounts, list):
+                raise ValueError("unexpected .Mounts shape")
+            name = name.lstrip("/")
+            for m in mounts:
+                if not isinstance(m, dict):
+                    raise ValueError("unexpected mount shape")
+                if m.get("RW") is not True:
+                    continue
+                if m.get("Type") == "volume" and isinstance(m.get("Name"), str):
+                    volumes.setdefault(m["Name"], []).append(name)
+                src = m.get("Source")
+                if isinstance(src, str) and src.startswith("/"):
+                    found.append((name, posixpath.normpath(src)))
+    except ValueError as e:  # json errors are ValueErrors too
+        raise d.DockerUnavailable(type(e).__name__) from None
+    if volumes:
+        names = sorted(v for v in volumes if VOLUME_NAME_RE.match(v))
+        if len(names) != len(volumes):
+            raise d.DockerUnavailable("unexpected volume name")
+        vout = _inspect_tolerant(docker, ["volume", "inspect", "--format", VOLUME_FORMAT], names,
+                                 lambda: docker("volume", "ls", "-q").split())
+        try:
+            for line in vout.splitlines():
+                if not line.strip():
+                    continue
+                vname, driver, opts = (json.loads(x) for x in line.split("\t"))
+                opts = opts or {}
+                if not isinstance(vname, str) or not isinstance(opts, dict):
+                    raise ValueError("unexpected volume shape")
+                users = volumes.get(vname, [])
+                if driver != "local":
+                    found += [(f"{u} (volume {vname}, driver {driver}: host path unknown)", "/") for u in users]
+                elif isinstance(opts.get("device"), str) and opts["device"].startswith("/"):
+                    found += [(f"{u} (volume {vname})", posixpath.normpath(opts["device"])) for u in users]
+        except ValueError as e:
+            raise d.DockerUnavailable(type(e).__name__) from None
     return sorted(set(found))
 
 
-def inventory(docker=docker_read) -> tuple[set[str], list[str]]:
-    """(compose project names, names of containers with no project label)."""
+def inventory(docker=docker_read) -> tuple[set[str], list[str], dict[str, str]]:
+    """(compose project names, names of containers with no project label,
+    every container name -> its project or "")."""
     try:
         out = docker("ps", "-a", "--no-trunc", "--format", PS_FORMAT)
     except (subprocess.SubprocessError, OSError) as e:
         raise d.DockerUnavailable(type(e).__name__) from None
-    projects, loose = set(), []
+    projects, loose, owner_of = set(), [], {}
     for line in out.splitlines():
         if not line.strip():
             continue
         cname, _, project = line.partition("\t")
+        owner_of[cname.strip()] = project.strip()
         if project.strip():
             projects.add(project.strip())
         else:
             loose.append(cname.strip())
-    return projects, sorted(loose)
+    return projects, sorted(loose), owner_of
 
 
 def ensure_project_dir(data_dir: str) -> str:
@@ -1115,7 +1195,7 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
     except (OSError, ValueError) as e:
         return fail(f"compose project directory unusable: {type(e).__name__}")
     try:
-        projects, loose = inventory(docker)
+        projects, loose, owner_of = inventory(docker)
         live_rw = live_writable(docker)
     except d.DockerUnavailable as e:
         return fail(f"docker ps failed: {e}")
@@ -1148,9 +1228,11 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
             if tree is not None and (base is None or r["state"] == "synced"):
                 baselines[e["name"]] = {"sha": sha, "tree": tree}
             ctx[e["name"]] = {"entry": e, "binds": binds, "hashes": hashes, "tree": tree,
-                              "container_names": {svc: b.get("container_name") for svc, b in
-                                                  (e["compose"].get("services") or {}).items()
-                                                  if isinstance(b, dict) and b.get("container_name")}}
+                              # The names `up` would create: container_name, or
+                              # compose's default <project>-<service>-1.
+                              "container_names": {svc: (b.get("container_name") or f"{e['name']}-{svc}-1")
+                                                  for svc, b in (e["compose"].get("services") or {}).items()
+                                                  if isinstance(b, dict)}}
             results.append(r)
         except d.DryRunViolation:
             raise
@@ -1168,13 +1250,23 @@ def reconcile(*, docker=docker_read, data_dir: str = d.DATA_DIR, textfile_dir: s
     writable = live_rw + [(n, posixpath.normpath(b[1])) for n, c in ctx.items() for b in (c["binds"] or [])
                           if isinstance(b[1], str) and not b[2]]
     names = {e["name"] for e in all_entries} | {self_name}
+    claimed: dict[str, list[str]] = {}
+    for n, c in ctx.items():
+        for cn in (c.get("container_names") or {}).values():
+            claimed.setdefault(cn, []).append(n)
     for r in results:
         c = ctx.get(r["app"])
         bad = nested_write_reasons(c["binds"] or [], writable) if c else []
         if c:
-            bad += [f"services.{svc}.container_name: {cn} is another app's name"
-                    for svc, cn in sorted((c.get("container_names") or {}).items())
-                    if cn in names and cn != r["app"]]
+            for svc, cn in sorted((c.get("container_names") or {}).items()):
+                if cn in names and cn != r["app"]:
+                    bad.append(f"services.{svc}: container name {cn} is another app's name")
+                elif len(set(claimed.get(cn, []))) > 1:
+                    bad.append(f"services.{svc}: container name {cn} is also claimed by "
+                               + ", ".join(sorted(set(claimed[cn]) - {r['app']})))
+                elif cn in owner_of and owner_of[cn] != r["app"]:
+                    bad.append(f"services.{svc}: container name {cn} is taken by a live container "
+                               f"outside this project ({owner_of[cn] or 'no project'})")
         if bad:
             r.update(state="invalid", reasons=bad, drift=[], changes=[])
             ctx.pop(r["app"])

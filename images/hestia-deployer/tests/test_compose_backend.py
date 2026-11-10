@@ -722,6 +722,7 @@ class FakeDocker:
         self.host = {}
         self.up_breaks = set()
         self.loose_mounts = {}
+        self.volumes = {}          # name -> (driver, options)
 
     def _hash(self, project, service, owned):
         c = self.desired[project]
@@ -738,6 +739,11 @@ class FakeDocker:
         if list(args) == ["ps", "-a", "-q", "--no-trunc"]:
             ids = [cid(p, i) for p, cs in self.projects.items() for i, _ in enumerate(cs)]
             return "\n".join(ids + [cid("loose", n) for n in self.loose])
+        if list(args) == ["volume", "ls", "-q"]:
+            return "\n".join(self.volumes)
+        if args[0] == "volume":
+            return "".join(f"{json.dumps(v)}\t{json.dumps(self.volumes[v][0])}\t{json.dumps(self.volumes[v][1])}\n"
+                           for v in args[4:] if v in self.volumes)
         if args[0] == "inspect" and args[4] == cb.MOUNTS_FORMAT:
             rows = {cid(p, i): c for p, cs in self.projects.items() for i, c in enumerate(cs)}
             rows.update({cid("loose", n): {"name": n, "mounts": self.loose_mounts.get(n, [])} for n in self.loose})
@@ -1423,6 +1429,108 @@ def test_a_preflight_the_guard_refuses_fails_only_that_app(tmp_path, capsys, arm
     assert state_of(s, "odd", "failed") == 1 and state_of(s, "plain", "synced") == 1
     assert "preflight refused by the argv guard" in capsys.readouterr().out
     assert "odd" in json.loads(state)["failures"]
+
+
+class LiveDocker:
+    """A minimal docker for live_writable(): containers -> mounts, volumes, vanishing ids."""
+
+    def __init__(self, containers, volumes=None, vanish=(), raw=None):
+        self.containers, self.volumes, self.vanish, self.raw = containers, volumes or {}, set(vanish), raw
+        self.calls = []
+
+    def __call__(self, *args, stdin=None):
+        cb.check_read_argv(args)
+        self.calls.append(args)
+        if list(args) == ["ps", "-a", "-q", "--no-trunc"]:
+            ids = [cid("c", n) for n in self.containers]
+            if len([a for a in self.calls if a[0] == "ps"]) > 1:      # the re-list after a failure
+                ids = [cid("c", n) for n in self.containers if n not in self.vanish]
+            return "\n".join(ids)
+        if args[0] == "inspect":
+            by = {cid("c", n): n for n in self.containers}
+            if any(by[x] in self.vanish for x in args[5:]):
+                raise subprocess.CalledProcessError(1, ["docker", "inspect"])
+            if self.raw is not None:
+                return self.raw
+            return "".join(f"{json.dumps('/' + by[x])}\t{json.dumps(self.containers[by[x]])}\n" for x in args[5:])
+        if list(args) == ["volume", "ls", "-q"]:
+            return "\n".join(self.volumes)
+        if args[0] == "volume":
+            if any(v not in self.volumes for v in args[4:]):
+                raise subprocess.CalledProcessError(1, ["docker", "volume", "inspect"])
+            return "".join(f"{json.dumps(v)}\t{json.dumps(self.volumes[v][0])}\t{json.dumps(self.volumes[v][1])}\n"
+                           for v in args[4:])
+        raise AssertionError(args)
+
+
+def test_live_writable_reads_bind_and_volume_paths():
+    docker = LiveDocker(
+        {"a": [{"Type": "bind", "Source": "/volume1/homes/g", "RW": True},
+               {"Type": "bind", "Source": "/volume1/ro", "RW": False}],
+         "b": [{"Type": "volume", "Name": "dev", "Source": "/volume1/@docker/volumes/dev/_data", "RW": True}],
+         "c": [{"Type": "volume", "Name": "plain", "Source": "/volume1/@docker/volumes/plain/_data", "RW": True}]},
+        volumes={"dev": ("local", {"type": "none", "o": "bind", "device": "/volume1/homes"}),
+                 "plain": ("local", {})})
+    got = cb.live_writable(docker)
+    assert ("a", "/volume1/homes/g") in got
+    assert ("b (volume dev)", "/volume1/homes") in got       # a local device volume counts at its device
+    assert not any(p == "/volume1/ro" for _, p in got)
+    assert all(p != "/" for _, p in got)
+
+
+def test_live_writable_non_local_volume_fails_closed():
+    docker = LiveDocker({"b": [{"Type": "volume", "Name": "nfsvol", "Source": "", "RW": True}]},
+                        volumes={"nfsvol": ("some/plugin", {})})
+    got = cb.live_writable(docker)
+    assert got == [("b (volume nfsvol, driver some/plugin: host path unknown)", "/")]
+    assert cb.nested_write_reasons([("v[0]", "/volume1/homes/g/Photos", True)], got)
+
+
+def test_live_writable_tolerates_a_container_vanishing():
+    docker = LiveDocker({"a": [{"Type": "bind", "Source": "/volume1/x", "RW": True}],
+                         "helper": [{"Type": "bind", "Source": "/volume1", "RW": False}]}, vanish={"helper"})
+    assert cb.live_writable(docker) == [("a", "/volume1/x")]
+
+
+@pytest.mark.parametrize("raw", ['"/a"\t{"not": "a list"}\n', '"/a"\t[1, 2]\n', '"/a"\tnot json\n', 'no tab\n'])
+def test_live_writable_malformed_mounts_is_docker_unavailable(raw):
+    with pytest.raises(d.DockerUnavailable):
+        cb.live_writable(LiveDocker({"a": []}, raw=raw))
+
+
+@needs_git
+def test_a_non_local_volume_on_the_host_blocks_binds_but_the_tick_runs(tmp_path):
+    apps = {"photos": ({"services": {"s": {"image": IMG, "volumes": ["/volume1/homes/george/Photos:/p:ro"]}}},
+                       {"allow-host-paths": ["/volume1/homes/george/Photos"]}),
+            "nobind": ({"services": {"s": {"image": IMG}}}, None)}
+    data, docker = scenario(tmp_path, apps)
+    docker.loose_mounts = {"portainer": [{"Type": "volume", "Name": "remote", "RW": True}]}
+    docker.volumes = {"remote": ("rclone", {})}
+    rc, body, _ = tick(tmp_path, docker, data)
+    s = parse_prom(body)
+    assert rc == 0 and state_of(s, "photos", "invalid") == 1 and state_of(s, "nobind", "missing") == 1
+
+
+@needs_git
+def test_two_apps_cannot_claim_the_same_container_name(tmp_path):
+    # foo + service bar-x and foo-bar + service x both default to foo-bar-x-1.
+    apps = {"foo": ({"services": {"bar-x": {"image": IMG}}}, None),
+            "foo-bar": ({"services": {"x": {"image": IMG}}}, None),
+            "ok": ({"services": {"s": {"image": IMG}}}, None)}
+    data, docker = scenario(tmp_path, apps)
+    _, body, _ = tick(tmp_path, docker, data)
+    s = parse_prom(body)
+    assert state_of(s, "foo", "invalid") == 1 and state_of(s, "foo-bar", "invalid") == 1
+    assert state_of(s, "ok", "missing") == 1
+
+
+@needs_git
+def test_container_name_taken_by_a_live_container_outside_the_project(tmp_path):
+    apps = {"pull": ({"services": {"s": {"image": IMG, "container_name": "pull"}}}, None)}
+    data, docker = scenario(tmp_path, apps)
+    docker.loose = ["pull"]                       # a hand-made `docker run --name pull`
+    _, body, _ = tick(tmp_path, docker, data)
+    assert state_of(parse_prom(body), "pull", "invalid") == 1
 
 
 def test_self_apply_is_refused(armed):

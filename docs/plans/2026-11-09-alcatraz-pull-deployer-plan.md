@@ -585,6 +585,22 @@ PR sets `APPLY_ENABLED["compose"] = True`, which is George's call.
       someone writing the host filesystem directly.
     - The policy guards against *containers* writing their way out, not against
       people with share access, who are George's household.
+- **Review round 3 (#1894).**
+  - **Named volumes are checked at their real host path.** A local volume with a
+    `device` option (`docker volume inspect --format`, a new exact read shape)
+    counts as writable at that device path. A non-local driver hides its path, so
+    it counts as writable at `/`. That makes every bind on the host `invalid`,
+    which fails closed; apps without binds are unaffected.
+  - **A container vanishing between `ps` and `inspect`** no longer fails the
+    tick. The deployer's own `--rm` preflight helper can do this. The backend
+    re-lists, drops the vanished ids and retries once. A malformed `.Mounts` or
+    volume shape is `DockerUnavailable`: the tick fails cleanly, with no crash.
+  - **Container names are unique.** They are the declared `container_name`, or
+    compose's default `<project>-<service>-1`, so `foo` with service `bar-x`
+    collides with `foo-bar` with service `x`. A name must be unique across all
+    apps, and must not be taken by a live container outside the project.
+  - **New A-Phase 2 step 5:** before the soak, list the hand-made containers that
+    write `/`, `/volume1` or `/volume1/homes`.
 - **`/var/log`.** An allow-list entry may not be `/var/log` itself, and a source
   under `/var/log` must resolve to a regular file.
 - **Top-level volume and network keys may not contain `_`.** `<project>_<key>` is
@@ -756,6 +772,22 @@ George's steps on alcatraz (over SSH; the agent does not SSH):
 4. **First start.** Copy the compose from `master` and run
    `sudo docker compose -f docker-compose.yml -p alcatraz-deployer up -d`. This is the one
    hand-run compose, the same role the runner had.
+5. **Pre-soak: list the containers that write broad host paths.** Any hand-made
+   Container Manager container that mounts `/`, `/volume1` or `/volume1/homes`
+   read-write (or uses a named volume whose local `device` is one of them) makes
+   every allow-listed bind below it `invalid`. That is the live nested-write rule
+   from the apply-path PR. List them before the soak, so that `invalid` is
+   expected rather than a surprise:
+
+   ```bash
+   sudo docker ps -aq | xargs -r sudo docker inspect \
+     --format '{{.Name}}{{range .Mounts}}{{if .RW}} {{.Type}}:{{if .Name}}{{.Name}}={{end}}{{.Source}}{{end}}{{end}}' \
+     | grep -E ':(/|/volume1|/volume1/homes)( |$)|volume:'
+   ```
+
+   For each `volume:` entry, check `sudo docker volume inspect <name>` for a
+   `device` option. Record what you find in the soak notes, and either make
+   such mounts read-only or accept that binds below them stay `invalid`.
 
 The soak exits only when **all** of the following are true. The 24 h is a minimum, not
 a deadline:

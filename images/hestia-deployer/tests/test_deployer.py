@@ -41,7 +41,11 @@ def entry(text, path="hosts/hestia/foo/docker-compose.yml"):
 
 
 def test_apply_is_disabled_in_phase_1():
-    assert d.APPLY_ENABLED is False
+    # One switch per backend (alcatraz plan A1). hestia's cutover flips
+    # "truenas" only; "compose" stays False until alcatraz's cutover PR.
+    assert d.APPLY_ENABLED == {"truenas": False, "compose": False}
+    assert d.apply_enabled("truenas") is False
+    assert d.apply_enabled("compose") is False
 
 
 @pytest.mark.parametrize("env,expected", [({}, True), ({"DRY_RUN": "1"}, True), ({"DRY_RUN": "true"}, True),
@@ -389,14 +393,14 @@ def test_deploy_help_strings_are_pinned():
     # Plan D9: fixed once. Changing one breaks node-exporter merging across
     # deployer versions mid-rollout; change it only deliberately, here too.
     assert d.DEPLOY_HELP == {
-        "homelabscope_deploy_head_info": "master commit the last hestia-deployer tick evaluated.",
-        "homelabscope_deploy_head_commit_seconds": "Commit time of the master commit the last hestia-deployer tick evaluated.",
-        "homelabscope_deploy_app_state": "hestia-deployer state of each hestia app (1 for the current state).",
-        "homelabscope_deploy_app_applied_info": "Last commit hestia-deployer successfully applied to the app.",
-        "homelabscope_deploy_app_last_apply_seconds": "Unix timestamp of hestia-deployer's last successful apply of the app.",
-        "homelabscope_deploy_paused": "1 when hestia-deployer is paused (scope=global: PAUSE file; otherwise x-deploy.paused).",
-        "homelabscope_deploy_unmanaged_apps": "Count of TrueNAS apps on hestia with no compose file in Git.",
-        "homelabscope_deploy_dry_run": "1 when hestia-deployer runs in dry-run (shadow) mode and applies nothing.",
+        "homelabscope_deploy_head_info": "master commit the last deployer tick evaluated.",
+        "homelabscope_deploy_head_commit_seconds": "Commit time of the master commit the last deployer tick evaluated.",
+        "homelabscope_deploy_app_state": "Deployer state of each app on the host (1 for the current state).",
+        "homelabscope_deploy_app_applied_info": "Last commit the deployer successfully applied to the app.",
+        "homelabscope_deploy_app_last_apply_seconds": "Unix timestamp of the deployer's last successful apply of the app.",
+        "homelabscope_deploy_paused": "1 when the deployer is paused (scope=global: PAUSE file; otherwise x-deploy.paused).",
+        "homelabscope_deploy_unmanaged_apps": "Count of apps on the host with no compose file in Git.",
+        "homelabscope_deploy_dry_run": "1 when the deployer runs in dry-run (shadow) mode and applies nothing.",
     }
 
 
@@ -429,13 +433,13 @@ def test_render_metrics_ok():
     assert s['homelabscope_job_last_success_seconds{job="hestia-deployer"}'] == 100
     assert s['homelabscope_job_last_status{job="hestia-deployer"}'] == 0
     assert s['homelabscope_job_max_age_seconds{job="hestia-deployer"}'] == 1800
-    assert s['homelabscope_deploy_head_info{commit="0123456"}'] == 1
-    assert s["homelabscope_deploy_head_commit_seconds"] == 90
-    assert s['homelabscope_deploy_app_state{app="c",state="pending"}'] == 1
-    assert s['homelabscope_deploy_paused{scope="global"}'] == 0
-    assert s['homelabscope_deploy_paused{scope="b"}'] == 1
-    assert s["homelabscope_deploy_unmanaged_apps"] == 2
-    assert s["homelabscope_deploy_dry_run"] == 1
+    assert s['homelabscope_deploy_head_info{host="hestia",commit="0123456"}'] == 1
+    assert s['homelabscope_deploy_head_commit_seconds{host="hestia"}'] == 90
+    assert s['homelabscope_deploy_app_state{host="hestia",app="c",state="pending"}'] == 1
+    assert s['homelabscope_deploy_paused{host="hestia",scope="global"}'] == 0
+    assert s['homelabscope_deploy_paused{host="hestia",scope="b"}'] == 1
+    assert s['homelabscope_deploy_unmanaged_apps{host="hestia"}'] == 2
+    assert s['homelabscope_deploy_dry_run{host="hestia"}'] == 1
     assert "applied_info" not in body
     # every family has exactly one HELP and TYPE
     helps = re.findall(r"^# HELP (\S+)", body, re.M)
@@ -456,15 +460,168 @@ def test_render_metrics_one_series_per_app():
                {"app": "b", "state": "pending"}]
     body = d.render_metrics(ok=True, now=1, prev_success=None, duration=0, dry_run=True, results=results)
     lines = [ln for ln in body.splitlines() if ln.startswith("homelabscope_deploy_app_state")]
-    assert lines == ['homelabscope_deploy_app_state{app="a",state="invalid"} 1',
-                     'homelabscope_deploy_app_state{app="b",state="invalid"} 1']
+    assert lines == ['homelabscope_deploy_app_state{host="hestia",app="a",state="invalid"} 1',
+                     'homelabscope_deploy_app_state{host="hestia",app="b",state="invalid"} 1']
 
 
 def test_render_applied():
     body = d.render_metrics(ok=True, now=1, prev_success=None, duration=0, dry_run=False,
                             applied={"a": {"commit": SHA, "at": 77}})
-    assert 'homelabscope_deploy_app_applied_info{app="a",commit="0123456"} 1' in body
-    assert 'homelabscope_deploy_app_last_apply_seconds{app="a"} 77' in body
+    assert 'homelabscope_deploy_app_applied_info{host="hestia",app="a",commit="0123456"} 1' in body
+    assert 'homelabscope_deploy_app_last_apply_seconds{host="hestia",app="a"} 77' in body
+
+
+def test_every_deploy_sample_has_the_host_label_and_job_samples_do_not():
+    # alcatraz plan A6: one node-exporter serves hestia's file and alcatraz's
+    # relayed file, so every deploy family needs host; the job_* families are
+    # shared with other writers and keep their job-only label set.
+    results = [{"app": "a", "state": "paused"}]
+    body = d.render_metrics(ok=True, now=1, prev_success=1, duration=0, dry_run=True, sha=SHA, commit_seconds=1,
+                            results=results, unmanaged=0, applied={"a": {"commit": SHA, "at": 1}})
+    samples = [ln for ln in body.splitlines() if ln and not ln.startswith("#")]
+    deploy = [ln for ln in samples if ln.startswith("homelabscope_deploy_")]
+    assert {ln.split("{")[0] for ln in deploy} == set(d.DEPLOY_HELP)
+    assert all(ln.split("{", 1)[1].startswith('host="hestia"') for ln in deploy)
+    job = [ln for ln in samples if ln.startswith("homelabscope_job_")]
+    assert job and all(ln.split("{", 1)[1].startswith(f'job="{d.JOB}"}}') for ln in job)
+
+
+GOLDEN_HESTIA = """\
+# HELP homelabscope_job_last_success_seconds Unix timestamp of the job's last successful run.
+# TYPE homelabscope_job_last_success_seconds gauge
+homelabscope_job_last_success_seconds{job="hestia-deployer"} 100
+# HELP homelabscope_job_last_duration_seconds Wall-clock duration of the job's last run (seconds).
+# TYPE homelabscope_job_last_duration_seconds gauge
+homelabscope_job_last_duration_seconds{job="hestia-deployer"} 3
+# HELP homelabscope_job_last_status Last run status (0=ok, 1=fail).
+# TYPE homelabscope_job_last_status gauge
+homelabscope_job_last_status{job="hestia-deployer"} 0
+# HELP homelabscope_job_max_age_seconds Staleness budget for this job (seconds).
+# TYPE homelabscope_job_max_age_seconds gauge
+homelabscope_job_max_age_seconds{job="hestia-deployer"} 1800
+# HELP homelabscope_deploy_dry_run 1 when the deployer runs in dry-run (shadow) mode and applies nothing.
+# TYPE homelabscope_deploy_dry_run gauge
+homelabscope_deploy_dry_run{host="hestia"} 1
+# HELP homelabscope_deploy_head_info master commit the last deployer tick evaluated.
+# TYPE homelabscope_deploy_head_info gauge
+homelabscope_deploy_head_info{host="hestia",commit="0123456"} 1
+# HELP homelabscope_deploy_head_commit_seconds Commit time of the master commit the last deployer tick evaluated.
+# TYPE homelabscope_deploy_head_commit_seconds gauge
+homelabscope_deploy_head_commit_seconds{host="hestia"} 90
+# HELP homelabscope_deploy_app_state Deployer state of each app on the host (1 for the current state).
+# TYPE homelabscope_deploy_app_state gauge
+homelabscope_deploy_app_state{host="hestia",app="a",state="synced"} 1
+homelabscope_deploy_app_state{host="hestia",app="b",state="paused"} 1
+# HELP homelabscope_deploy_paused 1 when the deployer is paused (scope=global: PAUSE file; otherwise x-deploy.paused).
+# TYPE homelabscope_deploy_paused gauge
+homelabscope_deploy_paused{host="hestia",scope="global"} 0
+homelabscope_deploy_paused{host="hestia",scope="b"} 1
+# HELP homelabscope_deploy_unmanaged_apps Count of apps on the host with no compose file in Git.
+# TYPE homelabscope_deploy_unmanaged_apps gauge
+homelabscope_deploy_unmanaged_apps{host="hestia"} 2
+"""
+
+
+def test_hestia_textfile_golden():
+    # The whole hestia body, byte for byte. The ONLY differences from the
+    # pre-HOMELAB-118 output are host="hestia" on the deploy samples and the
+    # host-neutral deploy HELP text; family order, job_* lines and values are
+    # unchanged. Update this only deliberately.
+    results = [{"app": "a", "state": "synced"}, {"app": "b", "state": "paused"}]
+    body = d.render_metrics(ok=True, now=100, prev_success=50, duration=3, dry_run=True, sha=SHA,
+                            commit_seconds=90, results=results, global_paused=False, unmanaged=2)
+    assert body == GOLDEN_HESTIA
+
+
+# ------------------------------------------------------------ host parameters (alcatraz plan A1)
+
+HOST_VARS = ("DEPLOYER_HOST", "DEPLOYER_HOSTS_PREFIX", "DEPLOYER_SELF_NAME", "DEPLOYER_JOB", "DATA_DIR",
+             "TEXTFILE_DIR", "DEPLOYER_EXCLUDED_PREFIXES")
+
+
+def import_with_env(extra, expr):
+    """Import deployer in a fresh interpreter with only `extra` host vars set."""
+    env = {k: v for k, v in os.environ.items() if k not in HOST_VARS}
+    env.update(extra)
+    code = f"import json, sys; sys.path.insert(0, {os.path.dirname(HERE)!r}); import deployer as d; print(json.dumps({expr}))"
+    p = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
+    return p.returncode, (json.loads(p.stdout) if p.returncode == 0 else None), p.stderr
+
+
+def test_host_parameter_defaults_are_hestias_previous_constants():
+    rc, got, err = import_with_env({}, "[d.HOST, d.HOSTS_PREFIX, d.SELF_NAME, d.JOB, d.DATA_DIR, d.TEXTFILE_DIR, "
+                                       "list(d.EXCLUDED_PREFIXES), list(d.EXCLUDED_NAMES), list(d.EXCLUDED_SCALE_APPS)]")
+    assert rc == 0, err
+    assert got == ["hestia", "hosts/hestia/", "hestia-deployer", "hestia-deployer",
+                   "/mnt/main/apps/hestia-deployer", "/var/lib/node-exporter/textfile",
+                   ["hosts/hestia/actions-runner/", "hosts/hestia/hestia-deployer/"],
+                   ["hestia-deployer"], ["gha-runner", "hestia-deployer"]]
+
+
+
+def test_bare_generic_env_names_are_ignored():
+    # zsh and some images export HOST; a stray (even malformed) value must
+    # neither change the deployer nor stop it at import.
+    rc, got, err = import_with_env({"HOST": "Some Box.local", "JOB": "x y", "SELF_NAME": "?", "HOSTS_PREFIX": "/",
+                                    "EXCLUDED_PREFIXES": "nope"},
+                                   "[d.HOST, d.HOSTS_PREFIX, d.SELF_NAME, d.JOB, list(d.EXCLUDED_PREFIXES)]")
+    assert rc == 0, err
+    assert got == ["hestia", "hosts/hestia/", "hestia-deployer", "hestia-deployer",
+                   ["hosts/hestia/actions-runner/", "hosts/hestia/hestia-deployer/"]]
+
+def test_host_parameters_from_env():
+    env = {"DEPLOYER_HOST": "alcatraz", "DEPLOYER_HOSTS_PREFIX": "hosts/alcatraz/",
+           "DEPLOYER_SELF_NAME": "alcatraz-deployer", "DEPLOYER_JOB": "alcatraz-deployer"}
+    rc, got, err = import_with_env(env, "[d.HOST, d.HOSTS_PREFIX, d.SELF_NAME, d.JOB, list(d.EXCLUDED_PREFIXES), "
+                                        "d.is_compose_path('hosts/alcatraz/a/docker-compose.yml'), "
+                                        "d.is_compose_path('hosts/hestia/a/docker-compose.yml'), "
+                                        "d.render_metrics(ok=True, now=1, prev_success=1, duration=0, dry_run=True, "
+                                        "unmanaged=0)]")
+    assert rc == 0, err
+    host, prefix, self_name, job, excluded, alc, hes, body = got
+    assert (host, prefix, self_name, job) == ("alcatraz", "hosts/alcatraz/", "alcatraz-deployer", "alcatraz-deployer")
+    assert excluded == ["hosts/alcatraz/actions-runner/", "hosts/alcatraz/alcatraz-deployer/"]
+    assert alc and not hes
+    assert 'homelabscope_deploy_unmanaged_apps{host="alcatraz"} 0' in body
+    assert 'homelabscope_job_last_status{job="alcatraz-deployer"} 0' in body
+    # HELP text is host-neutral: identical whichever host renders it.
+    helps = sorted(ln for ln in body.splitlines() if ln.startswith("# HELP homelabscope_deploy_"))
+    hestia = sorted(ln for ln in d.render_metrics(ok=True, now=1, prev_success=1, duration=0, dry_run=True,
+                                                  unmanaged=0).splitlines()
+                    if ln.startswith("# HELP homelabscope_deploy_"))
+    assert helps == hestia
+
+
+def test_excluded_prefixes_from_env():
+    assert d.excluded_prefixes_from_env("hosts/alcatraz/", "x", {"DEPLOYER_EXCLUDED_PREFIXES": "hosts/alcatraz/a/, hosts/alcatraz/b/"}) \
+        == ("hosts/alcatraz/a/", "hosts/alcatraz/b/")
+    for bad in ("hosts/hestia/a/", "hosts/alcatraz/a", "hosts/alcatraz/../hestia/"):
+        with pytest.raises(d.ConfigError):
+            d.excluded_prefixes_from_env("hosts/alcatraz/", "x", {"DEPLOYER_EXCLUDED_PREFIXES": bad})
+
+
+SENTINEL = "s3cr3t-value-never-printed"
+
+
+@pytest.mark.parametrize("var,bad", [("DEPLOYER_HOST", f"Hestia {SENTINEL}"),
+                                     ("DEPLOYER_HOSTS_PREFIX", f"hosts/{SENTINEL}"),
+                                     ("DEPLOYER_HOSTS_PREFIX", "hosts/../"),
+                                     ("DEPLOYER_SELF_NAME", f'x"{SENTINEL}'),
+                                     ("DEPLOYER_JOB", f"job\n{SENTINEL}")])
+def test_malformed_host_parameter_is_refused_without_echoing_it(var, bad):
+    rc, _, err = import_with_env({var: bad}, "1")
+    assert rc != 0
+    assert "ConfigError" in err and var in err
+    assert SENTINEL not in err
+
+
+def test_apply_switch_is_per_backend(monkeypatch):
+    # hestia's cutover arms "truenas"; that must never arm "compose".
+    monkeypatch.setitem(d.APPLY_ENABLED, "truenas", True)
+    assert d.mutations_allowed(False) is True
+    assert d.mutations_allowed(False, "compose") is False
+    assert d.mutations_allowed(False, "nonsense") is False
+    assert d.mutations_allowed(True) is False
 
 
 # ------------------------------------------------------------ reconcile end to end
@@ -535,16 +692,16 @@ def test_reconcile_only_reads_and_reports(tmp_path, capsys, dry_run):
 
     body = (tf / d.DEPLOY_TEXTFILE).read_text()
     s = parse_prom(body)
-    assert s['homelabscope_deploy_app_state{app="synced-app",state="synced"}'] == 1
-    assert s['homelabscope_deploy_app_state{app="bumped",state="pending"}'] == 1
-    assert s['homelabscope_deploy_app_state{app="secretive",state="blocked"}'] == 1
-    assert s['homelabscope_deploy_app_state{app="kept",state="synced"}'] == 1
-    assert s['homelabscope_deploy_app_state{app="absent",state="missing"}'] == 1
-    assert s['homelabscope_deploy_app_state{app="old",state="archived"}'] == 1
+    assert s['homelabscope_deploy_app_state{host="hestia",app="synced-app",state="synced"}'] == 1
+    assert s['homelabscope_deploy_app_state{host="hestia",app="bumped",state="pending"}'] == 1
+    assert s['homelabscope_deploy_app_state{host="hestia",app="secretive",state="blocked"}'] == 1
+    assert s['homelabscope_deploy_app_state{host="hestia",app="kept",state="synced"}'] == 1
+    assert s['homelabscope_deploy_app_state{host="hestia",app="absent",state="missing"}'] == 1
+    assert s['homelabscope_deploy_app_state{host="hestia",app="old",state="archived"}'] == 1
     assert not any('app="gha-runner"' in k for k in s)
-    assert s["homelabscope_deploy_unmanaged_apps"] == 1  # catalog-thing
+    assert s['homelabscope_deploy_unmanaged_apps{host="hestia"}'] == 1  # catalog-thing
     # APPLY_ENABLED is False, so even DRY_RUN=0 reports dry-run.
-    assert s["homelabscope_deploy_dry_run"] == 1
+    assert s['homelabscope_deploy_dry_run{host="hestia"}'] == 1
 
     state_text = (data / "state.json").read_text()
     out = capsys.readouterr().out
@@ -560,7 +717,7 @@ def test_reconcile_global_pause_is_reported(tmp_path):
     (data / "PAUSE").write_text("")
     tf = tmp_path / "tf"
     d.reconcile(client, docker=docker, data_dir=str(data), textfile_dir=str(tf), dry_run=True, now=1)
-    assert 'homelabscope_deploy_paused{scope="global"} 1' in (tf / d.DEPLOY_TEXTFILE).read_text()
+    assert 'homelabscope_deploy_paused{host="hestia",scope="global"} 1' in (tf / d.DEPLOY_TEXTFILE).read_text()
 
 
 def test_reconcile_without_desired_fails_without_fabricating(tmp_path):
@@ -729,7 +886,7 @@ class RecordingClient(FakeClient):
 
 def test_apply_app_never_logs_error_text(monkeypatch, capsys):
     # Phase 2 path, forced on here only to exercise its error handling.
-    monkeypatch.setattr(d, "APPLY_ENABLED", True)
+    monkeypatch.setitem(d.APPLY_ENABLED, "truenas", True)
     client = RecordingClient(fail_update=f"pydantic: TOKEN={SECRET} is invalid")
     assert d.apply_app(client, "foo", {"services": {}}, dry_run=False) is False
     out = capsys.readouterr().out
@@ -738,7 +895,7 @@ def test_apply_app_never_logs_error_text(monkeypatch, capsys):
 
 
 def test_apply_app_never_starts_a_stopped_app(monkeypatch):
-    monkeypatch.setattr(d, "APPLY_ENABLED", True)
+    monkeypatch.setitem(d.APPLY_ENABLED, "truenas", True)
     client = RecordingClient(state="STOPPED")
     assert d.apply_app(client, "foo", {"services": {}}, dry_run=False) is True
     assert "app.start" not in client.calls and "app.stop" not in client.calls
@@ -771,8 +928,8 @@ def test_one_bad_app_is_invalid_and_the_tick_still_reports(tmp_path, monkeypatch
     rc, body, state = run_tick(tmp_path, client, docker)
     assert rc == 0
     s = parse_prom(body)
-    assert s['homelabscope_deploy_app_state{app="bumped",state="invalid"}'] == 1
-    assert s['homelabscope_deploy_app_state{app="synced-app",state="synced"}'] == 1
+    assert s['homelabscope_deploy_app_state{host="hestia",app="bumped",state="invalid"}'] == 1
+    assert s['homelabscope_deploy_app_state{host="hestia",app="synced-app",state="synced"}'] == 1
     out = capsys.readouterr().out
     assert "evaluation error: KeyError" in out
     for text in (out, body, state):
@@ -808,7 +965,7 @@ def test_docker_failure_is_unevaluated_not_pending(tmp_path, capsys):
     assert not any("state=\"pending\"" in k for k in s)
     assert not any('app="bumped"' in k for k in s)
     # apps that need no docker look-up still report
-    assert s['homelabscope_deploy_app_state{app="absent",state="missing"}'] == 1
+    assert s['homelabscope_deploy_app_state{host="hestia",app="absent",state="missing"}'] == 1
     assert s['homelabscope_job_last_status{job="hestia-deployer"}'] == 1
     assert "homelabscope_job_last_success_seconds" not in body
     assert "unevaluated this tick: docker CalledProcessError" in capsys.readouterr().out

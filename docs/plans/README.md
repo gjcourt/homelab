@@ -90,11 +90,12 @@ see `scripts/plans-index/`).
 | [2026-05-02-critique-remediation.md](2026-05-02-critique-remediation.md) | 2026-05-04 | IaC hardening — close the 22 findings from the 2026-05-02 critique |
 | [2026-03-14-navidrome-snapcast-mopidy.md](2026-03-14-navidrome-snapcast-mopidy.md) | 2026-06-10 | Navidrome → Mopidy → Snapcast → HifiBerry audio pipeline — draft PR #426 open, not yet on master |
 
-### Planned (26)
+### Planned (27)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
 | [2026-11-09-bench-desk-renovate-plan.md](2026-11-09-bench-desk-renovate-plan.md) | 2026-11-09 | Rename agent-desk to bench-desk (Phase A, own PR, zero lost webhooks), then make Renovate PRs a second bench-desk work source: renovate-review and renovate-fix run as bench-cloud tasks, results go back as a sha-bound commit status + held-by-review, renovate-automerge stays the only merger with every 2026-09-28 gate; retire the renovate-review CronJob |
+| [2026-11-09-alcatraz-pull-deployer-plan.md](2026-11-09-alcatraz-pull-deployer-plan.md) | 2026-11-09 | Give alcatraz the hestia pull model: the same hestia-deployer image with a docker-compose backend (one commit per tick, config-hash diff, compose up -d per project), dry-run beside hestia's, a 24h evidence-gated soak, cutover about a week after hestia's (HOMELAB-112), then delete the never-registered alcatraz runner path (HOMELAB-118) |
 | [2026-11-08-agent-sessions-plan.md](2026-11-08-agent-sessions-plan.md) | 2026-11-08 | 03-042 phase 2: Devin-style agent sessions (list, live progress, chat); Matrix vs plane-mobile pane, prototype first |
 | [2026-11-07-bench-fleet-dashboard-plan.md](2026-11-07-bench-fleet-dashboard-plan.md) | 2026-11-07 | Grafana dashboard for the bench-cloud agent fleet (Plane HOMELAB, George-only — outside the bench gate): Phase 1 throughput + utilization-vs-cap from kube-state-metrics Job labels, Phase 2 cost/token economics via a new bench-metrics-exporter over the per-run result.json; sliced by playbook/project/model/outcome/time |
 | [2026-11-06-homeassistant-overhaul-plan.md](2026-11-06-homeassistant-overhaul-plan.md) | 2026-11-06 | Home Assistant overhaul (Plane HASS): current state, then four workstreams (maintenance reminders, energy tracking, floor plan, everyday-use app) plus the staging-refresh and http-block prerequisites, their order, and the questions only George can answer |

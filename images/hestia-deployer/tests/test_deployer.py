@@ -650,12 +650,14 @@ def test_fetch_failure_keeps_previous_desired(tmp_path):
 # ------------------------------------------------------------ packaging
 
 
-def test_compose_is_shadow_and_bootstrap_archived():
+def test_compose_is_shadow_and_digest_pinned():
     path = os.path.join(ROOT, "hosts/hestia/hestia-deployer/docker-compose.yml")
     doc = yaml.safe_load(open(path))
     assert doc["x-deploy"]["name"] == d.SELF_NAME
-    assert doc["x-deploy"]["archived"] is True
+    # Bootstrapped 2026-11-09 (#1880): live, so not archived, and digest-pinned.
+    assert doc["x-deploy"].get("archived") in (None, False)
     svc = doc["services"]["hestia-deployer"]
+    assert re.match(r"^ghcr\.io/gjcourt/hestia-deployer:\d{4}-\d{2}-\d{2}-[0-9a-f]{7}@sha256:[0-9a-f]{64}$", svc["image"])
     assert svc["privileged"] is True and svc["pid"] == "host"
     env = d._kv_list_to_map(svc["environment"])
     assert env["DRY_RUN"] == "1"

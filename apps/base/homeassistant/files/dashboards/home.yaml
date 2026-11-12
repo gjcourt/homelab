@@ -253,10 +253,8 @@ views:
       - state
       - last_side
     - type: tile
-      entity: input_select.daily_shot_next_side
-      name: Next side
-      features:
-      - type: select-options
+      entity: sensor.daily_shot_side
+      name: Today's side
     # Shown only until today's shot is logged: a second press would be
     # ignored by "Daily shot — log it" anyway, so don't offer it.
     - type: tile
@@ -274,7 +272,7 @@ views:
         target:
           entity_id: input_button.daily_shot_done
         confirmation:
-          text: Log today's shot and switch the next side?
+          text: Log today's shot?
   # ── Areas ──────────────────────────────────────────────────────────────
   # Curated rooms first (from Config → Overview; tap opens that room's page
   # on the Config dashboard), then every other area as HA's Overview shows

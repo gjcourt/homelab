@@ -51,9 +51,9 @@ boto3==1.44.1 \
     --hash=sha256:1342653b8af9dc89f182cb5c0dfd5fa10f430d757c0ebd00326c053a6270d2c4 \
     --hash=sha256:c81dfdaab894cbcba78aa3773fe3fb27a13b576f49ff5552b91190072fc7dac0
     # via plane-mcp-server
-botocore==1.44.1 \
-    --hash=sha256:7a741074a78e28187c88d9f7f91db18731ea91725455873d863ae63ea35e75f3 \
-    --hash=sha256:e71f6249be2a7324899ba81c5958ac1809a78498ea2c8f60e00fc0e62262ab83
+botocore==1.44.2 \
+    --hash=sha256:39da314d7bab66e9da9af5531445d237beaeeab1fce0ed034bb6315d480b85ce \
+    --hash=sha256:f255849e8adc413812162e100cf53c4d096d07d9fd6f1773d90fa6034f7d8980
     # via
     #   boto3
     #   s3transfer

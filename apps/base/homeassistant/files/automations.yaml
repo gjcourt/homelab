@@ -682,7 +682,7 @@
 # reminder is a persistent notification only (same guard as Maintenance).
 
 - alias: "Daily shot — reminder"
-  description: "At 19:00, and again at 19:30 if not yet logged, say which side is next, with a Done action."
+  description: "At 19:00, and again at 19:30 if not yet logged, say today's side, with a Done action."
   mode: single
   trigger:
     - platform: time
@@ -697,7 +697,7 @@
     - variables:
         phones:
           - mobile_app_parthenon
-        side: "{{ states('input_select.daily_shot_next_side') }}"
+        side: "{{ states('sensor.daily_shot_side') }}"
         title: "Daily shot: {{ side | lower }} side"
         message: >
           {% set last = states('input_datetime.daily_shot_last_done') | as_datetime(none) %}
@@ -741,10 +741,11 @@
       target:
         entity_id: input_button.daily_shot_done
 
-# The one place a shot is logged, whichever way Done was pressed. A second
-# press on the same day does nothing, so a double tap can't flip the side twice.
+# The one place a shot is logged, whichever way Done was pressed. It only
+# records; the side comes from the date (sensor.daily_shot_side), so a press
+# never changes tomorrow's side. A second press on the same day does nothing.
 - alias: "Daily shot — log it"
-  description: "On Done, record the time and side, flip the next side, save state and clear the reminder."
+  description: "On Done, record the time and today's side, save state and clear the reminder."
   mode: queued
   trigger:
     - platform: state
@@ -760,7 +761,7 @@
     - variables:
         phones:
           - mobile_app_parthenon
-        side: "{{ states('input_select.daily_shot_next_side') }}"
+        side: "{{ states('sensor.daily_shot_side') }}"
     - service: input_datetime.set_datetime
       target:
         entity_id: input_datetime.daily_shot_last_done
@@ -771,11 +772,6 @@
         entity_id: input_text.daily_shot_last_side
       data:
         value: "{{ side }}"
-    - service: input_select.select_option
-      target:
-        entity_id: input_select.daily_shot_next_side
-      data:
-        option: "{{ 'Left' if side == 'Right' else 'Right' }}"
     # Restorable state is otherwise written only every 15 min; save now so a
     # hard kill can't lose the side (see "Maintenance — save state").
     - service: homeassistant.save_persistent_states

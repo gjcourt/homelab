@@ -34,6 +34,11 @@ services:
     container_name: node-exporter
     restart: unless-stopped
     network_mode: host
+    labels:
+      # HOMELAB-111 soak canary: a config-only change to one managed app, so the
+      # shadow deployer's predicted changed-app set can be checked against what
+      # deploy-hestia.yml actually changed. Harmless; safe to keep.
+      homelab.burntbytes.com/soak-canary: "2026-11-10"
     command:
       - --collector.disable-defaults
       - --collector.textfile

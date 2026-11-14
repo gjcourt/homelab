@@ -15,4 +15,4 @@ What we're building and **why** — proposals, RFCs, in-flight or recently shipp
 
 **Allowed `status:` values:** `Proposed`, `Accepted`, `Rejected`, `Implemented`, `Superseded`.
 
-This folder is empty today — historically, design rationale has gone directly into `plans/` documents alongside execution sequencing. Either pattern is acceptable; for proposals where the decision is the primary artifact, prefer this folder.
+Contents: [`agent-sessions/`](agent-sessions/README.md), the shape-B prototype for the agent-sessions plan. Historically, design rationale has gone directly into `plans/` documents alongside execution sequencing. Either pattern is acceptable; for proposals where the decision is the primary artifact, prefer this folder.

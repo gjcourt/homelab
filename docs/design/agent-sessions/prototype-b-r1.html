@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Sessions prototype B</title>
+<!--
+  Agent sessions, shape B: Matrix + Element X. Low-fidelity prototype, round 1.
+  Plan: docs/plans/2026-11-08-agent-sessions-plan.md, build step 1.
+  A look-alike of Element X, not the real app: what Element X really does with edited, pinned
+  and threaded messages is checked on the phone at plan step 3B.2.
+  Single static file: no network, no build. Nothing here talks to a homeserver, Plane or GitHub.
+  The SANDBOX-8 room replays the real run ad-sandbox-8-20261024-0d545a (2026-10-24): its tool
+  calls, timings, comments, PR and CI result are from the run record and agent-sandbox PR #3.
+-->
+<style>
+:root {
+  --bg: #ffffff; --surface: #ffffff; --subtle: #f0f2f5; --text: #1b1d22; --muted: #656d77; --line: #e1e6ec;
+  --accent: #007a61; --accent-text: #ffffff; --focus: #007a61; --mine: #e3f4ee; --theirs: #f0f2f5; --mention: #e6f6f1;
+  --warn: #c4720b; --bad: #d51928; --stripe: #e6e8ec;
+  --tap: 44px;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", system-ui, sans-serif;
+  font-size: 17px; line-height: 1.4; color: var(--text); background: var(--bg);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101317; --surface: #101317; --subtle: #1d1f24; --text: #ebeef2; --muted: #9199a4; --line: #2a2e35;
+    --accent: #1fc090; --accent-text: #08130f; --focus: #1fc090; --mine: #173a2f; --theirs: #1d1f24; --mention: #13342a;
+    --warn: #f3a33a; --bad: #ff6b6b; --stripe: #1a1d22;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101317; --surface: #101317; --subtle: #1d1f24; --text: #ebeef2; --muted: #9199a4; --line: #2a2e35;
+  --accent: #1fc090; --accent-text: #08130f; --focus: #1fc090; --mine: #173a2f; --theirs: #1d1f24; --mention: #13342a;
+  --warn: #f3a33a; --bad: #ff6b6b; --stripe: #1a1d22;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); min-height: 100vh; }
+button, textarea, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+[hidden] { display: none !important; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.app { max-width: 430px; margin: 0 auto; min-height: 100vh; position: relative; background: var(--bg); }
+.screen { display: none; flex-direction: column; min-height: 100vh; }
+.screen.active { display: flex; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 14px; }
+.mono { font-family: ui-monospace, Menlo, monospace; font-size: 13px; overflow-wrap: anywhere; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.replay { position: sticky; top: 0; z-index: 8; display: flex; align-items: center; gap: 2px; padding: 2px 6px; font-size: 14px;
+  background: repeating-linear-gradient(45deg, var(--subtle) 0 8px, var(--stripe) 8px 16px); border-bottom: 1px solid var(--line); }
+.replay .rlabel { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-left: 4px; }
+.replay button { min-height: var(--tap); min-width: var(--tap); border: 0; background: none; color: var(--accent); font-weight: 600; padding: 0 6px; border-radius: 8px; }
+
+/* Room list */
+.lhead { display: flex; align-items: center; gap: 12px; padding: 8px 16px 4px; }
+.lhead h1 { margin: 0; font-size: 28px; font-weight: 700; flex: 1; }
+.me { width: 32px; height: 32px; border-radius: 50%; background: #5c56f5; color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+.filters { display: flex; gap: 8px; padding: 6px 16px 8px; overflow-x: auto; }
+.filters button { min-height: 36px; border-radius: 999px; padding: 0 14px; border: 1px solid var(--line); background: var(--bg); font-size: 15px; white-space: nowrap; }
+.filters button[aria-pressed="true"] { background: var(--text); color: var(--bg); border-color: var(--text); }
+.room { display: flex; gap: 12px; align-items: center; width: 100%; text-align: left; border: 0; background: none; padding: 10px 16px; min-height: 72px; color: inherit; }
+.room + .room .rbody { border-top: 0; }
+.avatar { width: 52px; height: 52px; border-radius: 50%; flex: none; display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 20px; }
+.avatar.sm { width: 36px; height: 36px; font-size: 15px; }
+.rbody { flex: 1; min-width: 0; }
+.rtop { display: flex; gap: 8px; align-items: baseline; }
+.rname { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rtime { font-size: 13px; color: var(--muted); }
+.rtime.hot { color: var(--accent); font-weight: 600; }
+.rprev { display: flex; gap: 8px; align-items: center; font-size: 15px; color: var(--muted); }
+.rprev span:first-child { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.unread .rname, .unread .rprev span:first-child { color: var(--text); }
+.badge { min-width: 20px; height: 20px; border-radius: 10px; background: var(--accent); color: var(--accent-text); font-size: 12px; font-weight: 700; display: inline-grid; place-items: center; padding: 0 6px; }
+.invite { padding: 10px 16px; display: flex; gap: 12px; }
+.invite .acts { display: flex; gap: 8px; margin-top: 8px; }
+.legend { margin: 16px; font-size: 14px; color: var(--muted); }
+
+/* Room */
+.rbar { position: sticky; top: 49px; z-index: 5; display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 4px 8px; background: var(--bg); border-bottom: 1px solid var(--line); }
+.rbar .titles { flex: 1; min-width: 0; }
+.rbar .t1 { font-weight: 600; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rbar .t2 { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.iconbtn { display: inline-flex; align-items: center; justify-content: center; min-width: var(--tap); min-height: var(--tap); border: 0; background: none; color: var(--accent); border-radius: 10px; font-size: 22px; }
+.pinned { position: sticky; top: 105px; z-index: 4; display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; border: 0; border-bottom: 1px solid var(--line);
+  background: var(--bg); padding: 8px 16px; min-height: 52px; font-size: 14px; }
+.pinned .bar { width: 3px; align-self: stretch; background: var(--accent); border-radius: 2px; }
+.pinned .ptext { flex: 1; min-width: 0; }
+.pinned .ptext b { color: var(--accent); font-weight: 600; }
+.pinned .ptext span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline { flex: 1; padding: 8px 12px 150px; }
+.day { text-align: center; font-size: 13px; color: var(--muted); margin: 10px 0; }
+.sysline { text-align: center; font-size: 13px; color: var(--muted); margin: 6px 16px; }
+.msg { display: flex; gap: 8px; margin: 8px 0; align-items: flex-end; }
+.msg.mine { justify-content: flex-end; }
+.bubble { max-width: 82%; border-radius: 16px; padding: 8px 12px; background: var(--theirs); overflow-wrap: anywhere; position: relative; }
+.mine .bubble { background: var(--mine); }
+.bubble.mention { background: var(--mention); box-shadow: inset 3px 0 0 var(--accent); }
+.bubble.notice { font-size: 15px; }
+.bubble.hl { outline: 3px solid var(--accent); }
+.sender { font-size: 14px; font-weight: 600; color: #b1376f; margin-bottom: 2px; }
+.bubble p, .bubble ul { margin: 0 0 6px; } .bubble ul { padding-left: 20px; } .bubble > div > :last-child { margin-bottom: 0; }
+.bubble code { font-family: ui-monospace, Menlo, monospace; font-size: 14px; }
+.bubble a { color: var(--accent); }
+.pill { background: var(--accent); color: var(--accent-text); border-radius: 999px; padding: 0 6px; font-weight: 600; }
+.meta { font-size: 12px; color: var(--muted); text-align: right; margin-top: 2px; }
+.reacts { display: flex; gap: 4px; margin-top: 4px; justify-content: flex-end; }
+.react { font-size: 13px; border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; background: var(--bg); }
+.status pre { margin: 0; white-space: pre-wrap; font-family: inherit; font-size: 15px; }
+.threadsum { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; margin-top: 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg);
+  padding: 6px 10px; min-height: var(--tap); font-size: 14px; color: inherit; }
+.threadsum b { color: var(--accent); }
+.threadsum span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pnote { font-size: 12px; color: var(--muted); font-style: italic; margin: 2px 4px 0; }
+.composer { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; z-index: 6; background: var(--bg);
+  border-top: 1px solid var(--line); padding: 8px 10px calc(10px + env(safe-area-inset-bottom)); display: flex; gap: 8px; align-items: flex-end; }
+.composer textarea { flex: 1; min-width: 0; min-height: var(--tap); max-height: 120px; border-radius: 22px; border: 1px solid var(--line); background: var(--subtle); padding: 10px 14px; font-size: 17px; resize: none; }
+.send { width: var(--tap); height: var(--tap); border-radius: 50%; border: 0; background: var(--accent); color: var(--accent-text); font-size: 20px; flex: none; }
+.send:disabled { opacity: .35; cursor: default; }
+.primary, .secondary { display: inline-flex; align-items: center; justify-content: center; min-height: var(--tap); padding: 0 18px; border-radius: 22px; font-weight: 600; }
+.primary { border: 0; background: var(--accent); color: var(--accent-text); }
+.secondary { border: 1px solid var(--line); background: var(--bg); }
+
+.scrim { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 20; display: none; }
+.sheet { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 430px; z-index: 21; display: none; background: var(--bg);
+  border-radius: 16px 16px 0 0; max-height: 85vh; overflow: auto; padding: 8px 0 calc(16px + env(safe-area-inset-bottom)); }
+.sheet.open, .scrim.open { display: block; }
+.grabber { width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: 4px auto 6px; }
+.sheet-h { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; }
+.sheet-h h2 { font-size: 17px; margin: 0; }
+.sheet-h .iconbtn { font-size: 17px; }
+.sheet-body { padding: 0 16px; }
+.opt { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 0 16px; min-height: 48px; border-bottom: 1px solid var(--line); }
+.opt .grow { flex: 1; }
+.ptasks { list-style: none; margin: 0; padding: 0; }
+.ptasks li { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.ptasks .tick { width: 22px; flex: none; text-align: center; }
+.toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: 90px; z-index: 30; width: calc(100% - 24px); max-width: 406px; display: flex; flex-direction: column; gap: 8px; }
+.toast { padding: 10px 14px; border-radius: 12px; background: #26262d; color: #fff; font-size: 15px; box-shadow: 0 6px 20px rgba(0,0,0,.3); }
+.notif { position: fixed; top: 56px; left: 50%; transform: translateX(-50%); width: calc(100% - 16px); max-width: 414px; z-index: 40; display: none;
+  text-align: left; border: 0; border-radius: 18px; padding: 10px 14px; background: rgba(245,245,247,.97); color: #111; box-shadow: 0 8px 30px rgba(0,0,0,.35); }
+.notif.open { display: block; }
+.notif .app-name { font-size: 12px; color: #555; text-transform: uppercase; letter-spacing: .04em; }
+.notif .proto-tag { display: block; font-size: 12px; color: #666; margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="replay" role="group" aria-label="Replay controls (prototype aid)">
+    <button type="button" id="r-play" aria-label="Pause replay">❚❚</button>
+    <span class="rlabel">Replay <span class="num" id="r-clock">4:14:36 PM</span></span>
+    <button type="button" class="num" id="r-speed" aria-label="Replay speed">1×</button>
+    <button type="button" id="r-tasks" aria-haspopup="dialog">Tasks <span class="num" id="r-taskcount">0/3</span></button>
+    <button type="button" id="r-menu" aria-haspopup="dialog" aria-label="More replay options">⋯</button>
+  </div>
+
+  <section class="screen active" id="s-list" aria-labelledby="list-h">
+    <div class="lhead"><span class="me" aria-hidden="true">G</span><h1 id="list-h" tabindex="-1">Chats</h1></div>
+    <div class="filters" role="group" aria-label="Filters">
+      <button type="button" aria-pressed="true" data-f="all">All</button><button type="button" aria-pressed="false" data-f="unread">Unreads</button>
+      <button type="button" aria-pressed="false" data-f="people">People</button><button type="button" aria-pressed="false" data-f="rooms">Rooms</button>
+    </div>
+    <div id="rooms"></div>
+    <p class="legend">Room names carry the state: ⏳ working, ❓ waiting on you, 👀 in review, ✓ finished. The plan names ⏳ and ✓; the other two are this prototype's. SANDBOX-8 replays its real run; SANDBOX-6 and SANDBOX-1 are real sessions shown without their activity.</p>
+  </section>
+
+  <section class="screen" id="s-room" aria-labelledby="room-h">
+    <header class="rbar"><button type="button" class="iconbtn" data-back aria-label="Back to chats">‹</button><span class="avatar sm" id="room-av" aria-hidden="true"></span>
+      <div class="titles"><div class="t1" id="room-h" tabindex="-1"></div><div class="t2" id="room-topic"></div></div></header>
+    <button type="button" class="pinned" id="pinned" hidden></button>
+    <main class="timeline" id="timeline"></main>
+    <form class="composer" id="composer" autocomplete="off">
+      <label class="sr-only" for="msg">Message</label><textarea id="msg" rows="1" placeholder="Message…"></textarea>
+      <button type="submit" class="send" id="send" aria-label="Send" disabled>➤</button>
+    </form>
+  </section>
+
+  <section class="screen" id="s-thread" aria-labelledby="thread-h">
+    <header class="rbar"><button type="button" class="iconbtn" id="thread-back" aria-label="Back to the room">‹</button>
+      <div class="titles"><div class="t1" id="thread-h" tabindex="-1">Thread</div><div class="t2">SANDBOX-8 · Improve the docs</div></div></header>
+    <main class="timeline" id="thread-body" style="padding-bottom:40px"></main>
+  </section>
+</div>
+
+<button type="button" class="notif" id="notif" aria-live="polite"></button>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet-tasks" role="dialog" aria-modal="true" aria-labelledby="tasks-h">
+  <div class="grabber"></div><div class="sheet-h"><h2 id="tasks-h">Prototype tasks</h2><button type="button" class="iconbtn" data-close>Close</button></div>
+  <div class="sheet-body"><p class="muted small">Ticks itself as you go. Evaluation aid only, not part of the design.</p><ul class="ptasks" id="ptasks"></ul></div>
+</div>
+<div class="sheet" id="sheet-menu" role="dialog" aria-modal="true" aria-labelledby="menu-h">
+  <div class="grabber"></div><div class="sheet-h"><h2 id="menu-h">Replay</h2><button type="button" class="iconbtn" data-close>Close</button></div>
+  <div class="sheet-body"><p class="muted small">Prototype aid. The replay is SANDBOX-8's real run, job <span class="mono">ad-sandbox-8-20261024-0d545a</span>, at its real pace. Times are Pacific. This is an Element X look-alike, not the real app.</p></div>
+  <button type="button" class="opt" data-jump="question"><span class="grow">Jump to the agent's question</span></button>
+  <button type="button" class="opt" data-jump="answer"><span class="grow">Answer as George did, then carry on</span></button>
+  <button type="button" class="opt" data-jump="pr"><span class="grow">Jump to the PR opening</span></button>
+  <button type="button" class="opt" data-jump="end"><span class="grow">Jump to the end of the run</span></button>
+  <button type="button" class="opt" data-jump="restart"><span class="grow">Start over</span></button>
+  <button type="button" class="opt" id="theme-btn"><span class="grow">Theme</span><span class="muted" id="theme-name">System</span></button>
+</div>
+<div class="sheet" id="sheet-gh" role="dialog" aria-modal="true" aria-labelledby="gh-h">
+  <div class="grabber"></div><div class="sheet-h"><h2 id="gh-h">Open link</h2><button type="button" class="iconbtn" data-close>Close</button></div>
+  <div class="sheet-body"><p>Element X opens <span class="mono">github.com/gjcourt/agent-sandbox/pull/3</span> in Safari or the GitHub app. Review happens there (or later in plane-mobile), not in the room.</p>
+  <p class="muted small">The prototype stops here so it never leaves the page.</p></div>
+</div>
+
+<script>
+'use strict';
+// ---- The replay data: identical to prototype A's (docs/ui/sessions/prototype-a-r1.html in plane-mobile) ----
+const at = s => Date.parse('2026-10-24T' + s + 'Z') / 1000;
+const JOB_START = at('23:14:38');
+const REPLAY_START = at('23:14:36');
+const WAIT_RETURN = at('23:16:05');   // bench-ticket wait returned 7 s after George's answer (23:15:58)
+const REAL_ANSWER = 'I want everything improved. fizz buzz was a mistake - ignore.';
+const Q_HTML = '<p>Before I change anything I need to know what "Improve the docs" should mean. The ticket has no description, and the repo has only two prose docs: <code>README.md</code> and <code>docs/about.md</code> (plus <code>AGENTS.md</code>, which is also *.md).</p><p>Which of these would you like?</p><ul><li>Which file(s) to change, or all of them?</li><li>What kind of improvement: fix wording or clarity, correct outdated content, add a missing section, or something else?</li><li>Any specific text, example, or fact to add or remove?</li></ul><p>Your comment "fizz buzz" doesn\'t say which of these it means. If it was an answer to something specific, tell me what it refers to.</p>';
+const FINAL_HTML = '<p>PR is ready for review: <a href="#" data-gh>PR #3</a> (docs: SANDBOX-8 improve README and about page). It changes only <code>README.md</code> and <code>docs/about.md</code>.</p><p>Checks: <code>lint-and-test</code> passed on <code>f7c954d</code> (CI run 40142083315). I also ran ruff check, ruff format --check and pytest locally in a scratch venv, all passing. The PR is mergeable with no comments. Critique found no major or moderate issues. One minor point: <code>docs/about.md</code> says tickets are labelled <code>ready</code>, which this repo doesn\'t verify. That wording came from the original file and I kept it.</p><p>I have not merged it; merging is yours.</p>';
+const cut = s => { s = s.split('\n')[0]; return s.length > 120 ? s.slice(0, 119) + '…' : s; };
+const B = (t, cmd) => ({ t: at(t), k: 'tool', tool: 'Bash', s: cut(cmd) });
+const P = (t, s) => ({ t: at(t), k: 'tool', tool: 'Plane', s });
+const N = (t, s) => ({ t: at(t), k: 'note', s });
+const EV = [
+  { t: JOB_START, k: 'start' },
+  N('23:14:43', "I'll load the Plane tools and read the ticket in full before deciding whether the request is clear enough to act on."),
+  { t: at('23:14:44'), k: 'tool', tool: 'ToolSearch', s: 'load the Plane tools: work item, comment, state, link' },
+  B('23:14:44', 'ls -la /home/node/work/repo /home/node/work/repo/docs && cat /home/node/work/repo/README.md && which bench-ticket'),
+  { t: at('23:14:45'), k: 'deliver', id: 'm1', via: 'at its first step' },
+  N('23:14:47', 'George\'s comment "fizz buzz" doesn\'t ask me anything, but it doesn\'t clarify the task either. I\'ll re-read the ticket and the one docs file before deciding what to ask.'),
+  P('23:14:48', 'read work item SANDBOX-8'),
+  P('23:14:48', 'list comments on SANDBOX-8'),
+  { t: at('23:14:48'), k: 'tool', tool: 'Read', s: 'docs/about.md' },
+  { t: at('23:14:57'), k: 'task', i: 0 },
+  N('23:14:57', 'The ticket has no description, and "Improve the docs" could mean several different edits. I\'ll look up the Blocked state so I can ask George which docs to change and how.'),
+  P('23:14:57', 'list states'),
+  N('23:14:59', "The ticket is ambiguous, so I'll post my question, move it to Blocked, and wait for George's answer."),
+  P('23:15:01', 'comment on SANDBOX-8'),
+  { t: at('23:15:01'), k: 'agent', id: 'q', html: Q_HTML, ask: true, mark: 'question' },
+  P('23:15:02', 'set state: Blocked'),
+  { t: at('23:15:03'), k: 'state', v: 'waiting' },
+  N('23:15:04', "The question is posted and the ticket is in Blocked. Now I'll wait for George's reply."),
+  { t: at('23:15:04'), k: 'tool', tool: 'Bash', s: 'bench-ticket wait' },
+  { t: at('23:15:04'), k: 'wait' },
+  // ---- after George's answer: shifted by however long he took ----
+  { t: WAIT_RETURN, k: 'deliver-answer' },
+  { t: WAIT_RETURN, k: 'task', i: 1 },
+  N('23:16:08', 'George wants everything improved. I\'ll set the ticket back to In Progress, then fetch origin and check the repo state before editing.'),
+  P('23:16:09', 'set state: In Progress'),
+  { t: at('23:16:09'), k: 'state', v: 'working' },
+  B('23:16:09', 'git fetch origin && git status --short && git branch --show-current && git log --oneline -1 origin/main && git remote -v && cat .gitignore && ls .github/workflows && cat .github/workflows/ci.yml'),
+  N('23:16:19', "Origin's main matches my checkout and the tree is clean. Next I'll create the branch from origin/main and read the README with the Read tool so I can edit it."),
+  B('23:16:19', 'git checkout -b docs/improve-docs origin/main && git branch --show-current'),
+  { t: at('23:16:19'), k: 'tool', tool: 'Read', s: 'README.md' },
+  N('23:16:21', "I'll rewrite the README for clarity and add the missing contents entries and CI note, without adding any facts I haven't verified."),
+  { t: at('23:16:22'), k: 'tool', tool: 'Write', s: 'README.md' },
+  { t: at('23:16:22'), k: 'tool', tool: 'Write', s: 'docs/about.md' },
+  { t: at('23:16:22'), k: 'task', i: 2 },
+  N('23:16:24', "Both docs are rewritten. Next I'll run the repo's three CI checks and confirm only *.md and docs/ files changed."),
+  B('23:16:24', 'uv run --with pytest --with ruff ruff check . ; echo "check=$?"; uv run --with pytest --with ruff ruff format --check . ; echo "format=$?"; uv run --with pytest pytest -q ; echo "pytest=$?"; git status --short; git diff --stat'),
+  N('23:16:25', "uv isn't on the PATH, so I'll check which of the underlying tools are available."),
+  B('23:16:26', 'which python3 pip pip3 ruff pytest uvx 2>&1; python3 --version 2>&1; ls ~/.local/bin 2>/dev/null'),
+  N('23:16:27', "Python 3.11 is present but ruff, pytest, and uv are not. I'll install uv for the user and rerun the same three commands."),
+  B('23:16:28', 'pip install --user --quiet uv 2>&1 | tail -3; export PATH="$HOME/.local/bin:$PATH"; uv --version'),
+  B('23:16:30', 'python3 -m venv /tmp/lint-venv && /tmp/lint-venv/bin/pip install --quiet ruff pytest 2>&1 | tail -2; /tmp/lint-venv/bin/ruff --version && /tmp/lint-venv/bin/pytest --version'),
+  B('23:16:39', '/tmp/lint-venv/bin/ruff check . ; echo "check=$?"; /tmp/lint-venv/bin/ruff format --check . ; echo "format=$?"; /tmp/lint-venv/bin/pytest -q ; echo "pytest=$?"'),
+  { t: at('23:16:42'), k: 'task', i: 3 },
+  N('23:16:42', "All three checks pass. I'll commit the two doc files, push the branch, and open the PR with the ticket key in the title."),
+  B('23:16:43', "git add README.md docs/about.md && git commit -q -F - <<'EOF'"),
+  B('23:16:48', 'gh pr create --base main --head docs/improve-docs --title "docs: SANDBOX-8 improve README and about page" --body "$(cat <<\'EOF\''),
+  { t: at('23:16:50'), k: 'pr', mark: 'pr' },
+  N('23:16:51', "The PR is open at https://github.com/gjcourt/agent-sandbox/pull/3. I'll attach it to the ticket as a link."),
+  P('23:16:52', 'add link: PR #3 · docs: SANDBOX-8 improve README and about page'),
+  { t: at('23:16:53'), k: 'task', i: 4 },
+  N('23:16:54', "The link is attached. Next I'll run the babysit pass on the PR."),
+  { t: at('23:16:54'), k: 'tool', tool: 'Skill', s: 'babysit' },
+  { t: at('23:16:56'), k: 'ci', v: 'run' },
+  N('23:16:56', "The babysit skill is loaded. This is a two-file docs PR, so I'll check CI and mergeability first, then run the critique pass."),
+  B('23:16:57', 'gh pr view 3 --json number,state,isDraft,mergeable,headRefOid,url && gh pr checks 3 --json name,bucket,link,state 2>&1; gh api repos/gjcourt/agent-sandbox/pulls/3/comments --jq \'length\' 2>&1'),
+  N('23:17:01', 'gh pr checks returned a permission error. I\'ll try listing workflow runs for the branch instead.'),
+  B('23:17:01', 'gh run list --branch docs/improve-docs --limit 5 --json databaseId,name,status,conclusion,headSha 2>&1'),
+  N('23:17:03', "CI is still running on the pushed commit. I'll run the critique pass while it finishes."),
+  { t: at('23:17:04'), k: 'tool', tool: 'Skill', s: 'critique' },
+  N('23:17:05', "The diff is under 50 changed lines and touches only *.md files, so the critique can use the fast path and work from the diff directly. I'll fetch the diff to review it."),
+  B('23:17:05', 'gh pr diff 3 --repo gjcourt/agent-sandbox'),
+  { t: at('23:17:07'), k: 'ci', v: 'pass' },
+  N('23:17:11', 'The diff is small. Before writing the findings I want to confirm the three function names the README now lists against sandbox/text.py.'),
+  { t: at('23:17:11'), k: 'tool', tool: 'Grep', s: '^def \\w+ in sandbox/' },
+  N('23:17:14', "The three function names match the code. I'll check CI again before deciding on the ticket state."),
+  B('23:17:14', "gh run list --branch docs/improve-docs --limit 3 --json databaseId,status,conclusion,headSha 2>&1; gh run view 40142083315 --json status,conclusion,jobs --jq '{status,conclusion,jobs:[.jobs[]|{name,conclusion,status}]}' 2>&1"),
+  N('23:17:19', "CI is green on the pushed commit, and the PR had no comments when I checked. I'll recheck comments once, then move the ticket to In review with a status comment."),
+  B('23:17:19', "gh api repos/gjcourt/agent-sandbox/pulls/3/comments --jq 'length' && gh api repos/gjcourt/agent-sandbox/issues/3/comments --jq 'length' && gh pr view 3 --json state,isDraft,mergeable,headRefOid --jq '.'"),
+  P('23:17:24', 'comment on SANDBOX-8'),
+  { t: at('23:17:24'), k: 'agent', id: 'f', html: FINAL_HTML },
+  P('23:17:26', 'set state: In review'),
+  { t: at('23:17:26'), k: 'state', v: 'review' },
+  { t: at('23:17:26'), k: 'task', i: 5 },
+  { t: at('23:17:28'), k: 'end', mark: 'end' },
+];
+const WAIT_IDX = EV.findIndex(e => e.k === 'wait');
+// No task list in this run: the agent didn't write one (no TodoWrite call). These are the docs-fix
+// playbook's steps, standing in for the agent's own list.
+const TASKS = ['Read the ticket', 'Ask George if it is unclear', 'Make the docs change', "Run the repo's lint", 'Open the PR and link it on the ticket', 'Move the ticket to In review'];
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const clock = t => new Date(t * 1000).toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit', second: '2-digit' });
+const hm = t => new Date(t * 1000).toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles', hour: 'numeric', minute: '2-digit' });
+const dur = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+const EMOJI = { working: '⏳', waiting: '❓', review: '👀', finished: '✓', starting: '⏳' };
+const STNAME = { working: 'Working', waiting: 'Waiting on you', review: 'In review', finished: 'Finished', starting: 'Starting' };
+const Q_PLAIN = 'Before I change anything I need to know what "Improve the docs" should mean.';
+
+let S, playing = true, speed = 1, screen = 'list', room = null, ptask = [false, false, false], hl = null;
+let dm, invites, extraRooms;
+function fresh() {
+  dm = [{ who: 'desk', at: at('22:40:00'), html: '<p>Write what an agent should do and I\'ll propose a ticket. Nothing starts until you reply <code>go</code>.</p>', notice: true }];
+  invites = []; extraRooms = [];
+  return { now: REPLAY_START, i: 0, state: 'working', jobActive: false, offset: 0, answered: false, waitingSince: null, tools: [], notes: [], tasks: [],
+    pr: false, ci: null, ended: false, endAt: null, unread: 0, mention: false, lastRead: REPLAY_START,
+    status: null, statusAt: null, statusPosted: null, batches: [], sent: 0, lastBatch: 0,
+    tl: [
+      { id: 'c0', who: 'desk', at: at('23:00:28'), notice: true, html: '<p>Started bench-cloud Job <code>ad-sandbox-8-20261024-0d545a</code> (playbook <code>docs-fix</code>, repo <code>gjcourt/agent-sandbox</code>).</p>' },
+      { id: 'm1', who: 'George', mine: true, at: at('23:14:13'), html: '<p>fizz buzz</p>', deliv: null },
+    ] };
+}
+const evT = i => EV[i].t + (i > WAIT_IDX ? S.offset : 0);
+const lastTool = () => S.tools[S.tools.length - 1];
+const elapsed = () => S.jobActive ? S.now - JOB_START : S.ended ? S.endAt - JOB_START : 0;
+function post(m) { S.tl.push(m); if (!(screen === 'room' && room === 'SANDBOX-8')) { S.unread++; if (m.mention) S.mention = true; } }
+function apply(e) {
+  switch (e.k) {
+    case 'start': S.jobActive = true; S.statusPosted = S.now; editStatus(); S.tl.push({ id: 'status', who: 'desk', at: S.now, status: true }); break;
+    case 'tool': S.tools.push({ at: S.now, tool: e.tool, s: e.s }); break;
+    case 'note': break;
+    case 'deliver': deliver(); break;
+    case 'agent': post({ id: e.id, who: 'desk', at: S.now, html: e.ask ? '<p><span class="pill">George</span> ' + e.html.slice(3) : e.html, mention: !!e.ask });
+      if (!e.ask) notify('review'); break;
+    case 'state': S.state = e.v; if (e.v === 'waiting') { S.waitingSince = S.now; notify('needs'); } break;
+    case 'deliver-answer': deliver(); S.waitingSince = null; break;
+    case 'task': S.tasks[e.i] = S.now; break;
+    case 'pr': S.pr = true; S.ci = 'queued'; break;
+    case 'ci': S.ci = e.v; break;
+    case 'end': S.ended = true; S.jobActive = false; S.endAt = S.now; editStatus(); break;
+  }
+}
+function deliver() { S.tl.forEach(m => { if (m.mine && !m.deliv && !m.wake) m.deliv = S.now; }); }
+// The status message: one m.notice, edited in place (m.replace) at most every 30 s, and pinned.
+function editStatus() {
+  const lt = lastTool(), done = TASKS.filter((_, i) => S.tasks[i]).length, cur = TASKS.find((_, i) => !S.tasks[i]);
+  const recent = S.tools.slice(-4, -1).reverse().map(a => '• ' + a.tool + ' ' + a.s).join('\n');
+  const st = S.ended ? 'review' : S.state;
+  let t = `${EMOJI[st]} ${S.ended ? 'Run ended · In review' : STNAME[st]} · ${dur(elapsed())}${S.ended ? '' : ' elapsed'}\n`;
+  if (!S.ended) t += lt ? `Now: ${lt.tool} ${lt.s}\n` : 'Now: starting\n';
+  if (recent && !S.ended) t += `Recent:\n${recent}\n`;
+  t += `Tasks: ${done}/${TASKS.length}${cur ? ' · next: ' + cur : ''}\n`;
+  t += S.pr ? `PR #3 · CI ${S.ci === 'pass' ? '✓ lint-and-test passed · mergeable' : S.ci === 'run' ? '⏳ lint-and-test running' : '⏳ queued'}\n` : 'PR: none yet\n';
+  t += S.ended ? 'Cost: $0.69 · 36 turns (Haiku)' : 'Cost: shown when the run ends';
+  S.status = t; S.statusAt = S.now;
+}
+// Activity goes in a thread under the status message, as m.notice, batched at most every 10 s (the hook's rate).
+function batch() {
+  if (S.tools.length > S.sent && S.now - S.lastBatch >= 10) {
+    S.batches.push({ at: S.now, items: S.tools.slice(S.sent) }); S.sent = S.tools.length; S.lastBatch = S.now;
+  }
+}
+function step(dt) {
+  S.now += dt;
+  while (S.i < EV.length) {
+    if (S.i > WAIT_IDX && !S.answered) break;
+    if (evT(S.i) > S.now) break;
+    const e = EV[S.i++]; const keep = S.now; S.now = evT(S.i - 1); apply(e); batch(); S.now = keep;
+  }
+  batch();
+  if (S.jobActive && S.now - S.statusAt >= 30) editStatus();
+  if (S.jobActive && S.state === 'working') { const lt = lastTool(); S.tl.forEach(m => { if (m.mine && !m.deliv && !m.wake && m.at > JOB_START && lt && lt.at > m.at) m.deliv = lt.at; }); }
+}
+function answer(text) {
+  S.answered = true; S.offset = (S.now + 7) - WAIT_RETURN;
+  S.tl.push({ id: 'a' + S.tl.length, who: 'George', mine: true, at: S.now, html: '<p>' + esc(text) + '</p>', deliv: null,
+    note: text.trim() === REAL_ANSWER ? '' : 'Replay: what the agent does next is the real run, which got George\'s answer "' + REAL_ANSWER + '"' });
+}
+
+// ---- Room list ----
+const AV = { 'SANDBOX-8': '#c2410c', 'SANDBOX-6': '#2563eb', 'SANDBOX-1': '#6b7280', desk: '#0d9488' };
+function rooms() {
+  const r8 = { id: 'SANDBOX-8', name: `${EMOJI[S.state]} SANDBOX-8 · Improve the docs`, at: (S.tl[S.tl.length - 1] || {}).at, prev: preview8(), unread: S.unread, mention: S.mention };
+  const list = [r8, ...extraRooms,
+    { id: 'desk', name: 'desk', at: dm[dm.length - 1].at, prev: (dm[dm.length - 1].who === 'George' ? 'You: ' : '') + dm[dm.length - 1].html.replace(/<[^>]+>/g, ''), unread: 0, dm: true },
+    { id: 'SANDBOX-6', name: '👀 SANDBOX-6 · Add a Contributing section to the README', at: at('23:27:16'), prev: 'desk: PR #2 · lint-and-test passed. 5 runs, $1.40 in all.', unread: 0, date: 'Oct 24', past: true },
+    { id: 'SANDBOX-1', name: '✓ SANDBOX-1 · Add a one-line description to the README', at: Date.parse('2026-10-25T04:02:06Z') / 1000, prev: 'desk: PR #4 merged. 75 s, $0.44.', unread: 0, date: 'Oct 25', past: true }];
+  // Replayed rooms first by time; the two real-but-static rooms after them (their dates are later than the replay's clock).
+  return list.sort((a, b) => (!!a.past - !!b.past) || (b.at || 0) - (a.at || 0));
+}
+function preview8() {
+  const m = [...S.tl].reverse().find(x => !x.status) || {};
+  return (m.mine ? 'You: ' : 'desk: ') + (m.html || '').replace(/<[^>]+>/g, '').replace(/^George /, '@George ');
+}
+function renderList() {
+  let h = invites.map(iv => `<div class="invite"><span class="avatar" style="background:${AV.desk}" aria-hidden="true">${EMOJI.starting}</span><div class="rbody">
+    <div class="rname">${esc(iv.name)}</div><div class="small muted">desk invited you</div>
+    <div class="acts"><button type="button" class="primary" data-accept="${iv.id}">Accept</button><button type="button" class="secondary" data-decline="${iv.id}">Decline</button></div></div></div>`).join('');
+  h += rooms().map(r => `<button type="button" class="room${r.unread ? ' unread' : ''}" data-room="${r.id}">
+    <span class="avatar" style="background:${AV[r.id] || AV.desk}" aria-hidden="true">${r.dm ? 'd' : esc(r.name.split(' ')[0])}</span>
+    <span class="rbody"><span class="rtop"><span class="rname">${esc(r.name)}</span><span class="rtime num${r.unread ? ' hot' : ''}">${r.date || (r.at ? hm(r.at) : '')}</span></span>
+    <span class="rprev"><span>${esc(r.prev)}</span>${r.mention ? '<span class="badge" aria-label="mentions you">@</span>' : ''}${r.unread ? `<span class="badge num" aria-label="${r.unread} unread">${r.unread}</span>` : ''}</span></span></button>`).join('');
+  $('#rooms').innerHTML = h;
+  document.querySelectorAll('[data-room]').forEach(b => b.onclick = () => openRoom(b.dataset.room));
+  document.querySelectorAll('[data-accept]').forEach(b => b.onclick = () => { const iv = invites.find(x => x.id === b.dataset.accept); invites = invites.filter(x => x !== iv);
+    extraRooms.unshift({ id: iv.id, name: iv.name, at: S.now, prev: 'desk: Waiting for agent-desk to start a Job.', unread: 0, tl: iv.tl }); openRoom(iv.id); });
+  document.querySelectorAll('[data-decline]').forEach(b => b.onclick = () => { invites = invites.filter(x => x.id !== b.dataset.decline); toast('Declined. The ticket still exists; its session goes on without a room.'); render(); });
+}
+
+// ---- Room ----
+function bubble(m) {
+  if (m.status) {
+    const edited = S.statusAt > S.statusPosted + 1;
+    return `<div class="msg" id="status-msg"><div class="bubble notice status${hl === 'status' ? ' hl' : ''}"><div class="sender">desk</div><pre class="num">${esc(S.status)}</pre>
+      <div class="meta num">${hm(S.statusPosted)}${edited ? ` · edited ${clock(S.statusAt)}` : ''} · 📌</div>
+      <button type="button" class="threadsum" id="open-thread"><b class="num">${S.batches.length} ${S.batches.length === 1 ? 'reply' : 'replies'}</b><span class="mono">${S.batches.length ? esc(lastTool().tool + ' ' + lastTool().s) : 'Activity appears here'}</span></button></div></div>
+      <p class="pnote">The status is edited at most every 30 s, so it can lag the thread.</p>`;
+  }
+  let foot = '';
+  if (m.mine) {
+    if (m.wake) foot = `<div class="pnote">${m.wake}</div>`;
+    else if (m.deliv) foot = `<div class="reacts"><span class="react" title="desk reacted">✅ reached the agent ${clock(m.deliv)}</span></div>`;
+    if (m.note) foot += `<div class="pnote">${esc(m.note)}</div>`;
+  }
+  return `<div class="msg${m.mine ? ' mine' : ''}"><div class="bubble${m.mention ? ' mention' : ''}${m.notice ? ' notice' : ''}">${m.mine ? '' : `<div class="sender">${esc(m.who)}</div>`}
+    <div>${m.html}</div><div class="meta num">${hm(m.at)}</div>${foot}</div></div>`;
+}
+function renderRoom() {
+  if (room === 'SANDBOX-8') {
+    $('#room-h').textContent = `${EMOJI[S.state]} SANDBOX-8 · Improve the docs`;
+    $('#room-av').textContent = EMOJI[S.state]; $('#room-av').style.background = AV['SANDBOX-8'];
+    $('#room-topic').textContent = 'SANDBOX-8 · gjcourt/agent-sandbox · docs-fix' + (S.pr ? ' · PR #3' : '');
+    const pin = $('#pinned');
+    if (S.status) { pin.hidden = false; const lines = S.status.split('\n'); pin.innerHTML = `<span class="bar" aria-hidden="true"></span><span class="ptext"><b>Pinned message</b><span class="num">${esc(lines[0])}</span><span class="mono">${esc(lines[1] || '')}</span></span>`; }
+    else pin.hidden = true;
+    let h = '<div class="day">Saturday, October 24</div><div class="sysline">desk created and configured the room. desk invited you; you joined.</div>';
+    h += S.tl.map(bubble).join('');
+    if (S.pr && !S.tl.some(m => m.id === 'f')) h += '';
+    $('#timeline').innerHTML = h;
+    const ot = $('#open-thread'); if (ot) ot.onclick = openThread;
+    document.querySelectorAll('#timeline [data-gh]').forEach(b => b.onclick = e => { e.preventDefault(); openSheet('sheet-gh'); });
+    $('#msg').placeholder = S.state === 'waiting' ? 'Reply to desk…' : 'Message…';
+    S.unread = 0; S.mention = false;
+  } else if (room === 'desk') {
+    $('#room-h').textContent = 'desk'; $('#room-av').textContent = 'd'; $('#room-av').style.background = AV.desk; $('#room-topic').textContent = 'Start agent sessions';
+    $('#pinned').hidden = true;
+    $('#timeline').innerHTML = dm.map(m => bubble({ ...m, mine: m.who === 'George' })).join('');
+    $('#msg').placeholder = 'What should an agent do?';
+  } else {
+    const r = extraRooms.find(x => x.id === room);
+    if (r) { $('#room-h').textContent = r.name; $('#room-av').textContent = '⏳'; $('#room-topic').textContent = r.id; $('#pinned').hidden = true; $('#timeline').innerHTML = r.tl.map(bubble).join(''); }
+  }
+}
+function openRoom(id) {
+  if (id === 'SANDBOX-6' || id === 'SANDBOX-1') { toast(id + ': only SANDBOX-8 is replayed in this prototype.'); return; }
+  if (id === 'SANDBOX-8' && S.state === 'waiting') tick(0);
+  room = id; screen = 'room'; show('s-room'); render(); $('#room-h').focus(); window.scrollTo(0, document.body.scrollHeight);
+}
+function openThread() {
+  screen = 'thread'; show('s-thread'); render(); $('#thread-h').focus();
+}
+function renderThread() {
+  let h = `<div class="msg"><div class="bubble notice status"><div class="sender">desk</div><pre class="num">${esc(S.status || '')}</pre></div></div>
+    <div class="sysline num">${S.batches.length} replies · one per batch, at most every 10 s, sent as m.notice so they don't push</div>`;
+  h += S.batches.map(b => `<div class="msg"><div class="bubble notice"><div class="sender">desk</div>` + b.items.map(a => `<div><b>${esc(a.tool)}</b> <span class="mono">${esc(a.s)}</span></div>`).join('') + `<div class="meta num">${clock(b.at)}</div></div></div>`).join('');
+  $('#thread-body').innerHTML = h;
+}
+$('#thread-back').onclick = () => { screen = 'room'; show('s-room'); render(); };
+$('#pinned').onclick = () => { hl = 'status'; render(); const el = $('#status-msg'); if (el) el.scrollIntoView({ block: 'center' }); setTimeout(() => { hl = null; }, 1500); };
+document.querySelectorAll('[data-back]').forEach(b => b.onclick = () => { screen = 'list'; room = null; show('s-list'); render(); $('#list-h').focus(); });
+
+// ---- Composer: room messages and the desk DM ----
+const msg = $('#msg');
+msg.oninput = () => { $('#send').disabled = !msg.value.trim(); msg.style.height = 'auto'; msg.style.height = Math.min(msg.scrollHeight, 120) + 'px'; };
+$('#composer').onsubmit = ev => {
+  ev.preventDefault(); const text = msg.value.trim(); if (!text) return;
+  if (room === 'SANDBOX-8') {
+    if (S.state === 'waiting' && !S.answered) { answer(text); tick(1); }
+    else {
+      const m = { id: 'u' + S.tl.length, who: 'George', mine: true, at: S.now, html: '<p>' + esc(text) + '</p>', deliv: null };
+      if (S.ended) m.wake = 'Wakes the agent: agent-desk starts a resumed run on PR #3. The prototype stops here.';
+      else m.note = "Replay: the agent's later steps are the real run's, so it won't answer this here.";
+      S.tl.push(m);
+    }
+  } else if (room === 'desk') deskReply(text);
+  else { const r = extraRooms.find(x => x.id === room); if (r) r.tl.push({ who: 'George', mine: true, at: S.now, html: '<p>' + esc(text) + '</p>', wake: 'Reaches the agent once its Job starts.' }); }
+  msg.value = ''; msg.oninput(); render(); window.scrollTo(0, document.body.scrollHeight);
+};
+const PROJECTS = { SANDBOX: 'gjcourt/agent-sandbox', PLANEMOBILE: 'gjcourt/plane-mobile', DOMESTIQUE: 'gjcourt/domestique', TOPPINGCTL: 'gjcourt/toppingctl',
+  MODEMSCOPE: 'gjcourt/modemscope', FAX: 'gjcourt/fax', VIBRATO: 'gjcourt/vibrato', HOMELAB: 'gjcourt/homelab', HASS: 'gjcourt/homelab' };
+const PLAYBOOKS = { 'docs-fix': ['Haiku', 6], design: ['Opus', 2], feature: ['Opus', 8], review: ['Opus', 1] };
+function guess(text) {
+  const t = text.toLowerCase();
+  const p = /plane.?mobile|phone app|desk app/.test(t) ? 'PLANEMOBILE' : /domestique|cycling|ride/.test(t) ? 'DOMESTIQUE' : /\bfax\b/.test(t) ? 'FAX'
+    : /modem/.test(t) ? 'MODEMSCOPE' : /topping|\bdac\b/.test(t) ? 'TOPPINGCTL' : /vibrato|espresso|leva/.test(t) ? 'VIBRATO'
+    : /home assistant|\bhass\b|\bha\b/.test(t) ? 'HASS' : /homelab|cluster|vitals|flux|kubernetes/.test(t) ? 'HOMELAB' : 'SANDBOX';
+  const pb = /\b(doc|docs|readme|typo|wording)\b/.test(t) ? 'docs-fix' : /design|prototype|mock|layout/.test(t) ? 'design' : /\breview\b/.test(t) && p === 'MODEMSCOPE' ? 'review' : 'feature';
+  let title = text.trim().split(/[.\n]/)[0].replace(/^please\s+/i, ''); title = title.charAt(0).toUpperCase() + title.slice(1);
+  if (title.length > 70) title = title.slice(0, 69) + '…';
+  return { p, pb, title };
+}
+let proposal = null;
+function say(html) { dm.push({ who: 'desk', at: S.now + 1, html, notice: true }); }
+function propose() {
+  const [model, cap] = PLAYBOOKS[proposal.pb];
+  const gate = proposal.p === 'HOMELAB' || proposal.p === 'HASS';
+  say(`<p><b>${proposal.p} · ${proposal.pb} · ${esc(proposal.title)}</b></p><p>Repo ${PROJECTS[proposal.p]}, ${model}, up to ${cap} at once.${gate ? ' In this repo the agent may change only apps/ and docs/, and its PR waits for your approval (HOMELAB-85).' : ''}</p>
+    <p>Reply <code>go</code> to start. To change it, write <code>project PLANEMOBILE</code>, <code>playbook design</code> or <code>title …</code>, or describe the task again.</p>
+    <p class="small muted">Recommended default (plan question 7a), not decided. A keyword guess stands in for the Haiku proposal.</p>`);
+}
+function deskReply(text) {
+  dm.push({ who: 'George', at: S.now, html: '<p>' + esc(text) + '</p>' });
+  const t = text.trim(), m = t.match(/^(project|playbook|title)\s+(.+)$/i);
+  if (t === 'go') {
+    if (!proposal) { say('<p>Nothing to start. Write what an agent should do first.</p>'); return; }
+    if (proposal.pb === 'review' && proposal.p !== 'MODEMSCOPE') { say('<p>Not started: the review playbook runs only on gjcourt/modemscope. Pick another playbook.</p>'); return; }
+    const p = proposal; proposal = null; const id = p.p + '-new';
+    say(`<p>Created a ${p.p} ticket, "${esc(p.title)}", as agent-desk with <code>playbook:${p.pb}</code> and <code>ready</code>. Your <code>go</code> (its event id) is recorded on the ticket; that is what lets it start. agent-desk checks the usual gates, then starts a Job. I've invited you to its room.</p>`);
+    invites.unshift({ id, name: `⏳ ${id} · ${p.title}`, tl: [{ who: 'desk', at: S.now + 2, notice: true, html: `<p>Session for ${esc(p.title)}. Waiting for agent-desk to start a Job. The prototype stops here.</p>` }] });
+    tick(2); return;
+  }
+  if (m && proposal) {
+    const k = m[1].toLowerCase(), v = m[2].trim();
+    if (k === 'project') { const u = v.toUpperCase(); if (PROJECTS[u]) proposal.p = u; else { say(`<p>I don't know project ${esc(v)}. Projects: ${Object.keys(PROJECTS).join(', ')}.</p>`); return; } }
+    if (k === 'playbook') { if (PLAYBOOKS[v]) proposal.pb = v; else { say(`<p>I don't know playbook ${esc(v)}. Playbooks: ${Object.keys(PLAYBOOKS).join(', ')}.</p>`); return; } }
+    if (k === 'title') proposal.title = v;
+    propose(); return;
+  }
+  proposal = guess(t); propose();
+}
+
+// ---- Notifications, sheets, controls ----
+function notify(kind) {
+  const n = $('#notif');
+  n.innerHTML = kind === 'needs'
+    ? '<span class="app-name">Element X · now</span><br><strong>❓ SANDBOX-8 · Improve the docs</strong><br>desk: @George ' + esc(Q_PLAIN) + '<span class="proto-tag">Simulated push. With event_id_only (plan Q4) the phone fetches this text over the VPN. Tap to open.</span>'
+    : '<span class="app-name">Element X · now</span><br><strong>👀 SANDBOX-8 · Improve the docs</strong><br>desk: PR is ready for review: PR #3…<span class="proto-tag">Simulated push. Tap to open.</span>';
+  n.classList.add('open'); clearTimeout(notify.t); notify.t = setTimeout(() => n.classList.remove('open'), 6000);
+}
+$('#notif').onclick = () => { $('#notif').classList.remove('open'); closeSheets(); openRoom('SANDBOX-8'); };
+function toast(text) { const t = document.createElement('div'); t.className = 'toast'; t.textContent = text; $('#toasts').appendChild(t); setTimeout(() => t.remove(), 4000); }
+function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id)); window.scrollTo(0, 0); }
+function tick(i) { ptask[i] = true; }
+let lastFocus = null;
+function openSheet(id) { lastFocus = document.activeElement; closeSheets(true); $('#' + id).classList.add('open'); $('#scrim').classList.add('open'); if (id === 'sheet-tasks') renderTasks(); const f = $('#' + id).querySelector('button'); if (f) f.focus(); }
+function closeSheets(keep) { document.querySelectorAll('.sheet.open').forEach(s => s.classList.remove('open')); $('#scrim').classList.remove('open'); if (!keep && lastFocus) lastFocus.focus(); }
+document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => closeSheets());
+$('#scrim').onclick = () => closeSheets();
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSheets(); });
+function renderTasks() {
+  const T = ["Find what's waiting on you.", 'Answer a question an agent asked you.', 'Start a new session.'];
+  $('#ptasks').innerHTML = T.map((t, i) => `<li><span class="tick" aria-hidden="true">${ptask[i] ? '✓' : '○'}</span><span>${t}${ptask[i] ? ' <span class="sr-only">(done)</span>' : ''}</span></li>`).join('');
+}
+document.querySelectorAll('.filters button').forEach(b => b.onclick = () => toast('Filters are Element X\'s own; not part of this prototype.'));
+$('#r-tasks').onclick = () => openSheet('sheet-tasks');
+$('#r-menu').onclick = () => openSheet('sheet-menu');
+$('#r-play').onclick = () => { playing = !playing; render(); };
+$('#r-speed').onclick = () => { speed = speed === 1 ? 4 : speed === 4 ? 16 : 1; render(); };
+function runTo(pred) { let n = 0; while (!pred() && n++ < 5000) { if (S.i > WAIT_IDX && !S.answered) break; if (S.i >= EV.length) break; step(Math.max(0.01, evT(S.i) - S.now)); } }
+document.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
+  const j = b.dataset.jump; closeSheets();
+  if (j === 'restart') { S = fresh(); ptask = [false, false, false]; screen = 'list'; room = null; show('s-list'); }
+  else if (j === 'question') { if (S.i <= WAIT_IDX) runTo(() => S.i > WAIT_IDX); }
+  else if (j === 'answer') { if (S.i <= WAIT_IDX) runTo(() => S.i > WAIT_IDX); if (!S.answered) answer(REAL_ANSWER); }
+  else { if (!S.answered) { if (S.i <= WAIT_IDX) runTo(() => S.i > WAIT_IDX); answer(REAL_ANSWER); }
+    const target = j === 'pr' ? EV.findIndex(e => e.mark === 'pr') : EV.length - 1; runTo(() => S.i > target); step(31); }
+  render();
+});
+const THEMES = ['System', 'Light', 'Dark'];
+let theme = 0;
+try { theme = Math.max(0, THEMES.indexOf(localStorage.getItem('sessions-proto-theme') || 'System')); } catch (e) {}
+function applyTheme() { const t = THEMES[theme]; if (t === 'System') document.documentElement.removeAttribute('data-theme'); else document.documentElement.setAttribute('data-theme', t.toLowerCase()); $('#theme-name').textContent = t; }
+$('#theme-btn').onclick = () => { theme = (theme + 1) % 3; applyTheme(); try { localStorage.setItem('sessions-proto-theme', THEMES[theme]); } catch (e) {} };
+applyTheme();
+
+function render() {
+  $('#r-clock').textContent = clock(S.now);
+  $('#r-play').textContent = playing ? '❚❚' : '▶'; $('#r-play').setAttribute('aria-label', playing ? 'Pause replay' : 'Play replay');
+  $('#r-speed').textContent = speed + '×';
+  $('#r-taskcount').textContent = ptask.filter(Boolean).length + '/3';
+  if (screen === 'list') renderList(); else if (screen === 'room') renderRoom(); else if (screen === 'thread') renderThread();
+}
+S = fresh();
+const params = new URLSearchParams(location.search);
+if (params.get('at') === 'question') runTo(() => S.i > WAIT_IDX);
+if (params.get('at') === 'end') { runTo(() => S.i > WAIT_IDX); answer(REAL_ANSWER); runTo(() => S.i >= EV.length); step(31); }
+if (params.get('paused')) playing = false;
+if (params.get('open')) { room = params.get('open'); screen = params.get('thread') ? 'thread' : 'room'; show(screen === 'thread' ? 's-thread' : 's-room'); }
+render();
+let lastRender = 0;
+setInterval(() => {
+  if (!playing) return;
+  step(0.25 * speed);
+  if (Date.now() - lastRender > 500) {
+    const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 80;
+    render(); lastRender = Date.now();
+    if (screen === 'room' && atBottom) window.scrollTo(0, document.body.scrollHeight);
+  }
+}, 250);
+</script>
+</body>
+</html>

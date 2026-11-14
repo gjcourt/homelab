@@ -8,6 +8,12 @@ planeWebUrl: https://plane.burntbytes.com
 # The agent-desk bot (plan, "Plane identity"): a Member of each mapped project's
 # Plane project, and of no others.
 botEmail: gjcourt+agent-desk@gmail.com
+# George's orchestrator (George, 2026-11-09): its own Plane user ("orchestrator"),
+# not the bot. A `ready` it adds counts like George's, under his standing rules
+# for /desk. Nothing else of George's carries over: its comments don't wake an
+# agent or answer a Blocked ticket, and `over-cap` stays George's alone.
+# Remove the line to go back to George-only.
+orchestratorEmail: gjcourt+bench-orchestrator@gmail.com
 # Plane project identifier → repo. The repo always comes from here, never from
 # ticket text. Real repos join here one at a time (plan step 10), each with
 # the bot as a Member of its project and the default-branch guard on the repo.

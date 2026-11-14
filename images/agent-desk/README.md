@@ -23,7 +23,7 @@ both start a Job.
 
 1. The project is in `projects`, and the item has no `external_source`.
 2. Exactly one `playbook:<name>` label, naming a configured playbook.
-3. `ready`, **added by George**: the latest activity on the `ready` label's id is an add whose actor is George's user id.
+3. `ready`, **added by George** or by the orchestrator (`orchestratorEmail`): the latest activity on the `ready` label's id is an add whose actor is one of those user ids.
 4. The project's repo isn't in `denyRepos`.
 5. No active Job for the ticket, and it isn't In Progress or In review. A Blocked ticket starts again only after a newer comment from George.
 6. The playbook has fewer than `maxConcurrent` running, unless George added `over-cap`. Otherwise the ticket goes to Awaiting approval with one comment.
@@ -40,6 +40,13 @@ secrets (`PLANE_API_KEY_FILE`, `WEBHOOK_SECRET_FILE`, `GITHUB_TOKEN_FILE`).
 With `DRY_RUN_JOBS=true`, Jobs are created with `dryRun=All`: the API server
 runs RBAC, admission and quota checks but stores nothing. Plane writes are
 still real.
+
+`orchestratorEmail` (optional) names George's orchestrator's Plane user. Like
+`ownerEmail` and `botEmail`, it's resolved to a user id from the workspace
+members. A `ready` it adds counts like George's; nothing else does: `over-cap`,
+waking an agent, answering a Blocked ticket and reopening stay George's. Its
+comments are labelled "orchestrator" in the prompt. Unset or empty, only
+George's `ready` counts.
 
 `repoNotes` (optional) maps `owner/repo` to text that is appended to every
 playbook prompt for that repo, ahead of the ticket. homelab uses it to tell

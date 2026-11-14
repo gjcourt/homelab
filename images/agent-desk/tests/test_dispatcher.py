@@ -637,6 +637,28 @@ def test_in_review_notifies_with_the_pr(tmp_path):
                         "https://plane.example/ws/browse/SANDBOX-1/")]
 
 
+def test_app_web_url_points_notification_links_at_the_app(tmp_path):
+    # C6 of plane-mobile's plan: notifications open the app; the Job's
+    # web_url (the PR description's ticket link) stays on Plane.
+    d, plane, kube = make(tmp_path)
+    d.cfg.app_web_url = "https://desk.example/"
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1")
+    d.poll()
+    assert ticket_of(kube.created[0][0])["web_url"] == "https://plane.example/ws/browse/SANDBOX-1/"
+    plane.say("p-sb", "i1", BOT, "Which file?")
+    plane.set_state("p-sb", "i1", "Blocked", actor=BOT)
+    d.poll()
+    assert sent(d) == [("SANDBOX-1 needs you", "Which file?", "https://desk.example/t/SANDBOX-1")]
+
+
+def test_app_web_url_is_read_from_config(tmp_path):
+    p = tmp_path / "config.yaml"
+    p.write_text(CONFIG.format(cap=6) + "appWebUrl: https://desk.example\n")
+    cfg = config.load(str(p), env={"PLANE_URL": "http://plane", "PLANE_WORKSPACE": "ws"})
+    assert cfg.app_web_url == "https://desk.example"
+
+
 def test_restart_is_quiet_and_unlabelled_tickets_never_notify(tmp_path):
     d, plane, kube = make(tmp_path)
     plane.add_item("p-sb", "i1")

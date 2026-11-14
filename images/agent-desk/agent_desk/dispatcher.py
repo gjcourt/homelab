@@ -59,8 +59,10 @@ class Dispatcher:
         self.projects: dict[str, Project] = {}  # project id → Project
         self.owner_id = ""
         self.bot_id = ""
+        self.orchestrator_id = ""  # "" when unset or not a member: only George's ready counts
         self._refreshed = 0.0
         self._not_member: set[str] = set()
+        self._orch_missing_logged = False
         self.unconfirmed = False
         # Tickets this process started and believes In Progress, by playbook.
         # Re-derived from Plane on every poll; only bridges the gap in between.
@@ -83,6 +85,15 @@ class Dispatcher:
         self.bot_id = by_email.get(self.cfg.bot_email, "")
         if not self.owner_id:
             raise RuntimeError(f"owner {self.cfg.owner_email} isn't a workspace member")
+        orch = self.cfg.orchestrator_email
+        self.orchestrator_id = by_email.get(orch, "") if orch else ""
+        if orch and not self.orchestrator_id and not self._orch_missing_logged:
+            # Fail closed: without its id, only George's ready counts.
+            self.log(f"orchestrator {orch} isn't a workspace member; only George's ready counts")
+            self._orch_missing_logged = True
+        if self.orchestrator_id and self.orchestrator_id in (self.owner_id, self.bot_id):
+            raise RuntimeError("orchestratorEmail must be its own Plane user, "
+                               "not the owner or the bot")
         projects = {}
         for p in self.plane.projects():
             repo = self.cfg.projects.get(p["identifier"])
@@ -214,7 +225,9 @@ class Dispatcher:
             return cheap
         acts = self.plane.activities(pr.id, t.id)
         ready_id, over_id = pr.labels.get("ready"), pr.labels.get("over-cap")
-        ready_ok = bool(ready_id) and rules.label_applied_by(acts, ready_id, self.owner_id)
+        # ready: George's, or his orchestrator's. over-cap stays George's alone.
+        ready_ok = bool(ready_id) and rules.label_applied_by(
+            acts, ready_id, {self.owner_id, self.orchestrator_id})
         over_ok = ("over-cap" in t.label_names and bool(over_id)
                    and rules.label_applied_by(acts, over_id, self.owner_id))
         # Plane sends the webhook before it writes the activity row (staging
@@ -287,6 +300,18 @@ class Dispatcher:
 
     # -- starting ---------------------------------------------------------------
 
+    def author(self, c: dict) -> str:
+        """Who wrote a comment, as the prompt labels it. Every comment is fenced
+        as untrusted data whoever wrote it; the label only says who."""
+        actor = c.get("actor", c.get("created_by")) or ""
+        if actor and actor == self.owner_id:
+            return "George"
+        if actor and actor == self.bot_id:
+            return "agent-desk"
+        if actor and actor == self.orchestrator_id:
+            return "orchestrator"
+        return "someone else"
+
     def start(self, pr: Project, t: Ticket, d: rules.Decision, job_list: list[dict],
               review: dict | None = None) -> bool:
         """review: {"id", "url", "text"} when George's GitHub review woke it.
@@ -294,10 +319,7 @@ class Dispatcher:
         pb = self.cfg.playbooks[d.playbook]
         item = self.plane.item(pr.id, t.id)
         cmts = self.plane.comments(pr.id, t.id)
-        comments = [("George" if c.get("actor", c.get("created_by")) == self.owner_id
-                     else "agent-desk" if c.get("actor", c.get("created_by")) == self.bot_id
-                     else "someone else", c.get("comment_html", ""))
-                    for c in cmts]
+        comments = [(self.author(c), c.get("comment_html", "")) for c in cmts]
         if review:
             comments.append(("George, in a GitHub review", _p(review["text"])))
         text = promptmod.build(pb.prompt, key=t.key, title=t.name,

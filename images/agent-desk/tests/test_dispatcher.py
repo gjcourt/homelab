@@ -6,7 +6,7 @@ import json
 import os
 
 import pytest
-from fakes import BOT, OTHER, OWNER, FakeKube, FakePlane
+from fakes import BOT, ORCH, OTHER, OWNER, FakeKube, FakePlane
 
 from agent_desk import config, rules, server
 from agent_desk.dispatcher import Dispatcher, event_target
@@ -33,9 +33,10 @@ playbooks:
 """
 
 
-def make(tmp_path, cap=6, deny=None):
+def make(tmp_path, cap=6, deny=None, orchestrator=None):
     p = tmp_path / "config.yaml"
-    p.write_text(CONFIG.format(cap=cap))
+    extra = f"orchestratorEmail: {orchestrator!r}\n" if orchestrator is not None else ""
+    p.write_text(CONFIG.format(cap=cap) + extra)
     cfg = config.load(str(p), env={"PLANE_URL": "http://plane", "PLANE_WORKSPACE": "ws",
                                    "DRY_RUN_JOBS": "true"})
     cfg.job_template = TEMPLATE
@@ -837,3 +838,170 @@ def test_github_client_reads_only_the_owners_deciding_reviews(monkeypatch):
     assert gh.changes_requested("o/r", 1, "gjcourt") is None
     calls["reviews"] = reviews((1, "CHANGES_REQUESTED", "someone"))
     assert gh.changes_requested("o/r", 1, "gjcourt") is None
+
+
+# -- the orchestrator's ready (George, 2026-11-09) ------------------------------
+
+ORCH_EMAIL = "gjcourt+bench-orchestrator@gmail.com"
+
+
+def prompt_of(job):
+    return env_of(job, "TASK_PROMPT")
+
+
+def test_orchestrator_email_is_resolved_and_optional(tmp_path):
+    d, _, _ = make(tmp_path, orchestrator=ORCH_EMAIL)
+    assert d.cfg.orchestrator_email == ORCH_EMAIL
+    d.refresh(force=True)
+    assert d.orchestrator_id == ORCH
+    for unset in (None, ""):
+        d, _, _ = make(tmp_path, orchestrator=unset)
+        assert d.cfg.orchestrator_email == ""
+        d.refresh(force=True)
+        assert d.orchestrator_id == ""
+
+
+def test_orchestrator_ready_starts_like_georges(tmp_path):
+    d, plane, kube = make(tmp_path, orchestrator=ORCH_EMAIL)
+    plane.add_item("p-sb", "i1", seq=3)
+    ready(plane, "p-sb", "i1", by=ORCH)
+    d.poll()
+    assert len(kube.created) == 1
+    assert plane.state_of("p-sb", "i1") == "In Progress"
+    # the Job's comment hook still relays only George's comments
+    assert ticket_of(kube.created[0][0])["owner_id"] == OWNER
+
+
+def test_orchestrator_ready_at_creation_counts(tmp_path):
+    d, plane, kube = make(tmp_path, orchestrator=ORCH_EMAIL)
+    plane.add_item("p-sb", "i1")
+    it = plane.projs["p-sb"]["items"]["i1"]
+    it["labels"] += [plane.lid("p-sb", "playbook:docs-fix"), plane.lid("p-sb", "ready")]
+    plane.projs["p-sb"]["acts"]["i1"].append({"verb": "created", "field": None, "actor": ORCH})
+    d.poll()
+    assert len(kube.created) == 1
+
+
+def test_orchestrator_ready_does_not_count_when_unset(tmp_path):
+    for unset in (None, ""):
+        d, plane, kube = make(tmp_path, orchestrator=unset)
+        plane.add_item("p-sb", "i1")
+        ready(plane, "p-sb", "i1", by=ORCH)
+        d.poll()
+        assert kube.created == [] and plane.writes == []
+        assert d.on_event("p-sb", "i1") is True  # unattributed, as for any other user
+        assert kube.created == []
+
+
+def test_orchestrator_does_not_widen_the_gate_to_anyone_else(tmp_path):
+    d, plane, kube = make(tmp_path, orchestrator=ORCH_EMAIL)
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1", by=BOT)
+    plane.add_item("p-sb", "i2")
+    ready(plane, "p-sb", "i2", by=OTHER)
+    plane.add_item("p-sb", "i3")  # the orchestrator's ready, removed and re-added by an agent
+    ready(plane, "p-sb", "i3", by=ORCH)
+    plane.label("p-sb", "i3", "ready", OTHER, add=False)
+    plane.label("p-sb", "i3", "ready", OTHER)
+    d.poll()
+    assert kube.created == [] and plane.writes == []
+
+
+def test_orchestrator_email_naming_owner_or_bot_is_refused(tmp_path):
+    for email in ("gjcourt@gmail.com", "gjcourt+agent-desk@gmail.com"):
+        d, _, _ = make(tmp_path, orchestrator=email)
+        with pytest.raises(RuntimeError, match="its own Plane user"):
+            d.refresh(force=True)
+
+
+def test_orchestrator_not_a_member_fails_closed(tmp_path):
+    logs = []
+    d, plane, kube = make(tmp_path, orchestrator="nobody@example.com")
+    d.log = logs.append
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1", by=ORCH)
+    d.poll()
+    d.poll()
+    assert d.orchestrator_id == "" and kube.created == []
+    assert len([m for m in logs if "isn't a workspace member" in m]) == 1
+
+
+def test_orchestrator_over_cap_does_not_count(tmp_path):
+    d, plane, kube = make(tmp_path, cap=1, orchestrator=ORCH_EMAIL)
+    plane.add_item("p-sb", "i1", seq=1)
+    ready(plane, "p-sb", "i1", by=ORCH)
+    plane.add_item("p-sb", "i2", seq=2)
+    ready(plane, "p-sb", "i2", by=ORCH)
+    d.poll()
+    assert len(kube.created) == 1
+    assert plane.state_of("p-sb", "i2") == "Awaiting approval"
+    plane.label("p-sb", "i2", "over-cap", ORCH)
+    d.poll()
+    assert len(kube.created) == 1  # over-cap is still George's alone
+    plane.label("p-sb", "i2", "over-cap", OWNER)
+    d.poll()
+    assert len(kube.created) == 2
+
+
+def test_orchestrator_comments_are_labelled_and_fenced(tmp_path):
+    d, plane, kube = make(tmp_path, orchestrator=ORCH_EMAIL)
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1", by=ORCH)
+    plane.say("p-sb", "i1", OWNER, "from George")
+    plane.say("p-sb", "i1", ORCH, "from the orchestrator")
+    plane.say("p-sb", "i1", OTHER, "from an agent")
+    d.poll()
+    prompt = prompt_of(kube.created[0][0])
+    fenced = prompt[prompt.index('<ticket id="SANDBOX-1">'):]
+    assert "--- comment by George ---\nfrom George" in fenced
+    assert "--- comment by orchestrator ---\nfrom the orchestrator" in fenced
+    assert "--- comment by someone else ---\nfrom an agent" in fenced
+    assert "--- comment by George ---\nfrom the orchestrator" not in fenced
+    assert fenced.rstrip().endswith("</ticket>")
+    assert "untrusted data" in prompt
+
+
+def test_orchestrator_comment_does_not_answer_a_blocked_ticket(tmp_path):
+    d, plane, kube = make(tmp_path, orchestrator=ORCH_EMAIL)
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1", by=ORCH)
+    d.poll()  # starts it, and seeds the notification state
+    assert len(kube.created) == 1
+    plane.say("p-sb", "i1", BOT, "Which file?")
+    plane.say("p-sb", "i1", ORCH, "README.md")  # before the move: still a question for George
+    plane.set_state("p-sb", "i1", "Blocked", actor=BOT)
+    kube.job_list = []
+    d.poll()
+    assert len(kube.created) == 1  # not woken
+    assert sent(d) == [("SANDBOX-1 needs you", "Which file?",
+                        "https://plane.example/ws/browse/SANDBOX-1/")]
+    plane.say("p-sb", "i1", OWNER, "README.md")
+    d.poll()
+    assert len(kube.created) == 2
+    t = ticket_of(kube.created[1][0])
+    assert t["resume"] and t["resume_prompt"].count("README.md") == 1
+
+
+def test_orchestrator_comment_does_not_wake_in_review_or_reopen(tmp_path):
+    for state in ("In review", "Done"):
+        d, plane, kube = make(tmp_path, orchestrator=ORCH_EMAIL)
+        worked(plane, state=state)
+        plane.say("p-sb", "i1", ORCH, "please rename the heading")
+        d.poll()
+        d.poll()
+        assert kube.created == []
+        assert not [w for w in plane.writes if w[0] == "comment" and "reopen" in w[2]]
+        if state == "Done":
+            plane.say("p-sb", "i1", ORCH, "reopen")
+            d.poll()
+            assert kube.created == []
+
+
+def test_label_gate_takes_a_set_and_ignores_empty_ids():
+    acts = [{"field": "labels", "new_identifier": "L", "old_identifier": None, "actor": ORCH}]
+    assert rules.label_applied_by(acts, "L", {OWNER, ORCH})
+    assert not rules.label_applied_by(acts, "L", {OWNER, ""})
+    blank = [{"field": "labels", "new_identifier": "L", "old_identifier": None, "actor": ""}]
+    assert not rules.label_applied_by(blank, "L", {OWNER, ""})
+    assert not rules.label_applied_by([{"verb": "created", "field": None, "actor": ""}],
+                                      "L", {OWNER, ""})

@@ -5,7 +5,7 @@
 # Plane, and writes Plane's brief statuses back to the lab repo through one
 # auto-merging PR. Needs git (clone/commit/push over HTTPS with a token).
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git ca-certificates \

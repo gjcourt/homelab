@@ -41,13 +41,17 @@ and again after any restore without `.storage`:
 
 This sets it for every user whose Profile → Dashboard is "Auto (use system
 settings)"; a per-user choice there wins over it (frontend `getDefaultPanelUrlPath`).
-HA's built-in **Overview** stays in the sidebar; its area pages (`/home/areas-…`)
-are what the Home dashboard's "Other areas" cards open, so keep it.
+HA's built-in **Overview** stays in the sidebar, for its generated area pages
+(`/home/areas-…`).
 
 ## HACS components the git dashboards depend on
 
-Not in git: HACS downloads them into `/config/www/community/` on the PVC and
-registers them as Lovelace resources in `.storage/lovelace_resources`. A fresh
+Not in git: HACS downloads them into `/config/www/community/` on the PVC. Their
+Lovelace resource is in git, though: `lovelace.resource_mode: yaml` in
+configuration.yaml (HASS-13) means HA reads resources only from
+`lovelace.resources` there and ignores `.storage/lovelace_resources`, so HACS
+can't register or re-tag them. After HACS installs or updates one, add it or
+bump its `?v=` in that list, or browsers keep the cached old file. A fresh
 HA, or a restore without `.storage` and `www/community/`, needs them
 reinstalled through HACS (HACS → search → Download → reload the browser).
 
@@ -56,7 +60,8 @@ reinstalled through HACS (HACS → search → Download → reload the browser).
 | [auto-entities](https://github.com/thomasloven/lovelace-auto-entities) (`thomasloven/lovelace-auto-entities`, tested v1.16.1) | Config → Maintenance view and its Maintenance intervals subview (HASS-2): every task list | Each list shows HA's "Custom element doesn't exist: auto-entities" card; tasks, reminders and the phone Done action still work |
 
 The vendored cards (Mushroom, card-mod, clock-weather) are different: they are
-in git (`../files/www/`) and load through `frontend.extra_module_url`.
+in git (`../files/www/`) and load through `lovelace.resources` in
+configuration.yaml (until HASS-13, `frontend.extra_module_url`).
 
 ## Refresh a snapshot
 

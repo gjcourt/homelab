@@ -4,15 +4,6 @@ default_config:
 # Load frontend themes from the themes folder
 frontend:
   themes: !include_dir_merge_named themes
-  # Vendored custom cards loaded as ES modules. mushroom.js is mounted to
-  # /config/www (served at /local/) from the homeassistant-www ConfigMap.
-  # This is the git-managed equivalent of a HACS resource registration and
-  # works in storage-mode lovelace (unlike `lovelace: resources:`).
-  extra_module_url:
-    # card-mod first so it's registered before cards that use card_mod render.
-    - /local/card-mod.js
-    - /local/mushroom.js
-    - /local/clock-weather-card.js
 
 # Lovelace dashboards. Map / Floor Plan stay UI-managed (storage mode);
 # Switchboard was deleted 2026-10-31. Home (HASS-10) and the Config dashboard
@@ -29,6 +20,32 @@ frontend:
 # Storage is the default mode (the other dashboards stay UI-managed); the
 # `mode:` key is deprecated, so it isn't set.
 lovelace:
+  # Custom cards as Lovelace resources, defined here (HASS-13). They used to be
+  # loaded with frontend.extra_module_url, and on cold loads Mushroom and
+  # card-mod cards often stuck on "Configuration error" (a load-order race,
+  # not a missing file: the console showed every module loaded, twice). Lovelace
+  # loads its resources itself, once. The Home dashboard uses only built-in
+  # cards, so it can't be broken by this either way; the Config dashboard and
+  # the UI-managed ones still need these.
+  #
+  # resource_mode: yaml takes resources from this list only, for every
+  # dashboard (storage-mode dashboards included); the UI's resource editor
+  # and HACS can no longer add or change them. So auto-entities (HACS, see
+  # bootstrap/README.md) is listed here too, at the path HACS serves it from.
+  # After HACS updates it, bump its `?v=` so browsers fetch the new file.
+  # The vendored cards (files/www/, mounted at /config/www = /local/) change
+  # only through PRs; bump their `?v=` with the file.
+  resource_mode: yaml
+  resources:
+    # card-mod first so it's registered before cards that use card_mod render.
+    - url: /local/card-mod.js?v=2026-11-08
+      type: module
+    - url: /local/mushroom.js?v=5.1.1
+      type: module
+    - url: /local/clock-weather-card.js?v=2.9.4
+      type: module
+    - url: /hacsfiles/lovelace-auto-entities/auto-entities.js?v=1.16.1
+      type: module
   dashboards:
     # Home (HASS-10): the main page. HA's built-in Overview (/home) can't be
     # kept in YAML or given extra cards, so this rebuilds it from HA's own
@@ -224,7 +241,8 @@ template:
         unique_id: lights_on_count
         unit_of_measurement: "on"
         icon: mdi:lightbulb-group
-        state: "{{ states.light | selectattr('state', 'eq', 'on') | list | count }}"
+        # Room groups (home_page package) are skipped so a room isn't counted twice.
+        state: "{{ states.light | rejectattr('attributes.entity_id', 'defined') | selectattr('state', 'eq', 'on') | list | count }}"
       - name: "Media Playing"
         unique_id: media_playing_count
         unit_of_measurement: "playing"
@@ -844,3 +862,210 @@ homeassistant:
                 next_side: "{{ states('input_select.daily_shot_next_side') }}"
                 last_side: "{{ states('input_text.daily_shot_last_side') }}"
                 last_done: "{{ states('input_datetime.daily_shot_last_done') }}"
+
+    # Home page (HASS-13): the helpers behind the phone-first Home dashboard
+    # (dashboards/home.yaml). Room light groups, the "Needs you" strip, and
+    # All lights off with an undo.
+    home_page:
+      # One light group per room, so a Home tile can show the room's state
+      # (on if any light in it is on) and long-press opens one dimmer for the
+      # whole room. Tapping a tile runs script.smart_light_toggle with the same
+      # list, not light.toggle, so the room's last level is remembered.
+      # Members match the "All lights" cards on the Config → Lights view.
+      # Groups are skipped by sensor.lights_on, sensor.lights_offline and
+      # script.lights_off_with_undo (they have an entity_id attribute), so a
+      # room is never counted twice.
+      light:
+        - platform: group
+          name: Living Room lights
+          unique_id: room_lights_living_room
+          entities: [light.living_room_sconces]
+        - platform: group
+          name: Kitchen lights
+          unique_id: room_lights_kitchen
+          entities: [light.kitchen_main_lights, light.kitchen_under_cabinet, light.kitchen_island_pendants]
+        - platform: group
+          name: Dining Room lights
+          unique_id: room_lights_dining_room
+          entities: [light.dining_room_sconces, light.0xa4c138b55dac7973, light.0xa4c138a9f6011cac, light.dining_room_chandelier]
+        - platform: group
+          name: Entryway lights
+          unique_id: room_lights_entryway
+          entities: [light.front_foyer_chandelier, light.front_foyer_spot_lights, light.front_foyer_closet]
+        - platform: group
+          name: Hallway lights
+          unique_id: room_lights_hallway
+          entities: [light.hallway_long, light.hallway_landing]
+        - platform: group
+          name: Master Bedroom lights
+          unique_id: room_lights_master_bedroom
+          entities: [light.master_bedroom_main_lights, light.master_bedroom_entry, light.master_bedroom_sconce_north, light.master_bedroom_sconce_south, light.master_bedroom_closet_light]
+        - platform: group
+          name: Master Bathroom lights
+          unique_id: room_lights_master_bathroom
+          entities: [light.master_bathroom_vanity, light.master_bathroom_ceiling]
+        - platform: group
+          name: Office lights
+          unique_id: room_lights_office
+          entities: [light.office_main_lights, light.office_closet]
+        - platform: group
+          name: Niccolo Bedroom lights
+          unique_id: room_lights_niccolo_bedroom
+          entities: [light.niccolo_bedroom_main_lights, light.secondary_bedroom_closet_light]
+        - platform: group
+          name: Nursery Bedroom lights
+          unique_id: room_lights_nursery_bedroom
+          entities: [light.nursery_bedroom_main_lights, light.nursery_bedroom_closet_light]
+        - platform: group
+          name: Hall Bathroom lights
+          unique_id: room_lights_hall_bathroom
+          entities: [light.hall_bathroom_main_lights, light.hall_bathroom_vanity_lights]
+        - platform: group
+          name: Powder Bathroom lights
+          unique_id: room_lights_powder_bathroom
+          entities: [light.powder_bathroom_chandelier]
+        - platform: group
+          name: Butler Pantry lights
+          unique_id: room_lights_butler_pantry
+          entities: [light.butler_pantry_main_lights]
+        - platform: group
+          name: Laundry Room lights
+          unique_id: room_lights_laundry_room
+          entities: [light.laundry_room_main_lights, light.laundry_room_cove]
+        - platform: group
+          name: Exterior lights
+          unique_id: room_lights_exterior
+          entities: [light.exterior_east, light.exterior_west]
+
+      # How long the Undo tile stays on Home after All lights off.
+      timer:
+        lights_off_undo:
+          name: All lights off, undo window
+          duration: "00:02:00"
+
+      template:
+        - binary_sensor:
+            # Today's shot isn't logged and the 19:00 reminder ("Daily shot —
+            # reminder", automations.yaml) has gone out. Moves the shot into
+            # "Needs you" on Home.
+            - name: Daily shot due
+              unique_id: daily_shot_due
+              default_entity_id: binary_sensor.daily_shot_due
+              icon: mdi:needle
+              state: "{{ is_state('sensor.daily_shot', 'To do') and now() >= today_at('19:00') }}"
+            # Either oven cavity is in any mode but Off.
+            - name: Oven on
+              unique_id: oven_on
+              default_entity_id: binary_sensor.oven_on
+              icon: mdi:stove
+              state: >
+                {{ [states('sensor.30_double_wall_oven_cooking_mode'),
+                    states('sensor.30_double_wall_oven_lower_oven_cooking_mode')]
+                   | reject('in', ['Off', 'unavailable', 'unknown']) | list | count > 0 }}
+        - sensor:
+            # Lights HA can't reach. The two dining-room chandelier LEDs
+            # (Zigbee) are left out: they go unavailable whenever their
+            # switch is off, by design (bootstrap/README.md, "Depends on").
+            - name: Lights offline
+              unique_id: lights_offline_count
+              default_entity_id: sensor.lights_offline
+              unit_of_measurement: "offline"
+              icon: mdi:lightbulb-alert
+              state: >
+                {{ states.light
+                   | rejectattr('attributes.entity_id', 'defined')
+                   | rejectattr('entity_id', 'in', ['light.0xa4c138b55dac7973', 'light.0xa4c138a9f6011cac'])
+                   | selectattr('state', 'eq', 'unavailable')
+                   | list | count }}
+            # What needs one of us, for the top of Home. State = how many
+            # items (0 = "All clear"); `items` = one sentence each.
+            # `maintenance` = the tasks that are due, for the Maintenance tile.
+            # The state and `items` must list the same checks: keep the two
+            # blocks below in step.
+            - name: Needs you
+              unique_id: needs_you
+              default_entity_id: sensor.needs_you
+              icon: mdi:bell-badge
+              state: >
+                {{ [is_state('binary_sensor.42_french_door_refrigerator_door', 'on'),
+                    is_state('binary_sensor.42_french_door_freezer_door', 'on'),
+                    is_state('binary_sensor.oven_on', 'on'),
+                    states('sensor.maintenance_to_do') | int(0) > 0,
+                    states('sensor.lights_offline') | int(0) > 0,
+                    is_state('binary_sensor.daily_shot_due', 'on')]
+                   | select | list | count }}
+              attributes:
+                items: >
+                  {% set ns = namespace(items=[]) %}
+                  {% if is_state('binary_sensor.42_french_door_refrigerator_door', 'on') %}{% set ns.items = ns.items + ['Fridge door open'] %}{% endif %}
+                  {% if is_state('binary_sensor.42_french_door_freezer_door', 'on') %}{% set ns.items = ns.items + ['Freezer door open'] %}{% endif %}
+                  {% if is_state('binary_sensor.oven_on', 'on') %}{% set ns.items = ns.items + ['Oven on'] %}{% endif %}
+                  {% set m = states('sensor.maintenance_to_do') | int(0) %}
+                  {% if m > 0 %}{% set ns.items = ns.items + ['Maintenance: ' ~ m ~ ' to do'] %}{% endif %}
+                  {% set o = states('sensor.lights_offline') | int(0) %}
+                  {% if o > 0 %}{% set ns.items = ns.items + [o ~ (' light' if o == 1 else ' lights') ~ ' offline'] %}{% endif %}
+                  {% if is_state('binary_sensor.daily_shot_due', 'on') %}{% set ns.items = ns.items + ['Daily shot: ' ~ (state_attr('sensor.daily_shot', 'next_side') or '?') | lower ~ ' side'] %}{% endif %}
+                  {{ ns.items }}
+                # Same selection as sensor.maintenance_to_do: anything not "ok".
+                maintenance: >
+                  {{ states.sensor
+                     | selectattr('entity_id', 'match', 'sensor\.maintenance_')
+                     | selectattr('attributes.default_interval', 'defined')
+                     | rejectattr('state', 'eq', 'ok')
+                     | map(attribute='name')
+                     | join(', ') }}
+
+      script:
+        # All lights off, with a way back (UI.md: undo beats confirmation; the
+        # Home tile still asks first, because "all" includes bedrooms at
+        # night). Snapshots every light that is on into
+        # scene.undo_all_lights_off, turns those off, and starts
+        # timer.lights_off_undo; Home shows an Undo tile while it runs.
+        # Room groups are left out of the snapshot: restoring a group would
+        # switch on every light in the room, not just the ones that were on.
+        # scene.create scenes live in memory, so an HA restart drops the undo.
+        lights_off_with_undo:
+          alias: All lights off (with undo)
+          icon: mdi:lightbulb-group-off
+          mode: single
+          sequence:
+            - variables:
+                on_lights: >
+                  {{ states.light
+                     | selectattr('state', 'eq', 'on')
+                     | rejectattr('attributes.entity_id', 'defined')
+                     | map(attribute='entity_id') | list }}
+            - if:
+                - condition: template
+                  value_template: "{{ on_lights | count == 0 }}"
+              then:
+                - stop: "No lights are on."
+            - action: scene.create
+              data:
+                scene_id: undo_all_lights_off
+                snapshot_entities: "{{ on_lights }}"
+            - action: light.turn_off
+              target:
+                entity_id: "{{ on_lights }}"
+            - action: timer.start
+              target:
+                entity_id: timer.lights_off_undo
+        # Puts back the lights the last All lights off turned off. Checks the
+        # scene exists rather than its state: a scene.create scene stays
+        # `unknown` until it is first activated (scene/__init__.py, 2026.10.4).
+        lights_off_undo:
+          alias: Undo all lights off
+          icon: mdi:undo
+          mode: single
+          sequence:
+            - if:
+                - condition: template
+                  value_template: "{{ states.scene.undo_all_lights_off is none }}"
+              then:
+                - stop: "Nothing to undo."
+            - action: scene.turn_on
+              target:
+                entity_id: scene.undo_all_lights_off
+            - action: timer.cancel
+              target:
+                entity_id: timer.lights_off_undo

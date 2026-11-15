@@ -298,6 +298,41 @@ Operational notes:
 
 Setup and troubleshooting: [`hosts/hestia/actions-runner/README.md`](../../hosts/hestia/actions-runner/README.md).
 
+### update-verifier — checking recovery after a UniFi reboot
+
+`infra/configs/update-verifier/` (plan:
+[2026-11-14-switch-update-observability-plan.md](../plans/2026-11-14-switch-update-observability-plan.md),
+phase 3). When the Rack Switch or the gateway (`Home`) reboots, it waits until
+uptime reaches 15 min, then checks once per boot through the Prometheus and Loki
+APIs: PVC write probes, `PvcNotWritable`, nodes Ready, etcd 3 members with a
+leader, no new Flux failures, and no iSCSI kernel errors in Loki after boot +
+10 min. It records `homelab_update_verification{device, boot, from_version,
+to_version, result, failed_checks}`, whose value is the boot start time.
+
+| Alert | Fires when |
+| --- | --- |
+| `UpdateVerificationFailed` (critical) | a boot's result is `fail`. Also POSTed directly to both Alertmanagers, so it still pages when Prometheus is blind |
+| `UpdateVerificationMissing` (critical) | a watched device has been up 60–180 min with no result for that boot |
+
+A pass sends nothing. `failed_checks` names each failure; `prometheus_stale`,
+`loki_error` and `loki_stale` mean a check **could not be made**, which counts
+as a failure, never a pass. When Prometheus is stale the verifier reads uptime
+from unpoller's own `/metrics`.
+
+What it cannot catch: both Alertmanagers down, or the verifier unable to reach
+either Prometheus or unpoller. `UpdateVerificationMissing` is evaluated by
+Prometheus and goes blind with it. The off-cluster healthchecks.io deadman
+behind `IngestionWatchdog` (above) is the last line for those cases.
+
+Replay one iteration at a past instant, without posting to Alertmanager:
+
+```bash
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-prometheus 19090:9090 &
+kubectl -n monitoring port-forward svc/loki 13100:3100 &
+PROMETHEUS_URL=http://localhost:19090 LOKI_URL=http://localhost:13100 \
+  python3 infra/configs/update-verifier/verifier.py --once --at <unix-seconds>
+```
+
 ## 8. Disaster Recovery
 - **Backup Strategy**:
   - Prometheus metrics are ephemeral and not backed up.

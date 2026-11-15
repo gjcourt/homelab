@@ -74,10 +74,119 @@ can remount volumes read-only. No amount of observation fixes that, so this goes
 - **The trade:** writes hang for up to 10 minutes instead of failing after 2. During a real
   hestia outage, apps freeze longer before erroring. Accepted, given that the read-only
   alternative has cost 14 hours twice.
-- **Open question 2: the target side.** The 08-13 log shows SCST
-  `conn_rsp_timer_fn: Timeout 30 sec ... closing connection`. That's a different timer.
-  Confirm a closed connection on hestia's side still lets the initiator re-login within its
-  600 s window, rather than failing the session.
+- **Resolved (from source; not yet tested live): the target side.** The 08-13 log shows SCST
+  `conn_rsp_timer_fn: Timeout 30 sec ... closing connection`. Short answer: hestia closes the
+  connection and **throws the whole session away** within about 60–90 s. That does not stop
+  recovery. The initiator never resumes the old session: it logs in to a fresh one and
+  re-sends its own queued I/O. Nothing on the target side limits how late that login can
+  arrive, so the only deadline is the initiator's `replacement_timeout`. **No TrueNAS setting
+  needs changing.** Details below.
+
+  *What the 30 s timer is.* `conn_rsp_timer_fn` (`iscsi-scst/kernel/conn.c`) watches the
+  oldest PDU still waiting on the initiator. When that PDU passes its deadline, it logs this
+  line and calls `mark_conn_closed()`. The deadline comes from `iscsi_get_timeout()`
+  (`kernel/iscsi.h`): `NopInTimeout` if the PDU is the target's own NOP-In ping, and
+  `RspTimeout` for everything else. With SCST's defaults (`include/iscsi_scst.h`:
+  `DEFAULT_NOP_IN_INTERVAL 30`, `DEFAULT_NOP_IN_TIMEOUT 30`, `DEFAULT_RSP_TIMEOUT 90`), a
+  logged "30 sec" therefore means a NOP-In that got no reply. That is consistent with 08-13: the link
+  dropped at 03:01:10, the connection then sat idle for the 30 s `NopInInterval`, a ping was
+  sent, and it timed out after another 30 s, at 03:02:07. A connection with a command in
+  flight would wait the 90 s `RspTimeout` instead. Either way, a 3–6 minute outage always
+  outlasts the target's patience, so for this plan **the old session is always gone by the
+  time the switch comes back**.
+
+  *What the target does with commands and session state when it closes.* `close_conn()`
+  (`kernel/nthread.c`) sends `SCST_NEXUS_LOSS_SESS` to the SCST core.
+  `scst_abort_all_nexus_loss_sess()` (`scst/src/scst_targ.c`) runs `__scst_abort_task_set()`
+  on every LUN in the session and clears any ACA. Outstanding commands are **aborted, not
+  kept**: their responses are discarded, and backend I/O already handed to ZFS is waited out
+  before the abort finishes. The connection-close event then reaches the user-space daemon.
+  In `usr/event.c` (`case E_CONN_CLOSE`), `if (list_empty(&session->conn_list))
+  session_free(session);` runs. That is the `session_free: Freeing session` line on 08-13.
+  Freeing the session's per-LUN state also drops any SCSI-2 `RESERVE` it held
+  (`scst_clear_reservation()` in `scst_lib.c`). How persistent reservations behave was not
+  traced in source. Nothing in this stack is known to use either kind; that is unverified,
+  but a reservation conflict would show up as an I/O error, which the test below fails on.
+  The target keeps no state to come back to anyway: it fixes `ErrorRecoveryLevel` at 0,
+  `MaxConnections` at 1 and `DefaultTime2Retain` at 0 (min = max in `usr/param.c`). So there
+  is no connection-level or task-level recovery on this target, ever.
+
+  *Why re-login still works.* open-iscsi always sends `login_hdr->tsih = 0`
+  (`usr/login.c`, `iscsi_make_login_pdu()`), together with the node's unchanged ISID. In
+  `login_check_reinstatement()` (`usr/iscsid.c`), TSIH 0 with no matching session means
+  "new session", which is accepted. TSIH 0 *with* a matching session means "session
+  reinstatement": the kernel aborts the old session first, so it can't run commands after
+  the new one does (comment in `iscsi_task_mgmt_affected_cmds_done()`). The only login it
+  rejects is a non-zero TSIH for a session that is gone, and open-iscsi never sends that.
+  The new session gets SCST's standard "power on / reset" Unit Attention (`29/00`, set by
+  `scst_alloc_set_UA()` when per-LUN state is created). For a non-removable disk, Linux
+  answers that with `ACTION_RETRY` (`scsi_io_completion_action()` in
+  `drivers/scsi/scsi_lib.c`).
+
+  *What happens to queued I/O on the node.* From Linux v6.18 source (the nodes' exact kernel
+  version wasn't checked): when the node detects the dead
+  connection (open-iscsi default `noop_out_interval`/`noop_out_timeout` 5/5 s), libiscsi
+  fails the in-flight commands with `DID_TRANSPORT_DISRUPTED`
+  (`iscsi_start_session_recovery()` → `fail_scsi_tasks()`). `scsi_decide_disposition()`
+  sends that to `maybe_retry`, so each command is requeued behind the blocked session; each
+  requeue uses up one of the command's retries. While the session is not logged in,
+  `iscsi_eh_cmd_timed_out()` returns `SCSI_EH_RESET_TIMER`, so the 30 s SCSI command timeout
+  can't escalate during recovery. Only `session_recovery_timedout()`
+  (`scsi_transport_iscsi.c`) fails I/O, by setting devices `SDEV_TRANSPORT_OFFLINE`, and
+  that is the `replacement_timeout` firing. If the login succeeds first, the queue unblocks
+  and the requeued commands go out on the new session. **ext4 sees only latency.** A write
+  the target finished but never acknowledged is sent again, which is safe for plain
+  `WRITE`s to the same blocks.
+
+  *Target settings: what matters and what doesn't.*
+
+  | Setting | Effect here |
+  | --- | --- |
+  | SCST `NopInInterval` / `NopInTimeout` / `RspTimeout` (30/30/90 s) | Only sets how fast hestia drops a dead session. It does **not** limit how late the initiator can come back, so leave it alone. Dropping fast is better: the old session is already gone at re-login, so the reinstatement path never runs. TrueNAS can't change these anyway. The `scst.conf.mako` template only passes per-target parameters listed in `ISCSI_TARGET_PARAMETERS = ['QueuedCommands']` (`plugins/iscsi_/utils.py`), and GitHub code search finds no `NopInInterval`, `NopInTimeout` or `RspTimeout` in `truenas/middleware`. A hand edit in sysfs would be lost the next time middleware regenerates the config. |
+  | Target `QueuedCommands` (32/128) | Queue depth only. Doesn't matter here. |
+  | Global: Base Name, ISNS Servers, Pool Available Space Threshold, Listen Port, ALUA (HA only), iSER | None of them touch session or connection lifetime (fields in `plugins/iscsi_/global_.py`). Don't matter here. |
+  | Portal, initiator group, CHAP | They only matter if they change during the outage: a re-login is a full login and must pass them again. |
+  | `scst` service restart on hestia | Not part of a switch reboot. A restart during the window still ends the same way: a fresh session, inside 600 s. |
+
+  **Target-side change for George: none.**
+
+  *Still unverified, and outside the target:* whether Talos's iscsi-tools `iscsid.conf` keeps
+  the 5/5 noop defaults (if detection were slower than 30 s, the SCSI error handler could
+  start aborts first); whether `kernel.hung_task_panic` is 0 on the nodes (writers blocked
+  over 120 s will log `blocked for more than 120 seconds`, which should only be a warning);
+  and how apps and probes behave during a several-minute freeze. Nothing here has run
+  against hestia's live target. Source versions read: `truenas/scst` `stable/26` @
+  `fda79d4` (2026-08-19). The same seven `iscsi-scst` files are byte-identical on
+  `release/26.0.0-BETA.1` @ `0fc6a9f`, the version last recorded for hestia in
+  `2026-09-04-hestia-silent-hang-diagnosis.md`. Also `truenas/middleware` `stable/26` @
+  `59e6372`, `open-iscsi/open-iscsi` `master` @ `a65ce4b`, and Linux `v6.18`. SCST's own
+  documentation is `iscsi-scst/README`, which describes `NopInInterval`, `NopInTimeout` and
+  `RspTimeout`.
+
+  *Test for the phase 4 game day.* Run this before the Rack Switch restart, after phase 1
+  shows `Recovery Timeout: 600` everywhere.
+  1. On hestia, as George: `cat /sys/kernel/scst_tgt/targets/iscsi/<iqn>/{NopInInterval,NopInTimeout,RspTimeout}`
+     for one democratic-csi target. Expect `30 30 90`. The attribute path comes from the
+     README and hasn't been checked on hestia.
+     Record `ls -d /sys/kernel/scst_tgt/targets/iscsi/*/sessions/* | wc -l` as the baseline.
+  2. Start `sudo dmesg -wT | grep -E 'iscsi-scst|igb'` on hestia, and on one node
+     `talosctl -n <node> dmesg -f | grep -iE 'iscsi|session|I/O error|EXT4-fs'` (kernel).
+     Also `talosctl -n <node> logs ext-iscsid -f` for the `iscsid` daemon (the extension
+     service is named `iscsid`; on Talos it shows up as `ext-iscsid`).
+  3. Restart the switch. Write down when the link goes down and comes up (hestia's `igb ...
+     Link is Down/Up`), so you know the actual outage against the 600 s window.
+  4. Pass if:
+     - hestia logs `conn_rsp_timer_fn ... closing connection` and `session_free` (expected:
+       this is the target giving up);
+     - after link-up, each node's `ext-iscsid` log shows `connection<N>:0 is operational
+       after recovery (<n> attempts)`;
+     - the hestia session count returns to the baseline;
+     - every `homelab_pvc_writable == 1`, and the per-pod write exec from `AGENTS.md`
+       succeeds.
+  5. Fail if any node logs `session recovery timed out after 600 secs`, `rejecting I/O to
+     offline device`, `Buffer I/O error` or `EXT4-fs error`, or if any login is rejected on
+     hestia (`Requested TSIH not 0`, or `TSIH for existing session ... doesn't match`).
+     Any of these means the reasoning above is wrong. Stop at phase 4 step 1.
 
 ## Phase 2 — detection: know an update is coming and that it happened
 

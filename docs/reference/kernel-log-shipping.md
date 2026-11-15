@@ -39,11 +39,11 @@ session errors).
 
 ```
 Talos node <ip> (host network)
-  ├─ machine.logging.destinations  tcp://<ip>:30600   service logs (json_lines)
-  └─ KmsgLogConfig                 tcp://<ip>:30600   kernel logs (json)
+  ├─ machine.logging.destinations  tcp://<ip>:6000    service logs (json_lines)
+  └─ KmsgLogConfig                 tcp://<ip>:6000    kernel logs (json)
         │
-        ▼  NodePort 30600, externalTrafficPolicy: Local
-Vector DaemonSet pod on that node (monitoring namespace)
+        ▼  host socket :6000 on the same node (no Service in between)
+Vector DaemonSet pod on that node, hostNetwork (monitoring namespace)
   ├─ TCP socket source  :6000
   ├─ VRL transform: normalise field names
   └─ Loki sink  →  http://loki.monitoring.svc.cluster.local:3100
@@ -69,17 +69,29 @@ Talos sends log events as **newline-delimited JSON**, not RFC 5424 syslog.
 Promtail's syslog receiver expects RFC 5424 framing. Vector has a native
 `socket` source with `decoding.codec: json` that reads this format.
 
-### Why a NodePort?
+### Why the host network, not a NodePort?
 
-Talos runs on the host network, outside the pod network. A NodePort is the
-simplest way to reach a pod from the host. NodePort `30600` maps to Vector's TCP
-socket on port `6000`.
+Talos runs on the host network, outside the pod network. Vector runs with
+`hostNetwork: true` and listens on port `6000` of each node, so a node sending
+to `tcp://<its-own-ip>:6000` reaches a real socket on that same node, with no
+Service routing in between. **Each node must send to its own IP**, and that node
+must have a ready Vector pod (`VectorAgentNotReady`).
 
-`externalTrafficPolicy: Local` sends a connection to `<node-ip>:30600` only to
-the Vector pod on that node. So **each node must send to its own IP**, and that
-node must have a ready Vector pod. An earlier version of this page pointed every
-node at `10.42.2.20`. With `Local`, that would have sent all four nodes' logs to
-one pod and lost them whenever that node was down.
+**Until 2026-11-15 this was a NodePort (`30600`) with `externalTrafficPolicy:
+Local`, and it did not do what it claimed.** Traffic a node sends to its own
+NodePort counts as *internal* traffic, so `externalTrafficPolicy` doesn't apply.
+Cilium 1.20's socket LB spread it across all four Vector pods: netstat showed
+talos-fpd-h0t connected to the Vector pod on talos-ykb-uir. Logs still arrived,
+but which pod received them was random. That made the `node` label wrong, and
+`TalosNodeLogsSilent` fired for nodes that were fine. Neither fix tested live
+worked here:
+- **`internalTrafficPolicy: Local`** left the internal NodePort entry (`/i` in
+  `cilium-dbg service list`) with all four backends.
+- **`hostPort`** isn't enabled in this Cilium: a test pod with a hostPort got no
+  service entry, and every connection from the host failed.
+
+Port `6000` is outside the NodePort range, so socket LB can't redirect it to a
+future Service. Like the old NodePort, it is reachable from the LAN.
 
 Vector records the peer address in each event's `host` field (in the JSON body).
 It is **not** a Loki label: the only labels are `job`, `talos_service` and
@@ -94,7 +106,6 @@ It is **not** a Loki label: the only labels are `job`, `talos_service` and
 | `infra/controllers/vector/repository.yaml` | HelmRepository for `https://helm.vector.dev` |
 | `infra/controllers/vector/release.yaml` | HelmRelease: `vector/vector` chart 0.50.0 |
 | `infra/controllers/vector/values.yaml` | `role: Agent` (DaemonSet), trimmed defaults, and the full Vector pipeline |
-| `infra/controllers/vector/nodeport.yaml` | `Service` type NodePort, port 30600 → 6000, selects `talos-log-receiver: "true"` |
 | `infra/controllers/loki/alerting-rules.yaml` | Loki ruler rules ConfigMap (`BTRFSCorruptionDetected`, `ISCSIKernelError`, `TalosLogsAbsent`, `TalosKernelLogsAbsent`) |
 | `infra/controllers/loki/values.yaml` | `singleBinary.rulerConfig` and rules volume mount |
 | `infra/configs/alerts/loki-rules.yaml` | PrometheusRule `VectorAgentNotReady` |
@@ -139,13 +150,13 @@ the Vector DaemonSet is ready.
 machine:
   logging:
     destinations:
-      - endpoint: tcp://<ip>:30600/
+      - endpoint: tcp://<ip>:6000/
         format: json_lines
 ---
 apiVersion: v1alpha1
 kind: KmsgLogConfig
 name: vector
-url: tcp://<ip>:30600/
+url: tcp://<ip>:6000/
 ```
 
 ```bash
@@ -202,10 +213,9 @@ sinks:
     address: "0.0.0.0:9598"
 ```
 
-**`node` label.** Each node sends to its own IP, and the NodePort's
-`externalTrafficPolicy: Local` routes that only to the Vector pod on the same
-node, so the receiving pod's node (`VECTOR_SELF_NODE_NAME`, set by the chart from
-`spec.nodeName`) is the sender. Before this, the only clue was the `host` field
+**`node` label.** Each node sends to its own IP, and the receiving Vector pod
+listens on that node's host network, so the receiving pod's node
+(`VECTOR_SELF_NODE_NAME`, set by the chart from `spec.nodeName`) is the sender. Before this, the only clue was the `host` field
 inside each line, which holds the node's pod-network address (`10.244.<n>.x`),
 not its node IP.
 
@@ -387,7 +397,7 @@ logcli query '{job="talos-kernel", node="talos-kot-7x7"}'
 helm -n monitoring get manifest vector | grep '^kind:'      # must include DaemonSet
 kubectl -n monitoring get ds vector                         # READY == node count
 kubectl -n monitoring get pods -l talos-log-receiver=true -o wide
-kubectl -n monitoring get endpointslices -l kubernetes.io/service-name=vector-talos-logs
+talosctl -n <ip> netstat --tcp | grep ':6000 '   # ESTABLISHED to <node-ip>:6000 only
 ```
 
 ### Verify logs flow into Loki

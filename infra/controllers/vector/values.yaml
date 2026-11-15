@@ -67,8 +67,26 @@ readinessProbe:
   initialDelaySeconds: 5
   periodSeconds: 10
 
-# Add a well-known label so the NodePort service can select the pods without
-# depending on Vector's internal chart labels.
+# Receive on the HOST network, so each node's Talos connects to a real socket
+# on that same node: tcp://<node-ip>:6000. Until 2026-11-15 this went through a
+# NodePort (30600) with externalTrafficPolicy: Local, which was meant to keep
+# each node's logs on its own pod. It didn't: traffic a node sends to its own
+# NodePort is internal traffic, and Cilium 1.20 (socket LB, kube-proxy
+# replacement) spread it across all four Vector pods. internalTrafficPolicy:
+# Local was tested live and changed nothing (the internal NodePort entry kept
+# all four backends), and hostPort is not enabled in this Cilium. A host
+# socket is the only option here that guarantees locality, and the node label
+# and TalosNodeLogsSilent both depend on it.
+#
+# Port 6000 is outside the NodePort range (30000-32767), so a future Service
+# can't take it over through socket LB, and no node listened on 6000 or 9598
+# on 2026-11-15. Like the old NodePort, it is reachable from the LAN.
+# ClusterFirstWithHostNet keeps cluster DNS for the Loki sink.
+podHostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+# A well-known label for selecting the receiver pods without depending on
+# Vector's internal chart labels.
 podLabels:
   talos-log-receiver: "true"
 
@@ -127,9 +145,8 @@ customConfig:
         .level = string(del(."talos-level")) ?? string(.level) ?? "info"
         .msg = string(.msg) ?? ""
 
-        # Each node sends to its own IP, and the NodePort's
-        # externalTrafficPolicy: Local only routes that to the Vector pod on
-        # the same node. So this pod's node is the sender.
+        # Each node sends to its own IP, and this pod listens on that node's
+        # host network, so this pod's node is the sender.
         .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
 
         # Use the time Talos logged the line, not the time it arrived. When a

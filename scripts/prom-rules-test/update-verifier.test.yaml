@@ -1,0 +1,113 @@
+# promtool unit tests for infra/configs/update-verifier/prometheus-rule.yaml.
+# Run by lint.yaml's prometheus-rules job.
+#
+# promtool time starts at 0. The Rack Switch's uptime is 60 s at t=0 and grows
+# 60 s a minute, so its derived boot start (timestamp - uptime) is -60, and a
+# result for that boot carries the value -60.
+rule_files:
+  - rules.yaml
+evaluation_interval: 1m
+tests:
+  - name: 'no result for the boot: deadman fires after 60 min (+5m for)'
+    interval: 1m
+    input_series:
+      - series: unpoller_device_uptime_seconds{name="Rack Switch"}
+        values: 60+60x300
+      - series: unpoller_device_uptime_seconds{name="Office Switch"}
+        values: 60+60x300
+    alert_rule_test:
+      - eval_time: 62m
+        alertname: UpdateVerificationMissing
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: UpdateVerificationMissing
+        exp_alerts:
+          - exp_labels:
+              device: Rack Switch
+              severity: critical
+              namespace: monitoring
+            exp_annotations:
+              summary: 'Rack Switch rebooted and update-verifier recorded no result'
+              description: 'Rack Switch has been up 1h 11m 0s and there is no homelab_update_verification for this boot, so nobody checked that storage, nodes, etcd and Flux came back. Check `kubectl -n monitoring logs deploy/update-verifier`, then verify by hand. Runbook: AGENTS.md "Recovering read-only iSCSI volumes".'
+
+  - name: 'upper bound: no page past 180 min'
+    interval: 1m
+    input_series:
+      - series: unpoller_device_uptime_seconds{name="Rack Switch"}
+        values: 60+60x300
+    alert_rule_test:
+      - eval_time: 185m
+        alertname: UpdateVerificationMissing
+        exp_alerts: []
+
+  - name: 'pass at 15-20 min, then the verifier restarts (series gone): no false deadman'
+    interval: 1m
+    input_series:
+      - series: unpoller_device_uptime_seconds{name="Rack Switch"}
+        values: 60+60x300
+      - series: homelab_update_verification{device="Rack Switch",boot="-60",from_version="7.5.15.17146",to_version="7.6.11.17272",result="pass",failed_checks="",pod="update-verifier-a"}
+        values: _x15 -60x5
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: UpdateVerificationMissing
+        exp_alerts: []
+      - eval_time: 179m
+        alertname: UpdateVerificationMissing
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: UpdateVerificationFailed
+        exp_alerts: []
+
+  - name: 'result recorded with a jittered boot (+300 s) still counts'
+    interval: 1m
+    input_series:
+      - series: unpoller_device_uptime_seconds{name="Rack Switch"}
+        values: 60+60x300
+      - series: homelab_update_verification{device="Rack Switch",boot="240",from_version="a",to_version="b",result="pass",failed_checks=""}
+        values: _x15 240x5
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: UpdateVerificationMissing
+        exp_alerts: []
+
+  - name: 'only a result for an EARLIER boot: deadman still fires'
+    interval: 1m
+    input_series:
+      - series: unpoller_device_uptime_seconds{name="Rack Switch"}
+        values: 60+60x300
+      - series: homelab_update_verification{device="Rack Switch",boot="-100000",from_version="a",to_version="b",result="pass",failed_checks=""}
+        values: -100000x300
+      - series: homelab_update_verification{device="Home",boot="-60",from_version="a",to_version="b",result="pass",failed_checks=""}
+        values: -60x300
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: UpdateVerificationMissing
+        exp_alerts:
+          - exp_labels:
+              device: Rack Switch
+              severity: critical
+              namespace: monitoring
+            exp_annotations:
+              summary: 'Rack Switch rebooted and update-verifier recorded no result'
+              description: 'Rack Switch has been up 1h 11m 0s and there is no homelab_update_verification for this boot, so nobody checked that storage, nodes, etcd and Flux came back. Check `kubectl -n monitoring logs deploy/update-verifier`, then verify by hand. Runbook: AGENTS.md "Recovering read-only iSCSI volumes".'
+
+  - name: 'fail result pages with device, versions and failed_checks'
+    interval: 1m
+    input_series:
+      - series: homelab_update_verification{device="Rack Switch",boot="-60",from_version="7.5.15.17146",to_version="7.6.11.17272",result="fail",failed_checks="prometheus_stale,loki_stale",pod="update-verifier-a",instance="10.0.0.1:9106"}
+        values: -60x30
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: UpdateVerificationFailed
+        exp_alerts:
+          - exp_labels:
+              device: Rack Switch
+              boot: "-60"
+              from_version: 7.5.15.17146
+              to_version: 7.6.11.17272
+              failed_checks: prometheus_stale,loki_stale
+              severity: critical
+              namespace: monitoring
+            exp_annotations:
+              summary: 'Rack Switch rebooted and the cluster did not verify clean: prometheus_stale,loki_stale'
+              description: 'Rack Switch rebooted (firmware 7.5.15.17146 -> 7.6.11.17272) and update-verifier''s checks failed: prometheus_stale,loki_stale. prometheus_stale and loki_* mean a check could not be made, which is not a pass. Runbook: AGENTS.md "Recovering read-only iSCSI volumes".'

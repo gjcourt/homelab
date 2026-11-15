@@ -126,6 +126,26 @@ jobs:
       - name: Shell syntax
         run: bash -n images/homelabscope-heartbeat/heartbeat.sh
 
+  # Switch-update observability plan, phase 3: update-verifier's decision
+  # logic (pass, each failed check, Prometheus blind, restart read-back,
+  # timing bounds) against fake API responses. Standard library only.
+  update-verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Unit tests
+        run: python -m pytest -q infra/configs/update-verifier/tests
+
   # HOMELAB-118: promtool unit tests for alert rules, starting with the gated
   # alcatraz-deployer arm of HomelabscopeJobMetricAbsent. The image matches the
   # cluster's Prometheus (kube-prometheus-stack 78.4.0 runs v3.5.0).
@@ -146,10 +166,11 @@ jobs:
       - name: Build the promtool rules file
         run: |
           mkdir -p /tmp/prom
-          python3 scripts/prom-rules-test/extract.py /tmp/prom/rules.yaml infra/configs/homelabscope/prometheus-rule.yaml
+          python3 scripts/prom-rules-test/extract.py /tmp/prom/rules.yaml infra/configs/homelabscope/prometheus-rule.yaml infra/configs/update-verifier/prometheus-rule.yaml
           cp scripts/prom-rules-test/*.test.yaml /tmp/prom/
 
       - name: promtool check + test rules
         run: |
           docker run --rm -v /tmp/prom:/w -w /w --entrypoint promtool quay.io/prometheus/prometheus:v3.5.0 check rules rules.yaml
           docker run --rm -v /tmp/prom:/w -w /w --entrypoint promtool quay.io/prometheus/prometheus:v3.5.0 test rules homelabscope-alcatraz-deployer.test.yaml
+          docker run --rm -v /tmp/prom:/w -w /w --entrypoint promtool quay.io/prometheus/prometheus:v3.5.0 test rules update-verifier.test.yaml

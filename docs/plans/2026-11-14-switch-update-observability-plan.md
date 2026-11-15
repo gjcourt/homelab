@@ -21,6 +21,10 @@ success and a deadman making sure silence can't also mean "the checker is broken
 Every StorageClass is democratic-csi over iSCSI to hestia, through the **Rack Switch**
 (USWED42). A switch reboot cuts every node's iSCSI sessions at once.
 
+The gateway is **not** on the iSCSI path: the nodes (10.42.2.20–25) and hestia (10.42.2.10)
+share a subnet, so iSCSI traffic stays on the switch. The gateway is watched here because it is
+the other device that updates itself unattended, not because its reboot drops storage.
+
 From unpoller (`unpoller_device_uptime_seconds`, `unpoller_device_info`), last 30 days:
 
 | Device | Reboot (local) | Firmware | Cause |
@@ -45,7 +49,8 @@ they are until phase 4.
 - **Talos kernel logs → Vector → Loki**, including the iSCSI error LogQL alert
   (`infra/controllers/loki/alerting-rules.yaml`).
 - **Recovery is deliberately manual** (`2026-09-01-readonly-pvc-recovery.md`): Tier 1 is a
-  recovery script, and a controller that suspends Flux or restarts Postgres is ruled out. This
+  recovery script (`scripts/recover-readonly-pvc.sh`, planned there, **not built yet**), and a
+  controller that suspends Flux or restarts Postgres is ruled out. This
   plan keeps that. It **prevents and verifies**; it does not auto-remediate.
 
 ## Phase 1 — prevention: raise `replacement_timeout` (prerequisite)
@@ -76,26 +81,36 @@ can remount volumes read-only. No amount of observation fixes that, so this goes
 
 ## Phase 2 — detection: know an update is coming and that it happened
 
-New rules in `infra/configs/unpoller/prometheus-rule.yaml`, scoped to the storage-path devices
-(`name=~"Rack Switch|Home"`). These are **record-only**: they route to a no-email receiver and
-show up in Grafana, not in George's inbox.
+New rules in `infra/configs/unpoller/prometheus-rule.yaml`, scoped to the watched devices
+(`name=~"Rack Switch|Home"`). These are **record-only**: `severity: info`, which matches neither
+the `critical` nor the `warning` email route and falls through to the default `'null'` receiver
+(`infra/controllers/kube-prometheus-stack/values.yaml`). They show up in Grafana, not in
+George's inbox.
 
 | Rule | Expr (sketch) | Purpose |
 | --- | --- | --- |
 | `UniFiUpdatePending` | `unpoller_device_upgradable == 1` | An update is queued for this device |
 | `UniFiDeviceRebooted` | `unpoller_device_uptime_seconds < 1800` | Opens a 30-min verification window |
-| `UniFiFirmwareChanged` | `count by (name) (count_over_time(unpoller_device_info[2h])) > 1` | Classifies the reboot as an update rather than a crash or power loss |
+| `UniFiFirmwareChanged` | `count by (name) (group by (name, version) (count_over_time(unpoller_device_info[2h]))) > 1` | Classifies the reboot as an update rather than a crash or power loss |
+
+`unpoller_device_info` also carries `pod`, `instance` and `ip` (the gateway's `ip` is its WAN
+address), so the `group by (name, version)` is load-bearing: counting raw series would fire on
+every unpoller restart or WAN IP change.
 
 Plus a Grafana annotation on each reboot (labelled with the old and new version) across the
 storage and etcd dashboards, so a future latency spike lines up with "switch updated here".
 
 ## Phase 3 — verification: check recovery, then stay silent
 
-A small **`update-verifier`** CronJob (monitoring namespace, every 5 min, read-only RBAC). It
-acts only when a storage-path device's uptime is under 45 min and that boot has no result yet:
+A small **`update-verifier`** Deployment (monitoring namespace, a 5-min loop, `/metrics`
+scraped by a ServiceMonitor). It's the same shape as pvc-writeprobe, which is also a
+long-running Deployment. A CronJob can't be scraped, and the cluster has no Pushgateway. It needs
+no Kubernetes RBAC, since it only queries Prometheus and Loki. It acts only when a watched
+device's uptime is under 45 min and that boot has no result yet. A boot is identified by its
+start time, `time() - unpoller_device_uptime_seconds`, rounded to the minute:
 
 1. Wait until uptime ≥ 15 min, so sessions have had the 600 s window to come back.
-2. Run checks through the Prometheus API (no node access needed):
+2. Run checks through the Prometheus and Loki APIs (no node access needed):
    - every `homelab_pvc_writable == 1`, and no `PvcNotWritable` firing or pending;
    - all nodes `Ready`, and the etcd member count is 3 with a leader;
    - Flux Kustomizations and HelmReleases are Ready (no new failures since boot);
@@ -107,15 +122,18 @@ Outcomes:
 
 - **Pass:** recorded in Grafana. No email.
 - **Fail:** one **critical** email naming the device, versions and the failed checks, linking
-  `scripts/recover-readonly-pvc.sh` and its runbook. This is the only time George is pulled in.
-- **Deadman:** `UpdateVerificationMissing` fires (critical) if a storage-path device rebooted
-  over 60 min ago with no `homelab_update_verification` for that boot. Silence then reliably
+  the recovery runbook (`AGENTS.md`, "Recovering read-only iSCSI volumes"), and
+  `scripts/recover-readonly-pvc.sh` once the 2026-09-01 plan builds it. This is the only time George is pulled in.
+- **Deadman:** `UpdateVerificationMissing` fires (critical) if a watched device's uptime is
+  between 60 and 180 min with no `homelab_update_verification` for that boot. The upper bound
+  stops it firing forever, and the window is wide enough to outlast one missed scrape or
+  verifier restart. Silence then reliably
   means "verified fine".
 
-**Open question 3:** whether a CronJob is worth it over pure alert rules. Rules alone can cover
+**Open question 3:** whether a verifier is worth it over pure alert rules. Rules alone can cover
 failure ("rebooted in the last hour AND `PvcNotWritable`"), but they can't positively record
-"this update went fine" per boot, and the deadman needs that record. Lean CronJob, a single
-small script, same pattern as pvc-writeprobe.
+"this update went fine" per boot, and the deadman needs that record. Lean verifier: a single
+small script, same Deployment pattern as pvc-writeprobe.
 
 ## Phase 4 — turn updates back on, unattended
 
@@ -135,8 +153,8 @@ A syslog source on the existing Vector DaemonSet (UDP NodePort), with UniFi remo
 pointed at it. In Network 10.6 that setting is **Settings → CyberSecure → Traffic Logging →
 Activity Logging (Syslog)**. It's currently **Internally Stored**; switch it to **SIEM Server**
 with the Vector address once the receiver exists. Its "All UniFi Device Management" flow
-(currently off) is the one that carries device events. That would give each update a detailed record (download, flash, reboot, port up)
-next to the iSCSI and kernel logs. Not needed for phases 1–4.
+(currently off) is the one that carries device events. That would give each update a
+detailed record (download, flash, reboot, port up) next to the iSCSI and kernel logs. Not needed for phases 1–4.
 
 ## Out of scope
 

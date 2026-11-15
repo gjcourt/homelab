@@ -19,6 +19,32 @@ data:
             "name": "Annotations & Alerts",
             "target": { "limit": 100, "matchAny": false, "tags": [], "type": "dashboard" },
             "type": "dashboard"
+          },
+          {
+            "datasource": { "type": "prometheus", "uid": "${datasource}" },
+            "enable": true,
+            "hide": false,
+            "iconColor": "orange",
+            "name": "UniFi reboot (Rack Switch / Home)",
+            "expr": "group by (name, version) (unpoller_device_info{name=~\"Rack Switch|Home\"}) * on (name) group_left () (max by (name) (unpoller_device_uptime_seconds{name=~\"Rack Switch|Home\"}) < 1800)",
+            "step": "1m",
+            "titleFormat": "{{name}} rebooted",
+            "textFormat": "Running {{version}}. Up under 30 min; same signal as UniFiDeviceRebooted.",
+            "tagKeys": "name",
+            "useValueForTime": false
+          },
+          {
+            "datasource": { "type": "prometheus", "uid": "${datasource}" },
+            "enable": true,
+            "hide": false,
+            "iconColor": "red",
+            "name": "UniFi firmware change (Rack Switch / Home)",
+            "expr": "group by (name, version) (unpoller_device_info{name=~\"Rack Switch|Home\"}) * on (name) group_left (from_version) topk by (name) (1, label_replace(group by (name, version) (count_over_time(unpoller_device_info{name=~\"Rack Switch|Home\"}[2h])) unless on (name, version) group by (name, version) (unpoller_device_info{name=~\"Rack Switch|Home\"}), \"from_version\", \"$1\", \"version\", \"(.*)\"))",
+            "step": "1m",
+            "titleFormat": "{{name}} firmware {{from_version}} → {{version}}",
+            "textFormat": "Shown once the old version is no longer reported; ends with UniFiFirmwareChanged, 2h after the old version's last sample.",
+            "tagKeys": "name",
+            "useValueForTime": false
           }
         ]
       },

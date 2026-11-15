@@ -30,7 +30,7 @@ From unpoller (`unpoller_device_uptime_seconds`, `unpoller_device_info`), last 3
 | Device | Reboot (local) | Firmware | Cause |
 | --- | --- | --- | --- |
 | Rack Switch | 2026-11-13 03:12 | 7.5.15.17146 → 7.6.11.17272 | Network app device auto-update (`mgmt.auto_upgrade_hour = 3`) |
-| Home (UCG-Fiber gateway) | 2026-11-08 00:21 (Sunday) | — | UniFi OS console auto-update (`firmware.yaml` `autoUpdate.schedule`: weekly, day 0, hour 0) |
+| Home (UCG-Fiber gateway) | 2026-11-08 00:21 (Sunday) | — | UniFi OS console auto-update (`autoUpdate.schedule` in `/data/unifi-core/config/firmware.yaml` on the gateway: weekly, day 0, hour 0) |
 
 The 2026-08-13 incident ("a two-minute link flap cost 14 hours") also started at **03:01**.
 The device auto-update hour is 3. That incident predates unpoller version history, so this is

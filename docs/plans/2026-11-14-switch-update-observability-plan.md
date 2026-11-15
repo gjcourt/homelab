@@ -1,6 +1,6 @@
 ---
-status: planned
-last_modified: 2026-11-14
+status: in-progress
+last_modified: 2026-11-15
 summary: "Let UniFi auto-update the Rack Switch and gateway unattended: raise the iSCSI replacement_timeout so a reboot can't remount volumes read-only, then detect each reboot, verify recovery automatically, and email only on failure"
 ---
 

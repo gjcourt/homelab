@@ -388,6 +388,25 @@ targets declares a healthcheck yet, so there is nothing for it to watch.
 Routing: `severity: critical` → `email-critical` → `gjcourt+critical@gmail.com`,
 `repeat_interval` 4h. It pages.
 
+**Dashboard (homelabscope, "Containers on hestia").** The dashboard applies the
+same lifecycle split, so a by-design restart is not shown as red. A hidden
+constant dashboard variable `$ephemeral` (currently `gha-runner`) lists the
+ephemeral containers. It mirrors the `lifecycle: ephemeral` alert arms above, so
+change both together. The "Restart status" column and the "Containers failing"
+stat use this rule:
+
+| Restart status | Long-lived container | Ephemeral container |
+|---|---|---|
+| **failing** (red) | 3+ restarts in 24 h | 3+ restarts in 24 h **and** a non-zero `last_exit_code` seen in 24 h, **or** >100 restarts in the last hour |
+| restarted (orange) | 1–2 restarts in 24 h | — |
+| normal (ephemeral) | — | any other restart count |
+| none | 0 | 0 |
+
+The "Restarts, 24 h" count is a plain number and has no colour. The verdict is in
+the status column. The dashboard is more sensitive than the alert: it has a
+24 h window and no `for:`, so one recurring-exit hour shows red. It does not
+page.
+
 ## 5. Diagnosis
 
 Symptoms in rough order of how you'll notice them:

@@ -45,12 +45,14 @@
     - platform: event
       event_type: timer.finished
   condition:
-    # Only bathroom fan timers (not other timers in the house)
+    # Only bathroom fan timers (not other timers in the house; an exact list,
+    # since timer.<bathroom>_light_timer shares the timer.<bathroom> prefix)
     - condition: template
       value_template: >
-        {{ "timer.master_bathroom" in trigger.event.data.entity_id | lower or
-           "timer.hall_bathroom" in trigger.event.data.entity_id | lower or
-           "timer.powder_bathroom" in trigger.event.data.entity_id | lower }}
+        {{ trigger.event.data.entity_id in [
+             "timer.hall_bathroom_fan_timer",
+             "timer.master_bathroom_fan_timer",
+             "timer.powder_bathroom_fan_timer"] }}
   action:
     - variables:
         # Derive switch entity ID from timer entity ID
@@ -346,6 +348,135 @@
       continue_on_error: true
 
 # ============================================================================
+# Closet and bathroom light auto-off timers
+# ============================================================================
+# Same behaviour as the laundry lights above, for every closet light and every
+# bathroom light (George, 2026-11-14). One timer per room: when any light in
+# the room turns on, the room's timer starts; when it runs out, every light in
+# the room turns off; it's cancelled only when all of them are off.
+#
+# `room_lights` maps each room to its lights. It is defined once, in the first
+# automation (YAML anchor), and reused by the other two. Each room <name> has
+# (configuration.yaml):
+#   timer.<name>_timer            — counts down once a light turns on
+#   input_number.<name>_minutes   — configurable timeout (default 30 min)
+#
+# To add a room: add it to `room_lights` and to the trigger lists below, then
+# add its timer and input_number (configuration.yaml), its line in
+# sensor.auto_off_timer_deadlines, its default in "Helpers — seed defaults",
+# its entries in "Helpers — save settings", and its cards on the Auto-shutoff
+# views (dashboards/control.yaml).
+#
+# Three closet lights are switch_as_x wrappers of a Lutron switch
+# (light.front_foyer_closet, light.master_bedroom_closet_light,
+# light.office_closet); the wrapper follows the switch, so the wall switch
+# starts and cancels the timer too.
+
+- alias: "Room light auto-off — start timer"
+  description: "When a closet or bathroom light turns on, start its room's timer."
+  trigger:
+    - platform: state
+      entity_id: &room_auto_off_lights
+        - light.front_foyer_closet
+        - light.master_bedroom_closet_light
+        - light.office_closet
+        - light.secondary_bedroom_closet_light
+        - light.nursery_bedroom_closet_light
+        - light.hall_bathroom_main_lights
+        - light.hall_bathroom_vanity_lights
+        - light.master_bathroom_vanity
+        - light.master_bathroom_ceiling
+        - light.powder_bathroom_chandelier
+      from: "off"
+      to: "on"
+  action:
+    - variables:
+        room_lights: &room_lights
+          front_foyer_closet_light:
+            - light.front_foyer_closet
+          master_bedroom_closet_light:
+            - light.master_bedroom_closet_light
+          office_closet_light:
+            - light.office_closet
+          secondary_bedroom_closet_light:
+            - light.secondary_bedroom_closet_light
+          nursery_bedroom_closet_light:
+            - light.nursery_bedroom_closet_light
+          hall_bathroom_light:
+            - light.hall_bathroom_main_lights
+            - light.hall_bathroom_vanity_lights
+          master_bathroom_light:
+            - light.master_bathroom_vanity
+            - light.master_bathroom_ceiling
+          powder_bathroom_light:
+            - light.powder_bathroom_chandelier
+        room: >
+          {%- set ns = namespace(room='') -%}
+          {%- for name, lights in room_lights.items() if trigger.entity_id in lights -%}
+            {%- set ns.room = name -%}
+          {%- endfor -%}
+          {{ ns.room }}
+        delay_minutes: >
+          {{ states('input_number.' ~ room ~ '_minutes') | int(30) }}
+    - condition: template
+      value_template: "{{ room != '' }}"
+    - service: timer.start
+      target:
+        entity_id: "timer.{{ room }}_timer"
+      data:
+        duration: "{{ delay_minutes * 60 }}"
+  # queued, not restart: lights in different rooms can turn on together
+  # (a scene), and each must start its own room's timer. A second light in
+  # the same room restarts that room's timer, like the laundry lights.
+  mode: queued
+  max: 20
+
+- alias: "Room light auto-off — turn off lights"
+  description: "When a closet or bathroom light timer runs out, turn off every light in that room."
+  trigger:
+    - platform: event
+      event_type: timer.finished
+  action:
+    - variables:
+        room_lights: *room_lights
+        room: >
+          {{ trigger.event.data.entity_id | replace('timer.', '', 1) | regex_replace('_timer$', '') }}
+    # Only this setup's timers (not other timers in the house)
+    - condition: template
+      value_template: "{{ trigger.event.data.entity_id.startswith('timer.') and room in room_lights }}"
+    - service: light.turn_off
+      target:
+        entity_id: "{{ room_lights[room] }}"
+      continue_on_error: true
+  mode: queued
+  max: 20
+
+- alias: "Room light auto-off — cancel timer when the room's lights are off"
+  description: "If every light in a closet or bathroom is turned off before its timer runs out, cancel the timer."
+  trigger:
+    - platform: state
+      entity_id: *room_auto_off_lights
+      to: "off"
+  action:
+    - variables:
+        room_lights: *room_lights
+        room: >
+          {%- set ns = namespace(room='') -%}
+          {%- for name, lights in room_lights.items() if trigger.entity_id in lights -%}
+            {%- set ns.room = name -%}
+          {%- endfor -%}
+          {{ ns.room }}
+    - condition: template
+      value_template: >
+        {{ room != '' and room_lights[room] | select('is_state', 'on') | list | count == 0 }}
+    - service: timer.cancel
+      target:
+        entity_id: "timer.{{ room }}_timer"
+      continue_on_error: true
+  mode: queued
+  max: 20
+
+# ============================================================================
 # agent-desk → George's phone (agent-desk plan, "Notifications", 2026-10-24)
 # ============================================================================
 # agent-desk POSTs {title, message, url} here when an agent asks George
@@ -605,6 +736,14 @@
           input_number.master_bathroom_fan_minutes: 30
           input_number.powder_bathroom_fan_minutes: 30
           input_number.laundry_room_light_minutes: 30
+          input_number.front_foyer_closet_light_minutes: 30
+          input_number.master_bedroom_closet_light_minutes: 30
+          input_number.office_closet_light_minutes: 30
+          input_number.secondary_bedroom_closet_light_minutes: 30
+          input_number.nursery_bedroom_closet_light_minutes: 30
+          input_number.hall_bathroom_light_minutes: 30
+          input_number.master_bathroom_light_minutes: 30
+          input_number.powder_bathroom_light_minutes: 30
           input_number.nightlight_brightness: 6
           input_number.nightlight_random_offset: 30
           input_datetime.nightlight_turnoff_time: "23:00:00"
@@ -648,6 +787,14 @@
         - input_number.master_bathroom_fan_minutes
         - input_number.powder_bathroom_fan_minutes
         - input_number.laundry_room_light_minutes
+        - input_number.front_foyer_closet_light_minutes
+        - input_number.master_bedroom_closet_light_minutes
+        - input_number.office_closet_light_minutes
+        - input_number.secondary_bedroom_closet_light_minutes
+        - input_number.nursery_bedroom_closet_light_minutes
+        - input_number.hall_bathroom_light_minutes
+        - input_number.master_bathroom_light_minutes
+        - input_number.powder_bathroom_light_minutes
         - input_number.nightlight_brightness
         - input_number.nightlight_random_offset
         - input_datetime.nightlight_turnoff_time
@@ -667,6 +814,14 @@
         - timer.master_bathroom_fan_timer
         - timer.powder_bathroom_fan_timer
         - timer.laundry_room_light_timer
+        - timer.front_foyer_closet_light_timer
+        - timer.master_bedroom_closet_light_timer
+        - timer.office_closet_light_timer
+        - timer.secondary_bedroom_closet_light_timer
+        - timer.nursery_bedroom_closet_light_timer
+        - timer.hall_bathroom_light_timer
+        - timer.master_bathroom_light_timer
+        - timer.powder_bathroom_light_timer
         - sensor.auto_off_timer_deadlines
   action:
     - service: homeassistant.save_persistent_states

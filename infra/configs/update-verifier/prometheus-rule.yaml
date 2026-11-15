@@ -78,3 +78,26 @@ spec:
             summary: '{{ $labels.device }} rebooted and update-verifier recorded no result'
             description: >-
               {{ $labels.device }} has been up {{ $value | humanizeDuration }} and there is no homelab_update_verification for this boot, so nobody checked that storage, nodes, etcd and Flux came back. Check `kubectl -n monitoring logs deploy/update-verifier`, then verify by hand. Runbook: AGENTS.md "Recovering read-only iSCSI volumes".
+        # The verifier's own health, so a broken verifier shows up before the
+        # next reboot rather than 65 min into it. Warning, as for
+        # PvcWriteProbeStale/Absent: it means "cannot see", not "data at risk".
+        # last_loop only advances when an iteration completes, so a loop that
+        # raises every time trips the first rule.
+        - alert: UpdateVerifierStale
+          expr: time() - homelab_update_verifier_last_loop_seconds > 1800
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'update-verifier has not completed a loop in 30m'
+            description: 'UniFi reboots are currently not being verified. Check `kubectl -n monitoring logs deploy/update-verifier`.'
+
+        - alert: UpdateVerifierAbsent
+          expr: absent(homelab_update_verifier_last_loop_seconds)
+          for: 15m
+          labels:
+            severity: warning
+            namespace: monitoring
+          annotations:
+            summary: 'update-verifier is not reporting at all'
+            description: 'UniFi reboots are currently not being verified.'

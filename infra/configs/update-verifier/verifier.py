@@ -53,7 +53,7 @@ CONFIG = {
     # Labels Prometheus stamps on every alert it sends (its external labels).
     # Adding the same ones to the direct POST gives both paths the same label
     # set, so Alertmanager deduplicates them into one alert and one email.
-    "alert_extra_labels": json.loads(_env("ALERT_EXTRA_LABELS", "{}")),
+    "alert_extra_labels": None,  # filled below by _extra_labels()
     "devices": [d for d in _env("DEVICES", "Rack Switch|Home").split("|") if d],
     "interval": int(_env("INTERVAL_SECONDS", "300")),
     "min_uptime": int(_env("MIN_UPTIME_SECONDS", "900")),
@@ -65,6 +65,22 @@ CONFIG = {
     "port": int(_env("LISTEN_PORT", "9106")),
     "timeout": float(_env("HTTP_TIMEOUT_SECONDS", "20")),
 }
+
+
+
+def _extra_labels(raw):
+    """ALERT_EXTRA_LABELS as a {str: str} dict. Anything else is ignored, so a
+    typo in the env var can never stop the fail POST from being sent."""
+    try:
+        d = json.loads(raw)
+    except ValueError:
+        return {}
+    if not isinstance(d, dict):
+        return {}
+    return {str(k): str(v) for k, v in d.items()}
+
+
+CONFIG["alert_extra_labels"] = _extra_labels(_env("ALERT_EXTRA_LABELS", "{}"))
 
 # Unpoller's uptime jitters by up to ~5 min against the sample time (measured
 # 2026-11-14: one boot's start ranged over 300 s), so "the same boot" is a
@@ -97,14 +113,29 @@ class ApiError(Exception):
 
 
 def _http_get_json(url, timeout):
+    # Exception, not a list: http.client.HTTPException (IncompleteRead,
+    # BadStatusLine) does not subclass OSError, and a body that is not the
+    # expected JSON shape raises AttributeError/KeyError/TypeError. Every one
+    # of them means "could not tell", which callers treat as a failed check.
     try:
         with urllib.request.urlopen(url, timeout=timeout) as r:
             body = json.load(r)
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        raise ApiError(f"GET {url.split('?')[0]}: {e}") from e
-    if body.get("status") != "success":
-        raise ApiError(f"GET {url.split('?')[0]}: {body.get('error', body)}")
-    return body["data"]
+        if body.get("status") != "success":
+            raise ApiError(f"GET {url.split('?')[0]}: {body.get('error', body)}")
+        return body["data"]
+    except ApiError:
+        raise
+    except Exception as e:
+        raise ApiError(f"GET {url.split('?')[0]}: {e!r}") from e
+
+
+def _rows(data):
+    try:
+        if data.get("resultType") == "scalar":
+            return [({}, float(data["result"][1]))]
+        return [(dict(r["metric"]), float(r["value"][1])) for r in data["result"]]
+    except Exception as e:
+        raise ApiError(f"unexpected query response: {e!r}") from e
 
 
 class Api:
@@ -118,22 +149,18 @@ class Api:
         p = {"query": expr}
         if at is not None:
             p["time"] = f"{at:.3f}"
-        data = _http_get_json(f"{self.cfg['prom_url']}/api/v1/query?{urllib.parse.urlencode(p)}", self.cfg["timeout"])
-        if data.get("resultType") == "scalar":
-            return [({}, float(data["result"][1]))]
-        return [(r["metric"], float(r["value"][1])) for r in data["result"]]
+        return _rows(_http_get_json(f"{self.cfg['prom_url']}/api/v1/query?{urllib.parse.urlencode(p)}", self.cfg["timeout"]))
 
     def loki(self, expr, at):
         """Instant metric query. Returns [(labels, float_value)]."""
         p = {"query": expr, "time": str(int(at * 1e9))}
-        data = _http_get_json(f"{self.cfg['loki_url']}/loki/api/v1/query?{urllib.parse.urlencode(p)}", self.cfg["timeout"])
-        return [(r["metric"], float(r["value"][1])) for r in data["result"]]
+        return _rows(_http_get_json(f"{self.cfg['loki_url']}/loki/api/v1/query?{urllib.parse.urlencode(p)}", self.cfg["timeout"]))
 
     def unpoller_text(self):
         try:
             with urllib.request.urlopen(self.cfg["unpoller_url"], timeout=self.cfg["timeout"]) as r:
-                return r.read().decode()
-        except (urllib.error.URLError, OSError) as e:
+                return r.read().decode("utf-8", errors="replace")
+        except Exception as e:
             raise ApiError(f"GET {self.cfg['unpoller_url']}: {e}") from e
 
     def post_alerts(self, url, alerts):
@@ -146,7 +173,7 @@ class Api:
         try:
             with urllib.request.urlopen(req, timeout=self.cfg["timeout"]) as r:
                 r.read()
-        except (urllib.error.URLError, OSError) as e:
+        except Exception as e:
             raise ApiError(f"POST {url}: {e}") from e
 
 
@@ -247,8 +274,12 @@ def prometheus_fresh(api, now, cfg):
 
 def devices_from_prometheus(api, now, cfg):
     sel = "{name=~" + promql_str("|".join(re.escape(d) for d in cfg["devices"])) + "}"
-    starts = api.prom(f"timestamp(unpoller_device_uptime_seconds{sel}) - unpoller_device_uptime_seconds{sel}", at=now)
-    uptimes = {lb.get("name"): v for lb, v in api.prom(f"unpoller_device_uptime_seconds{sel}", at=now)}
+    # max by (name): more than one series per device is normal (an unpoller
+    # restart overlaps two pods), and both must collapse to one answer.
+    starts = api.prom(
+        f"max by (name) (timestamp(unpoller_device_uptime_seconds{sel}) - unpoller_device_uptime_seconds{sel})", at=now
+    )
+    uptimes = {lb.get("name"): v for lb, v in api.prom(f"min by (name) (unpoller_device_uptime_seconds{sel})", at=now)}
     infos = {}
     for lb, _ in api.prom(f"unpoller_device_info{sel}", at=now):
         infos[lb.get("name")] = lb.get("version", "unknown")
@@ -279,7 +310,10 @@ def version_before(api, device, cfg):
     # change on the gateway), so pick by sample time, not by series.
     expr = f"max by (version) (max_over_time(timestamp(unpoller_device_info{sel})[1h:1m]))"
     try:
-        rows = api.prom(expr, at=device.start - 120)
+        # BOOT_TOLERANCE before the derived start: the start wanders by up to
+        # ~300 s, and asking any later can land after the reboot and return
+        # the NEW version.
+        rows = api.prom(expr, at=device.start - BOOT_TOLERANCE)
     except ApiError:
         return None
     if not rows:
@@ -314,10 +348,13 @@ def run_checks(api, boot, now, prom_ok, cfg):
             _count(api.prom("count(homelab_pvc_writable)", at=now)) > 0
             and _count(api.prom("count(homelab_pvc_writable != 1)", at=now)) == 0
         ))
-        # The sweep must have finished after the reboot, or the result above
-        # describes the volumes before the switch went down.
+        # The sweep must have finished after boot + the iSCSI grace window:
+        # volumes only go read-only once replacement_timeout (600 s) runs
+        # out, so an earlier sweep can describe volumes that are about to
+        # fail. With a 300 s sweep and checks at >= 900 s uptime, a healthy
+        # probe always has a sweep that late.
         check("pvc_writeprobe_stale", lambda: (
-            lambda rows: bool(rows) and rows[0][1] >= boot
+            lambda rows: bool(rows) and rows[0][1] >= boot + cfg["iscsi_grace"]
         )(api.prom("max(homelab_pvc_writeprobe_last_run_seconds)", at=now)))
         check("pvc_not_writable_alert", lambda: (
             _count(api.prom('count(ALERTS{alertname="PvcNotWritable"})', at=now)) == 0
@@ -361,11 +398,14 @@ def _flux_ok(api, boot, now):
     sel = 'customresource_kind=~"Kustomization|HelmRelease"'
     if _count(api.prom(f"count(gotk_resource_info{{{sel}}})", at=now)) == 0:
         return False  # no data is not "all ready"
-    bad_now = _flux_keys(api.prom(f'gotk_resource_info{{{sel},ready!="True"}}', at=now))
+    # ready="False", not !="True": Flux sets Ready=Unknown at the start of
+    # every reconcile, so "Unknown" is normal churn (same choice as the Flux
+    # rules in infra/configs/alerts/prometheus-rules.yaml).
+    bad_now = _flux_keys(api.prom(f'gotk_resource_info{{{sel},ready="False"}}', at=now))
     if not bad_now:
         return True
     # Only failures that are new since the boot count.
-    bad_before = _flux_keys(api.prom(f'last_over_time(gotk_resource_info{{{sel},ready!="True"}}[10m])', at=boot - 60))
+    bad_before = _flux_keys(api.prom(f'last_over_time(gotk_resource_info{{{sel},ready="False"}}[10m])', at=boot - 60))
     return not (bad_now - bad_before)
 
 
@@ -374,16 +414,30 @@ def _flux_ok(api, boot, now):
 
 class State:
     def __init__(self):
+        # The /metrics thread reads results while the loop writes them.
+        self.lock = threading.Lock()
         self.results = {}  # (device, boot) -> Result
-        self.last_seen = {}  # device -> (boot, version), for from_version without Prometheus
+        # device -> {"boot", "version", "prev_version"}: the version the
+        # device ran on the boot before this one, for from_version when
+        # Prometheus cannot answer.
+        self.last_seen = {}
         self.last_loop = 0.0
         self.prom_fresh = 0
 
     def find(self, device, boot):
-        for (d, b), r in self.results.items():
-            if d == device and same_boot(b, boot):
-                return r
+        with self.lock:
+            for (d, b), r in self.results.items():
+                if d == device and same_boot(b, boot):
+                    return r
         return None
+
+    def add(self, res):
+        with self.lock:
+            self.results[(res.device, res.boot)] = res
+
+    def snapshot(self):
+        with self.lock:
+            return list(self.results.values())
 
 
 def read_back(api, state, now, cfg):
@@ -399,52 +453,69 @@ def read_back(api, state, now, cfg):
             failed = [c for c in (lb.get("failed_checks") or "").split(",") if c]
             if lb.get("result") == "fail" and not failed:
                 failed = ["unknown"]
-            state.results[(device, boot)] = Result(
+            state.add(Result(
                 device, boot, lb.get("from_version", "unknown"), lb.get("to_version", "unknown"), failed, now
-            )
+            ))
+
+
+def _track(state, dev):
+    seen = state.last_seen.get(dev.name)
+    if seen is None:
+        seen = {"boot": dev.boot, "version": dev.version, "prev_version": None}
+    elif not same_boot(seen["boot"], dev.boot):
+        seen = {"boot": dev.boot, "version": dev.version, "prev_version": seen["version"]}
+    state.last_seen[dev.name] = seen
+    return seen
 
 
 def step(api, state, now, cfg, log=print):
     """One loop iteration. Returns the Results recorded in this iteration."""
-    state.last_loop = now
     prom_ok = prometheus_fresh(api, now, cfg)
     state.prom_fresh = 1 if prom_ok else 0
 
-    devices = []
+    devices, readback_ok = [], False
     if prom_ok:
         try:
             read_back(api, state, now, cfg)
+            readback_ok = True
+        except ApiError as e:
+            log(json.dumps({"msg": "cannot read back earlier results", "error": str(e)}))
+        try:
             devices = devices_from_prometheus(api, now, cfg)
         except ApiError as e:
-            log(json.dumps({"msg": "prometheus query failed", "error": str(e)}))
-            prom_ok = False
-            state.prom_fresh = 0
-    if not prom_ok:
+            log(json.dumps({"msg": "prometheus device query failed", "error": str(e)}))
+    # Any watched device Prometheus could not see -- because it is stale, or
+    # because the unpoller scrape is down (likely while the gateway that hosts
+    # the UniFi controller reboots) -- is read from unpoller directly.
+    missing = [d for d in cfg["devices"] if d not in {x.name for x in devices}]
+    if missing:
         try:
-            devices = devices_from_unpoller(api, now, cfg)
+            devices += [d for d in devices_from_unpoller(api, now, cfg) if d.name in missing]
         except ApiError as e:
-            # Neither source can see the devices: nothing to verify against.
-            # The Prometheus-side deadman cannot help here either; this log
-            # line and the Alertmanager-independent healthchecks.io deadman
-            # are what is left.
-            log(json.dumps({"msg": "cannot read device uptime", "error": str(e)}))
-            devices = []
+            # Nothing can see these devices. The Prometheus-side deadman cannot
+            # either; this log line and the off-cluster healthchecks.io
+            # deadman are what is left.
+            log(json.dumps({"msg": "cannot read device uptime", "devices": missing, "error": str(e)}))
 
     recorded = []
     for dev in devices:
-        prev = state.last_seen.get(dev.name)
-        if prev is None or not same_boot(prev[0], dev.boot):
-            state.last_seen[dev.name] = (dev.boot, dev.version)
+        seen = _track(state, dev)
         if dev.uptime >= cfg["max_uptime"] or dev.uptime < cfg["min_uptime"]:
             continue
         if state.find(dev.name, dev.boot) is not None:
             continue
+        if prom_ok and not readback_ok:
+            # Prometheus answers but the earlier results could not be read,
+            # so this boot may already be done. Try again next loop; if it
+            # never works the deadman pages.
+            log(json.dumps({"msg": "deferring verification: read-back failed", "device": dev.name}))
+            continue
         from_version = version_before(api, dev, cfg) if prom_ok else None
         if from_version is None:
-            from_version = prev[1] if prev is not None and not same_boot(prev[0], dev.boot) else "unknown"
+            from_version = seen["prev_version"] or "unknown"
         failed = run_checks(api, dev.boot, now, prom_ok, cfg)
         res = Result(dev.name, dev.boot, from_version, dev.version, failed, now)
-        state.results[(dev.name, dev.boot)] = res
+        state.add(res)
         recorded.append(res)
         log(json.dumps({
             "msg": "update verification",
@@ -454,10 +525,14 @@ def step(api, state, now, cfg, log=print):
         }))
 
     # Forget results once their boot is older than the deadman can look back.
-    for key in [k for k, r in state.results.items() if now - r.boot > cfg["retain"]]:
-        del state.results[key]
+    with state.lock:
+        for key in [k for k, r in state.results.items() if now - r.boot > cfg["retain"]]:
+            del state.results[key]
 
     notify_alertmanager(api, state, now, cfg, log)
+    # Last, so an iteration that raises leaves this stale and
+    # UpdateVerifierStale fires.
+    state.last_loop = now
     return recorded
 
 
@@ -484,20 +559,21 @@ def alert_payload(res, now, cfg):
 
 
 def annotations(res):
+    # Word for word what the UpdateVerificationFailed rule renders, so the
+    # email reads the same whichever path delivered it.
     return {
         "summary": f"{res.device} rebooted and the cluster did not verify clean: {res.failed_checks}",
         "description": (
-            f"{res.device} booted at {_rfc3339(res.boot)} "
-            f"(firmware {res.from_version} -> {res.to_version}). "
-            f"update-verifier checks failed: {res.failed_checks}. "
-            "prometheus_stale / loki_* mean the check could not be made, which is not a pass. "
+            f"{res.device} rebooted (firmware {res.from_version} -> {res.to_version}) "
+            f"and update-verifier's checks failed: {res.failed_checks}. "
+            "prometheus_stale and loki_* mean a check could not be made, which is not a pass. "
             "Runbook: AGENTS.md \"Recovering read-only iSCSI volumes\"."
         ),
     }
 
 
 def notify_alertmanager(api, state, now, cfg, log=print):
-    fails = [alert_payload(r, now, cfg) for r in state.results.values() if r.failed]
+    fails = [alert_payload(r, now, cfg) for r in state.snapshot() if r.failed]
     if not fails:
         return
     for url in cfg["alertmanager_urls"]:
@@ -524,7 +600,7 @@ def render_metrics(state):
         "The value is the boot start time in unix seconds.",
         "# TYPE homelab_update_verification gauge",
     ]
-    for r in sorted(state.results.values(), key=lambda r: (r.device, r.boot)):
+    for r in sorted(state.snapshot(), key=lambda r: (r.device, r.boot)):
         lb = ",".join(f'{k}="{_esc(v)}"' for k, v in r.labels().items())
         lines.append(f"homelab_update_verification{{{lb}}} {r.boot}")
     lines += [

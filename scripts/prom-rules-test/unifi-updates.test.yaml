@@ -10,7 +10,7 @@ tests:
 - name: 'firmware change on a watched device fires; ip flip and unwatched devices do not'
   interval: 1m
   input_series:
-  # Rack Switch: 7.5.15 until t=30m, 7.6.11 from t=31m.
+  # Rack Switch: 7.5.15 for t=0..30m, 7.6.11 from t=30m (one shared sample).
   - series: unpoller_device_info{name="Rack Switch",version="7.5.15.17146",ip="10.42.1.100"}
     values: 1x30
   - series: unpoller_device_info{name="Rack Switch",version="7.6.11.17272",ip="10.42.1.100"}
@@ -27,6 +27,10 @@ tests:
   - series: unpoller_device_info{name="Office Switch",version="7.6.11.17272",ip="10.42.1.103"}
     values: _x30 1x150
   alert_rule_test:
+  # Before the new version appears: one version per device, nothing fires.
+  - eval_time: 20m
+    alertname: UniFiFirmwareChanged
+    exp_alerts: []
   - eval_time: 40m
     alertname: UniFiFirmwareChanged
     exp_alerts:

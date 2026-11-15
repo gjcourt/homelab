@@ -26,7 +26,7 @@ data:
             "hide": false,
             "iconColor": "orange",
             "name": "UniFi reboot (Rack Switch / Home)",
-            "expr": "group by (name, version) (unpoller_device_info{name=~\"Rack Switch|Home\"}) * on (name) group_left () (unpoller_device_uptime_seconds{name=~\"Rack Switch|Home\"} < 1800)",
+            "expr": "group by (name, version) (unpoller_device_info{name=~\"Rack Switch|Home\"}) * on (name) group_left () (max by (name) (unpoller_device_uptime_seconds{name=~\"Rack Switch|Home\"}) < 1800)",
             "step": "1m",
             "titleFormat": "{{name}} rebooted",
             "textFormat": "Running {{version}}. Up under 30 min; same signal as UniFiDeviceRebooted.",
@@ -39,10 +39,10 @@ data:
             "hide": false,
             "iconColor": "red",
             "name": "UniFi firmware change (Rack Switch / Home)",
-            "expr": "label_replace(group by (name, version) (unpoller_device_info{name=~\"Rack Switch|Home\"}), \"to_version\", \"$1\", \"version\", \"(.*)\") * on (name) group_left (from_version) topk by (name) (1, label_replace(group by (name, version) (count_over_time(unpoller_device_info{name=~\"Rack Switch|Home\"}[2h])) unless on (name, version) group by (name, version) (unpoller_device_info{name=~\"Rack Switch|Home\"}), \"from_version\", \"$1\", \"version\", \"(.*)\"))",
+            "expr": "group by (name, version) (unpoller_device_info{name=~\"Rack Switch|Home\"}) * on (name) group_left (from_version) topk by (name) (1, label_replace(group by (name, version) (count_over_time(unpoller_device_info{name=~\"Rack Switch|Home\"}[2h])) unless on (name, version) group by (name, version) (unpoller_device_info{name=~\"Rack Switch|Home\"}), \"from_version\", \"$1\", \"version\", \"(.*)\"))",
             "step": "1m",
-            "titleFormat": "{{name}} firmware {{from_version}} → {{to_version}}",
-            "textFormat": "Same signal as UniFiFirmwareChanged (two versions within 2h).",
+            "titleFormat": "{{name}} firmware {{from_version}} → {{version}}",
+            "textFormat": "Two versions within 2h, as in UniFiFirmwareChanged. Starts ~5 min after the change, once the old version goes stale.",
             "tagKeys": "name",
             "useValueForTime": false
           }

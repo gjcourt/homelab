@@ -1,21 +1,45 @@
 # Talos Kernel Log Shipping
 
+> **Status (2026-11-14): this pipeline never worked, from install (2026-03-05)
+> until the `role: Agent` fix.** Two separate faults, each enough on its own to
+> stop it:
+>
+> 1. **No Vector workload.** `values.yaml` set `role: DaemonSet`. The chart
+>    accepts only `Agent` (DaemonSet), `Aggregator` (StatefulSet) or
+>    `Stateless-Aggregator` (Deployment). Any other value renders a
+>    ServiceAccount, a ConfigMap and two Services and **no workload**. The chart
+>    does not fail and the HelmRelease reported `Ready` throughout. The vector
+>    Services had no endpoints, and Loki held no `{job="talos-kernel"}` stream.
+> 2. **Talos was never pointed at it.** On 2026-11-14 none of the four nodes
+>    had `machine.logging` set, a `KmsgLogConfig` document, or a
+>    `talos.logging.kernel` kernel argument. The patch in
+>    [§3](#talos-machineconfig) has to be applied by an operator. Merging the
+>    repo change does not do it.
+>
+> So `BTRFSCorruptionDetected` and `ISCSIKernelError` were inactive for eight
+> months with no data behind them, and that looked the same as "no errors".
+> Three alerts now make this failure visible: `VectorAgentNotReady`,
+> `TalosLogsAbsent` and `TalosKernelLogsAbsent` ([§4](#4-alerting-rules)).
+> **`TalosLogsAbsent` fires from the moment it loads until the Talos patch is
+> applied**, and `TalosKernelLogsAbsent` fires about a day later.
+
 ## 1. Overview
 
-Talos nodes produce kernel (`dmesg`) and service logs that are not captured by
-Promtail's standard container log scraping. This pipeline forwards those logs to
-Loki via a dedicated **Vector** DaemonSet, enabling log-based alerting for
-failure modes that produce no Prometheus metrics (e.g. BTRFS corruption in state
-`EA`, iSCSI session errors).
+Talos nodes produce kernel (`dmesg`) and service logs that Promtail's container
+log scraping does not capture. This pipeline sends them to Loki through a
+dedicated **Vector** DaemonSet. That allows log-based alerting for failure modes
+that produce no Prometheus metric (e.g. BTRFS corruption in state `EA`, iSCSI
+session errors).
 
 ## 2. Architecture
 
 ```
-Talos node (host network)
-  └─ machine.logging.destinations: tcp://10.42.2.20:30600
-        │   json_lines over TCP
-        ▼
-Vector DaemonSet (monitoring namespace)
+Talos node <ip> (host network)
+  ├─ machine.logging.destinations  tcp://<ip>:30600   service logs (json_lines)
+  └─ KmsgLogConfig                 tcp://<ip>:30600   kernel logs (json)
+        │
+        ▼  NodePort 30600, externalTrafficPolicy: Local
+Vector DaemonSet pod on that node (monitoring namespace)
   ├─ TCP socket source  :6000
   ├─ VRL transform: normalise field names
   └─ Loki sink  →  http://loki.monitoring.svc.cluster.local:3100
@@ -28,23 +52,34 @@ Loki SingleBinary  (monitoring namespace)
 Alertmanager
 ```
 
+**Two Talos settings, not one.** `machine.logging.destinations` carries Talos
+*service* logs (machined, kubelet, etcd, …). Kernel messages, which include
+every BTRFS and iSCSI error the alerts look for, are a separate stream: a
+`KmsgLogConfig` document or the `talos.logging.kernel` kernel argument. An
+earlier version of this page described `machine.logging` alone as shipping
+kernel logs. It does not.
+
 ### Why Vector, not Promtail?
 
-Talos `machine.logging` sends log events as **newline-delimited JSON** (`json_lines`
-format), not RFC 5424 syslog. Promtail's syslog receiver expects RFC 5424 framing
-and will reject or mangle Talos events. Vector has a native `socket` source with
-`decoding.codec: json` that handles this format correctly.
+Talos sends log events as **newline-delimited JSON**, not RFC 5424 syslog.
+Promtail's syslog receiver expects RFC 5424 framing. Vector has a native
+`socket` source with `decoding.codec: json` that reads this format.
 
 ### Why a NodePort?
 
-Talos runs on the host network, outside the Kubernetes pod network. The only way
-to reach a pod from the host is via a `NodePort` (or a `hostPort`). NodePort
-`30600` maps to Vector's TCP socket on port `6000`.
+Talos runs on the host network, outside the pod network. A NodePort is the
+simplest way to reach a pod from the host. NodePort `30600` maps to Vector's TCP
+socket on port `6000`.
 
-`externalTrafficPolicy: Local` ensures:
-- Each Talos node's logs go to the Vector pod **on that same node** (no cross-node
-  hops), preserving local context (hostname, etc.).
-- No SNAT — the source IP is the node IP, which Vector uses to set the `host` label.
+`externalTrafficPolicy: Local` sends a connection to `<node-ip>:30600` only to
+the Vector pod on that node. So **each node must send to its own IP**, and that
+node must have a ready Vector pod. An earlier version of this page pointed every
+node at `10.42.2.20`. With `Local`, that would have sent all four nodes' logs to
+one pod and lost them whenever that node was down.
+
+Vector records the peer address in each event's `host` field (in the JSON body).
+It is **not** a Loki label: the only labels are `job`, `talos_service` and
+`level`.
 
 ## 3. Configuration
 
@@ -53,31 +88,84 @@ to reach a pod from the host is via a `NodePort` (or a `hostPort`). NodePort
 | File | Purpose |
 |---|---|
 | `infra/controllers/vector/repository.yaml` | HelmRepository for `https://helm.vector.dev` |
-| `infra/controllers/vector/release.yaml` | HelmRelease: `vector/vector` v0.50.0, DaemonSet role |
-| `infra/controllers/vector/values.yaml` | Full Vector pipeline (source → transform → sink) |
-| `infra/controllers/vector/nodeport.yaml` | `Service` type NodePort, port 30600 → 6000 |
-| `infra/controllers/loki/alerting-rules.yaml` | Loki ruler rules ConfigMap (`BTRFSCorruptionDetected`, `ISCSIKernelError`) |
+| `infra/controllers/vector/release.yaml` | HelmRelease: `vector/vector` chart 0.50.0 |
+| `infra/controllers/vector/values.yaml` | `role: Agent` (DaemonSet), trimmed defaults, and the full Vector pipeline |
+| `infra/controllers/vector/nodeport.yaml` | `Service` type NodePort, port 30600 → 6000, selects `talos-log-receiver: "true"` |
+| `infra/controllers/loki/alerting-rules.yaml` | Loki ruler rules ConfigMap (`BTRFSCorruptionDetected`, `ISCSIKernelError`, `TalosLogsAbsent`, `TalosKernelLogsAbsent`) |
 | `infra/controllers/loki/values.yaml` | `singleBinary.rulerConfig` and rules volume mount |
+| `infra/configs/alerts/loki-rules.yaml` | PrometheusRule `VectorAgentNotReady` |
+
+### What the `Agent` role renders
+
+`helm template` at chart 0.50.0 with these values renders a ServiceAccount, the
+`vector` ConfigMap, two ClusterIP Services and a DaemonSet. The Agent role is
+built to scrape container logs from the host. Its defaults are switched off
+because this pipeline only listens on a socket:
+
+| Agent default | Here | Why |
+|---|---|---|
+| hostPath mounts `/var/log`, `/var/lib`, `/proc`, `/sys` | `defaultVolumes: []`, `defaultVolumeMounts: []` | Only the `kubernetes_logs` / host-metrics sources read them |
+| ClusterRole + Binding (list/watch pods, nodes, namespaces) | `rbac.create: false` | Only `kubernetes_logs` needs it |
+| Data dir on hostPath `/var/lib/vector` | `persistence.hostPath.enabled: false` → emptyDir | The socket source keeps no checkpoints; the Loki sink buffers in memory |
+| Default `vector.yaml` (kubernetes_logs, host_metrics, …) | replaced entirely by `customConfig` | The rendered ConfigMap contains only the pipeline below |
+
+The pod has no hostPath volumes, so Talos's read-only root filesystem does not
+affect it. It runs to the `restricted` Pod Security profile: uid 65534,
+`runAsNonRoot`, read-only root filesystem, all capabilities dropped,
+`allowPrivilegeEscalation: false`, `RuntimeDefault` seccomp, and no
+ServiceAccount token. The `monitoring` namespace enforces the more permissive
+`privileged` level, so admission does not depend on any of this. The chart's
+Agent branch still sets `PROCFS_ROOT` / `SYSFS_ROOT` env vars. They point at
+paths that are no longer mounted and nothing in this config reads them.
+
+The DaemonSet tolerates every `NoSchedule` taint, so a tainted node still ships
+its logs. A custom `NoExecute` taint would still evict the pod, and
+`VectorAgentNotReady` would then fire. Its `readinessProbe` is a TCP check on
+port 6000, so a pod counts as ready once the socket is listening.
 
 ### Talos MachineConfig
 
-`machine.logging.destinations` must be set on each Talos node. For the single
-node cluster (`talos-519-vmy`):
+Apply this to **each** node, with that node's own IP in both places. Nodes as of
+2026-11-14: `10.42.2.20` (talos-ykb-uir), `10.42.2.21` (talos-2mz-rfj),
+`10.42.2.23` (talos-fpd-h0t), `10.42.2.25` (talos-kot-7x7). Apply it **after**
+the Vector DaemonSet is ready.
 
-```bash
-talosctl -n talos-519-vmy patch mc --patch \
-  '[{"op":"add","path":"/machine/logging","value":{"destinations":[{"endpoint":"tcp://10.42.2.20:30600","format":"json_lines"}]}}]'
+```yaml
+# vector-logging-<ip>.yaml
+machine:
+  logging:
+    destinations:
+      - endpoint: tcp://<ip>:30600/
+        format: json_lines
+---
+apiVersion: v1alpha1
+kind: KmsgLogConfig
+name: vector
+url: tcp://<ip>:30600/
 ```
 
-This does **not** require a reboot. Talos applies the logging config live.
+```bash
+talosctl -n <ip> patch mc --patch @vector-logging-<ip>.yaml --dry-run   # review the diff
+talosctl -n <ip> patch mc --patch @vector-logging-<ip>.yaml
+```
 
-If the cluster gains additional nodes, repeat the `talosctl patch mc` for each
-node IP (`-n <node-ip>`).
+Whether either setting applies without a reboot on v1.12 was **not verified**
+(the `--dry-run` output reports the apply mode). Confirm after applying with
+`talosctl -n <ip> get kmsglogconfigs` and a `{job="talos-kernel",
+talos_service="kernel"}` query. The `talos.logging.kernel` kernel argument also
+works, but `extraKernelArgs` only take effect on a Talos upgrade.
+
+When a node joins the cluster, apply the same patch to it with its own IP.
 
 ### Vector pipeline (values.yaml summary)
 
+Talos field names, from the Talos logging docs:
+
+- **Service log:** `msg`, `talos-level`, `talos-service`, `talos-time`
+- **Kernel log:** `msg`, `talos-level`, `talos-time`, `facility`, `priority`,
+  `seq`, `clock`. There is no `talos-service` field.
+
 ```yaml
-# Receive Talos json_lines over TCP
 sources:
   talos_logs:
     type: socket
@@ -86,14 +174,14 @@ sources:
     framing.method: newline_delimited
     decoding.codec: json
 
-# Normalise field names (Talos uses "talos-service" with a hyphen)
 transforms:
   normalize_talos:
     type: remap
     source: |
-      .talos_service = string(del(."talos-service")) ?? "kernel"
+      .talos_service = string(del(."talos-service")) ?? "kernel"   # kmsg → "kernel"
+      .level = string(del(."talos-level")) ?? string(.level) ?? "info"
+      .msg = string(.msg) ?? ""
 
-# Forward to Loki with structured labels
 sinks:
   loki_output:
     type: loki
@@ -101,6 +189,16 @@ sinks:
       job: talos-kernel
       talos_service: "{{ talos_service }}"
       level: "{{ level }}"
+```
+
+The transform used to read `.level`, which Talos does not send, so every line
+would have been labelled `info`. The pipeline was checked on 2026-11-14 by
+running `timberio/vector:0.53.0-distroless-libc` locally on the rendered config
+(Loki sink swapped for a console sink) and sending a sample of each event type:
+
+```text
+service → talos_service="machined", level="info"
+kmsg    → talos_service="kernel",   level="error"
 ```
 
 ### Loki ruler
@@ -133,46 +231,91 @@ singleBinary:
       readOnly: true
 ```
 
+As of 2026-11-14 the ruler loads the rules (`health: ok`) and has discovered one
+Alertmanager, but `loki_prometheus_notifications_sent_total` is 0: it has never
+sent an alert. `TalosLogsAbsent` will be the first, which is a useful end-to-end
+check of that path.
+
 ## 4. Alerting Rules
 
-Defined in `infra/controllers/loki/alerting-rules.yaml` (ConfigMap `loki-alerting-rules`).
-
-### BTRFSCorruptionDetected (critical)
+### BTRFSCorruptionDetected (critical, Loki ruler)
 
 ```logql
 sum(count_over_time({job="talos-kernel"} |= "parent transid verify failed" [5m])) > 0
 ```
 
 Fires immediately (`for: 0m`) when BTRFS `parent transid verify failed` appears
-in kernel logs. This indicates an iSCSI volume is serving stale data after a
-session reconnect. The filesystem remains mounted **read-write** in error state
-`EA` — `NodeFilesystemReadOnly` does **not** fire for this failure mode.
+in kernel logs. This indicates an iSCSI volume serving stale data after a
+session reconnect. The filesystem stays mounted **read-write** in error state
+`EA`, so `NodeFilesystemReadOnly` does **not** fire for this failure mode.
+**Needs the `KmsgLogConfig` half of the Talos patch.**
 
 **Response**: identify the affected device via `talosctl dmesg`, map it to a
-PVC, and recycle the pod + PVC. See [2026-02-27 incident](../operations/incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md) for an example.
+PVC, and recycle the pod and PVC. See the [2026-02-27 incident](../operations/incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md) for an example.
 
-### ISCSIKernelError (warning)
+### ISCSIKernelError (warning, Loki ruler)
 
 ```logql
 sum(count_over_time({job="talos-kernel"} |~ "(?i)(iscsid|iscsi).*(error|failed|timeout|lost)" [5m])) > 0
 ```
 
-Fires after 2 minutes when iSCSI session errors appear in kernel logs. May
-precede a BTRFS corruption event or indicate a storage connectivity issue.
+Fires after 2 minutes when iSCSI session errors appear in the logs. These may
+come before a BTRFS corruption event or point to a storage connectivity problem.
+
+### TalosLogsAbsent (critical, Loki ruler)
+
+```logql
+absent_over_time({job="talos-kernel"}[1h])
+```
+
+`for: 5m`. A healthy node sends service logs constantly, so an hour with no line
+from any node means the pipeline is broken. The two alerts above evaluate to
+nothing in that state. Checked live 2026-11-14: returns `1` for
+`{job="talos-kernel"}` and nothing for a present stream (`{job="monitoring/grafana"}`).
+It is cluster-wide: one node that has stopped shipping is not caught, because
+the stream has no node label.
+
+### TalosKernelLogsAbsent (warning, Loki ruler)
+
+```logql
+absent_over_time({job="talos-kernel", talos_service="kernel"}[24h])
+```
+
+`for: 30m`. `TalosLogsAbsent` is satisfied by service logs alone. This alert
+covers the kernel half, which is the half the BTRFS and iSCSI alerts actually
+match. If only `machine.logging` is applied, or the `KmsgLogConfig` is lost,
+this is the alert that fires. **The 24h window is a guess.** No kernel stream
+existed to measure when it was written. Calibrate it against a few days of real
+data, then tighten it or raise it to critical.
+
+### VectorAgentNotReady (critical, Prometheus)
+
+```promql
+kube_daemonset_status_number_ready{namespace="monitoring", daemonset="vector"}
+  < on() group_left() count(kube_node_info)
+or absent(kube_daemonset_status_number_ready{namespace="monitoring", daemonset="vector"})
+```
+
+`for: 15m`. Ready pods are compared with the node count, not with
+`desiredNumberScheduled`, so a DaemonSet kept off a node still counts as short.
+`absent()` covers the pre-fix state, where no DaemonSet existed. Checked live
+2026-11-14: returns 1 for `vector` (absent) and nothing for `loki-canary` (4/4).
+With `>=` it returns 4 for `loki-canary`, and with one ready pod subtracted it
+returns 3, so the join binds.
 
 ## 5. Querying Logs
 
-Once Vector is deployed and Talos MachineConfig is patched, logs appear in the
-`talos-kernel` job in Loki.
-
 ```bash
-# All kernel logs from the last hour
+# All Talos logs from the last hour
 logcli query '{job="talos-kernel"}' --limit=50
+
+# Kernel messages only
+logcli query '{job="talos-kernel", talos_service="kernel"}'
 
 # BTRFS errors only
 logcli query '{job="talos-kernel"} |= "btrfs"'
 
-# Logs from a specific service (e.g. kubelet)
+# One service (e.g. kubelet)
 logcli query '{job="talos-kernel", talos_service="kubelet"}'
 
 # Via Grafana: Explore → Loki → {job="talos-kernel"}
@@ -180,68 +323,63 @@ logcli query '{job="talos-kernel", talos_service="kubelet"}'
 
 ## 6. Testing
 
-### Verify Vector is running and receiving logs
+### Verify the workload rendered
 
 ```bash
-# Should show DaemonSet pods in Running state
-kubectl get pods -n monitoring -l talos-log-receiver=true
-
-# Check for incoming events (look for "talos_logs" source stats)
-kubectl logs -n monitoring -l talos-log-receiver=true --tail=30
+helm -n monitoring get manifest vector | grep '^kind:'      # must include DaemonSet
+kubectl -n monitoring get ds vector                         # READY == node count
+kubectl -n monitoring get pods -l talos-log-receiver=true -o wide
+kubectl -n monitoring get endpointslices -l kubernetes.io/service-name=vector-talos-logs
 ```
 
 ### Verify logs flow into Loki
 
 ```bash
-# Port-forward Loki
-kubectl port-forward -n monitoring svc/loki 3100:3100
-
-# Query via logcli
-logcli query '{job="talos-kernel"}' --limit=5 --addr=http://localhost:3100
+kubectl -n monitoring exec loki-0 -c loki -- \
+  wget -qO- 'http://localhost:3100/loki/api/v1/query?query=count_over_time(%7Bjob%3D%22talos-kernel%22%7D%5B5m%5D)'
 ```
 
 ### Verify Loki ruler loaded the rules
 
 ```bash
-kubectl port-forward -n monitoring svc/loki 3100:3100
-curl -s http://localhost:3100/loki/api/v1/rules | python3 -m json.tool
+kubectl -n monitoring exec loki-0 -c loki -- wget -qO- http://localhost:3100/prometheus/api/v1/rules
 ```
 
-Expected output includes `BTRFSCorruptionDetected` and `ISCSIKernelError`.
+Expected output includes `BTRFSCorruptionDetected`, `ISCSIKernelError`,
+`TalosLogsAbsent` and `TalosKernelLogsAbsent`.
 
 ## 7. Troubleshooting
 
 ### No logs appearing in Loki
 
-1. Check Talos MachineConfig has `machine.logging` set:
+1. Check that the DaemonSet exists and is ready on every node (§6). If
+   `helm get manifest` has no DaemonSet, check `role:` in `values.yaml`. It must
+   be `Agent`.
+2. Check each node's Talos logging config:
    ```bash
-   talosctl -n talos-519-vmy get machineconfig -o yaml | grep -A5 logging
+   talosctl -n <ip> get machineconfig -o yaml | grep -A4 'logging:'
+   talosctl -n <ip> get kmsglogconfigs
    ```
-2. Check the NodePort is reachable from the node:
+3. Check Vector pod logs for socket or Loki sink errors:
    ```bash
-   talosctl -n talos-519-vmy exec -- nc -zv 10.42.2.20 30600
-   ```
-3. Check Vector pod logs for connection errors:
-   ```bash
-   kubectl logs -n monitoring -l talos-log-receiver=true | grep -i error
+   kubectl -n monitoring logs -l talos-log-receiver=true --tail=50 | grep -iE 'error|warn'
    ```
 
 ### Loki ruler not evaluating rules
 
 1. Confirm the ConfigMap is mounted:
    ```bash
-   kubectl exec -n monitoring deploy/loki -- ls /var/loki/rules/fake/
+   kubectl -n monitoring exec loki-0 -c loki -- ls /var/loki/rules/fake/
    ```
 2. Check Loki logs for ruler errors:
    ```bash
-   kubectl logs -n monitoring sts/loki | grep -i ruler
+   kubectl -n monitoring logs loki-0 -c loki | grep -i ruler
    ```
-3. Verify the ruler API reports the loaded rules (see Testing section above).
+3. Verify the ruler API reports the loaded rules (§6).
 
-### Adding a new Talos node
+### Adding a Talos node
 
-When a new Talos node joins the cluster:
-
-1. Patch its MachineConfig to add logging destinations (same command, different `-n` target).
-2. The Vector DaemonSet will automatically schedule a pod on the new node.
-3. No Loki/Alertmanager changes are needed.
+1. Apply the [§3 patch](#talos-machineconfig) with the new node's own IP.
+2. The Vector DaemonSet schedules a pod on the new node automatically.
+3. `VectorAgentNotReady` compares against the node count, so it fires if the
+   new node does not get a ready pod.

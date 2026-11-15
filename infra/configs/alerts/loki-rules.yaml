@@ -351,4 +351,6 @@ spec:
               If it is absent, run `helm -n monitoring get manifest vector` and
               check that a DaemonSet rendered (the chart's role must be
               "Agent"). Otherwise: kubectl -n monitoring get pods -l
-              talos-log-receiver=true -o wide
+              talos-log-receiver=true -o wide. The absent() branch also fires
+              if kube-state-metrics itself is down, so check that first if
+              other kube_* alerts are firing.

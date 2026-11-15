@@ -1,10 +1,12 @@
-# Expose Vector's TCP socket source on a fixed NodePort so that Talos
-# machine.logging.destinations can forward kernel logs from the host network.
+# Expose Vector's TCP socket source on a fixed NodePort so that Talos, which
+# runs on the host network, can send it logs: service logs via
+# machine.logging.destinations and kernel logs via a KmsgLogConfig document.
 #
-# Talos is configured to send json_lines logs to tcp://<node-ip>:30600
-# where <node-ip> is the node IP (10.42.2.20 for melodic-muse).
-# externalTrafficPolicy: Local ensures that each Talos node's log stream is
-# received by the Vector pod running on the same node, preserving host context.
+# Each node must send to its OWN IP: tcp://<that-node-ip>:30600.
+# externalTrafficPolicy: Local delivers a connection only to the Vector pod on
+# the node that received it, so pointing every node at one IP would funnel all
+# logs to one pod and lose them whenever that node is down.
+# Patch and node list: docs/reference/kernel-log-shipping.md §3.
 apiVersion: v1
 kind: Service
 metadata:

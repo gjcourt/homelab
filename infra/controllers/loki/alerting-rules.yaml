@@ -87,3 +87,29 @@ data:
                 talos-log-receiver=true), then each node's logging config
                 (talosctl -n <node-ip> get machineconfig -o yaml | grep -A4
                 logging). See docs/reference/kernel-log-shipping.md.
+
+          # TalosLogsAbsent is satisfied by service logs alone. Kernel messages
+          # arrive by a separate Talos setting (KmsgLogConfig), and they are
+          # what BTRFSCorruptionDetected and ISCSIKernelError match. If only
+          # the machine.logging half is applied, or the KmsgLogConfig is lost,
+          # those two alerts are blind while TalosLogsAbsent stays quiet.
+          #
+          # The 24h window is NOT calibrated. There was no kernel stream to
+          # measure when this was written. Talos writes its own "[talos] ..."
+          # lines to kmsg, but how often a settled node does so is unknown.
+          # Warning tier until a few days of real data show the quiet-node
+          # rate. Then tighten the window or raise the severity.
+          - alert: TalosKernelLogsAbsent
+            expr: |
+              absent_over_time({job="talos-kernel", talos_service="kernel"}[24h])
+            for: 30m
+            labels:
+              severity: warning
+            annotations:
+              summary: "No Talos kernel (kmsg) logs in Loki for 24h"
+              description: >
+                Loki has received no kernel line ({job="talos-kernel",
+                talos_service="kernel"}) in 24h, so BTRFSCorruptionDetected and
+                ISCSIKernelError cannot fire. Service logs may still be arriving.
+                Check each node's KmsgLogConfig: talosctl -n <node-ip> get
+                kmsglogconfigs. See docs/reference/kernel-log-shipping.md §3.

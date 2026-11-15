@@ -17,10 +17,11 @@
 >    repo change does not do it.
 >
 > So `BTRFSCorruptionDetected` and `ISCSIKernelError` were inactive for eight
-> months with no data behind them, and that looked the same as "no errors". Two
-> alerts now make this failure visible: `VectorAgentNotReady` and
-> `TalosLogsAbsent` ([§4](#4-alerting-rules)). **`TalosLogsAbsent` fires from
-> the moment it loads until the Talos patch is applied.**
+> months with no data behind them, and that looked the same as "no errors".
+> Three alerts now make this failure visible: `VectorAgentNotReady`,
+> `TalosLogsAbsent` and `TalosKernelLogsAbsent` ([§4](#4-alerting-rules)).
+> **`TalosLogsAbsent` fires from the moment it loads until the Talos patch is
+> applied**, and `TalosKernelLogsAbsent` fires about a day later.
 
 ## 1. Overview
 
@@ -90,7 +91,7 @@ It is **not** a Loki label: the only labels are `job`, `talos_service` and
 | `infra/controllers/vector/release.yaml` | HelmRelease: `vector/vector` chart 0.50.0 |
 | `infra/controllers/vector/values.yaml` | `role: Agent` (DaemonSet), trimmed defaults, and the full Vector pipeline |
 | `infra/controllers/vector/nodeport.yaml` | `Service` type NodePort, port 30600 → 6000, selects `talos-log-receiver: "true"` |
-| `infra/controllers/loki/alerting-rules.yaml` | Loki ruler rules ConfigMap (`BTRFSCorruptionDetected`, `ISCSIKernelError`, `TalosLogsAbsent`) |
+| `infra/controllers/loki/alerting-rules.yaml` | Loki ruler rules ConfigMap (`BTRFSCorruptionDetected`, `ISCSIKernelError`, `TalosLogsAbsent`, `TalosKernelLogsAbsent`) |
 | `infra/controllers/loki/values.yaml` | `singleBinary.rulerConfig` and rules volume mount |
 | `infra/configs/alerts/loki-rules.yaml` | PrometheusRule `VectorAgentNotReady` |
 
@@ -108,9 +109,14 @@ because this pipeline only listens on a socket:
 | Data dir on hostPath `/var/lib/vector` | `persistence.hostPath.enabled: false` → emptyDir | The socket source keeps no checkpoints; the Loki sink buffers in memory |
 | Default `vector.yaml` (kubernetes_logs, host_metrics, …) | replaced entirely by `customConfig` | The rendered ConfigMap contains only the pipeline below |
 
-The pod has no hostPath volumes and no privileges, so Talos's read-only root
-filesystem does not affect it. The `monitoring` namespace enforces the
-`privileged` Pod Security level. The DaemonSet tolerates every `NoSchedule`
+The pod has no hostPath volumes, so Talos's read-only root filesystem does not
+affect it. It runs to the `restricted` Pod Security profile: uid 65534,
+`runAsNonRoot`, read-only root filesystem, all capabilities dropped,
+`allowPrivilegeEscalation: false`, `RuntimeDefault` seccomp, and no
+ServiceAccount token. The `monitoring` namespace enforces the more permissive
+`privileged` level, so admission does not depend on any of this. The chart's
+Agent branch still sets `PROCFS_ROOT` / `SYSFS_ROOT` env vars. They point at
+paths that are no longer mounted and nothing in this config reads them. The DaemonSet tolerates every `NoSchedule`
 taint so that a tainted node still ships its logs. Its `readinessProbe` is a TCP
 check on port 6000, so a pod counts as ready once the socket is listening.
 
@@ -266,6 +272,19 @@ nothing in that state. Checked live 2026-11-14: returns `1` for
 It is cluster-wide: one node that has stopped shipping is not caught, because
 the stream has no node label.
 
+### TalosKernelLogsAbsent (warning, Loki ruler)
+
+```logql
+absent_over_time({job="talos-kernel", talos_service="kernel"}[24h])
+```
+
+`for: 30m`. `TalosLogsAbsent` is satisfied by service logs alone. This alert
+covers the kernel half, which is the half the BTRFS and iSCSI alerts actually
+match. If only `machine.logging` is applied, or the `KmsgLogConfig` is lost,
+this is the alert that fires. **The 24h window is a guess.** No kernel stream
+existed to measure when it was written. Calibrate it against a few days of real
+data, then tighten it or raise it to critical.
+
 ### VectorAgentNotReady (critical, Prometheus)
 
 ```promql
@@ -323,8 +342,8 @@ kubectl -n monitoring exec loki-0 -c loki -- \
 kubectl -n monitoring exec loki-0 -c loki -- wget -qO- http://localhost:3100/prometheus/api/v1/rules
 ```
 
-Expected output includes `BTRFSCorruptionDetected`, `ISCSIKernelError` and
-`TalosLogsAbsent`.
+Expected output includes `BTRFSCorruptionDetected`, `ISCSIKernelError`,
+`TalosLogsAbsent` and `TalosKernelLogsAbsent`.
 
 ## 7. Troubleshooting
 

@@ -1,5 +1,7 @@
-# Deploy Vector as a DaemonSet so it runs on every Talos node and processes
-# kernel/service logs sent from Talos machine.logging destinations.
+# Deploy Vector as a DaemonSet so it runs on every Talos node and receives
+# that node's Talos logs over TCP: service logs from
+# machine.logging.destinations and kernel logs from a KmsgLogConfig document
+# (see docs/reference/kernel-log-shipping.md).
 #
 # The chart's DaemonSet role is called "Agent". The valid roles are "Agent"
 # (DaemonSet), "Aggregator" (StatefulSet) and "Stateless-Aggregator"
@@ -24,12 +26,34 @@ defaultVolumes: []
 defaultVolumeMounts: []
 rbac:
   create: false
+# With no RBAC there is nothing for an API token to do.
+serviceAccount:
+  automountToken: false
 persistence:
   hostPath:
     enabled: false
 
+# Without hostPath mounts the pod needs no privileges, so run it to the
+# restricted Pod Security profile even though the namespace allows more.
+# Checked 2026-11-14: the 0.53.0-distroless-libc image runs this config as
+# uid 65534 with a read-only root, all capabilities dropped and
+# no-new-privileges, writing only to the data dir.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
 # Every node must run a receiver, including one that has been tainted.
-# Same toleration as node-exporter.
+# Same toleration as the prometheus-node-exporter chart default.
 tolerations:
   - operator: Exists
     effect: NoSchedule
@@ -60,7 +84,8 @@ customConfig:
   data_dir: /vector-data-dir
 
   sources:
-    # Receive Talos kernel and service logs sent via machine.logging.destinations.
+    # Receive Talos service logs (machine.logging.destinations) and kernel logs
+    # (KmsgLogConfig).
     # Format: newline-delimited JSON (Talos json_lines format, one event per line).
     talos_logs:
       type: socket

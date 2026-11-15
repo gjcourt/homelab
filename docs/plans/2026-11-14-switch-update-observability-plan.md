@@ -53,6 +53,12 @@ Loki check now has data and the next update should get past `loki_stale`. Loki l
 carry a `node` label and Talos's own timestamps, and `TalosNodeLogsSilent` catches a single
 silent node (`docs/reference/kernel-log-shipping.md`).
 
+**2026-11-15, evening:** phase 1 is live. Every node was drained in turn (14:20–15:00 PST),
+and all 80 iSCSI sessions now report `Recovery Timeout: 600`. The drain needed pod deletes,
+because the single-replica `maxUnavailable: 0` PDBs block eviction; the procedure in
+`AGENTS.md` is updated. Still open before device auto-update goes back on: the Rack Switch
+game day.
+
 ## What already exists (do not rebuild)
 
 - **unpoller → Prometheus:** `unpoller_device_uptime_seconds`, `unpoller_device_info{version}`,

@@ -61,6 +61,17 @@ lovelace:
 # Laundry room lights (via Lutron Caseta):
 #   timer.laundry_room_light_timer / input_number.laundry_room_light_minutes
 #
+# Closet and bathroom lights, one pair per room (Lutron Caseta, three closets
+# via switch_as_x):
+#   timer.front_foyer_closet_light_timer / input_number.front_foyer_closet_light_minutes
+#   timer.master_bedroom_closet_light_timer / input_number.master_bedroom_closet_light_minutes
+#   timer.office_closet_light_timer / input_number.office_closet_light_minutes
+#   timer.secondary_bedroom_closet_light_timer / input_number.secondary_bedroom_closet_light_minutes
+#   timer.nursery_bedroom_closet_light_timer / input_number.nursery_bedroom_closet_light_minutes
+#   timer.hall_bathroom_light_timer / input_number.hall_bathroom_light_minutes
+#   timer.master_bathroom_light_timer / input_number.master_bathroom_light_minutes
+#   timer.powder_bathroom_light_timer / input_number.powder_bathroom_light_minutes
+#
 # The auto-off automations in automations.yaml tie them to the corresponding
 # Lutron Caseta switch/light entities.
 #
@@ -130,6 +141,62 @@ input_number:
     step: 1
     unit_of_measurement: min
     mode: slider
+  front_foyer_closet_light_minutes:
+    name: Front Foyer Closet Light Timer
+    min: 4
+    max: 45
+    step: 1
+    unit_of_measurement: min
+    mode: slider
+  master_bedroom_closet_light_minutes:
+    name: Master Bedroom Closet Light Timer
+    min: 4
+    max: 45
+    step: 1
+    unit_of_measurement: min
+    mode: slider
+  office_closet_light_minutes:
+    name: Office Closet Light Timer
+    min: 4
+    max: 45
+    step: 1
+    unit_of_measurement: min
+    mode: slider
+  secondary_bedroom_closet_light_minutes:
+    name: Secondary Bedroom Closet Light Timer
+    min: 4
+    max: 45
+    step: 1
+    unit_of_measurement: min
+    mode: slider
+  nursery_bedroom_closet_light_minutes:
+    name: Nursery Bedroom Closet Light Timer
+    min: 4
+    max: 45
+    step: 1
+    unit_of_measurement: min
+    mode: slider
+  hall_bathroom_light_minutes:
+    name: Hall Bathroom Light Timer
+    min: 4
+    max: 45
+    step: 1
+    unit_of_measurement: min
+    mode: slider
+  master_bathroom_light_minutes:
+    name: Master Bathroom Light Timer
+    min: 4
+    max: 45
+    step: 1
+    unit_of_measurement: min
+    mode: slider
+  powder_bathroom_light_minutes:
+    name: Powder Bathroom Light Timer
+    min: 4
+    max: 45
+    step: 1
+    unit_of_measurement: min
+    mode: slider
 
 # restore: true (George, 2026-10-31): a running or paused timer resumes after
 # an HA restart with the time it had left. One that ran out while HA was down
@@ -146,6 +213,30 @@ timer:
     restore: true
   laundry_room_light_timer:
     name: Laundry Room Light Timer
+    restore: true
+  front_foyer_closet_light_timer:
+    name: Front Foyer Closet Light Timer
+    restore: true
+  master_bedroom_closet_light_timer:
+    name: Master Bedroom Closet Light Timer
+    restore: true
+  office_closet_light_timer:
+    name: Office Closet Light Timer
+    restore: true
+  secondary_bedroom_closet_light_timer:
+    name: Secondary Bedroom Closet Light Timer
+    restore: true
+  nursery_bedroom_closet_light_timer:
+    name: Nursery Bedroom Closet Light Timer
+    restore: true
+  hall_bathroom_light_timer:
+    name: Hall Bathroom Light Timer
+    restore: true
+  master_bathroom_light_timer:
+    name: Master Bathroom Light Timer
+    restore: true
+  powder_bathroom_light_timer:
+    name: Powder Bathroom Light Timer
     restore: true
 
 automation: !include automations.yaml
@@ -306,6 +397,14 @@ template:
           - timer.master_bathroom_fan_timer
           - timer.powder_bathroom_fan_timer
           - timer.laundry_room_light_timer
+          - timer.front_foyer_closet_light_timer
+          - timer.master_bedroom_closet_light_timer
+          - timer.office_closet_light_timer
+          - timer.secondary_bedroom_closet_light_timer
+          - timer.nursery_bedroom_closet_light_timer
+          - timer.hall_bathroom_light_timer
+          - timer.master_bathroom_light_timer
+          - timer.powder_bathroom_light_timer
       - trigger: event
         event_type: timer.finished
     sensor:
@@ -314,13 +413,32 @@ template:
         default_entity_id: sensor.auto_off_timer_deadlines
         icon: mdi:timer-sand
         state: >
-          {{ ['timer.hall_bathroom_fan_timer', 'timer.master_bathroom_fan_timer', 'timer.powder_bathroom_fan_timer', 'timer.laundry_room_light_timer']
+          {{ ['timer.hall_bathroom_fan_timer',
+              'timer.master_bathroom_fan_timer',
+              'timer.powder_bathroom_fan_timer',
+              'timer.laundry_room_light_timer',
+              'timer.front_foyer_closet_light_timer',
+              'timer.master_bedroom_closet_light_timer',
+              'timer.office_closet_light_timer',
+              'timer.secondary_bedroom_closet_light_timer',
+              'timer.nursery_bedroom_closet_light_timer',
+              'timer.hall_bathroom_light_timer',
+              'timer.master_bathroom_light_timer',
+              'timer.powder_bathroom_light_timer']
              | select('is_state', 'active') | list | count }}
         attributes:
           hall_bathroom_fan_timer: "{{ state_attr('timer.hall_bathroom_fan_timer', 'finishes_at') if is_state('timer.hall_bathroom_fan_timer', 'active') else none }}"
           master_bathroom_fan_timer: "{{ state_attr('timer.master_bathroom_fan_timer', 'finishes_at') if is_state('timer.master_bathroom_fan_timer', 'active') else none }}"
           powder_bathroom_fan_timer: "{{ state_attr('timer.powder_bathroom_fan_timer', 'finishes_at') if is_state('timer.powder_bathroom_fan_timer', 'active') else none }}"
           laundry_room_light_timer: "{{ state_attr('timer.laundry_room_light_timer', 'finishes_at') if is_state('timer.laundry_room_light_timer', 'active') else none }}"
+          front_foyer_closet_light_timer: "{{ state_attr('timer.front_foyer_closet_light_timer', 'finishes_at') if is_state('timer.front_foyer_closet_light_timer', 'active') else none }}"
+          master_bedroom_closet_light_timer: "{{ state_attr('timer.master_bedroom_closet_light_timer', 'finishes_at') if is_state('timer.master_bedroom_closet_light_timer', 'active') else none }}"
+          office_closet_light_timer: "{{ state_attr('timer.office_closet_light_timer', 'finishes_at') if is_state('timer.office_closet_light_timer', 'active') else none }}"
+          secondary_bedroom_closet_light_timer: "{{ state_attr('timer.secondary_bedroom_closet_light_timer', 'finishes_at') if is_state('timer.secondary_bedroom_closet_light_timer', 'active') else none }}"
+          nursery_bedroom_closet_light_timer: "{{ state_attr('timer.nursery_bedroom_closet_light_timer', 'finishes_at') if is_state('timer.nursery_bedroom_closet_light_timer', 'active') else none }}"
+          hall_bathroom_light_timer: "{{ state_attr('timer.hall_bathroom_light_timer', 'finishes_at') if is_state('timer.hall_bathroom_light_timer', 'active') else none }}"
+          master_bathroom_light_timer: "{{ state_attr('timer.master_bathroom_light_timer', 'finishes_at') if is_state('timer.master_bathroom_light_timer', 'active') else none }}"
+          powder_bathroom_light_timer: "{{ state_attr('timer.powder_bathroom_light_timer', 'finishes_at') if is_state('timer.powder_bathroom_light_timer', 'active') else none }}"
 
 # Which helpers have had their fresh-install default written (see "No
 # `initial:`" above and "Helpers — seed defaults on a fresh install" in

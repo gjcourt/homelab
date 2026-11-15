@@ -780,6 +780,9 @@
 - alias: "Helpers — save settings right after a change"
   description: "Persist auto-off and nightlight settings, and auto-off timer starts and stops, immediately."
   mode: queued
+  # First start seeds 15 helpers at once; each change queues a run.
+  max: 30
+  max_exceeded: silent
   trigger:
     - platform: state
       entity_id:

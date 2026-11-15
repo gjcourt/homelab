@@ -311,7 +311,7 @@ data:
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "hestia containers failing their healthcheck or restarting 3+ times in 24 h. Exited one-shot containers are not counted. Names in the Containers row below.",
+          "description": "hestia containers failing their healthcheck, or restarting in a way that indicates a fault: 3+ restarts in 24 h for a long-lived service; for an ephemeral container (one job per run, e.g. gha-runner) 3+ restarts with a nonzero exit code, or more than 100 restarts in the last hour. An ephemeral container restarting cleanly is not counted, nor is an exited one-shot. Names in the Containers row below.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -381,7 +381,7 @@ data:
                 "type": "prometheus",
                 "uid": "${datasource}"
               },
-              "expr": "count((homelabscope_container_health == 0) or (increase(homelabscope_container_restarts_total[24h]) >= 3)) or (count(homelabscope_container_running)*0)",
+              "expr": "count(count by (name) ((homelabscope_container_health == 0) or (((increase(homelabscope_container_restarts_total{name=~\"$ephemeral\"}[24h]) >= 2.5) and (max_over_time(homelabscope_container_last_exit_code{name=~\"$ephemeral\"}[24h]) > 0)) or (increase(homelabscope_container_restarts_total{name=~\"$ephemeral\"}[1h]) > 100)) or (increase(homelabscope_container_restarts_total{name!~\"$ephemeral\"}[24h]) >= 2.5))) or (count(homelabscope_container_running) * 0)",
               "legendFormat": "",
               "refId": "A"
             }
@@ -740,7 +740,7 @@ data:
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "description": "Exited = one-shot containers that ran and stopped; normal unless you expect them up.",
+          "description": "Exited = one-shot containers that ran and stopped; normal unless you expect them up. Restart status: 'failing' = 3+ restarts in 24 h (long-lived), or for an ephemeral container 3+ restarts with a nonzero exit or >100 in the last hour; 'restarted' = 1-2 restarts (long-lived); 'normal (ephemeral)' = an ephemeral container restarting after each job, as designed; 'none' = no restarts in 24 h.",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -775,6 +775,55 @@ data:
                   {
                     "id": "decimals",
                     "value": 0
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Restart status"
+                },
+                "properties": [
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "options": {
+                          "0": {
+                            "color": "text",
+                            "index": 0,
+                            "text": "none"
+                          },
+                          "1": {
+                            "color": "text",
+                            "index": 1,
+                            "text": "normal (ephemeral)"
+                          },
+                          "2": {
+                            "color": "orange",
+                            "index": 2,
+                            "text": "restarted"
+                          },
+                          "3": {
+                            "color": "red",
+                            "index": 3,
+                            "text": "failing"
+                          }
+                        },
+                        "type": "value"
+                      },
+                      {
+                        "options": {
+                          "match": "null+nan",
+                          "result": {
+                            "color": "#6c7480",
+                            "index": 99,
+                            "text": "No data"
+                          }
+                        },
+                        "type": "special"
+                      }
+                    ]
                   },
                   {
                     "id": "custom.cellOptions",
@@ -792,16 +841,8 @@ data:
                           "value": null
                         },
                         {
-                          "color": "text",
+                          "color": "#6c7480",
                           "value": -1000000000
-                        },
-                        {
-                          "color": "orange",
-                          "value": 1
-                        },
-                        {
-                          "color": "red",
-                          "value": 3
                         }
                       ]
                     }
@@ -943,7 +984,7 @@ data:
             "sortBy": [
               {
                 "desc": true,
-                "displayName": "Restarts, 24 h"
+                "displayName": "Restart status"
               }
             ]
           },
@@ -995,6 +1036,18 @@ data:
               "legendFormat": "",
               "range": false,
               "refId": "D"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "((((increase(homelabscope_container_restarts_total{name=~\"$ephemeral\"}[24h]) >= 2.5) and (max_over_time(homelabscope_container_last_exit_code{name=~\"$ephemeral\"}[24h]) > 0)) or (increase(homelabscope_container_restarts_total{name=~\"$ephemeral\"}[1h]) > 100)) * 0 + 3) or ((increase(homelabscope_container_restarts_total{name!~\"$ephemeral\"}[24h]) >= 2.5) * 0 + 3) or ((increase(homelabscope_container_restarts_total{name!~\"$ephemeral\"}[24h]) >= 0.5) * 0 + 2) or ((increase(homelabscope_container_restarts_total{name=~\"$ephemeral\"}[24h]) >= 0.5) * 0 + 1) or (increase(homelabscope_container_restarts_total[24h]) * 0)",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "range": false,
+              "refId": "E"
             }
           ],
           "title": "Containers on hestia",
@@ -1015,27 +1068,36 @@ data:
                   "Time 2": true,
                   "Time 3": true,
                   "Time 4": true,
+                  "Time 5": true,
                   "__name__": true,
                   "instance": true,
+                  "instance 1": true,
+                  "instance 2": true,
+                  "instance 3": true,
+                  "instance 4": true,
+                  "instance 5": true,
                   "job": true,
                   "job 1": true,
                   "job 2": true,
                   "job 3": true,
-                  "job 4": true
+                  "job 4": true,
+                  "job 5": true
                 },
                 "indexByName": {
+                  "name": 0,
                   "Value #A": 1,
                   "Value #B": 2,
-                  "Value #C": 3,
-                  "Value #D": 4,
-                  "name": 0
+                  "Value #E": 3,
+                  "Value #C": 4,
+                  "Value #D": 5
                 },
                 "renameByName": {
                   "Value #A": "Running",
                   "Value #B": "Health",
                   "Value #C": "Restarts, 24 h",
                   "Value #D": "Up for",
-                  "name": "Container"
+                  "name": "Container",
+                  "Value #E": "Restart status"
                 }
               }
             }
@@ -1140,6 +1202,15 @@ data:
             "query": "prometheus",
             "refresh": 1,
             "type": "datasource"
+          },
+          {
+            "description": "hestia containers that are EPHEMERAL by design: one job per container life, exit 0, restarted. Restarts are their success path, so they are coloured only on a nonzero exit or a crash-loop rate. Mirrors the lifecycle: ephemeral arms in infra/configs/homelabscope/prometheus-rule.yaml; keep the two in sync. Regex alternation, e.g. gha-runner|other.",
+            "hide": 2,
+            "label": "Ephemeral containers",
+            "name": "ephemeral",
+            "query": "gha-runner",
+            "skipUrlSync": true,
+            "type": "constant"
           }
         ]
       },

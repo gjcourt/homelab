@@ -118,14 +118,14 @@ result nor re-runs a finished boot:
    - all nodes `Ready`, and the etcd member count is 3 with a leader;
    - Flux Kustomizations and HelmReleases are Ready (no new failures since boot);
    - no iSCSI error lines in Loki since boot + 10 min (the reconnect itself logs some).
-3. Export `homelab_update_verification{device, boot, from_version, to_version, result}` and
-   write one structured log line to Loki.
+3. Export `homelab_update_verification{device, boot, from_version, to_version, result,
+   failed_checks}` (`failed_checks` empty on a pass) and write one structured log line to Loki.
 
 Outcomes:
 
 - **Pass:** recorded in Grafana. No email.
-- **Fail:** a `severity: critical` alert on `result="fail"`, so one email naming the device, versions and the failed checks, linking
-  the recovery runbook (`AGENTS.md`, "Recovering read-only iSCSI volumes"), and
+- **Fail:** a `severity: critical` alert on `result="fail"`, so one email naming the device,
+  versions and `failed_checks`, linking the recovery runbook (`AGENTS.md`, "Recovering read-only iSCSI volumes"), and
   `scripts/recover-readonly-pvc.sh` once the 2026-09-01 plan builds it. This is the only
   time George is pulled in.
 - **Deadman:** `UpdateVerificationMissing` fires (critical) if a watched device's uptime is

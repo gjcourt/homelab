@@ -116,9 +116,12 @@ affect it. It runs to the `restricted` Pod Security profile: uid 65534,
 ServiceAccount token. The `monitoring` namespace enforces the more permissive
 `privileged` level, so admission does not depend on any of this. The chart's
 Agent branch still sets `PROCFS_ROOT` / `SYSFS_ROOT` env vars. They point at
-paths that are no longer mounted and nothing in this config reads them. The DaemonSet tolerates every `NoSchedule`
-taint so that a tainted node still ships its logs. Its `readinessProbe` is a TCP
-check on port 6000, so a pod counts as ready once the socket is listening.
+paths that are no longer mounted and nothing in this config reads them.
+
+The DaemonSet tolerates every `NoSchedule` taint, so a tainted node still ships
+its logs. A custom `NoExecute` taint would still evict the pod, and
+`VectorAgentNotReady` would then fire. Its `readinessProbe` is a TCP check on
+port 6000, so a pod counts as ready once the socket is listening.
 
 ### Talos MachineConfig
 

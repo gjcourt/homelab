@@ -52,8 +52,9 @@ securityContext:
     drop:
       - ALL
 
-# Every node must run a receiver, including one that has been tainted.
-# Same toleration as the prometheus-node-exporter chart default.
+# Every node must run a receiver, including one with a NoSchedule taint.
+# Same toleration as the prometheus-node-exporter chart default. A custom
+# NoExecute taint would still evict it, and VectorAgentNotReady would fire.
 tolerations:
   - operator: Exists
     effect: NoSchedule

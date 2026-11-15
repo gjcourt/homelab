@@ -166,10 +166,10 @@ jobs:
       - name: Build the promtool rules file
         run: |
           mkdir -p /tmp/prom
-          python3 scripts/prom-rules-test/extract.py /tmp/prom/rules.yaml infra/configs/homelabscope/prometheus-rule.yaml infra/configs/unpoller/prometheus-rule.yaml infra/configs/update-verifier/prometheus-rule.yaml
+          python3 scripts/prom-rules-test/extract.py /tmp/prom/rules.yaml infra/configs/homelabscope/prometheus-rule.yaml infra/configs/unpoller/prometheus-rule.yaml infra/configs/update-verifier/prometheus-rule.yaml infra/configs/alerts/loki-rules.yaml
           cp scripts/prom-rules-test/*.test.yaml /tmp/prom/
 
       - name: promtool check + test rules
         run: |
           docker run --rm -v /tmp/prom:/w -w /w --entrypoint promtool quay.io/prometheus/prometheus:v3.5.0 check rules rules.yaml
-          docker run --rm -v /tmp/prom:/w -w /w --entrypoint promtool quay.io/prometheus/prometheus:v3.5.0 test rules homelabscope-alcatraz-deployer.test.yaml unifi-updates.test.yaml update-verifier.test.yaml
+          docker run --rm -v /tmp/prom:/w -w /w --entrypoint promtool quay.io/prometheus/prometheus:v3.5.0 test rules homelabscope-alcatraz-deployer.test.yaml unifi-updates.test.yaml update-verifier.test.yaml talos-node-logs.test.yaml

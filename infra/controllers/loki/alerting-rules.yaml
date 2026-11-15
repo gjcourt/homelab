@@ -70,8 +70,9 @@ data:
           # {job="talos-kernel"} (absent) and nothing for a present stream such
           # as {job="monitoring/grafana"}.
           #
-          # Cluster-wide, not per node: the stream carries no node label yet, so
-          # one node that is not shipping is not caught here.
+          # Cluster-wide, not per node: the other nodes' lines satisfy it, so one
+          # node that has stopped sending is not caught here. TalosNodeLogsSilent
+          # (Prometheus, infra/configs/alerts/loki-rules.yaml) covers that.
           - alert: TalosLogsAbsent
             expr: |
               absent_over_time({job="talos-kernel"}[1h])

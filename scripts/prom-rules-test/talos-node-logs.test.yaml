@@ -1,0 +1,47 @@
+# promtool unit tests for TalosNodeLogsSilent (loki.talos-log-shipping group in
+# infra/configs/alerts/loki-rules.yaml). Run by lint.yaml's prometheus-rules job.
+---
+rule_files:
+- rules.yaml
+evaluation_interval: 1m
+tests:
+- name: 'a sending node is quiet; a flat counter and a missing counter both fire'
+  interval: 1m
+  input_series:
+  # Three nodes, each with its vector pod.
+  - series: kube_pod_info{namespace="monitoring",created_by_kind="DaemonSet",created_by_name="vector",node="talos-a",pod="vector-a"}
+    values: 1x60
+  - series: kube_pod_info{namespace="monitoring",created_by_kind="DaemonSet",created_by_name="vector",node="talos-b",pod="vector-b"}
+    values: 1x60
+  - series: kube_pod_info{namespace="monitoring",created_by_kind="DaemonSet",created_by_name="vector",node="talos-c",pod="vector-c"}
+    values: 1x60
+  # Unrelated DaemonSet pod on a fourth node: out of scope, must not fire.
+  - series: kube_pod_info{namespace="monitoring",created_by_kind="DaemonSet",created_by_name="loki-canary",node="talos-d",pod="loki-canary-d"}
+    values: 1x60
+  # talos-a sends ~1,500 lines a minute (2026-11-15 rate).
+  - series: vector_component_received_events_total{namespace="monitoring",component_id="talos_logs",component_kind="source",node="talos-a",pod="vector-a"}
+    values: 0+1500x60
+  # talos-b had a counter that stopped moving: silent.
+  - series: vector_component_received_events_total{namespace="monitoring",component_id="talos_logs",component_kind="source",node="talos-b",pod="vector-b"}
+    values: 42x60
+  # talos-c has no counter at all: Vector never received a line after a restart.
+  alert_rule_test:
+  # Pending, not firing, before for: 15m elapses.
+  - eval_time: 10m
+    alertname: TalosNodeLogsSilent
+    exp_alerts: []
+  - eval_time: 30m
+    alertname: TalosNodeLogsSilent
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        node: talos-b
+      exp_annotations:
+        summary: "No Talos logs from talos-b for 30m"
+        description: "The vector pod on talos-b has received no Talos log line in 30 minutes, so BTRFSCorruptionDetected and ISCSIKernelError are blind for that node. Check the node's logging config (talosctl -n <node-ip> get kmsglogconfigs, and talosctl -n <node-ip> get machineconfig -o yaml | grep -A4 logging), then the vector pod on that node (kubectl -n monitoring get pods -l talos-log-receiver=true -o wide). See docs/reference/kernel-log-shipping.md.\n"
+    - exp_labels:
+        severity: critical
+        node: talos-c
+      exp_annotations:
+        summary: "No Talos logs from talos-c for 30m"
+        description: "The vector pod on talos-c has received no Talos log line in 30 minutes, so BTRFSCorruptionDetected and ISCSIKernelError are blind for that node. Check the node's logging config (talosctl -n <node-ip> get kmsglogconfigs, and talosctl -n <node-ip> get machineconfig -o yaml | grep -A4 logging), then the vector pod on that node (kubectl -n monitoring get pods -l talos-log-receiver=true -o wide). See docs/reference/kernel-log-shipping.md.\n"

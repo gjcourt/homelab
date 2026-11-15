@@ -72,6 +72,17 @@ readinessProbe:
 podLabels:
   talos-log-receiver: "true"
 
+# Scrape Vector's own metrics (the prom_exporter sink below). The relabeling
+# copies the pod's node onto every series, so TalosNodeLogsSilent
+# (infra/configs/alerts/loki-rules.yaml) can name the node that stopped
+# sending. The chart names the generated container port after the sink:
+# prom_exporter -> prom-exporter, the PodMonitor default.
+podMonitor:
+  enabled: true
+  relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: node
+
 resources:
   requests:
     cpu: 50m
@@ -97,6 +108,10 @@ customConfig:
       decoding:
         codec: json
 
+    # Vector's own counters, for the per-node silence alert.
+    vector_metrics:
+      type: internal_metrics
+
   transforms:
     # Normalise Talos field names. Talos uses "talos-service" (hyphenated) which
     # is invalid in VRL without quoting; rename to talos_service. Kernel (kmsg)
@@ -111,6 +126,26 @@ customConfig:
         .talos_service = string(del(."talos-service")) ?? "kernel"
         .level = string(del(."talos-level")) ?? string(.level) ?? "info"
         .msg = string(.msg) ?? ""
+
+        # Each node sends to its own IP, and the NodePort's
+        # externalTrafficPolicy: Local only routes that to the Vector pod on
+        # the same node. So this pod's node is the sender.
+        .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
+
+        # Use the time Talos logged the line, not the time it arrived. When a
+        # node first connects, Talos sends its in-memory buffer from boot, and
+        # arrival time would make those old lines look new (on 2026-11-15 a
+        # replay of old iscsid errors fired ISCSIKernelError). Lines more than
+        # Loki's out-of-order window behind are rejected by Loki, which is
+        # what we want for a replay; the rest of the batch is accepted.
+        # Extension services (ext-iscsid) log plain stdout with no time of
+        # their own, so Talos stamps those when it sends them and they keep
+        # arrival time either way.
+        ts, err = parse_timestamp(string(."talos-time") ?? "", "%+")
+        if err == null {
+          .timestamp = ts
+          del(."talos-time")
+        }
 
   sinks:
     # Forward all Talos log events to Loki with structured labels for querying.
@@ -127,6 +162,14 @@ customConfig:
         # which is the Vector field-reference syntax for dynamic Loki labels.
         talos_service: '{{ "{{" }} talos_service {{ "}}" }}'
         level: '{{ "{{" }} level {{ "}}" }}'
+        node: '{{ "{{" }} node {{ "}}" }}'
       batch:
         max_events: 500
         timeout_secs: 5
+
+    # Vector's own metrics, scraped by the PodMonitor above.
+    prom_exporter:
+      type: prometheus_exporter
+      inputs:
+        - vector_metrics
+      address: "0.0.0.0:9598"

@@ -22,6 +22,10 @@
 > `TalosLogsAbsent` and `TalosKernelLogsAbsent` ([§4](#4-alerting-rules)).
 > **`TalosLogsAbsent` fires from the moment it loads until the Talos patch is
 > applied**, and `TalosKernelLogsAbsent` fires about a day later.
+>
+> **2026-11-15: working.** The [§3](#talos-machineconfig) patch is applied on
+> all four nodes. Each one sends 7,000–10,500 lines per 5 minutes, kernel lines
+> included, and both absent alerts are inactive.
 
 ## 1. Overview
 
@@ -181,6 +185,9 @@ transforms:
       .talos_service = string(del(."talos-service")) ?? "kernel"   # kmsg → "kernel"
       .level = string(del(."talos-level")) ?? string(.level) ?? "info"
       .msg = string(.msg) ?? ""
+      .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
+      ts, err = parse_timestamp(string(."talos-time") ?? "", "%+")
+      if err == null { .timestamp = ts; del(."talos-time") }
 
 sinks:
   loki_output:
@@ -189,7 +196,32 @@ sinks:
       job: talos-kernel
       talos_service: "{{ talos_service }}"
       level: "{{ level }}"
+      node: "{{ node }}"
+  prom_exporter:            # Vector's own metrics, for TalosNodeLogsSilent
+    type: prometheus_exporter
+    address: "0.0.0.0:9598"
 ```
+
+**`node` label.** Each node sends to its own IP, and the NodePort's
+`externalTrafficPolicy: Local` routes that only to the Vector pod on the same
+node, so the receiving pod's node (`VECTOR_SELF_NODE_NAME`, set by the chart from
+`spec.nodeName`) is the sender. Before this, the only clue was the `host` field
+inside each line, which holds the node's pod-network address (`10.244.<n>.x`),
+not its node IP.
+
+**Timestamps.** Loki's timestamp is the time Talos logged the line
+(`talos-time`), not the time Vector received it. This matters because Talos
+sends its in-memory log buffer from boot when a destination first connects. On
+2026-11-15, applying the patch replayed old service lines with lags of up to
+about 149 days, and old kernel lines up to about 17 days. Stamped on arrival, a
+replayed old iscsid error made `ISCSIKernelError` fire. Loki rejects lines too
+far behind its out-of-order window and keeps the rest of the batch, which is the
+right result for a replay. **Extension services such as `ext-iscsid` are the
+exception.** They log plain stdout with no time of their own, so Talos stamps
+those lines when it sends them, and a replay still looks new. Checked locally on
+`timberio/vector:0.53.0-distroless-libc`: a line with an old `talos-time` keeps
+that time, and a line with a missing or invalid `talos-time` falls back to
+arrival time. Either way `node` is set.
 
 The transform used to read `.level`, which Talos does not send, so every line
 would have been labelled `info`. The pipeline was checked on 2026-11-14 by
@@ -272,8 +304,8 @@ absent_over_time({job="talos-kernel"}[1h])
 from any node means the pipeline is broken. The two alerts above evaluate to
 nothing in that state. Checked live 2026-11-14: returns `1` for
 `{job="talos-kernel"}` and nothing for a present stream (`{job="monitoring/grafana"}`).
-It is cluster-wide: one node that has stopped shipping is not caught, because
-the stream has no node label.
+It is cluster-wide: other nodes' lines satisfy it, so it does not catch a single
+node that has stopped sending. `TalosNodeLogsSilent` (below) covers that case.
 
 ### TalosKernelLogsAbsent (warning, Loki ruler)
 
@@ -303,6 +335,29 @@ or absent(kube_daemonset_status_number_ready{namespace="monitoring", daemonset="
 With `>=` it returns 4 for `loki-canary`, and with one ready pod subtracted it
 returns 3, so the join binds.
 
+### TalosNodeLogsSilent (critical, Prometheus)
+
+```promql
+count by (node) (
+  kube_pod_info{namespace="monitoring", created_by_kind="DaemonSet", created_by_name="vector"}
+)
+unless on (node)
+sum by (node) (
+  rate(vector_component_received_events_total{namespace="monitoring", component_id="talos_logs"}[30m]) > 0
+)
+```
+
+`for: 15m`. Fires for each node whose Vector pod received no Talos line in 30
+minutes. It uses Vector's own counters, scraped through the chart's PodMonitor,
+whose relabeling sets `node`. Loki can't do this check itself: a Loki rule has
+no list of nodes to compare against, and a "seen recently" window stops firing
+once the node has been quiet for longer than the window. The rule starts from
+`kube_pod_info` because Vector creates the counter only at its first event.
+Without that, a node that never sends after a pod restart would have no series,
+and `== 0` would miss it. If every node fires at once, check the scrape
+(`up{job="vector"}`) before the nodes. Unit-tested in
+`scripts/prom-rules-test/talos-node-logs.test.yaml`.
+
 ## 5. Querying Logs
 
 ```bash
@@ -317,6 +372,9 @@ logcli query '{job="talos-kernel"} |= "btrfs"'
 
 # One service (e.g. kubelet)
 logcli query '{job="talos-kernel", talos_service="kubelet"}'
+
+# One node
+logcli query '{job="talos-kernel", node="talos-kot-7x7"}'
 
 # Via Grafana: Explore → Loki → {job="talos-kernel"}
 ```

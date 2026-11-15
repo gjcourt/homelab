@@ -354,3 +354,43 @@ spec:
               talos-log-receiver=true -o wide. The absent() branch also fires
               if kube-state-metrics itself is down, so check that first if
               other kube_* alerts are firing.
+
+        # One node not sending. TalosLogsAbsent (Loki ruler) is cluster-wide:
+        # the other nodes' lines satisfy it, so a single silent node never
+        # fires it. This works from Vector's own counters instead. Every node
+        # sends only to the Vector pod on that node (NodePort with
+        # externalTrafficPolicy: Local), so a pod whose talos_logs source
+        # received nothing for 30m means that node stopped sending.
+        #
+        # It starts from kube_pod_info rather than the counter, because Vector
+        # creates the counter only at the first event: a node that never sends
+        # after a pod restart has no series at all, and a plain `== 0` would
+        # miss it. A node with no Vector pod is VectorAgentNotReady's job.
+        # If every node fires at once, suspect the PodMonitor or scraping, not
+        # the nodes. Check `up{job="vector"}` first.
+        #
+        # Silence is normal for nothing here: on 2026-11-15 every node sent
+        # 7,000-10,500 lines per 5 min.
+        - alert: TalosNodeLogsSilent
+          expr: >
+            count by (node) (
+              kube_pod_info{namespace="monitoring", created_by_kind="DaemonSet", created_by_name="vector"}
+            )
+            unless on (node)
+            sum by (node) (
+              rate(vector_component_received_events_total{namespace="monitoring", component_id="talos_logs"}[30m]) > 0
+            )
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No Talos logs from {{ $labels.node }} for 30m"
+            description: >
+              The vector pod on {{ $labels.node }} has received no Talos log
+              line in 30 minutes, so BTRFSCorruptionDetected and
+              ISCSIKernelError are blind for that node. Check the node's
+              logging config (talosctl -n <node-ip> get kmsglogconfigs, and
+              talosctl -n <node-ip> get machineconfig -o yaml | grep -A4
+              logging), then the vector pod on that node (kubectl -n
+              monitoring get pods -l talos-log-receiver=true -o wide). See
+              docs/reference/kernel-log-shipping.md.

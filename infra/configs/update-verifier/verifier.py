@@ -603,10 +603,16 @@ def render_metrics(state):
     for r in sorted(state.snapshot(), key=lambda r: (r.device, r.boot)):
         lb = ",".join(f'{k}="{_esc(v)}"' for k, v in r.labels().items())
         lines.append(f"homelab_update_verification{{{lb}}} {r.boot}")
+    if state.last_loop > 0:
+        # Not emitted until the first loop completes: a 0 here would read as
+        # "stale for 56 years" to UpdateVerifierStale. Until then
+        # UpdateVerifierAbsent covers a start-up that never finishes a loop.
+        lines += [
+            "# HELP homelab_update_verifier_last_loop_seconds Unix time the verifier loop last completed.",
+            "# TYPE homelab_update_verifier_last_loop_seconds gauge",
+            f"homelab_update_verifier_last_loop_seconds {int(state.last_loop)}",
+        ]
     lines += [
-        "# HELP homelab_update_verifier_last_loop_seconds Unix time the verifier loop last ran.",
-        "# TYPE homelab_update_verifier_last_loop_seconds gauge",
-        f"homelab_update_verifier_last_loop_seconds {int(state.last_loop)}",
         "# HELP homelab_update_verifier_prometheus_fresh 1 if Prometheus had recent data on the last loop.",
         "# TYPE homelab_update_verifier_prometheus_fresh gauge",
         f"homelab_update_verifier_prometheus_fresh {state.prom_fresh}",

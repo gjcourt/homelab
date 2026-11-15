@@ -425,3 +425,10 @@ def test_post_annotations_match_the_rule_text():
                 .replace("{{ $labels.to_version }}", r.to_version)
                 .replace("{{ $labels.failed_checks }}", r.failed_checks))
     assert rendered == v.annotations(r)["description"]
+
+
+def test_last_loop_metric_absent_until_first_loop_completes():
+    state = v.State()
+    assert "homelab_update_verifier_last_loop_seconds" not in v.render_metrics(state)
+    v.step(FakeApi(), state, NOW, CFG, log=lambda s: None)
+    assert f"homelab_update_verifier_last_loop_seconds {int(NOW)}" in v.render_metrics(state)

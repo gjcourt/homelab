@@ -43,7 +43,7 @@ storageClasses:
       provisioner-secret:
       controller-publish-secret:
       node-stage-secret:
-        # open-iscsi node-DB key: democratic-csi runs `iscsiadm -m node -o update`
+        # open-iscsi node-DB setting: democratic-csi runs `iscsiadm -m node -o update`
         # with it before login. The 120 s default is shorter than a Rack Switch
         # reboot, so I/O failed and ext4 went read-only. Not a credential.
         # docs/plans/2026-11-14-switch-update-observability-plan.md, Phase 1.

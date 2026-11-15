@@ -54,3 +54,36 @@ data:
                 may have lost its backing storage connection. Check
                 `talosctl dmesg` and verify the iSCSI session against hestia
                 (10.42.2.10) via the TrueNAS shares UI.
+
+      - name: talos-log-shipping
+        rules:
+          # Every rule above matches on {job="talos-kernel"}. If that stream is
+          # absent, they evaluate to nothing and look exactly like "no
+          # corruption, no iSCSI errors". That is how shipping stayed broken from
+          # install (2026-03-05) until the vector `role: Agent` fix: the
+          # DaemonSet never rendered, Talos was never pointed at it, and both
+          # alerts above were inactive for eight months with no data behind them.
+          #
+          # A healthy node sends kubelet/etcd/machined service logs all the time,
+          # so an hour with no line at all from any node is a broken pipeline,
+          # not a quiet cluster. Checked live 2026-11-14: this returns 1 for
+          # {job="talos-kernel"} (absent) and nothing for a present stream such
+          # as {job="monitoring/grafana"}.
+          #
+          # Cluster-wide, not per node: the stream carries no node label yet, so
+          # one node that is not shipping is not caught here.
+          - alert: TalosLogsAbsent
+            expr: |
+              absent_over_time({job="talos-kernel"}[1h])
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "No Talos kernel/service logs in Loki for 1h"
+              description: >
+                Loki has received no {job="talos-kernel"} line in the last hour,
+                so BTRFSCorruptionDetected and ISCSIKernelError cannot fire.
+                Check the vector DaemonSet (kubectl -n monitoring get pods -l
+                talos-log-receiver=true), then each node's logging config
+                (talosctl -n <node-ip> get machineconfig -o yaml | grep -A4
+                logging). See docs/reference/kernel-log-shipping.md.

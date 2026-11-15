@@ -1,6 +1,46 @@
 # Deploy Vector as a DaemonSet so it runs on every Talos node and processes
 # kernel/service logs sent from Talos machine.logging destinations.
-role: DaemonSet
+#
+# The chart's DaemonSet role is called "Agent". The valid roles are "Agent"
+# (DaemonSet), "Aggregator" (StatefulSet) and "Stateless-Aggregator"
+# (Deployment). Any other value renders NO workload at all, and the chart does
+# not fail: from install (2026-03-05) until this was fixed, `role: DaemonSet`
+# rendered only a ServiceAccount, a ConfigMap and two Services, the HelmRelease
+# reported Ready, and no Talos log ever reached Loki. VectorAgentNotReady
+# (infra/configs/alerts/loki-rules.yaml) and TalosLogsAbsent
+# (infra/controllers/loki/alerting-rules.yaml) exist so that cannot recur
+# silently.
+role: Agent
+
+# The Agent role is built for scraping container logs off the host. This
+# pipeline only listens on a TCP socket, so turn off what that role adds by
+# default and this config never uses:
+#   - hostPath mounts of /var/log, /var/lib, /proc and /sys
+#   - a ClusterRole/Binding to list+watch pods, nodes and namespaces (only the
+#     kubernetes_logs source needs it)
+#   - a hostPath data dir at /var/lib/vector (an emptyDir is enough: the
+#     socket source keeps no checkpoints and the Loki sink buffers in memory)
+defaultVolumes: []
+defaultVolumeMounts: []
+rbac:
+  create: false
+persistence:
+  hostPath:
+    enabled: false
+
+# Every node must run a receiver, including one that has been tainted.
+# Same toleration as node-exporter.
+tolerations:
+  - operator: Exists
+    effect: NoSchedule
+
+# Ready once the socket source is listening, which is what the NodePort needs.
+# No livenessProbe: it would have no signal distinct from this one.
+readinessProbe:
+  tcpSocket:
+    port: 6000
+  initialDelaySeconds: 5
+  periodSeconds: 10
 
 # Add a well-known label so the NodePort service can select the pods without
 # depending on Vector's internal chart labels.
@@ -33,15 +73,17 @@ customConfig:
 
   transforms:
     # Normalise Talos field names. Talos uses "talos-service" (hyphenated) which
-    # is invalid in VRL without quoting; rename to talos_service. Also ensure
-    # that level and msg are always present.
+    # is invalid in VRL without quoting; rename to talos_service. Kernel (kmsg)
+    # events carry no talos-service, so they get "kernel". Talos puts the level
+    # in "talos-level" (service and kmsg events alike), not "level"; reading
+    # .level alone labelled every line "info". Also ensure msg is present.
     normalize_talos:
       type: remap
       inputs:
         - talos_logs
       source: |
         .talos_service = string(del(."talos-service")) ?? "kernel"
-        .level = string(.level) ?? "info"
+        .level = string(del(."talos-level")) ?? string(.level) ?? "info"
         .msg = string(.msg) ?? ""
 
   sinks:

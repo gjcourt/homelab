@@ -50,8 +50,8 @@ they are until phase 4.
   (`infra/controllers/loki/alerting-rules.yaml`).
 - **Recovery is deliberately manual** (`2026-09-01-readonly-pvc-recovery.md`): Tier 1 is a
   recovery script (`scripts/recover-readonly-pvc.sh`, planned there, **not built yet**), and a
-  controller that suspends Flux or restarts Postgres is ruled out. This
-  plan keeps that. It **prevents and verifies**; it does not auto-remediate.
+  controller that suspends Flux or restarts Postgres is ruled out.
+  This plan keeps that. It **prevents and verifies**; it does not auto-remediate.
 
 ## Phase 1 — prevention: raise `replacement_timeout` (prerequisite)
 
@@ -107,7 +107,10 @@ scraped by a ServiceMonitor). It's the same shape as pvc-writeprobe, which is al
 long-running Deployment. A CronJob can't be scraped, and the cluster has no Pushgateway. It needs
 no Kubernetes RBAC, since it only queries Prometheus and Loki. It acts only when a watched
 device's uptime is under 45 min and that boot has no result yet. A boot is identified by its
-start time, `time() - unpoller_device_uptime_seconds`, rounded to the minute:
+start time, `timestamp(unpoller_device_uptime_seconds) - unpoller_device_uptime_seconds`
+rounded to the minute (sample time, not `time()`, so scrape lag doesn't shift it). "No result
+yet" is read back from Prometheus, not held in memory, so a verifier restart neither loses a
+result nor re-runs a finished boot:
 
 1. Wait until uptime ≥ 15 min, so sessions have had the 600 s window to come back.
 2. Run checks through the Prometheus and Loki APIs (no node access needed):
@@ -121,14 +124,15 @@ start time, `time() - unpoller_device_uptime_seconds`, rounded to the minute:
 Outcomes:
 
 - **Pass:** recorded in Grafana. No email.
-- **Fail:** one **critical** email naming the device, versions and the failed checks, linking
+- **Fail:** a `severity: critical` alert on `result="fail"`, so one email naming the device, versions and the failed checks, linking
   the recovery runbook (`AGENTS.md`, "Recovering read-only iSCSI volumes"), and
-  `scripts/recover-readonly-pvc.sh` once the 2026-09-01 plan builds it. This is the only time George is pulled in.
+  `scripts/recover-readonly-pvc.sh` once the 2026-09-01 plan builds it. This is the only
+  time George is pulled in.
 - **Deadman:** `UpdateVerificationMissing` fires (critical) if a watched device's uptime is
-  between 60 and 180 min with no `homelab_update_verification` for that boot. The upper bound
-  stops it firing forever, and the window is wide enough to outlast one missed scrape or
-  verifier restart. Silence then reliably
-  means "verified fine".
+  between 60 and 180 min with no `homelab_update_verification` for that boot in
+  `max_over_time(...[3h])`. The lookback matters: the gauge lives in the verifier's memory, so
+  a restart after a pass would otherwise read as "never verified" and page falsely. The upper
+  bound stops it firing forever. Silence then reliably means "verified fine".
 
 **Open question 3:** whether a verifier is worth it over pure alert rules. Rules alone can cover
 failure ("rebooted in the last hour AND `PvcNotWritable`"), but they can't positively record

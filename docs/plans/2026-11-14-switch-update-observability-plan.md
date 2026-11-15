@@ -30,7 +30,8 @@ From unpoller (`unpoller_device_uptime_seconds`, `unpoller_device_info`), last 3
 | Device | Reboot (local) | Firmware | Cause |
 | --- | --- | --- | --- |
 | Rack Switch | 2026-11-13 03:12 | 7.5.15.17146 → 7.6.11.17272 | Network app device auto-update (`mgmt.auto_upgrade_hour = 3`) |
-| Home (UCG-Fiber gateway) | 2026-11-08 00:21 (Sunday) | — | UniFi OS console auto-update (`autoUpdate.schedule` in `/data/unifi-core/config/firmware.yaml` on the gateway: weekly, day 0, hour 0) |
+| Home (UCG-Fiber gateway) | 2026-11-08 00:21 (Sunday) | 5.1.34.34102 → 5.1.35.34107 | UniFi OS console auto-update (`autoUpdate.schedule` in `/data/unifi-core/config/firmware.yaml` on the gateway: weekly, day 0, hour 0) |
+| Home (UCG-Fiber gateway) | 2026-11-15 00:53 (Sunday) | 5.1.35.34107 → 6.0.17.36539 | Same console schedule (after this plan was written; see below) |
 
 The 2026-08-13 incident ("a two-minute link flap cost 14 hours") also started at **03:01**.
 The device auto-update hour is 3. That incident predates unpoller version history, so this is
@@ -39,6 +40,13 @@ consistent with an update rather than proven.
 **Current state (2026-11-14):** George turned off Network-app device auto-update
 (`mgmt.auto_upgrade = false`). The console OS schedule above is still active. Both stay as
 they are until phase 4.
+
+**2026-11-15:** the console schedule updated the gateway to 6.0.17 at about 00:53. The
+update-verifier (phase 3) caught it, and `UpdateVerificationFailed` paged from 01:10 to 03:54
+with `failed_checks=loki_stale`, the expected failure while Talos logs aren't shipped yet. The
+update also stopped FRR on the gateway (`frr.service` is `not-found` on 6.0.17), so the Cilium
+BGP session from talos-kot-7x7 to 10.42.2.1 has been down since 00:54 (`CiliumBGPSessionDown`).
+LoadBalancer IPs still answered from the LAN at 04:30. The verifier has no BGP check.
 
 ## What already exists (do not rebuild)
 

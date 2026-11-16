@@ -36,8 +36,14 @@ x-deploy:
   # guard blocks the CATASTROPHIC prefixes (/, /etc, iSCSI, bare /volume1)
   # unconditionally and everything else only when NOT listed here. See
   # docs/plans/2026-06-26-alcatraz-gitops-docker.md ("protected-path guard").
+  #
+  # EXACT paths (HOMELAB-118): the pull deployer allows only a bind source
+  # that equals an entry, never a sub-path of one, so each mounted file is
+  # listed itself. alcatraz-deploy.yaml's guard accepts these too (an exact
+  # entry is "under" itself).
   allow-host-paths:
-    - /volume1/homes/truenas-backup/.ssh
+    - /volume1/homes/truenas-backup/.ssh/id_ed25519_hestia
+    - /volume1/homes/truenas-backup/.ssh/known_hosts_hestia
     - /volume1/homes/george/Photos
     - /volume1/homes/mara/Photos
     - /var/log/immich-photos-pull.log

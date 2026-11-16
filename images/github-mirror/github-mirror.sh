@@ -103,6 +103,10 @@ if mkdir -p "${TEXTFILE_DIR}" 2>/dev/null; then
     echo "# HELP github_mirror_repos_failed Repos that failed this run."
     echo "# TYPE github_mirror_repos_failed gauge"
     echo "github_mirror_repos_failed ${fail}"
+    # HELP strings below MUST match the other textfile writers byte-for-byte
+    # (images/homelabscope-heartbeat, images/immich-photos-backup): node-exporter's
+    # textfile collector drops a metric family from every file whose HELP differs
+    # from the first file read, which silently removed max_age for the other jobs.
     echo "# HELP homelabscope_job_last_success_seconds Unix timestamp of the job's last successful run."
     echo "# TYPE homelabscope_job_last_success_seconds gauge"
     echo "homelabscope_job_last_success_seconds{job=\"github-mirror\"} ${end_ts}"
@@ -112,7 +116,7 @@ if mkdir -p "${TEXTFILE_DIR}" 2>/dev/null; then
     echo "# HELP homelabscope_job_last_status Last run status (0=ok, 1=fail)."
     echo "# TYPE homelabscope_job_last_status gauge"
     echo "homelabscope_job_last_status{job=\"github-mirror\"} ${status}"
-    echo "# HELP homelabscope_job_max_age_seconds Per-job staleness budget (seconds)."
+    echo "# HELP homelabscope_job_max_age_seconds Staleness budget for this job (seconds)."
     echo "# TYPE homelabscope_job_max_age_seconds gauge"
     echo "homelabscope_job_max_age_seconds{job=\"github-mirror\"} ${MAX_AGE_SECONDS}"
   } >"${tmp}" 2>/dev/null; then

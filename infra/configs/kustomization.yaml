@@ -14,3 +14,4 @@ resources:
   - network-policies
   - thermalscope
   - unpoller
+  - update-verifier

@@ -155,7 +155,8 @@ views:
         - unknown
         - unavailable
     # After the 19:00 reminder, until logged. Tap = Done (asks first, so a
-    # stray tap can't log a shot); hold = pick the side by hand.
+    # stray tap can't log a shot); hold = today's side. The side comes from
+    # the date (sensor.daily_shot_side, HASS-11), so there is nothing to pick.
     - type: tile
       entity: sensor.daily_shot
       name: Daily shot
@@ -169,11 +170,11 @@ views:
         target:
           entity_id: input_button.daily_shot_done
         confirmation:
-          text: Log today's shot and switch the next side?
+          text: Log today's shot?
       icon_tap_action: *shot_done
       hold_action:
         action: more-info
-        entity: input_select.daily_shot_next_side
+        entity: sensor.daily_shot_side
       grid_options:
         columns: 12
       visibility:
@@ -446,10 +447,8 @@ views:
       - state
       - last_side
     - type: tile
-      entity: input_select.daily_shot_next_side
-      name: Next side
-      features:
-      - type: select-options
+      entity: sensor.daily_shot_side
+      name: Today's side
     # Shown only until today's shot is logged: a second press would be
     # ignored by "Daily shot — log it" anyway, so don't offer it. (Same rule
     # as homelab#1861.)
@@ -468,4 +467,4 @@ views:
         target:
           entity_id: input_button.daily_shot_done
         confirmation:
-          text: Log today's shot and switch the next side?
+          text: Log today's shot?

@@ -76,6 +76,27 @@
       ],
       "matchCurrentValue": "/^\\d{4}-\\d{2}-\\d{2}(-\\d{1,3})?$/",
       "versioning": "regex:^(?<major>\\d{4})-(?<minor>\\d{2})-(?<patch>\\d{2})(?:-(?<build>\\d{1,3}))?(?:-[0-9a-f]{7})?$"
+    },
+    {
+      "description": "linuxserver/qbittorrent carries two bare-number tags from its old scheme that Renovate's docker versioning sorts ABOVE current releases: 20.04.1 (pushed 2021-11-29 with the qBittorrent 14.3.9 / Ubuntu 20.04.1 build -- the number is the Ubuntu base, not a qBittorrent version) and 14.3.9. Renovate offered 5.2.1 -> 20.04.1 as a 'major' in #1612, which would have replaced a current image with a 2021 one. Excluded by exact tag so real future majors (6.x) still come through.",
+      "matchDatasources": [
+        "docker"
+      ],
+      "matchPackageNames": [
+        "lscr.io/linuxserver/qbittorrent"
+      ],
+      "allowedVersions": "!/^(14\\.3\\.9|20\\.04\\.1)$/"
+    },
+    {
+      "description": "images/bench-cloud/plane-mcp-requirements.txt is installed with pip --require-hashes --no-deps, so the file IS the dependency resolution: a one-line bump is never safe on its own. On 2026-11-07/08 separate automerged PRs moved pydantic to 2.14.3 a day before pydantic-core (which pydantic pins exactly), the image built in between crashed plane-mcp-server at import, and every agent-desk ticket Job lost the plane MCP server ('Connection closed'); the later pydantic-core PR then appended a second pydantic_core entry with new hashes, and every bench-cloud build after it failed hash checking. So everything in the file moves in ONE grouped PR (pydantic and pydantic-core can no longer land apart), nothing in it is automerged by Renovate, and the no-automerge label holds it in the renovate-automerge CronJob too. The fix for such a PR is to regenerate the file with uv pip compile (command in its header), not to merge Renovate's line edits; the bench-cloud PR build runs pip check and starts the server. Must stay after the automerge rule: last match wins.",
+      "matchFileNames": [
+        "images/bench-cloud/plane-mcp-requirements.txt"
+      ],
+      "groupName": "plane-mcp-server dependencies",
+      "automerge": false,
+      "addLabels": [
+        "no-automerge"
+      ]
     }
   ]
 }

@@ -103,8 +103,10 @@ A small service, `agent-desk`, in its own namespace.
 - **Webhook** at `http://agent-desk.agent-desk.svc.cluster.local:<port>/plane`, registered as a Plane
   workspace webhook for work items and comments.
   - Verify `X-Plane-Signature` (HMAC) against a SOPS secret; reject anything unsigned or wrong.
-  - Production's `WEBHOOK_ALLOWED_HOSTS` gets exactly that one name, in `apps/production/plane/release-patch.yaml`,
-    which already reserves the spot. Never a CIDR.
+  - Production's `WEBHOOK_ALLOWED_HOSTS` gets that name, in `apps/production/plane/release-patch.yaml`,
+    which already reserves the spot. Never a CIDR. Since plane-mobile's production deploy it also lists
+    `plane-mobile.plane-mobile-prod.svc.cluster.local`, a second receiver with its own webhook and secret
+    (plane-mobile plan, decision Q-E); each entry is one exact name.
 - **Backstop poll** every 10 minutes: list items in the allowlisted projects and re-evaluate.
   Plane retries a delivery up to 5 times and then drops it, so this is what catches an outage.
 - **GitHub poll** every 5 minutes:
@@ -117,7 +119,9 @@ A small service, `agent-desk`, in its own namespace.
 2. It carries exactly one `playbook:<name>` label naming a playbook the dispatcher knows.
 3. **A `ready` label applied by George's Plane account.** The dispatcher checks the actor in the
    item's activity. An agent can add labels through MCP, and the gate must not be one it can open
-   itself. Every playbook is ready-gated (decision 2). The `auto` rule stays in the format for later,
+   itself. **Amended 2026-11-09:** a `ready` applied by George's orchestrator
+   (`orchestratorEmail`, its own Plane user, not `agent-desk`) counts too; see "Guardrails".
+   Every playbook is ready-gated (decision 2). The `auto` rule stays in the format for later,
    and when used, starts only tickets **created** by George or an allowlisted automation identity,
    never by `agent-desk`.
 4. The project's repo is not on the deny list (`gjcourt/homelab`).
@@ -320,6 +324,14 @@ That's an idea for George to revisit, not a decision.
 - **Ticket text is untrusted input** to the agent, the same as any issue body. The prompt fences it.
   The gates above (George-applied `ready` and `over-cap`, George-authored comments) don't trust
   anything an agent can write.
+- **The orchestrator (2026-11-09).** George's /desk orchestrator has its own Plane user
+  (`gjcourt+bench-orchestrator@gmail.com`, "orchestrator"), set as `orchestratorEmail` in
+  production's config. Under George's standing rules it may add `ready` on its own judgement, so a
+  `ready` it applies counts like his. That is the only signal it shares: `over-cap` stays George's,
+  and its comments never wake an agent, answer a Blocked ticket or reopen a closed one. In the
+  prompt they're labelled "orchestrator", fenced with the rest of the ticket as untrusted data.
+  Whoever holds the orchestrator's Plane token can open the `ready` gate, so that token must
+  never reach a Job or the bot's secrets. Unset, the gate is George-only as before.
 
 ### Network
 

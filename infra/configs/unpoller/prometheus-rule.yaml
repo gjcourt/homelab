@@ -89,3 +89,65 @@ spec:
           annotations:
             summary: "UniFi device {{ $labels.name }} is overheating"
             description: "{{ $labels.name }} ({{ $labels.type }}) at {{ $value }}°C exceeds the overheating threshold."
+
+    # Update detection for the devices that update themselves unattended:
+    # the Rack Switch (every iSCSI path to hestia crosses it) and the Home
+    # gateway (UniFi OS console auto-update). Phase 2 of
+    # docs/plans/2026-11-14-switch-update-observability-plan.md.
+    #
+    # RECORD-ONLY. `severity: info` matches neither the `critical` nor the
+    # `warning` email route in infra/controllers/kube-prometheus-stack/values.yaml
+    # and falls through to the default 'null' receiver. These show in Grafana and
+    # in ALERTS{}, never in the inbox. Do not raise the severity here: the page
+    # for a bad update is the phase 3 verifier's job, on a failed check, not on
+    # the update itself.
+    #
+    # Known blind spot, measured 2026-11-14: Prometheus ingested nothing from
+    # 03:09 to 20:55 local on 2026-11-13, right after the Rack Switch update
+    # rebooted it. Both rules below need samples from inside their window, so
+    # neither fired for that update — the first post-gap sample already had
+    # uptime 63963s and only the new version in [2h]. A storage-path reboot
+    # that blinds Prometheus is exactly what these rules cannot see.
+    - name: unifi-updates
+      rules:
+        # unpoller exports `upgradable` 0/1 per device. Measured: the Rack
+        # Switch read 1 from 00:27 to 03:09 local on 2026-11-13, ahead of the
+        # 03:12 update. The Home gateway read 0 throughout its 2026-11-08
+        # console OS update (5.1.34 -> 5.1.35), so do not expect this to warn
+        # before gateway updates.
+        - alert: UniFiUpdatePending
+          expr: unpoller_device_upgradable{name=~"Rack Switch|Home"} == 1
+          labels:
+            severity: info
+          annotations:
+            summary: "UniFi device {{ $labels.name }} has a firmware update queued"
+            description: "{{ $labels.name }} reports upgradable=1. If device auto-update is on, it will reboot at the next update window."
+
+        # Opens a 30-minute window after any reboot (update, crash or power
+        # loss). The phase 3 verifier keys off the same uptime signal.
+        - alert: UniFiDeviceRebooted
+          expr: unpoller_device_uptime_seconds{name=~"Rack Switch|Home"} < 1800
+          labels:
+            severity: info
+          annotations:
+            summary: "UniFi device {{ $labels.name }} rebooted"
+            description: "{{ $labels.name }} uptime is {{ $value | humanizeDuration }}."
+
+        # Classifies a reboot as a firmware update: more than one distinct
+        # `version` in the last 2h. The `group by (name, version)` is
+        # load-bearing — `unpoller_device_info` also carries `ip`, `pod` and
+        # `instance`, and the Home gateway's `ip` flips between its WAN address
+        # and "unknown" (4 raw series over 30d with only 2 versions). Counting
+        # raw series would fire on every such flip or unpoller restart.
+        - alert: UniFiFirmwareChanged
+          expr: |
+            count by (name) (
+              group by (name, version) (
+                count_over_time(unpoller_device_info{name=~"Rack Switch|Home"}[2h])
+              )
+            ) > 1
+          labels:
+            severity: info
+          annotations:
+            summary: "UniFi device {{ $labels.name }} changed firmware"
+            description: "{{ $labels.name }} reported {{ $value }} firmware versions in the last 2h: the reboot was an update."

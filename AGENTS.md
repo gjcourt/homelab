@@ -118,7 +118,8 @@ Recurrences: [2026-02-08](docs/operations/incidents/2026-02-08-pv-recovery.md) �
 [2026-02-27](docs/operations/incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md) ·
 [2026-02-28](docs/operations/incidents/2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md) ·
 [2026-08-13](docs/operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md) ·
-[2026-09-04](docs/operations/incidents/2026-09-04-hestia-down-mass-readonly.md) **(59/63 volumes — largest to date)**.
+[2026-09-04](docs/operations/incidents/2026-09-04-hestia-down-mass-readonly.md) **(59/63 volumes — largest to date)** ·
+[2026-11-13](docs/operations/incidents/2026-11-13-rack-switch-update-readonly-prometheus-blind.md) (switch firmware update; Prometheus blind 17h43m).
 Tracking issue: [#1080](https://github.com/gjcourt/homelab/issues/1080).
 
 ### Initiator `replacement_timeout` (600 s)

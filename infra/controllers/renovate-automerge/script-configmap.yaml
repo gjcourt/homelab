@@ -50,6 +50,12 @@ data:
     # a PR needs a human. Honoured here so that hold is binding rather than
     # advisory -- the reviewer has no merge rights and cannot enforce it itself.
     HOLD_LABEL = "held-by-review"
+    # Applied by Renovate itself (renovate.json addLabels) to updates that must
+    # never self-merge whatever their update type: the hash-pinned --no-deps
+    # plane-mcp-requirements.txt, where a lone bump broke every ticket Job on
+    # 2026-11-08. Same effect as HOLD_LABEL, different author.
+    NO_AUTOMERGE_LABEL = "no-automerge"
+    HOLD_LABELS = {HOLD_LABEL, NO_AUTOMERGE_LABEL}
 
     # Update types Renovate may report, and the subset we auto-merge.
     UPDATE_TYPES = ("major", "minor", "patch", "digest", "pin", "pinDigest", "rollback")
@@ -102,6 +108,15 @@ data:
         "oven/bun", "denoland/deno",
     }
 
+    # Packages held for review whatever the update type: Home Assistant's
+    # monthly release is a "minor" to Renovate (2026.9 -> 2026.10) but carries
+    # breaking changes and one-way config migrations. renovate.json holds it
+    # from Renovate's own automerge too. Matched on the whole name, like
+    # RUNTIME_DEPS.
+    HELD_DEPS = {
+        "ghcr.io/home-assistant/home-assistant",
+    }
+
     # Renovate renders the arrow as a literal, an entity, or '->' depending
     # on the platform and on whether the cell is inside a link.
     _ARROW = r"(?:->|-&gt;|\u2192|&#8594;|&rarr;)"
@@ -113,6 +128,11 @@ data:
     )
     VERSION_ONLY_RE = re.compile(r"^v?(\d+(?:\.\d+)*)$")
     DIGEST_RE = re.compile(r"^(?:sha256:)?[0-9a-f]{7,}$", re.IGNORECASE)
+    # pip-style pinned requirements render as "==0.16.9" -> "==0.16.10"; strip a
+    # shared specifier before comparing, the same way a shared suffix is
+    # stripped below. Only when both sides agree -- "==1.0" -> ">=1.0" is an
+    # actual change, not a version bump, and should stay unparseable.
+    SPECIFIER_RE = re.compile(r"^(==|>=|<=|~=|!=|>|<)")
     # Renovate's digest titles always end "... digest to <short sha>".
     DIGEST_TITLE_RE = re.compile(r"\bdigest to [0-9a-f]{7,}\s*$")
 
@@ -164,6 +184,9 @@ data:
                 if a_tail == b_tail:
                     a, b = a_head, b_head
                     break
+        a_spec, b_spec = SPECIFIER_RE.match(a), SPECIFIER_RE.match(b)
+        if a_spec and b_spec and a_spec.group(1) == b_spec.group(1):
+            a, b = a[a_spec.end():], b[b_spec.end():]
         ma, mb = VERSION_ONLY_RE.match(a), VERSION_ONLY_RE.match(b)
         if ma and mb:
             return bump_kind(ma.group(1), mb.group(1))
@@ -277,7 +300,7 @@ data:
         An ALLOWLIST (the author -- self-hosted Renovate opens PRs as George),
         not a denylist of the App: GraphQL names bots without the "[bot]"
         suffix REST uses, and an allowlist does not care. Adding a label is not
-        gated -- the only label read here is HOLD_LABEL, and adding it holds.
+        gated -- the only labels read here are HOLD_LABELS, and adding one holds.
         Fails CLOSED: an API error, a missing/deleted actor, or more than one
         page of history is a hold."""
         owner, name = repo.split("/", 1)
@@ -344,6 +367,20 @@ data:
         return found
 
 
+    def held_deps_in_table(table):
+        """HELD_DEPS named anywhere in Renovate's summary table."""
+        found = set()
+        for line in table.splitlines():
+            line = line.strip()
+            if not line.startswith("|"):
+                continue
+            for cell in line.strip("|").split("|"):
+                name = _cell_name(cell)
+                if name in HELD_DEPS:
+                    found.add(name)
+        return found
+
+
     def classify_pr(pr):
         """Return (safe: bool, reason: str) based on title and PR body."""
         title = pr["title"].lower()
@@ -360,6 +397,9 @@ data:
         runtimes = runtime_deps_in_table(table)
         if runtimes:
             return False, "language runtime upgrade: " + ", ".join(sorted(runtimes))
+        held = held_deps_in_table(table)
+        if held:
+            return False, "held for review: " + ", ".join(sorted(held))
 
         # Preferred signal: the explicit Update column. The closing pipe is
         # matched by lookahead rather than consumed, so two type words that
@@ -404,8 +444,8 @@ data:
         # a PR whose table we could not read is exactly the case to fail closed
         # on rather than fall through to a version-string comparison.
         if any(re.search(r"(?<![\w./-])" + re.escape(d) + r"(?![\w./-])", title)
-               for d in RUNTIME_DEPS):
-            return False, "possible runtime upgrade, unreadable update table"
+               for d in RUNTIME_DEPS | HELD_DEPS):
+            return False, "possible runtime or held-package upgrade, unreadable update table"
 
         # Digest pins are content-addressed -- same logical version -- but
         # trust the title only once the table has said nothing, and only for
@@ -525,8 +565,9 @@ data:
                 print(f"    -> hold: {reason}", flush=True)
                 held.append({"pr": pr, "reason": reason})
                 continue
-            if any((lab or {}).get("name") == HOLD_LABEL for lab in pr.get("labels") or []):
-                reason = f"held by dependency review ({HOLD_LABEL})"
+            hold_labels = sorted({(lab or {}).get("name") for lab in pr.get("labels") or []} & HOLD_LABELS)
+            if hold_labels:
+                reason = "held by label (" + ", ".join(hold_labels) + ")"
                 print(f"    -> hold: {reason}", flush=True)
                 held.append({"pr": pr, "reason": reason})
                 continue

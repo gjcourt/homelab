@@ -14,7 +14,10 @@ metadata:
   labels:
     app: bench-console
 spec:
-  replicas: 1
+  # Spun down 2026-11-08: the in-cluster console is no longer needed (hands-on
+  # sessions / Remote Control moved to aristotle). Set back to 1 to revive — the
+  # PVC (bench-console-home) and its stored `claude auth login` are retained.
+  replicas: 0
   # RWO home volume: the old pod must release it before the new one mounts it.
   strategy:
     type: Recreate

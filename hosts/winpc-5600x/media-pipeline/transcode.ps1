@@ -43,6 +43,7 @@
   relative to media/video; it defaults to movies/<Library Name>, so existing
   movie queues are unchanged. TV: a dir like
   tv/Show (Year)/Season 01 with a name like Show (Year) - S01E01.
+  The dir must be under movies/, tv/, tv-anime/ or music-videos/.
 
 .EXAMPLE
   .\transcode.ps1 -Queue .\queue.tsv
@@ -132,8 +133,8 @@ foreach ($line in [IO.File]::ReadAllLines($Queue, [Text.UTF8Encoding]::new($fals
   # refuse anything that could escape the library root or break the quoting,
   # rather than land a file somewhere nobody will look for it.
   if ($nm -match '[\\/:*?"<>|'']') { Log "SKIP bad Library Name (path/quote chars): $l"; continue }
-  if ($dir -notmatch '^(movies|tv|tv-anime)/' -or $dir -match '\.\.|[\\:*?"<>|'']') {
-    Log "SKIP bad Library Dir (must be under movies/, tv/ or tv-anime/): $l"; continue
+  if ($dir -notmatch '^(movies|tv|tv-anime|music-videos)/' -or $dir -match '\.\.|[\\:*?"<>|'']') {
+    Log "SKIP bad Library Dir (must be under movies/, tv/, tv-anime/ or music-videos/): $l"; continue
   }
   $items += [pscustomobject]@{ Src = $parts[0].Trim(); Name = $nm; Dir = $dir }
 }
@@ -165,6 +166,11 @@ foreach ($i in $items) {
                                   AChan = $achan; ADesc = $adesc }
 }
 Log ("== PREFLIGHT DONE: $($runnable.Count) to encode ==")
+# The preflight loop variable outlives its loop. Until 2026-10-14 the ENCODED and
+# LANDED rows below read $i.Src instead of $it.Src, so every title in a run was
+# recorded against the LAST queued file - and verify-before-delete keys on that
+# path. Drop it here so a stray $i is $null (no Src, never deletable), not wrong.
+Remove-Variable i
 VLedgerRun 'RUN_START' "queue=$Queue titles=$($items.Count) runnable=$($runnable.Count) bitrate=$Bitrate dryrun=$DryRun"
 VLedger 'QUEUED' @($runnable | ForEach-Object {
   [pscustomobject]@{ Scope='title'; Title=$_.Name; Src=$_.Src; Note='preflight passed' } })
@@ -227,6 +233,23 @@ foreach ($it in $runnable) {
   $expected = 0
   $srcCnt = & $FP -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of default=nw=1:nk=1 $it.Src 2>$null
   if ("$srcCnt".Trim() -match '^\d+$') { $expected = [int]"$srcCnt".Trim() }
+  # ⚠️ Field-coded (PAFF) interlaced H.264 stores each FIELD as its own packet,
+  # so the source reports twice as many packets as frames. Measured 2026-10-26
+  # on the Iron Giant Signature Edition SD extras: 6,000 source packets for a
+  # 100 s, 29.97 fps clip, a perfect 3,000-frame encode, and the gate refused it
+  # at exactly 50% - every 480i extra on the disc, while every 1080p title passed.
+  # When the packet count is ~2x what duration x rate allows, count frames, not
+  # fields. Soft telecine (above) goes the other way, so it is untouched.
+  if ($expected -gt 0) {
+    $sfps = Probe $it.Src 'stream=r_frame_rate' 'v:0'
+    $sn,$sd = ($sfps -split '/')
+    $sfpsVal = if ($sd) { [double]$sn / [double]$sd } else { [double]$sn }
+    $nominal = $it.Dur * $sfpsVal
+    if ($nominal -gt 0 -and $expected -gt 1.9 * $nominal) {
+      Log ("  field-coded source: $expected packets for ~" + [math]::Round($nominal) + " frames - expecting " + [math]::Round($expected / 2))
+      $expected = [math]::Round($expected / 2)
+    }
+  }
   if ($expected -le 0) {
     $fps = Probe $va 'stream=r_frame_rate' 'v:0'
     $num,$den = ($fps -split '/')
@@ -312,7 +335,7 @@ foreach ($it in $runnable) {
   # Hash it, exactly as the music path does before it trusts a landed file.
   $localSha = (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash.ToLower()
   VLedger 'ENCODED' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$localSha; Bytes=$outLen
-                                         Src=$i.Src; Dest=$rel
+                                         Src=$it.Src; Dest=$rel
                                          Note="validated: duration, bitrate, decoded frame, audio [$($it.ADesc)]" })
 
   $tmp = "/tmp/mediapush_$([guid]::NewGuid().ToString('N')).mkv"
@@ -328,7 +351,51 @@ foreach ($it in $runnable) {
   # swap is a rename within one dataset, so it is atomic, and a failed verify
   # leaves the existing file untouched.
   $inc = "$rel.incoming"
-  ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$HBASE/$dest' && sudo -n mv '$tmp' '$HBASE/$inc' && sudo -n chown 1028:100 '$HBASE/$inc' && sudo -n chmod 644 '$HBASE/$inc'"
+  # ⚠️ Movie dirs must be group `apps` (gid 568, Radarr) with group write. This
+  # used to be a bare `sudo mkdir -p`, which made every new title dir
+  # root:truenas_admin 2755 - 71 of them by 2026-11-03, invisible to Radarr's
+  # writes while Jellyfin played them fine. Create each MISSING component
+  # explicitly and stamp it; never touch a dir that already exists. Outside
+  # movies/ nothing manages the tree, so the old behaviour stands.
+  if ($it.Dir -like 'movies/*') {
+    $mk = @(); $acc = "$HBASE/media/video"
+    foreach ($c in ($it.Dir -split '/')) {
+      $acc = "$acc/$c"
+      $mk += "{ [ -d '$acc' ] || { sudo -n mkdir '$acc' && sudo -n chown truenas_admin:apps '$acc' && sudo -n chmod 2775 '$acc'; }; }"
+    }
+    $mkCmd = $mk -join ' && '
+  } else {
+    $mkCmd = "sudo -n mkdir -p '$HBASE/$dest'"
+  }
+  ssh -n -o BatchMode=yes $HST $mkCmd
+  if ($LASTEXITCODE -ne 0) {
+    ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null
+    VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note='could not create destination dir' })
+    Log "FAIL mkdir: $name -- keeping local"; continue
+  }
+  if ($it.Dir -like 'movies/*') {
+    # Check BEFORE landing the file, the way import-music.ps1 checks ownership:
+    # a dir Radarr cannot write is a failure, not a warning. An existing dir from
+    # before this fix fails here too - run normalize-movie-dirs.ps1.
+    # Every dir below movies/ (title dir AND extras/), not just the leaf: an
+    # extras/ created now under a pre-fix root-owned title dir would otherwise
+    # pass while Radarr still cannot write the title dir.
+    $chk = @(); $acc = "$HBASE/media/video/movies"
+    foreach ($c in @(($it.Dir -split '/') | Select-Object -Skip 1)) { $acc = "$acc/$c"; $chk += "'$acc'" }
+    $lines = @(Invoke-SshRead -RemoteHost $HST -Cmd "stat -c '%G %A' $($chk -join ' ')" | Where-Object { $_ })
+    $ga = ($lines -join '; ')
+    $bad = ($lines.Count -ne $chk.Count)
+    foreach ($ln in $lines) {
+      $gs = "$ln".Trim() -split ' '
+      if ($gs.Count -ne 2 -or $gs[0] -ne 'apps' -or $gs[1].Length -lt 6 -or $gs[1][5] -ne 'w') { $bad = $true }
+    }
+    if ($bad) {
+      ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null
+      VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note="dest dir is '$ga', not group apps with group write" })
+      Log "FAIL dir ownership: $HBASE/$dest is '$ga' (need group apps + g+w; see normalize-movie-dirs.ps1) -- keeping local"; continue
+    }
+  }
+  ssh -n -o BatchMode=yes $HST "sudo -n mv '$tmp' '$HBASE/$inc' && sudo -n chown 1028:100 '$HBASE/$inc' && sudo -n chmod 644 '$HBASE/$inc'"
   if ($LASTEXITCODE -ne 0) {
     VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note='move into library failed' })
     Log "FAIL push: $name -- keeping local"; continue
@@ -344,7 +411,7 @@ foreach ($it in $runnable) {
     # LANDED is written only here, after the hash is proven in the library, so a
     # row means "this film is there and it matched" - not "we pushed it".
     VLedger 'LANDED' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$remoteSha; Bytes=$remoteLen
-                                          Src=$i.Src; Dest=$rel; Note='sha256 verified on hestia' })
+                                          Src=$it.Src; Dest=$rel; Note='sha256 verified on hestia' })
     Remove-Item $local -Force
     VLedger 'LOCAL_DELETED' @([pscustomobject]@{ Scope='title'; Title=$name; Src=$local
                                                  Note='local copy removed after verification' })

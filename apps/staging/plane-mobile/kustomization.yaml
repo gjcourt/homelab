@@ -1,0 +1,86 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Staging plane-mobile: https://desk.stage.burntbytes.com (LAN-only, like every
+# *.stage host: AdGuard's *.stage wildcard, no Cloudflare tunnel), against
+# staging Plane (plane-stage) and staging Authelia (auth.stage.burntbytes.com).
+#
+# Not deployable until George has (1) published an image from plane-mobile's
+# build.yml and pinned its tag below, and (2) added the SOPS-encrypted
+# secret-plane-mobile.yaml from its .example. Until (2), `kustomize build
+# apps/staging` fails on the missing file — on purpose: it keeps this PR, and
+# the placeholder Authelia client hash in apps/staging/authelia, out of the
+# staging preview branch.
+namespace: plane-mobile-stage
+resources:
+  - ../../base/plane-mobile/
+  - httproute.yaml
+  - networkpolicy-plane.yaml
+  - networkpolicy-oidc.yaml
+  # SOPS-encrypted by the operator from secret-plane-mobile.yaml.example
+  # (agents never run sops in this repo); Flux decrypts it at apply time.
+  - secret-plane-mobile.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+
+# Env vars for backend/src/plane_mobile/config.py, by their exact names.
+# Secrets are not here: they are files under /secrets (base deployment.yaml).
+configMapGenerator:
+  - name: plane-mobile-config
+    literals:
+      - PUBLIC_URL=https://desk.stage.burntbytes.com
+      - OIDC_ISSUER=https://auth.stage.burntbytes.com
+      - OIDC_CLIENT_ID=plane-mobile
+      # The one Authelia user name allowed in (matched against
+      # preferred_username). Staging Authelia's users.yml is SOPS-only.
+      - ALLOWED_USER=george
+      # The public half of the staging VAPID key pair (base64url); the private
+      # half is the Secret's vapid-private-key. The app refuses to start if
+      # they don't match.
+      - VAPID_PUBLIC_KEY=BGCcy7wGc3OlowjTVrSMnVGZjmaVdeinUIESWpGEXth5kblqHICX81MXxoTutMKl5ZUwz0dWDIOenxt_onJdp6A
+      - VAPID_SUBJECT=mailto:gjcourt@gmail.com
+      - DATA_PATH=/data/plane-mobile.db
+      - PUSH_HOSTS=*.push.apple.com
+      - PLANE_READ=on
+      - PLANE_API_URL=http://plane-api.plane-stage.svc.cluster.local:8000
+      # Staging's workspace slug, spelled that way.
+      - PLANE_WORKSPACE=my-test-workspacce
+      # Staging Plane has no PLANEMOBILE project (checked 2026-10-26), and an
+      # unknown identifier keeps /readyz at 503 forever, so SANDBOX only.
+      - PROJECTS=SANDBOX
+      - OWNER_EMAIL=gjcourt@gmail.com
+      # As for agent-desk-stage: staging has no bot account, so the
+      # collab-test Member stands in for it.
+      - BOT_EMAIL=collab-test@stage.invalid
+
+patches:
+  - target:
+      kind: Namespace
+      name: plane-mobile
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: plane-mobile-stage
+  # OIDC back-channel: the issuer host has to resolve from inside the pod.
+  # AdGuard's rewrites aren't visible to CoreDNS, so pin it to the staging
+  # gateway VIP (app-gateway-staging, 10.42.2.42), as audiobookshelf does.
+  # Keep the IP in sync with networkpolicy-oidc.yaml.
+  - target:
+      kind: Deployment
+      name: plane-mobile
+    patch: |
+      - op: add
+        path: /spec/template/spec/hostAliases
+        value:
+          - ip: "10.42.2.42"
+            hostnames:
+              - auth.stage.burntbytes.com
+
+# PLACEHOLDER — there is no image yet. George adds .github/workflows/build.yml
+# to gjcourt/plane-mobile; pin the YYYY-MM-DD-sha7 tag it prints here.
+images:
+  - name: ghcr.io/gjcourt/plane-mobile
+    newTag: 2026-11-01-321bf87

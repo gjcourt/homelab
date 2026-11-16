@@ -1,11 +1,17 @@
 title: BurntBytes Staging
 description: Staging Environment
 headerStyle: clean
+# Five groups in one row from 1800px. Narrower, base custom.css lays them
+# out as rows of 3 and 2 (Homepage would otherwise do 4 and 1).
+fiveColumns: true
 layout:
   Media:
     style: column
     rows: 8
-  Tools:
+  Home & Life:
+    style: column
+    rows: 8
+  Notes & Learning:
     style: column
     rows: 8
   Infrastructure:

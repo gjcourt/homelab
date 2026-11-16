@@ -17,12 +17,3 @@ labels:
       app.kubernetes.io/component: monitor
       app.kubernetes.io/part-of: homelab
       app.kubernetes.io/managed-by: flux
-
-configMapGenerator:
-  - name: truenas-iscsi-dashboard
-    namespace: truenas-iscsi-monitor
-    files:
-      - dashboard.json
-    options:
-      labels:
-        grafana_dashboard: "1"

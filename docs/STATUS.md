@@ -5,7 +5,7 @@
 > this page links out. **Update this file in the same PR whenever** a plan's
 > status changes, an incident postmortem lands, or hardware/topology changes.
 >
-> Last updated: 2026-10-06
+> Last updated: 2026-11-15
 
 ## Cluster at a glance
 
@@ -14,7 +14,7 @@
 | Cluster | `melodic-muse` |
 | Nodes | 4 — 3 control-plane (`.20`/`.21`/`.23`) + 1 worker (`.25`), **all `Ready`**; `.22`/`.24` physically out (see Known issues). `.20` recovered ~2026-07-01 and is scheduling normally (46 pods as of 2026-08-13) |
 | Platform | Talos v1.12.4 · Kubernetes v1.35.0 |
-| CNI / ingress | Cilium 1.19 (VXLAN) + Gateway API |
+| CNI / ingress | Cilium 1.20 (VXLAN) + Gateway API (per-route Authelia ExternalAuth) |
 | GitOps | Flux CD, reconciling from `master` |
 | Apps | ~14 self-hosted (see [apps/README.md](../apps/README.md)) |
 | LB advertisement | L2 announcements + BGP to the UCGF (AS 65010 ↔ 65100) |
@@ -40,8 +40,12 @@ Active plans (see [docs/plans/](plans/README.md) for the full status-grouped ind
 - [Snapcast / HifiBerry rollout](plans/2026-05-03-snapcast-hifiberry-rollout.md) — server + LB IP live; per-device client setup remaining.
 - [Navidrome → Mopidy → Snapcast audio source](plans/2026-03-14-navidrome-snapcast-mopidy.md) — Mopidy sidecar in draft PR #426; not yet on master.
 - [Hestia memory benchmark](plans/2026-05-15-hestia-memory-benchmark.md) — 6-DIMM baseline captured; 8-DIMM comparison pending a physical DIMM swap.
-- [bench-cloud — Claude Code agents in-cluster](plans/2026-09-25-bench-cloud-agent.md) — agent image (#1482), phase-2 task runner (#1486), `default-branch-guard` on every repo (daily CronJob, #1493) and the hourly `bench-merge-audit` / `BenchCloudAppMerged` (#1491) are on master; operator setup (GitHub App, hestia `bench-agent`, secrets) done. Remaining for phase 1: merge #1483 (namespace/console), first console login, exit test. Deferred: out-of-repo "bench-watch" merge check — revisit before agents run unattended on homelab. Runbook: [operations/apps/bench-cloud.md](operations/apps/bench-cloud.md).
+- [bench-cloud — Claude Code agents in-cluster](plans/2026-09-25-bench-cloud-agent.md) — the console and task Jobs run in-cluster; [agent-desk](plans/2026-10-22-agent-desk-loop.md) turns `ready` Plane tickets into Jobs. Since 2026-11-02 ([HOMELAB-85](plans/2026-11-01-bench-homelab-paths-plan.md)) Jobs may open homelab PRs for Plane HOMELAB and HASS, limited to `apps/**` and `docs/**` by the `bench-paths` check and held by `bench-approval` until George approves the head SHA. Tests T12 and T13 (the homelab tests) have not run yet. The gate replaces bench-watch for homelab; bench-watch is now a nice-to-have. Runbooks: [bench-cloud](operations/apps/bench-cloud.md), [agent-desk](operations/apps/agent-desk.md).
 - [homelabscope — scheduled-job monitoring](plans/2026-07-04-homelabscope.md) — unified `homelabscope_job_*` metric family + hestia node-exporter textfile scraper (fixes the orphaned/unscraped immich-backup metric) + cronjob recording rules + templated staleness/absence alerts + Grafana table. Repo artifacts landed; operator steps remain (deploy node-exporter, build+enable the heartbeat Custom App, bump the immich image digest).
+- [Lab projects and repo plans in Plane](plans/2026-10-21-plane-lab-project-sync.md) — production Plane live at `plane.burntbytes.com` (2026-10-21); lab `Cancelled` status merged (lab#110); API verified on staging (findings in the plan). Next: the `images/plane-sync/` tool PR, staging import for review, then the production import and CronJob.
+- [hestia pull deployer](plans/2026-11-09-hestia-pull-deployer-plan.md) — retire the hestia self-hosted runner for a Git-pull deployer; Phase 1 (shadow, dry-run) `hestia-deployer` built (HOMELAB-111), awaiting operator `app.create` and a 7-day clean shadow before cutover.
+- [alcatraz pull deployer](plans/2026-11-09-alcatraz-pull-deployer-plan.md) — the same `hestia-deployer` image with a compose backend for alcatraz (HOMELAB-118). A-Phase 1 (build, dry-run only): shared code (#1889) and the compose backend (#1890) merged; the heartbeat relay, the `hosts/alcatraz/alcatraz-deployer` compose (`DRY_RUN=1`, runbook [alcatraz-deployer](operations/apps/alcatraz-deployer.md)) and the canary are in PRs. Nothing runs on alcatraz until George's bootstrap (runbook section 5).
+- [Unattended UniFi updates](plans/2026-11-14-switch-update-observability-plan.md) — the Rack Switch's 2026-11-13 03:12 auto-update (7.5.15 → 7.6.11) outlasted the 120 s iSCSI `replacement_timeout`: 18 volumes read-only and Prometheus blind 03:14–20:58 ([postmortem](operations/incidents/2026-11-13-rack-switch-update-readonly-prometheus-blind.md)). Device auto-update is off until the plan is done. Phase 1 (600 s timeout, #1933) then a node-by-node drain rollout (AGENTS.md); phase 2 detection (#1929), phase 3 verifier (#1931) and the Vector fix (#1932) in review; phase 4 is George's game-day restart.
 
 ## Next up
 
@@ -62,6 +66,7 @@ Planned, not yet started:
 
 ## Known issues / blocked
 
+- **Talos kernel/service logs never reached Loki, from install (2026-03-05) to 2026-11-14.** The vector chart was given `role: DaemonSet`, which it does not recognise (valid: `Agent`, `Aggregator`, `Stateless-Aggregator`). It rendered no workload and the HelmRelease still reported `Ready`. Separately, no node had `machine.logging` or a `KmsgLogConfig` set. So `BTRFSCorruptionDetected` and `ISCSIKernelError` could never fire. The repo side is fixed (`role: Agent`, plus the guards `VectorAgentNotReady` and `TalosLogsAbsent`). **Still open: an operator has to apply the per-node Talos patch** in [reference/kernel-log-shipping.md §3](reference/kernel-log-shipping.md#talos-machineconfig). Until then, `TalosLogsAbsent` fires.
 - **`truenas-iscsi-exporter` segfaults about every 9.6h — instrumented 2026-08-29, cause not yet known.** Bare `Segmentation fault` (exit 139), 30 times since 2026-08-17, always *after* a clean `Metrics updated` line and typically ~8h into a run. No Python traceback, so there is nothing to attribute it to yet. The obvious suspect is ruled out: `python:3.14-slim` is the standard GIL build (`Py_GIL_DISABLED=0`), so the free-threaded `cp314t` ABI bugs do not apply — but `websockets.speedups` **is** loaded as a compiled `cp314` extension, so a C-level crash is live-possible. [#1368](https://github.com/gjcourt/homelab/pull/1368) deliberately ships **no fix**: it enables `PYTHONFAULTHANDLER=1` to dump the C stack to stderr on the next crash, and pins the previously-unpinned dependency set (`websockets==17.0.1`, `kubernetes==36.0.3`, `prometheus_client==0.26.0`, `urllib3==2.7.0`) so the crash is reproducible — `websockets` 17.1 shipped 2026-08-26 and the next restart would otherwise have silently changed versions mid-investigation. **Next step:** read `kubectl -n truenas-iscsi-monitor logs <pod> --previous` after the next crash and look for a frame naming `speedups.c`, `_ssl`, `_datetime` or `gc`. Blast radius while unfixed is monitoring-only, but note this is the exporter that would report iSCSI trouble — see the 2026-08-13 entry below for why a blind iSCSI monitor matters.
 - **6 orphan iSCSI extents on TrueNAS.** The exporter reports `targets=184 extents=184 labeled=178` — six extents whose `csi-pvc-<uuid>-k8s` name matches no PV in the cluster. Leftovers from destroyed PVCs. Harmless but they consume zvol space; audit before removing (destructive, operator-only).
 

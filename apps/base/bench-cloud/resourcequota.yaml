@@ -1,8 +1,10 @@
 # The concurrency cap, enforced by the API server rather than by convention:
-# at most 8 task pods exist at once (plan decision 4 — started at 5; raise
-# toward the agreed ceiling of 10 by editing this number). A 9th Job's pod is
-# rejected at creation and the Job controller retries it with backoff, so it
-# waits.
+# at most 24 task pods exist at once. Started at 5, then 8; raised to 24 by
+# George on 2026-10-22 for the agent desk (docs/plans/2026-10-22-agent-desk-loop.md,
+# decision 5), which supersedes the bench-cloud plan's ceiling of 10. The
+# per-playbook cap of 6 is the dispatcher's, not this quota's. A 25th Job's pod
+# is rejected at creation and the Job controller retries it with backoff, so
+# it waits.
 # Scoped to the bench-cloud-task PriorityClass so the console doesn't count.
 apiVersion: v1
 kind: ResourceQuota
@@ -11,7 +13,7 @@ metadata:
   namespace: bench-cloud
 spec:
   hard:
-    pods: "8"
+    pods: "24"
   scopeSelector:
     matchExpressions:
       - scopeName: PriorityClass

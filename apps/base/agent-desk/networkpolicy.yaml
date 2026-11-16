@@ -1,0 +1,51 @@
+# agent-desk's whole network: Plane delivers webhooks in; it calls Plane's api,
+# the kube-apiserver (Jobs in bench-cloud) and GitHub (read-only PR state).
+# The two Plane rules depend on the environment, so each overlay adds them as
+# a second policy (networkpolicy-plane.yaml). The internet rule is 0.0.0.0/0 minus
+# private ranges, as for bench-cloud and plane-sync, not `toEntities: world`.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: agent-desk
+  namespace: agent-desk
+  labels:
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "agent-desk: probes in; out to DNS, kube-apiserver, internet 443. Plane rules are in the overlay."
+  endpointSelector: {}
+  enableDefaultDeny:
+    ingress: true
+    egress: true
+  ingress:
+    # kubelet readiness probes
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - {port: "8080", protocol: TCP}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - {port: "53", protocol: UDP}
+            - {port: "53", protocol: TCP}
+    - toEntities:
+        - kube-apiserver
+      toPorts:
+        - ports:
+            - {port: "443", protocol: TCP}
+            - {port: "6443", protocol: TCP}
+    - toCIDRSet:
+        - cidr: 0.0.0.0/0
+          except:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+            - 100.64.0.0/10
+            - 169.254.0.0/16
+      toPorts:
+        - ports:
+            - {port: "443", protocol: TCP}

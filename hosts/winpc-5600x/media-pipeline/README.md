@@ -1,7 +1,69 @@
 # media-pipeline (winpc-5600x)
 
 Transcodes MakeMKV disc rips to x265 and pushes them into the hestia media
-library that Jellyfin serves.
+library that Jellyfin serves, and imports CD rips into the Navidrome library.
+
+Rip-tool settings (EAC, MakeMKV, Picard) are captured in [`../rip-tools/`](../rip-tools/README.md).
+
+## Loading anything: `load.ps1` (start here)
+
+**Every load goes through `load.ps1`. Never hand-run `scp`/`rsync` into the
+library.** On 2026-11-02 two CD loads were done by hand instead of with
+`import-music.ps1`. A plain `rsync -a` stamped `truenas_admin 707` onto five
+existing artist folders, and five multi-disc albums landed without their
+`[Disc N]` folders. Both are things the script prevents.
+
+```powershell
+cd C:\Users\George\src\homelab\hosts\winpc-5600x\media-pipeline
+.\load.ps1 status                                    # lock, ffmpeg, last 3 load logs
+.\load.ps1 music -DryRun                             # what import-music.ps1 would do
+.\load.ps1 music                                     # real run, detached
+.\load.ps1 video -Disc C:\Video\Looper -Name 'Looper (2012)' -DryRun
+.\load.ps1 video -Disc C:\Video\Looper -Name 'Looper (2012)' -Exclude '*Play_All*','*SEG_*'
+```
+
+What it does, in order. Each step is a refusal if it fails:
+
+1. **Uncommitted changes in the checkout → refuse.** This is checked *before* pulling, so the message
+   is clear rather than a failed pull. Scripts are edited in the repo, merged, then pulled.
+2. **`git pull --ff-only` fails → refuse.** A stale or diverged copy never runs.
+3. **Lock held by a live run, or an ffmpeg already running → refuse.**
+4. **Video only:** `build-queue.ps1` writes `C:\media-work\queue-<slug>.tsv` and prints the pick.
+5. **`-DryRun`:** runs `import-music.ps1 -DryRun` or `transcode.ps1 -DryRun` in the foreground, then stops.
+6. **Otherwise:** detaches via WMI (it survives the SSH session ending) and logs to
+   `C:\media-work\load-<type>-<stamp>.log`.
+
+**The lock** (`C:\media-work\load.lock`) is held by the detached run, not by the
+launcher, and holds the run's PID. If that PID is not a running PowerShell that
+started before the lock was written (a recycled PID fails that), the lock is stale (left by a crash or a kill), and the next `load.ps1` reports it and
+clears it. A live lock blocks the start.
+
+### `build-queue.ps1`: the video queue, generated
+
+- **The main feature is the longest title** (`-Main <file>` overrides). It goes to
+  `movies/<Name>/<Name>.mkv`.
+- **Every other title** goes to `movies/<Name>/extras/Extra tNN (M min).mkv`. `tNN` is MakeMKV's
+  title number.
+- Titles under 60 s are skipped. `-Exclude` takes file-name wildcards. `-NoExtras` queues the
+  feature alone.
+- `-Name` is required and must be `Title (Year)`, with none of the characters transcode refuses.
+
+⚠️ **"Longest = feature" is a heuristic, and the dry run is the guard.** It is wrong on
+discs with an extended cut, several versions of the film, or a Play All reel
+longer than the film. Read the printed queue before every real run.
+
+Looper (2012) is the worked example. The disc has 33 titles. The deleted scenes
+appear twice (`SEG_` segments and `SF_` copies), and there are two Play All reels.
+`-Exclude '*Play_All*','*SEG_*'` brings that down to 20. Extra t00 (a silent
+Easter egg) is then skipped by transcode's no-audio check.
+
+### `normalize-movie-dirs.ps1`: one-time ownership fix
+
+Before 2026-11-03, `transcode.ps1` created title dirs as `root:truenas_admin
+2755`. Radarr (uid 568, group `apps`) cannot write to those. The script is
+list-only by default; `-Apply` sets every movie **dir** that is not group `apps`
+with group write to `truenas_admin:apps 2775`. Files are not touched. It matched
+73 dirs on 2026-11-03. New dirs are created correctly now (see `transcode.ps1`).
 
 ## Importing CD rips (`import-music.ps1`)
 
@@ -69,7 +131,7 @@ episodes need it, because Jellyfin wants `Show (Year)/Season NN/` with the
 C:\Video\WORMD1543255\B1_t00.mkv	Through the Wormhole (2010) - S01E01	tv/Through the Wormhole (2010)/Season 01
 ```
 
-The directory must sit under `movies/`, `tv/` or `tv-anime/`. Names and
+The directory must sit under `movies/`, `tv/`, `tv-anime/` or `music-videos/`. Names and
 directories containing `'`, `..`, `\`, `:` or the other Windows-reserved
 characters are **skipped with a log line**: both are interpolated into
 single-quoted remote shell commands and Windows paths, so a stray apostrophe
@@ -245,6 +307,45 @@ Dedup normalises away punctuation, so a tag reading `True Love: A Celebration of
 Cole Porter` correctly matches the on-disk `True Love - A Celebration of Cole
 Porter` instead of re-importing it.
 
+## AccurateRip check (`ar-verify.ps1`)
+
+Before staging, every disc being imported is checked against the public
+AccurateRip database: are its tracks bit-identical to what other people ripped
+from the same pressing? It runs in dry runs too, so `-DryRun` with the disc still
+in the drive is the moment to catch a bad track. About 2-3 s per disc.
+
+| Status | Meaning | What to do |
+| :--- | :--- | :--- |
+| `OK` | Every track matches | Nothing |
+| `BAD_TRACKS` | Some tracks match, the listed ones match nothing | **Clean the disc and re-rip those tracks before returning it.** The disc still imports, and the run ends with a `!! RE-RIP BEFORE RETURNING` block |
+| `NO_MATCH` | In the database, but nothing matches | Usually a different pressing with the same track layout, not a bad rip |
+| `NOT_IN_AR` | No database entry | Cannot be checked either way |
+| `SKIP` / `ERROR` | Not CD audio, or decode/network failure | The import is never blocked by the check; `-SkipAccurateRip` turns it off |
+
+Each disc's result is a ledger row, event `AR_CHECK`, scope `disc`: `dest` is the
+library folder and `note` carries `status=`, `bad=`, `minconf=`, the per-track
+confidences and the database URL. The ledger is the system of record; the
+bad-disc tally in the private `media-library` repo is generated from these rows.
+
+**Why it exists.** A library-wide scan on 2026-11-04 found 7 discs where 1-4
+tracks matched nothing while the rest matched at confidence 5-200: read errors,
+found weeks after the discs had gone back to SFPL. Nothing at rip time caught
+them, and EAC was saving no logs.
+
+**Shift 0 only, on purpose.** EAC already applies the drive's read offset (see
+`rip-tools/README.md`), so the rip is checked exactly as written. Searching
+other shifts finds coincidences: one disc in that scan matched a single
+submitter at -6 and others at -60, -12 and +456, all at confidence 1.
+
+The checksum code is compiled C# inside the script (ffmpeg decodes). Its
+per-track confidences were cross-checked against the Python checker used for
+the library scan on 15 discs, identical on every track, and a deliberately
+altered track was reported as `BAD_TRACKS` with its neighbours still matching.
+
+**EAC logs** (`AutoSaveStatus` on since 2026-11-04) are copied to
+`hestia:/mnt/main/archive/_inventory/rips/eac-logs/<sha256-16>.log`, once per
+distinct log, with a `LOG_ARCHIVED` ledger row recording the original name.
+
 ## Afterwards, on the Mac
 
 Refresh `~/src/music-library/owned_albums.txt` so the SFPL borrow queue stops
@@ -318,6 +419,41 @@ then hashed — usually one file, never 1.6 TB. Nothing is ever judged *on* size
 a match of the right number of wrong bytes is precisely the failure
 `transcode.ps1` stopped accepting when it replaced its size check with a hash.
 
+### The `LANDED` row's `Src` is what a delete keys on
+
+For video the ledger row is the only link between a rip and its transcode, so
+the `Src` column decides **which local file** a verified library copy clears.
+Until 2026-10-14 `transcode.ps1` wrote `Src=$i.Src` — the preflight loop's
+variable, still holding the **last queued file** — instead of `$it.Src`. Every
+title in a multi-title run was recorded against that one path:
+
+| Effect | Seen |
+| :--- | :--- |
+| Real sources never matched, so they were never cleared | Godzilla, Mad Max, Marty Supreme, Kaguya — all recorded as `C:\Video\OLDBOY\title_t00.mkv` |
+| **Fail-open**: if the last queued title failed while an earlier one landed, the failed title's source would be "verified" against the other film and deleted | not hit — both deletions made under the bug (Oldboy 10/5, Wormhole S01E08 10/6) happened to be the last item *and* the last to land |
+
+The fix uses `$it.Src` and removes `$i` after preflight, so a regression writes
+an empty `Src`, which the verifier skips. Rows already written are corrected by
+**appending** rows with the true path (`ledger-corrections/`) — the ledger is
+append-only and later rows win per `Src`. The verifier still re-hashes the
+library file before trusting any of them, so a wrong correction row blocks; it
+cannot clear anything by itself.
+
+Applying a correction file is a manual step, done once after its PR merges.
+Copy the file to hestia, then append it under the **same lock** `ledger.ps1`
+takes, so it cannot interleave with a row a running script is writing:
+
+```bash
+# on hestia, with the .tsv copied to /tmp
+sudo flock /mnt/main/archive/_inventory/rips/ledger.tsv.lock \
+  -c 'cat /tmp/2026-10-15-transcode-src.tsv >> /mnt/main/archive/_inventory/rips/ledger.tsv'
+```
+
+Then dry-run `verify-before-delete.ps1 -Mode Video` before any `-Delete`.
+Correction files must stay LF-only with 13 tab-separated fields, the ledger
+schema; a trailing CR rides into the `note` field, and the verifier silently
+skips a row with fewer than 12 fields.
+
 ## The library index, and why it is not in the ledger
 
 `index-library.sh` runs on hestia and emits `sha256 <TAB> bytes <TAB> relpath`.
@@ -365,3 +501,90 @@ gone before claiming the space back.
 Without `-Delete` the script is read-only: it writes ledger rows and an audit
 TSV (`<RUN_ID>.verify.tsv`, kept both locally and on hestia) and touches nothing
 else.
+
+---
+
+# rescue-disc.ps1 — damaged discs: image first, decrypt second
+
+MakeMKV reads and decrypts a disc in one pass. A damaged area stalls that pass,
+and when it fails the next attempt starts again from sector 0. This script splits
+the work in two:
+
+1. **`ddrescue` images the disc to an ISO.** Pass 1 (`-n`) copies everything that
+   reads cleanly and skips damage. Pass 2 (`-r N`) retries only what is still
+   missing. Progress lives in a **map file**, so re-running the same command
+   resumes. You can clean the disc or move it to another drive between runs, and
+   only the missing sectors are read again.
+2. **MakeMKV decrypts the ISO** (`-Mkv`) into `C:\Video\<Name>`.
+   Without `-Mkv` the run stops after imaging. Ripping later means re-running
+   with `-Mkv` **with the same disc still loaded**: the drive probe and identity
+   check run on every invocation, before ddrescue and MakeMKV.
+
+```powershell
+cd C:\Users\George\src\homelab\hosts\winpc-5600x\media-pipeline
+.\rescue-disc.ps1 -Name SPIDERVERSE -Mkv -Detach      # returns at once; survives SSH
+Get-Content -Wait C:\media-work\rescue\SPIDERVERSE.log  # follow it
+```
+
+Imaging a BD-50 takes 1–2 hours. `-Detach` relaunches the script through
+`Win32_Process Create`, like the other long jobs here, because `Start-Process`
+dies with the SSH session. **To retry after cleaning the disc, run the exact same
+command.**
+
+Files in `C:\media-work\rescue\`: `<Name>.iso` (the image, ~50 GB), `.map`
+(ddrescue progress), `.disc` (which disc this is), `.log` (every run, appended).
+
+## Guards
+
+| Guard | Why |
+| :--- | :--- |
+| **Disc identity on resume** | Resuming is the point, so the dangerous mistake is resuming with the *wrong disc* loaded: ddrescue would fill one film's gaps with another film's sectors and report success. The first run records the volume label and size in `<Name>.disc`. A resume against a different disc aborts. A map with no `.disc` file needs `-Force`. |
+| **One run at a time** | Two runs would fight over one drive or one map. The lock is an **open file handle** (`.rescue.lock`), not a PID file, so the OS releases it when the process dies and a crash never leaves a stale lock. |
+| **Completeness from the map, not the exit code** | ddrescue exits 0 when it *finishes*, not when it recovers everything. The script sums every block not marked `+` in the map itself, so the count doesn't depend on the wording of ddrescue's summary. The result is logged and written to the ledger. |
+| **No `-s` size cap** | Measured on Spider-Verse: the device is 288 sectors larger than `Win32_CDROMDrive.Size`, which reports the filesystem, not the medium. Capping at it would cut off the end of the disc, where UDF keeps an anchor. The Windows size is only the identity check. |
+| **Rip into `<Name>.partial`** | The folder is renamed to `<Name>` only when makemkvcon succeeds, so a failed rip never leaves half a title where `transcode.ps1` would pick it up. An existing `<Name>` needs `-Force`. |
+| **Native stderr under `Stop`** | Windows PowerShell turns a native command's stderr into ErrorRecords under `2>&1`, and with `$ErrorActionPreference='Stop'` the first progress line would kill the run. Native calls run under `Continue` and are judged by exit code. |
+| **`-HestiaHost`, not `-LedgerHost`** | `ledger.ps1` sets `$script:LedgerHost = $null` when dot-sourced, which silently blanked a parameter of that name. |
+| **Ledger** | `RUN_START`, `IMAGED` (with `unrecovered=<bytes>`), `RIPPED`, `RUN_END` / `RUN_ABORT` go to the shared hestia ledger. |
+
+### When rescue-disc.ps1 stalls: `rescue/`
+
+`rescue-disc.ps1` runs a fixed retry count and stops when the drive locks up (errno 13). For a
+disc worth an overnight effort, the Cygwin scripts in `rescue/` resume from the same
+`<Name>.iso` / `<Name>.map` (start with `rescue-disc.ps1` so `<Name>.disc` pins the disc):
+
+| Script | Does |
+| --- | --- |
+| `rescue-loop.sh <Name>` | Up to `PASSES` (60) single retry passes, alternating forward / reverse so each restart after a lock-up works a different area; logs ddrescue stats per pass to `<Name>-loop.log`. `touch STOP-LOOP` in the work dir stops it after the current pass. |
+| `rescue-reverse.sh <Name>` | One reverse pass with no trim or scrape (`-R -n -N`) over what is still non-tried. |
+| `stop-ddrescue.sh` | SIGINT, then waits for ddrescue to exit, so the map is flushed. Never `kill -9`. |
+
+`DIR` (default `/cygdrive/c/media-work/rescue`) and `DEV` (default `/dev/sr0`) are
+overridable. First used on the E.T. disc in 2026-10 (99.73% recovered).
+
+## Why Cygwin, not WSL
+
+WSL2 cannot see the optical drive without USB passthrough (`usbipd`), and
+passthrough detaches the drive from Windows, so MakeMKV loses it. Cygwin reads
+the Windows drive in place. Install once, no admin needed:
+
+```powershell
+curl.exe -sSLo C:\media-work\setup-x86_64.exe https://cygwin.com/setup-x86_64.exe
+C:\media-work\setup-x86_64.exe --quiet-mode --no-admin --root C:\cygwin64 `
+  --site https://mirrors.kernel.org/sourceware/cygwin/ --packages ddrescue
+```
+
+Cygwin numbers `/dev/srN` by Windows device index, not drive letter. On this box
+`/dev/sr0` is a phantom (`No such device`) and the BD-RE is `/dev/sr1`, so the
+script reads one sector from each `srN` and requires exactly one to answer.
+
+## When imaging won't help
+
+**ddrescue does not decrypt.** The ISO is a raw copy, encryption included. If a
+**clean** disc fails at the start with AACS or key errors, that's copy
+protection, not damage. The BH16NS40 runs in **LibreDrive mode**
+(`makemkvcon -r info disc:0` prints `Using LibreDrive mode`), which covers most
+of that case.
+
+Delete `<Name>.iso` once the transcode has landed. The script refuses to start
+with less than `-MinFreeGB` (default 55) free, or less than the disc plus its rip.

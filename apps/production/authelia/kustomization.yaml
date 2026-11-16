@@ -4,6 +4,7 @@ namespace: authelia-prod
 resources:
   - ../../base/authelia
   - httproute.yaml
+  - referencegrant.yaml
   - secret-authelia.yaml
   - secret-users.yaml
 

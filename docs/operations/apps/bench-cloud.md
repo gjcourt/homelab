@@ -2,7 +2,7 @@
 title: bench-cloud
 status: Stable
 created: 2026-09-26
-updated: 2026-09-28
+updated: 2026-11-02
 updated_by: gjcourt
 tags: [operations, apps, agents, claude-code]
 ---
@@ -28,10 +28,11 @@ internet, move files to hestia. Plan and decisions:
 |---|---|---|
 | Claude | Console: full `claude auth login` on the PVC. Jobs (phase 2): `setup-token` token | Console must never get `CLAUDE_CODE_OAUTH_TOKEN` — it overrides the login and Remote Control refuses it |
 | GitHub | `bench-cloud` GitHub App, 1 h installation tokens | Contents/PRs/Issues RW; no Workflows, no Administration. `default-branch-guard` ruleset → can't push a default branch, only open PRs. **Can merge its own PR** (option 2): policy forbids it, `BenchCloudAppMerged` pages if it happens |
+| homelab PRs | Since 2026-11-02 ([HOMELAB-85 plan](../../plans/2026-11-01-bench-homelab-paths-plan.md)): agent-desk maps Plane HOMELAB and HASS to `gjcourt/homelab`. The `bench-gate.yaml` workflow posts two required statuses on every PR's head SHA | `bench-paths`: a bench PR may change only `apps/**` and `docs/**`, minus the denylist in `scripts/bench-gate/rules.yaml` (agent-desk and bench-cloud manifests, SOPS secrets, network policies, cluster-scoped kinds, system namespaces, privileged-pod lines). It must pass before the PR enters staging. `bench-approval`: failure until George's latest review approves the current head SHA; staging ignores it. Every other author gets success on both. A pre-push hook in the task image runs the same check, but the gate is the boundary. This replaces the deferred bench-watch condition for homelab (plan decision 6) |
 | Cluster | Tasks: `bench-agent` → built-in `view`. Console: `bench-console` → `view` + create/delete Jobs in `bench-cloud` only | Read-only elsewhere, no Secrets, no exec. Plus read-only Gateway API (`bench-cloud-gateway-api-read`: Gateways, HTTPRoutes and the other `gateway.networking.k8s.io` kinds), which `view` doesn't include. A ValidatingAdmissionPolicy (`bench-cloud-task-jobs`) only admits Jobs that run as `bench-agent` with the `bench-cloud-task` PriorityClass, so tasks can't spawn tasks and every task counts against the quota. Creating Jobs does let the console reach any Secret in the namespace through a pod it starts — in practice only `bench-cloud-claude-token` is new to it, and its own full-scope login already covers that. `view` **does** include ConfigMaps and `pods/log` cluster-wide — anything an app logs, an agent can read |
 | Internet | CiliumNetworkPolicy: 0.0.0.0/0 **minus RFC1918/CGNAT/link-local**, ports 80/443 | The home LAN is unreachable except hestia:22 |
 | hestia | User `bench-agent`, two keys, each forced to `rrsync` | `hestia-inbox:` → `/mnt/main/agent-inbox` RW (symlinks munged); `hestia-media:` → `/mnt/main/family/media` RO |
-| Concurrency | ResourceQuota on the `bench-cloud-task` PriorityClass | 8 task pods (raised from 5; ceiling 10) |
+| Concurrency | ResourceQuota on the `bench-cloud-task` PriorityClass | 24 task pods (5, then 8; raised to 24 on 2026-10-22 for the agent desk, [plan](../../plans/2026-10-22-agent-desk-loop.md) decision 5) |
 
 ## One-time operator setup
 
@@ -53,8 +54,9 @@ exist.**
    - Name `bench-cloud`; homepage `https://github.com/gjcourt/homelab`.
    - Webhook: **off** (uncheck Active).
    - Repository permissions: **Contents: Read and write · Pull requests: Read and
-     write · Issues: Read and write · Actions: Read · Commit statuses: Read ·
-     Metadata: Read**. Everything else, including **Workflows** and
+     write · Issues: Read and write · Actions: Read · Checks: Read · Commit
+     statuses: Read · Metadata: Read**. (Checks: Read added 2026-10-24: without it
+     `gh pr checks` fails with "Resource not accessible by integration".) Everything else, including **Workflows** and
      **Administration**: No access. No account permissions.
    - Where can it be installed: **Only on this account**.
 2. Generate a private key (downloads a `.pem`).
@@ -180,7 +182,7 @@ bench-cloud tasks for X in golinks and Y in llmux"); it runs the same
 `bench-agent`, which cannot create Jobs, so tasks never spawn tasks — and the
 `bench-cloud-task-jobs` admission policy rejects any Job that asks for another
 ServiceAccount or leaves out the `bench-cloud-task` PriorityClass, so a Job the
-console writes by hand can't get around that or the 8-pod quota.
+console writes by hand can't get around that or the 24-pod quota.
 
 ## George's skills and agents in the cluster
 
@@ -227,6 +229,13 @@ kubectl -n bench-cloud exec deploy/bench-console -- sh -c '
 
 ## Monitoring
 
+- **Grafana "Bench fleet"** (uid `bench-fleet`, HOMELAB-94 Phase 1): agent-desk Job throughput,
+  running Jobs per playbook against each cap, outcomes (`BackoffLimitExceeded` = the shared
+  subscription's session limit), runtime p50/p95, and per-project throughput. Built from
+  kube-state-metrics Job series via the `bench:*` recording rules in
+  `infra/configs/alerts/bench-fleet-rules.yaml`, so it covers only Jobs Kubernetes still knows
+  about. Cost and tokens are Phase 2. The cap lines are copied from
+  `apps/production/agent-desk/config.yaml`; change both together.
 - **`BenchCloudAppMerged`** (critical) — the last `bench-merge-audit` run
   (`renovate` namespace, hourly) failed. The audit fails when it finds a PR
   merged by `bench-cloud[bot]` in its 25 h lookback, but also when the audit
@@ -236,6 +245,16 @@ kubectl -n bench-cloud exec deploy/bench-console -- sh -c '
   `hestia:/mnt/main/agent-inbox/runs/`.
 - **`HomelabscopeJobStale{job="bench-merge-audit"}`** — the audit hasn't
   succeeded in 30 h (suspended, deleted, or failing every run).
+- **Bench gate on homelab PRs.** Read the two statuses on the PR (`gh pr checks <n>`); each
+  status description says why. The run log is the `evaluate` job of `bench-gate.yaml`. It runs on
+  PR pushes, on reviews, and hourly as a safety net. George can backfill every open PR with
+  `gh workflow run bench-gate.yaml`.
+  - A missing status leaves the PR "Waiting for status to be reported". That blocks the merge, so
+    the gate fails closed. A PR with conflicts gets no run on review.
+  - Any push makes a new head SHA, so `bench-approval` turns failure until George approves again.
+  - Whether a bench PR reached staging: the staging-deploy log. A PR with a failing or missing
+    `bench-paths` shows "PR #N not ready — skipping"; a merged one shows "Successfully merged
+    PR #N".
 - The home PVC is covered by `pvc-writeprobe` (`PvcNotWritable`), and the
   readiness probe writes to it too, so a read-only remount shows as an unready
   pod. Check the pod and PVC with `kubectl -n bench-cloud get pods,pvc`.

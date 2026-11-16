@@ -1,0 +1,49 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: plane-stage
+resources:
+  - ../../base/plane/
+  - database.yaml
+  - objectstore.yaml
+  - scheduledbackup.yaml
+  - httproute.yaml
+  - networkpolicy.yaml
+  - secret-app-keys.yaml
+  - secret-aws-creds.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+
+configMapGenerator:
+  - name: plane-helm-values-staging
+    files:
+      - values.yaml
+
+configurations:
+  - kustomizeconfig.yaml
+
+patches:
+  - target:
+      kind: Namespace
+      name: plane
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: plane-stage
+  # Staging values merge over the base values.
+  - target:
+      kind: HelmRelease
+      name: plane
+    patch: |
+      - op: add
+        path: /spec/valuesFrom/-
+        value:
+          kind: ConfigMap
+          name: plane-helm-values-staging
+  - target:
+      kind: HelmRelease
+      name: plane
+    path: release-patch.yaml

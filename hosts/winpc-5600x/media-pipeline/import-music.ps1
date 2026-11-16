@@ -35,6 +35,12 @@
 
 .PARAMETER DryRun
   Report what would be imported and stop. Nothing is copied or transferred.
+  The AccurateRip check still runs, so a dry run with the disc still in the
+  drive is the cheapest moment to find a bad track.
+
+.PARAMETER SkipAccurateRip
+  Do not run the AccurateRip check (ar-verify.ps1). For when accuraterip.com is
+  unreachable; the import itself never depends on it.
 
 .NOTES
   Does NOT delete anything from C:\Rips. Clearing source rips is operator-only and
@@ -52,6 +58,7 @@ param(
   [int]$MaxNameBytes = 200,
   [switch]$DryRun,
   [switch]$AllowIncomplete,
+  [switch]$SkipAccurateRip,
   [string]$AuditDir = (Join-Path $env:LOCALAPPDATA 'music-rip-audit')
 )
 
@@ -383,7 +390,57 @@ Ledger 'SKIP' @($albums | Where-Object { $_ -notin $toImport } | ForEach-Object 
   [pscustomobject]@{ Artist=$_.Group[0].Artist; Album=$_.Group[0].Album; Note='already in library' } })
 if (-not $toImport) { LedgerRun 'RUN_END' 'nothing new to import'; Log '== nothing new to import =='; exit 0 }
 Log "== $($toImport.Count) new album(s), $(($toImport | ForEach-Object { $_.Count } | Measure-Object -Sum).Sum) tracks =="
-if ($DryRun) { LedgerRun 'RUN_END' 'dry run'; Log 'DRY RUN - stopping here'; exit 0 }
+
+# ---- 2b. AccurateRip: does every track match other people's rips? ---------
+# Run per DISC, before staging, while the disc is most likely still in hand.
+# 2026-11-04: a library-wide scan found 7 discs with 1-4 tracks that matched
+# nothing while their other tracks matched at confidence 5-200 - read errors,
+# found weeks after the discs went back to SFPL. A BAD_TRACKS disc still
+# imports (a flawed track beats a missing one); it is flagged loudly at the end
+# and recorded in the ledger, which is what media-library's bad-disc tally is
+# generated from. See ar-verify.ps1 for the algorithm and statuses.
+$arBad = @()
+function ShowArBad {
+  if (-not $arBad) { return }
+  Log ''
+  Log '!! RE-RIP BEFORE RETURNING THESE DISCS - tracks matching no AccurateRip submission:'
+  foreach ($b in $arBad) { Log "!!   $b" }
+  Log '!! Clean the disc and re-rip those tracks. If it goes back still bad, note its'
+  Log '!! library barcode in media-library/unrippable-discs.tsv.'
+  Log ''
+}
+if ($SkipAccurateRip) {
+  Log '== AccurateRip check SKIPPED (-SkipAccurateRip) =='
+} else {
+  . (Join-Path $PSScriptRoot 'ar-verify.ps1')
+  $FF = Join-Path $FFDIR 'ffmpeg.exe'
+  Log '== AccurateRip check =='
+  $arRows = @()
+  foreach ($g in $toImport) {
+    $art = $g.Group[0].Artist
+    foreach ($d in ($g.Group | Group-Object Disc | Sort-Object { [int]$_.Name })) {
+      $albD = DiscAlbum $g.Group[0].Album ([int]$d.Name) $d.Group[0].DiscTotal
+      $r = Test-AccurateRipDisc -Files @($d.Group | Sort-Object Track | ForEach-Object { $_.File }) -Ffmpeg $FF -Ffprobe $FP
+      $detail = switch ($r.Status) {
+        'OK'         { "every track matches, confidence >= $($r.MinConf)" }
+        'BAD_TRACKS' { "tracks $($r.BadTracks -join ',') match nothing; the rest match at confidence >= $($r.MinConf)" }
+        'NO_MATCH'   { 'in the database but nothing matches - usually another pressing, not a bad rip' }
+        'NOT_IN_AR'  { 'no database entry for this track layout - cannot be checked' }
+        default      { $r.Reason }
+      }
+      Log ("  {0,-10} {1} / {2}  ({3})" -f $r.Status, $art, $albD, $detail)
+      if ($r.Status -eq 'BAD_TRACKS') { $arBad += "$art / ${albD}: tracks $($r.BadTracks -join ', ')" }
+      $arRows += [pscustomobject]@{
+        Scope='disc'; Artist=$art; Album=$albD; Disc=$d.Name; Track=$r.Tracks
+        Dest="$(LinuxName $art)/$(LinuxName $albD)"
+        Note=("status=$($r.Status) bad=$($r.BadTracks -join ',') minconf=$($r.MinConf) conf=$($r.Conf -join ',') url=$($r.Url)" +
+              $(if ($r.Reason) { " reason=$($r.Reason -replace '\s+',' ')" } else { '' })) }
+    }
+  }
+  Ledger 'AR_CHECK' $arRows
+}
+
+if ($DryRun) { LedgerRun 'RUN_END' 'dry run'; ShowArBad; Log 'DRY RUN - stopping here'; exit 0 }
 
 # ---- 3. stage on Windows, recording any name that must be fixed on Linux --
 if (Test-Path -LiteralPath $Staging) { Remove-Item -LiteralPath $Staging -Recurse -Force }
@@ -606,6 +663,33 @@ foreach ($r in [IO.File]::ReadAllLines($AUDIT)) {
 Ledger 'LANDED' $landed.ToArray()
 }
 
+# ---- 8. archive EAC logs ------------------------------------------------
+# EAC writes a status log per rip (AutoSaveStatus, rip-tools/eac/EAC.reg). It is
+# EAC's own record of read errors and AccurateRip results, so it goes off-box
+# with the rip. Named by content hash: C:\Rips is never cleared by this script,
+# so the same log is seen on every run and must land once, and the hash also
+# sidesteps scp's trouble with spaces and non-ASCII in names. The original name
+# is kept in the ledger.
+$logs = @(Get-ChildItem $RipsDir -File -Recurse -Filter *.log -ErrorAction SilentlyContinue)
+if ($logs) {
+  $logRemote = "$AUDIT_REMOTE/eac-logs"
+  ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$logRemote' && sudo -n chown truenas_admin '$logRemote'" | Out-Null
+  $logRows = @()
+  foreach ($l in $logs) {
+    $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $l.FullName).Hash.ToLower()
+    $name = "$($sha.Substring(0,16)).log"
+    if ((SshRead "test -f '$logRemote/$name' && echo PRESENT") -contains 'PRESENT') { continue }
+    $tmp = Join-Path $env:TEMP $name
+    Copy-Item -LiteralPath $l.FullName -Destination $tmp -Force
+    & cmd /c "scp -B -o BatchMode=yes `"$tmp`" $($HST):$logRemote/ >nul 2>nul" | Out-Null
+    Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+    if ((SshRead "test -f '$logRemote/$name' && echo PRESENT") -contains 'PRESENT') {
+      $logRows += [pscustomobject]@{ Scope='file'; Sha=$sha; Bytes=$l.Length; Src=$l.FullName; Dest="$logRemote/$name"; Note='EAC log archived' }
+    } else { Log "  WARNING: EAC log $($l.Name) did NOT reach hestia (import continues)" }
+  }
+  if ($logRows) { Ledger 'LOG_ARCHIVED' $logRows; Log "  EAC logs archived: $($logRows.Count) new" }
+}
+
 # Audit must outlive the source rips: keep a copy off this box.
 ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$AUDIT_REMOTE' && sudo -n chown truenas_admin '$AUDIT_REMOTE'" | Out-Null
 CopyAudit $AUDIT
@@ -639,3 +723,4 @@ foreach ($g in $toImport) {
     Log "  $a/$d"
   }
 }
+ShowArBad

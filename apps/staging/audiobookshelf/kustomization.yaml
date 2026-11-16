@@ -5,6 +5,7 @@ resources:
   - ../../base/audiobookshelf/
   - httproute.yaml
   - secret-sso.yaml
+  - nfs-media.yaml
 
 labels:
   - pairs:
@@ -21,3 +22,30 @@ patches:
       - op: replace
         path: /metadata/name
         value: audiobookshelf-stage
+  - target:
+      kind: CiliumNetworkPolicy
+      name: audiobookshelf
+    patch: |
+      - op: test
+        path: /spec/egress/2/toEndpoints/0/matchLabels/k8s:io.kubernetes.pod.namespace
+        value: authelia
+      - op: replace
+        path: /spec/egress/2/toEndpoints/0/matchLabels/k8s:io.kubernetes.pod.namespace
+        value: authelia-stage
+  # Music Assistant in snapcast-stage reads this ABS (MA plan). Staging only, so
+  # staging MA writes listening progress here and never to prod.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: audiobookshelf
+    patch: |
+      - op: add
+        path: /spec/ingress/-
+        value:
+          fromEndpoints:
+            - matchLabels:
+                app: snapcast
+                k8s:io.kubernetes.pod.namespace: snapcast-stage
+          toPorts:
+            - ports:
+                - port: "13378"
+                  protocol: TCP

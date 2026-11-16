@@ -66,3 +66,17 @@ patches:
       - op: replace
         path: /spec/volumeName
         value: jellyfin-tvanime-pv-staging
+  - target:
+      kind: PersistentVolume
+      name: jellyfin-musicvideos-pv
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: jellyfin-musicvideos-pv-staging
+  - target:
+      kind: PersistentVolumeClaim
+      name: jellyfin-musicvideos-pvc
+    patch: |
+      - op: replace
+        path: /spec/volumeName
+        value: jellyfin-musicvideos-pv-staging

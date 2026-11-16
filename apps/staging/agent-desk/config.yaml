@@ -1,0 +1,57 @@
+# agent-desk rules for staging (plan "Playbooks"). Reviewed here. Agents may
+# open homelab PRs, but this directory (apps/*/agent-desk/**) is outside their
+# paths (scripts/bench-gate/rules.yaml), so nothing here can be widened by an
+# agent.
+ownerEmail: gjcourt@gmail.com
+# Plane in the browser, for the link in a phone notification.
+planeWebUrl: https://plane.stage.burntbytes.com
+# Staging has no agent-desk account; the workspace Member collab-test stands
+# in for it, as in the step 2 checks. Its comments are ignored as the bot's.
+botEmail: collab-test@stage.invalid
+# Plane project identifier → repo. The repo always comes from here, never from
+# ticket text. HOMELAB is mapped only so step 4 can show the deny list refuses it.
+projects:
+  SANDBOX: gjcourt/agent-sandbox
+  HOMELAB: gjcourt/homelab
+denyRepos:
+  - gjcourt/homelab
+pollInterval: 10m
+githubPollInterval: 5m
+# George's GitHub login: his "request changes" review on a ticket's PR wakes
+# the agent, like a comment on the ticket (plan, "Waking the agent").
+githubOwner: gjcourt
+playbooks:
+  docs-fix:
+    ready: ready
+    # 1 on staging so the cap → Awaiting approval → over-cap path is testable
+    # with two tickets. Production uses 6 (decision 5).
+    maxConcurrent: 1
+    deadline: 90m
+    # Simple tasks run on the cheap model (George, 2026-10-24). The others
+    # keep Claude Code's default until model routing measures them (plan).
+    model: claude-haiku-5-5
+    prompt: |
+      Playbook docs-fix. Make the documentation change the ticket asks for, and
+      nothing else: only *.md files and docs/ may change. Run the repo's own lint.
+      Open a PR from a new branch with the ticket key in its title, link the PR on
+      the ticket, then move the ticket to In review. If the ticket is unclear,
+      comment your question on the ticket and move it to Blocked instead.
+  dep-hold:
+    ready: ready
+    maxConcurrent: 6
+    deadline: 2h
+    prompt: |
+      Playbook dep-hold. Find out why the dependency update named in the ticket
+      is held or failing. Either open a PR that fixes it, with CI passing, or
+      comment your findings naming the blocking change. Then move the ticket to
+      In review.
+  main-ci:
+    ready: ready
+    maxConcurrent: 6
+    deadline: 2h
+    prompt: |
+      Playbook main-ci. The default branch's CI is failing; the ticket names the
+      run. Find the root cause. Either open a PR on which that workflow passes,
+      citing the failed run and the cause, or, if the cause isn't in the repo
+      (flaky test, outage, expired secret), comment the evidence. Then move the
+      ticket to In review.

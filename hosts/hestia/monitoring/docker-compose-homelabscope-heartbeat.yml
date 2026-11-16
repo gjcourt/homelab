@@ -27,7 +27,7 @@ x-deploy:
 
 services:
   homelabscope-heartbeat:
-    image: ghcr.io/gjcourt/homelabscope-heartbeat:2026-08-20
+    image: ghcr.io/gjcourt/homelabscope-heartbeat:2026-08-27-d482f8d
     container_name: homelabscope-heartbeat
     restart: unless-stopped
     # Root + privileged + /dev/zfs so `zfs list -t snapshot` can talk to the

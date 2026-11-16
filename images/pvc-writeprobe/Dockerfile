@@ -1,4 +1,4 @@
-FROM alpine:3.20
+FROM alpine:3.24
 
 # kubectl for the exec, jq to walk the pod spec, busybox httpd to serve the
 # textfile. No app runtime — this only ever runs `sh -c 'printf ok > … && rm'`

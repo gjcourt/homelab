@@ -55,11 +55,16 @@ RUN curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" && npm cache clean --force
 
 # The Plane MCP server for ticket Jobs (agent-desk plan, "Plane access inside a
-# Job"), in its own venv, every package hash-pinned. 0.3.4 is the version tested
-# against Plane CE on staging.
+# Job"), in its own venv, every package hash-pinned. 0.3.4 was the version first
+# tested against Plane CE on staging. --no-deps means the requirements file IS
+# the resolution, so `pip check` fails the build on any set that doesn't agree
+# with itself (2026-11-08: pydantic 2.14.3 over pydantic-core 2.50.0 crashed the
+# server at import, and every ticket Job lost Plane). plane-mcp-smoke, below,
+# then starts the server and lists its tools.
 COPY images/bench-cloud/plane-mcp-requirements.txt /tmp/plane-mcp-requirements.txt
 RUN python3 -m venv /opt/plane-mcp \
  && /opt/plane-mcp/bin/pip install --no-cache-dir --require-hashes --no-deps -r /tmp/plane-mcp-requirements.txt \
+ && /opt/plane-mcp/bin/pip check \
  && rm /tmp/plane-mcp-requirements.txt
 
 # The bench gate's path checker (HOMELAB-85), copied from homelab at build
@@ -80,6 +85,7 @@ COPY images/bench-cloud/bench-agents-sync /usr/local/bin/bench-agents-sync
 COPY images/bench-cloud/bench-ticket /usr/local/bin/bench-ticket
 COPY images/bench-cloud/ticket-settings.json /usr/local/share/bench-cloud/ticket-settings.json
 COPY images/bench-cloud/agents-allowlist /usr/local/share/bench-cloud/agents-allowlist
+COPY images/bench-cloud/plane-mcp-smoke /usr/local/share/bench-cloud/plane-mcp-smoke
 # The task CLI + Job template, so the console can start task Jobs itself
 # (bench-console ServiceAccount; task pods run as bench-agent and cannot).
 # Build context is the repo root for exactly these two files.
@@ -96,7 +102,7 @@ RUN chmod 0755 /usr/local/bin/github-app-token /usr/local/bin/gh /usr/local/bin/
  && git config --system init.defaultBranch main \
  && go version && kubectl version --client=true && /usr/local/lib/gh/gh --version \
  && claude --version && python3 --version && tmux -V && rsync --version | head -1 \
- && /opt/plane-mcp/bin/python -c "import plane_mcp" \
+ && /usr/bin/python3 /usr/local/share/bench-cloud/plane-mcp-smoke \
  && /usr/bin/python3 /usr/local/share/bench-cloud/bench-gate/check.py --help >/dev/null
 
 # node:22-bookworm ships uid/gid 1000 "node" — reuse it.

@@ -9,6 +9,7 @@ resources:
   - certificates
   - changes
   - couchdb
+  - domestique
   - excalidraw
   - flashcards
   - flashcards-sync

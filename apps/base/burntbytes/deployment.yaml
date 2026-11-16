@@ -47,7 +47,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: burntbytes
-          image: ghcr.io/gjcourt/burntbytes:2026-06-10-29cc91a
+          image: ghcr.io/gjcourt/burntbytes:2026-08-10-b306352
           ports:
             - containerPort: 8080
           resources:

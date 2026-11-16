@@ -2,12 +2,16 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - adguard
+  - agent-desk
   - audiobookshelf
   - authelia
+  - bench-cloud
   - burntbytes
+  - cadence-site
   - certificates
   - changes
   - cloudflare-tunnel
+  - domestique
   - excalidraw
   - external-services
   - finance-dashboard
@@ -19,18 +23,23 @@ resources:
   - homepage-clicks
   - immich
   - jellyfin
+  - kokoro
   - ladder
   - linkding
+  - llmux
   - mealie
   - memos
   - modemscope
   - mqttscope
   - navidrome
   - openwebui
-  - overture
+  - plane
+  - plane-mobile
+  - plane-sync
   - snapcast
   - thermalscope
   - thermalscope-smart
   - truenas-iscsi-monitor
   - vibrato
   - vitals
+  - wyoming-piper

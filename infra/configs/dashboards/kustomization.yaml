@@ -2,17 +2,18 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - application-health-cm.yaml
+  - bench-fleet-cm.yaml
   - cluster-overview-cm.yaml
   - cnpg-cm.yaml
   - control-plane-cm.yaml
   - homepage-clicks-cm.yaml
+  - llmux-cm.yaml
   - homelabscope-cm.yaml
   - modemscope-cm.yaml
   - mqttscope-cm.yaml
   - netscope-cm.yaml
   - networking-gateway-cm.yaml
   - node-details-cm.yaml
-  - overture-cm.yaml
-  - storage-csi-cm.yaml
+  - storage-cm.yaml
   - thermalscope-cm.yaml
   - vibrato-cm.yaml

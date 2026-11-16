@@ -1,0 +1,30 @@
+# Authelia single sign-on for Navidrome (reverse-proxy auth), same as staging.
+# Off in base; see docs/operations/apps/navidrome.md for why it was
+# disabled on 2026-11-03 and what makes it safe now.
+#
+# - TrustedSources: Navidrome compares this list with the DIRECT peer address,
+#   saved before X-Forwarded-For is applied (navidrome v0.61.2
+#   server/middlewares.go:170-174), so a client can't spoof its way in.
+#   These are the per-node Cilium ingress IPs the Gateway's Envoy connects
+#   from (`kubectl get ciliumnode -o jsonpath='{..spec.ingress}'`). If a node
+#   is rebuilt its IP can change; SSO then fails closed to Navidrome's own login.
+# - The gated HTTPRoute rule sets Remote-User from Authelia; the ungated /rest
+#   and /auth rules strip it (see httproute.yaml).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: navidrome
+  namespace: navidrome
+spec:
+  template:
+    spec:
+      containers:
+        - name: navidrome
+          env:
+            - name: ND_EXTAUTH_USERHEADER
+              value: Remote-User
+            - name: ND_EXTAUTH_TRUSTEDSOURCES
+              # talos-2mz-rfj, talos-fpd-h0t, talos-kot-7x7, talos-ykb-uir
+              value: 10.244.1.11/32,10.244.6.106/32,10.244.5.171/32,10.244.0.96/32
+            - name: ND_EXTAUTH_LOGOUTURL
+              value: https://auth.burntbytes.com/logout

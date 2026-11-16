@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: immich-stage
 resources:
   - ../../base/immich/
+  - cronjob-bootstrap.yaml
   - cronjob-photos-30d.yaml
   - database.yaml
   - httproute.yaml
@@ -11,6 +12,7 @@ resources:
   - scheduledbackup.yaml
   - secret-aws-creds.yaml
   - secret-db-credentials.yaml
+  - secret-staging-admin.yaml # operator-encrypted; template in secret-staging-admin.yaml.example
   - secret-sso.yaml
 
 labels:
@@ -30,6 +32,11 @@ configMapGenerator:
     namespace: immich
     files:
       - config/immich-config.json
+  # Script for cronjob-bootstrap.yaml; the hash suffix rolls the CronJob on edit.
+  - name: immich-staging-bootstrap-script
+    namespace: immich
+    files:
+      - bootstrap/bootstrap.mjs
 
 patches:
   - path: deployment-patch.yaml

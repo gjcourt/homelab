@@ -1,0 +1,10 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kokoro
+  namespace: kokoro
+spec:
+  maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: kokoro

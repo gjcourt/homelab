@@ -12,7 +12,7 @@
 # numeric uid). Compose at hosts/alcatraz/immich-photos-pull/docker-compose.yml.
 # Mirrors images/immich-photos-backup/ (the hestia-side leg).
 
-FROM alpine:3.23
+FROM alpine:3.24
 
 # Pinned package set (same rationale as images/immich-photos-backup):
 #   - rsync          — the transport

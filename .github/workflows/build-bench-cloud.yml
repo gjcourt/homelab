@@ -1,0 +1,75 @@
+name: Build bench-cloud
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'images/bench-cloud/**'
+      - 'scripts/bench-cloud/**'
+      - 'scripts/bench-gate/check.py'
+      - '.github/workflows/build-bench-cloud.yml'
+  # PRs build too (no push), so a requirements set that fails pip check or the
+  # plane-mcp smoke test fails the PR -- and holds Renovate's automerge --
+  # instead of surfacing as a broken image after merge (2026-11-08).
+  pull_request:
+    paths:
+      - 'images/bench-cloud/**'
+      - 'scripts/bench-cloud/**'
+      - 'scripts/bench-gate/check.py'
+      - '.github/workflows/build-bench-cloud.yml'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: gjcourt/bench-cloud
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Immutable per-commit tag (date + short SHA) — avoids the same-day tag
+      # collision that a bare YYYY-MM-DD hits when code is rebuilt twice in a day.
+      - name: Generate date-sha tag
+        id: tag
+        run: echo "tag=$(date -u +%Y-%m-%d)-$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v7
+        with:
+          # Repo root: the image also carries scripts/bench-cloud/ (CLI + Job template).
+          context: .
+          file: images/bench-cloud/Dockerfile
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+            ghcr.io/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max' || '' }}
+
+      - name: Summary
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "### bench-cloud published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Image:** \`ghcr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Pin this tag in \`apps/production/bench-cloud/kustomization.yaml\` (\`images:\` newTag) in a follow-up PR (Flux does not auto-track tags)." >> $GITHUB_STEP_SUMMARY

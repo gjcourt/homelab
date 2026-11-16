@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kokoro
+  labels:
+    # Admits the voice.burntbytes.com HTTPRoute to the LAN gateway. The gateway
+    # holds a LAN IP only and voice.* is not in the Cloudflare tunnel, so this is
+    # LAN-only. No login and no Authelia gate (docs/architecture/gateway-auth.md
+    # says how to add one).
+    http-ingress: "true"

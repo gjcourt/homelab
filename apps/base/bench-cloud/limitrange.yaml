@@ -1,0 +1,19 @@
+# Defaults for any container that doesn't set its own, and a per-container
+# ceiling so a runaway build can't take a node.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: bench-cloud
+  namespace: bench-cloud
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu: 500m
+        memory: 1Gi
+      default:
+        cpu: "2"
+        memory: 4Gi
+      max:
+        cpu: "4"
+        memory: 8Gi

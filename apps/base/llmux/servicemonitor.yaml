@@ -1,0 +1,25 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: llmux
+  namespace: llmux
+  labels:
+    # kube-prometheus-stack's Prometheus selects ServiceMonitors by the
+    # helm-default release label (serviceMonitorSelectorNilUsesHelmValues=true).
+    # Without this label the SM is invisible to it.
+    release: kube-prometheus-stack
+    app: llmux
+spec:
+  selector:
+    matchLabels:
+      app: llmux
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      # Force job="llmux" in both environments; the dashboard tells prod and
+      # stage apart by the namespace label (llmux-prod / llmux-stage).
+      relabelings:
+        - targetLabel: job
+          replacement: llmux

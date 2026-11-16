@@ -31,7 +31,7 @@ spec:
           # self-heals once the first build lands. Until then the Deployment
           # will not pull and PvcWriteProbeAbsent will fire, which is
           # expected pre-build.
-          image: "ghcr.io/gjcourt/pvc-writeprobe:latest"
+          image: "ghcr.io/gjcourt/pvc-writeprobe:2026-08-27-d482f8d"
           # Always, not IfNotPresent, while this tracks :latest. With
           # IfNotPresent the node keeps its cached :latest forever, so a
           # rebuild never reaches the pod -- which would have made the fix

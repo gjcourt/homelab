@@ -242,6 +242,25 @@ from filenames or directory structure.
   is a *series* — `Nina Simone/The Montreux Years` was already in the library and
   a title-only match would have wrongly skipped the new
   `Monty Alexander/The Montreux Years`.
+- ⚠️ **SET `[Console]::OutputEncoding` TO UTF-8 BEFORE ANY NATIVE COMMAND.** PowerShell
+  decodes a native command's stdout with the **OEM codepage**, not UTF-8. `ffprobe` emits
+  UTF-8, so on 2026-09-19 every tag with a non-ASCII character was mangled at step 1 and
+  two separate bugs fell out of it: three folders reached hestia as `LightninΓÇÖ Hopkins`,
+  and albums already in the library were re-imported as `NEW` because `Norm()`'s `FormKD`
+  decomposes the mojibake `™` into the letters `TM` (`whos` vs `whotms`). One missing line
+  caused both. Fixed in `import-music.ps1`.
+- ⚠️ **scp on Win32-OpenSSH carries FILENAMES in the console codepage too.** Even with tags
+  decoded correctly, a non-ASCII name is mangled in transit. The pipeline now stages under
+  ASCII placeholders (`~uXXXX~`) and restores the true names on hestia from a UTF-8
+  **manifest file** — bytes in a file are not codepage-converted, an ssh command line is.
+- ⚠️ **Dedup must compare the folder names the run would CREATE.** A multi-disc album lands
+  as `Album [Disc 1]` / `[Disc 2]`, so comparing the bare album title never matched and
+  every multi-disc set was re-transferred on every run. Per-disc comparison also means a
+  half-imported album now imports only its missing discs.
+- ⚠️ **Run the import DETACHED (WMI), never in an SSH foreground.** On 2026-09-19 the SSH
+  session was torn down mid-run; the script died after `scp` and before the rsync, leaving
+  147 files staged and nothing in the library. `Invoke-CimMethod -ClassName Win32_Process
+  -MethodName Create` survives the session, as `README.md` already says for transcodes.
 - **Check Unicode normalization before landing.** An existing artist dir like
   `Cécile McLorin Salvant` will silently become a **second** artist folder if the
   incoming `é` differs (NFC vs NFD). Confirm with a `--dry-run --itemize-changes`:

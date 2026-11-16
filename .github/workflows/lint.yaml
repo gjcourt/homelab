@@ -34,3 +34,142 @@ jobs:
       - name: Check plans frontmatter and index
         run: go run . -check
         working-directory: scripts/plans-index
+
+  # HOMELAB-85: unit tests for the bench-cloud path and approval gate, and the
+  # rule that only bench-gate.yaml may hold `statuses: write`.
+  bench-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pyyaml pytest
+
+      - name: Unit tests
+        run: python -m pytest -q scripts/bench-gate/tests
+
+      - name: Only bench-gate.yaml may write commit statuses
+        run: python3 scripts/bench-gate/lint_workflows.py .github/workflows
+
+  # HOMELAB-106/108: pure logic of the gha-runner watchdog (pin parsing,
+  # apply/recover decisions, token expiry, textfile metrics and their HELP).
+  gha-runner-watchdog:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Unit tests
+        run: python -m pytest -q images/gha-runner-watchdog/tests
+
+      - name: Shell syntax
+        run: bash -n images/gha-runner-watchdog/watchdog.sh
+
+  # HOMELAB-111: hestia-deployer (Phase 1 shadow): discovery, diff, secret
+  # merge, metrics and HELP parity, and the guard that dry-run can never call
+  # app.update / app.stop / app.start / app.create.
+  hestia-deployer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest pyyaml
+
+      - name: Unit tests
+        run: python -m pytest -q images/hestia-deployer/tests
+
+      - name: Shell syntax
+        run: bash -n images/hestia-deployer/deployer.sh
+
+  # HOMELAB-118: homelabscope-heartbeat's alcatraz deploy relay: line
+  # validation (only host="alcatraz" deploy samples, only job="alcatraz-deployer"
+  # heartbeats, HELP text equal to deployer.py's), atomic publish, and that a
+  # rejected or failed fetch keeps the last accepted file.
+  homelabscope-heartbeat:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest pyyaml
+
+      - name: Unit tests
+        run: python -m pytest -q images/homelabscope-heartbeat/tests
+
+      - name: Shell syntax
+        run: bash -n images/homelabscope-heartbeat/heartbeat.sh
+
+  # Switch-update observability plan, phase 3: update-verifier's decision
+  # logic (pass, each failed check, Prometheus blind, restart read-back,
+  # timing bounds) against fake API responses. Standard library only.
+  update-verifier:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Unit tests
+        run: python -m pytest -q infra/configs/update-verifier/tests
+
+  # HOMELAB-118: promtool unit tests for alert rules, starting with the gated
+  # alcatraz-deployer arm of HomelabscopeJobMetricAbsent. The image matches the
+  # cluster's Prometheus (kube-prometheus-stack 78.4.0 runs v3.5.0).
+  prometheus-rules:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Build the promtool rules file
+        run: |
+          mkdir -p /tmp/prom
+          python3 scripts/prom-rules-test/extract.py /tmp/prom/rules.yaml infra/configs/homelabscope/prometheus-rule.yaml infra/configs/unpoller/prometheus-rule.yaml infra/configs/update-verifier/prometheus-rule.yaml infra/configs/alerts/loki-rules.yaml
+          cp scripts/prom-rules-test/*.test.yaml /tmp/prom/
+
+      - name: promtool check + test rules
+        run: |
+          docker run --rm -v /tmp/prom:/w -w /w --entrypoint promtool quay.io/prometheus/prometheus:v3.5.0 check rules rules.yaml
+          docker run --rm -v /tmp/prom:/w -w /w --entrypoint promtool quay.io/prometheus/prometheus:v3.5.0 test rules homelabscope-alcatraz-deployer.test.yaml unifi-updates.test.yaml update-verifier.test.yaml talos-node-logs.test.yaml

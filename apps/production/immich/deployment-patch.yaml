@@ -25,7 +25,7 @@ spec:
       initContainers:
         - name: oauth-config
           # busybox 1.37
-          image: busybox@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
+          image: busybox@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           command:
             - sh
             - -c
@@ -161,7 +161,7 @@ spec:
       initContainers:
         - name: oauth-config
           # busybox 1.37
-          image: busybox@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
+          image: busybox@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           command:
             - sh
             - -c
@@ -319,12 +319,11 @@ spec:
           - 109 # render group
       containers:
         - name: immich-machine-learning
-          # Per-arch (linux/amd64) digest of :v2.7.5; this overrides the base
-          # multi-arch index pin so the GPU-accelerated build runs in production.
-          # When bumping: update both the tag and the digest from
-          # `docker manifest inspect ghcr.io/immich-app/immich-machine-learning:vX.Y.Z`
-          # → pick the linux/amd64 entry's digest.
-          image: ghcr.io/immich-app/immich-machine-learning:v3.0.1@sha256:cb2128c5cbc554fdaa2a036fb4419c808a9f3e0f27170e569dd9e727243da909
+          # Multi-arch index digest, the same pin as the base (it has been since
+          # v3.0.1). When bumping, keep this and the base in step: take the
+          # top-level `Digest:` from
+          # `docker buildx imagetools inspect ghcr.io/immich-app/immich-machine-learning:vX.Y.Z`.
+          image: ghcr.io/immich-app/immich-machine-learning:v3.4.1@sha256:8adebf414256f6e4f837bfbb66fa94f14f4da7260e3a1d65cbba49e4e35d8764
           securityContext:
             privileged: true
           env:

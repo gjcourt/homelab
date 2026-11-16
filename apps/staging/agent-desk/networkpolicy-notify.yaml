@@ -1,0 +1,21 @@
+# agent-desk-stage -> staging Home Assistant's webhook, for notifications
+# (agent_desk/notify.py). The matching ingress is in
+# apps/staging/homeassistant/kustomization.yaml.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: agent-desk-notify
+  namespace: agent-desk
+  labels:
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "agent-desk-stage -> homeassistant-stage webhook on 8123."
+  endpointSelector: {}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: homeassistant-stage
+            app: homeassistant
+      toPorts:
+        - ports:
+            - {port: "8123", protocol: TCP}

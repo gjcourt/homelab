@@ -6,7 +6,7 @@
 # Run from the homelab repo root:  scripts/update-finance-data.sh
 set -euo pipefail
 
-SRC="${FINANCE_SRC:-$HOME/src/utility/portfolio}"
+SRC="${FINANCE_SRC:-$HOME/src/private/portfolio}"
 SECRET="apps/base/finance-dashboard/secret-finance-data.yaml"
 PY="${PYTHON:-$SRC/.venv/bin/python}"
 

@@ -1,4 +1,4 @@
-# Deployment patches for staging - DNS
+# Deployment patches for staging - DNS + media libraries
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -9,8 +9,28 @@ spec:
     spec:
       # Authelia OIDC issuerUrl must resolve from within the pod.
       # AdGuard DNS rewrites are not visible to CoreDNS, so we add
-      # a hostAlias pointing at the staging gateway.
+      # a hostAlias pointing at the staging gateway
+      # (app-gateway-staging, 10.42.2.42; .41 is snapcast-stage's LB).
       hostAliases:
-        - ip: "10.42.2.41"
+        - ip: "10.42.2.42"
           hostnames:
             - auth.stage.burntbytes.com
+      # Read-only NFS media mounts, same paths as prod (nfs-media.yaml). In the
+      # Audiobookshelf UI, add a Book library at /audiobooks and a Podcast
+      # library at /podcasts.
+      containers:
+        - name: audiobookshelf
+          volumeMounts:
+            - name: abs-audiobooks
+              mountPath: /audiobooks
+              readOnly: true
+            - name: abs-podcasts
+              mountPath: /podcasts
+              readOnly: true
+      volumes:
+        - name: abs-audiobooks
+          persistentVolumeClaim:
+            claimName: audiobookshelf-audiobooks-pvc
+        - name: abs-podcasts
+          persistentVolumeClaim:
+            claimName: audiobookshelf-podcasts-pvc

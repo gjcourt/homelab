@@ -1,0 +1,103 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: update-verifier
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: update-verifier
+      rules:
+        # A watched device rebooted and the cluster did not verify clean. Pass
+        # results are recorded but never alert.
+        #
+        # The verifier ALSO POSTs this alert straight to both Alertmanagers,
+        # because the failure it exists for can blind Prometheus itself
+        # (2026-11-13: no samples 03:13-20:55 after the Rack Switch update).
+        # `max by` keeps exactly the labels the POST sends (plus Prometheus'
+        # external `prometheus` label, which the POST copies), so the two
+        # paths are one alert in Alertmanager, not two.
+        - alert: UpdateVerificationFailed
+          expr: |
+            max by (device, boot, from_version, to_version, failed_checks) (
+              homelab_update_verification{result="fail"}
+            )
+          labels:
+            severity: critical
+            namespace: monitoring
+          annotations:
+            summary: '{{ $labels.device }} rebooted and the cluster did not verify clean: {{ $labels.failed_checks }}'
+            description: >-
+              {{ $labels.device }} rebooted (firmware {{ $labels.from_version }} -> {{ $labels.to_version }}) and update-verifier's checks failed: {{ $labels.failed_checks }}. prometheus_stale and loki_* mean a check could not be made, which is not a pass. Runbook: AGENTS.md "Recovering read-only iSCSI volumes".
+        # Deadman: a watched device has been up 60-180 min and no result
+        # exists for THIS boot. Silence must mean "verified fine", not "the
+        # verifier is broken".
+        #
+        # Matching "this boot" is numeric, not a label join. The result's
+        # VALUE is its boot start time; unpoller's derived start time
+        # (timestamp - uptime) wanders by up to 300 s on one boot (measured
+        # 2026-11-14), so an exact `boot` label match would miss. A result
+        # counts if its boot is no more than 600 s before the current boot's
+        # start, so a result for an earlier boot never satisfies it.
+        #
+        # max_over_time(...[3h]): the gauge lives in the verifier's memory, so
+        # after a restart the series is gone; looking back 3h keeps a pass
+        # recorded ~15 min into the boot visible through the 180 min bound.
+        # The upper bound stops it firing forever.
+        #
+        # Evaluated by Prometheus, so it is blind when Prometheus is (as on
+        # 2026-11-13). The off-cluster healthchecks.io deadman behind
+        # IngestionWatchdog is the last line for that case.
+        - alert: UpdateVerificationMissing
+          expr: |
+            (
+              max by (device) (
+                label_replace(unpoller_device_uptime_seconds{name=~"Rack Switch|Home"}, "device", "$1", "name", "(.+)")
+              ) > 3600 < 10800
+            )
+            unless on (device)
+            (
+              max by (device) (max_over_time(homelab_update_verification[3h]))
+                > on (device)
+              (
+                max by (device) (
+                  label_replace(
+                    timestamp(unpoller_device_uptime_seconds{name=~"Rack Switch|Home"})
+                      - unpoller_device_uptime_seconds{name=~"Rack Switch|Home"},
+                    "device", "$1", "name", "(.+)"
+                  )
+                ) - 600
+              )
+            )
+          for: 5m
+          labels:
+            severity: critical
+            namespace: monitoring
+          annotations:
+            summary: '{{ $labels.device }} rebooted and update-verifier recorded no result'
+            description: >-
+              {{ $labels.device }} has been up {{ $value | humanizeDuration }} and there is no homelab_update_verification for this boot, so nobody checked that storage, nodes, etcd and Flux came back. Check `kubectl -n monitoring logs deploy/update-verifier`, then verify by hand. Runbook: AGENTS.md "Recovering read-only iSCSI volumes".
+        # The verifier's own health, so a broken verifier shows up before the
+        # next reboot rather than 65 min into it. Warning, as for
+        # PvcWriteProbeStale/Absent: it means "cannot see", not "data at risk".
+        # last_loop only advances when an iteration completes, so a loop that
+        # raises every time trips the first rule.
+        - alert: UpdateVerifierStale
+          expr: time() - homelab_update_verifier_last_loop_seconds > 1800
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: 'update-verifier has not completed a loop in 30m'
+            description: 'UniFi reboots are currently not being verified. Check `kubectl -n monitoring logs deploy/update-verifier`.'
+
+        - alert: UpdateVerifierAbsent
+          expr: absent(homelab_update_verifier_last_loop_seconds)
+          for: 15m
+          labels:
+            severity: warning
+            namespace: monitoring
+          annotations:
+            summary: 'update-verifier is not reporting at all'
+            description: 'UniFi reboots are currently not being verified.'

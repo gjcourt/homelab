@@ -37,8 +37,13 @@
      coincidences of the one title that happened to have a sparse track.
 
 .PARAMETER Queue
-  TSV file, one title per line: <source path><TAB><Library Name>
+  TSV file, one title per line: <source path><TAB><Library Name>[<TAB><Library Dir>]
   Blank lines and lines starting with # are ignored.
+  <Library Name> is the FILE name (no extension). <Library Dir> is optional and
+  relative to media/video; it defaults to movies/<Library Name>, so existing
+  movie queues are unchanged. TV: a dir like
+  tv/Show (Year)/Season 01 with a name like Show (Year) - S01E01.
+  The dir must be under movies/, tv/, tv-anime/ or music-videos/.
 
 .EXAMPLE
   .\transcode.ps1 -Queue .\queue.tsv
@@ -54,13 +59,26 @@ param(
   [int]$MinFreeGB  = 60,     # refuse to start without this much headroom
   [int]$MinFrameKB = 100,    # a decoded frame smaller than this is near-blank
   [switch]$DryRun,           # validate the queue and exit, encode nothing
-  [switch]$WaitForIdle       # wait for any other ffmpeg to finish first
+  [switch]$WaitForIdle,      # wait for any other ffmpeg to finish first
+  [switch]$Replace           # re-encode titles already in the library
 )
 
 $ErrorActionPreference = 'Continue'
 $FFDIR = 'C:\ffmpeg\ffmpeg-master-latest-win64-gpl\bin'
 $FF    = Join-Path $FFDIR 'ffmpeg.exe'
 $FP    = Join-Path $FFDIR 'ffprobe.exe'
+# ⚠️ Same root cause that mangled every non-ASCII music tag (see
+# import-music.ps1): PowerShell decodes native output - and Get-Content -
+# in the OEM codepage, not UTF-8. A queue line for "Amélie" or "Léon" would
+# push a mojibake filename to the library. Fail closed rather than silently
+# mis-name a film.
+try { [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
+$OutputEncoding = [Text.UTF8Encoding]::new($false)
+if ([Console]::OutputEncoding.CodePage -ne 65001) {
+  Write-Output "ABORT: console encoding is CP$([Console]::OutputEncoding.CodePage), not UTF-8 (65001)."
+  exit 5
+}
+
 $HST   = 'truenas_admin@10.42.2.10'
 $HBASE = '/mnt/main/family'
 $WORK  = 'C:\media-work'
@@ -72,7 +90,31 @@ function Probe($f, $entries, $stream) {
   (& $FP @a $f 2>$null)
 }
 function Dur($f) { $d = Probe $f 'format=duration' $null; if ($d) { [double]$d } else { 0 } }
-function OnHestia($rel) { (ssh -n -o BatchMode=yes $HST "sudo -n test -f '$HBASE/$rel' && echo yes") -match 'yes' }
+# AAC bitrate scaled to the channel count, because the whole point is to STOP
+# flattening everything to stereo. 64k/channel is the usual rule of thumb;
+# stereo keeps the 160k this script has always used.
+function AacBitrate([int]$ch) {
+  if ($ch -le 1) { return 96 }
+  if ($ch -le 2) { return 160 }
+  return 64 * $ch          # 5.1 -> 384k, 7.1 -> 512k
+}
+# ⚠️ Every remote READ goes through Invoke-SshRead (ledger.ps1), never through
+# ssh stdout. Win32-OpenSSH's ssh.exe (9.5.6.2 here) can fail to exit when its
+# stdout is a pipe and the remote printed anything - well below the 12288-byte
+# threshold ledger.ps1 first recorded. Measured 2026-10-05: `ssh -n host "echo
+# yes"` hung 6/6 through a pipe and finished in 0.1 s redirected to a file. This
+# script hung forever on the post-push sha256sum of March of the Penguins, and
+# on this very existence check for a title already in the library. It is not
+# deterministic (import-music's piped reads completed on 2026-10-01), which is
+# exactly why reads go through a file regardless. Writes that print nothing are
+# unaffected.
+function OnHestia($rel) { (Invoke-SshRead -RemoteHost $HST -Cmd "sudo -n test -f '$HBASE/$rel' && echo yes") -match 'yes' }
+
+. (Join-Path $PSScriptRoot 'ledger.ps1')
+$RUN_ID = (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')
+Initialize-Ledger -RemoteHost $HST -RunId $RUN_ID
+function VLedger([string]$event, [object[]]$records) { Write-Ledger -Event $event -Records $records; if ($records) { Log "  ledger: $event x$($records.Count)" } }
+function VLedgerRun([string]$event, [string]$note) { Write-LedgerRun -Event $event -Note $note; Log "  ledger: $event" }
 
 foreach ($t in @($FF, $FP)) { if (-not (Test-Path $t)) { Log "ABORT: missing $t"; exit 1 } }
 if (-not (Test-Path $Queue)) { Log "ABORT: queue not found: $Queue"; exit 1 }
@@ -80,12 +122,21 @@ New-Item -ItemType Directory -Path $WORK -Force | Out-Null
 
 # ---- parse queue -------------------------------------------------------
 $items = @()
-foreach ($line in Get-Content $Queue) {
+foreach ($line in [IO.File]::ReadAllLines($Queue, [Text.UTF8Encoding]::new($false))) {
   $l = $line.Trim()
   if (-not $l -or $l.StartsWith('#')) { continue }
   $parts = $l -split "`t+"
   if ($parts.Count -lt 2) { Log "SKIP malformed queue line: $l"; continue }
-  $items += [pscustomobject]@{ Src = $parts[0].Trim(); Name = $parts[1].Trim() }
+  $nm  = $parts[1].Trim()
+  $dir = if ($parts.Count -ge 3 -and $parts[2].Trim()) { $parts[2].Trim().Trim('/') } else { "movies/$nm" }
+  # Both end up inside single-quoted remote shell commands and Windows paths:
+  # refuse anything that could escape the library root or break the quoting,
+  # rather than land a file somewhere nobody will look for it.
+  if ($nm -match '[\\/:*?"<>|'']') { Log "SKIP bad Library Name (path/quote chars): $l"; continue }
+  if ($dir -notmatch '^(movies|tv|tv-anime|music-videos)/' -or $dir -match '\.\.|[\\:*?"<>|'']') {
+    Log "SKIP bad Library Dir (must be under movies/, tv/, tv-anime/ or music-videos/): $l"; continue
+  }
+  $items += [pscustomobject]@{ Src = $parts[0].Trim(); Name = $nm; Dir = $dir }
 }
 if (-not $items) { Log 'ABORT: queue is empty'; exit 1 }
 
@@ -96,14 +147,34 @@ foreach ($i in $items) {
   if (-not (Test-Path $i.Src)) { Log ("  MISSING src  : " + $i.Name + "  <= " + $i.Src); continue }
   $d = Dur $i.Src
   if ($d -le 0) { Log ("  UNREADABLE   : " + $i.Name); continue }
-  $rel = "media/video/movies/$($i.Name)/$($i.Name).mkv"
-  if (OnHestia $rel) { Log ("  SKIP on hestia: " + $i.Name); continue }
+  $rel = "media/video/$($i.Dir)/$($i.Name).mkv"
+  $onHestia = OnHestia $rel
+  if ($onHestia -and -not $Replace) { Log ("  SKIP on hestia: " + $i.Name); continue }
+  if ($onHestia) { Log ("  REPLACING     : " + $i.Name + " (already in the library)") }
   $nsub = @(Probe $i.Src 'stream=index' 's').Count
+  # Every audio stream, not just the first. Channels and language are read here
+  # so the encode can preserve both instead of discarding them.
+  $achan = @(Probe $i.Src 'stream=channels' 'a')
+  $alang = @(Probe $i.Src 'stream_tags=language' 'a')
+  $adesc = @(for ($k = 0; $k -lt $achan.Count; $k++) {
+    "$(if ($k -lt $alang.Count -and $alang[$k]) { $alang[$k] } else { 'und' })/$($achan[$k])ch"
+  }) -join ' '
   Log ("  QUEUED       : " + $i.Name + "  " + [math]::Round($d/60,1) + "min  subs=" + $nsub + " (muxed after encode, never mapped into it)")
-  $runnable += [pscustomobject]@{ Src = $i.Src; Name = $i.Name; Dur = $d; Subs = $nsub }
+  Log ("                 audio=" + $achan.Count + "  [" + $adesc + "]")
+  if ($achan.Count -eq 0) { Log ("  NO AUDIO     : " + $i.Name + " -- skipping"); continue }
+  $runnable += [pscustomobject]@{ Src = $i.Src; Name = $i.Name; Dir = $i.Dir; Dur = $d; Subs = $nsub
+                                  AChan = $achan; ADesc = $adesc }
 }
 Log ("== PREFLIGHT DONE: $($runnable.Count) to encode ==")
-if ($DryRun) { Log 'DRY RUN - stopping here'; exit 0 }
+# The preflight loop variable outlives its loop. Until 2026-10-14 the ENCODED and
+# LANDED rows below read $i.Src instead of $it.Src, so every title in a run was
+# recorded against the LAST queued file - and verify-before-delete keys on that
+# path. Drop it here so a stray $i is $null (no Src, never deletable), not wrong.
+Remove-Variable i
+VLedgerRun 'RUN_START' "queue=$Queue titles=$($items.Count) runnable=$($runnable.Count) bitrate=$Bitrate dryrun=$DryRun"
+VLedger 'QUEUED' @($runnable | ForEach-Object {
+  [pscustomobject]@{ Scope='title'; Title=$_.Name; Src=$_.Src; Note='preflight passed' } })
+if ($DryRun) { VLedgerRun 'RUN_END' 'dry run'; Log 'DRY RUN - stopping here'; exit 0 }
 if (-not $runnable) { Log 'nothing to do'; exit 0 }
 
 if ($WaitForIdle) {
@@ -113,7 +184,7 @@ if ($WaitForIdle) {
 # ---- encode ------------------------------------------------------------
 foreach ($it in $runnable) {
   $name = $it.Name
-  $dest = "media/video/movies/$name"; $rel = "$dest/$name.mkv"
+  $dest = "media/video/$($it.Dir)"; $rel = "$dest/$name.mkv"
   $free = (Get-PSDrive C).Free / 1GB
   if ($free -lt $MinFreeGB) { Log ("ABORT low disk: " + [math]::Round($free,1) + "GB < ${MinFreeGB}GB"); break }
 
@@ -129,21 +200,70 @@ foreach ($it in $runnable) {
   # precisely because ffmpeg's own frame=/time= line was suppressed.
   $va = Join-Path $WORK "$name.va.mkv"
   if (Test-Path $va) { Remove-Item $va -Force }
+  # ⚠️ EVERY audio stream, at its OWN channel count. This used to be
+  # `-map 0:a:0 -c:a aac -b:a 160k -ac 2`: the FIRST audio stream only,
+  # downmixed to stereo. Measured 2026-09-20 on The Tale of the Princess
+  # Kaguya - the disc carries eng/eng/jpn/jpn/fra in DTS 5.1 and the library
+  # copy came out as a single 2-channel English AAC track. For a Ghibli film
+  # that silently discards the original Japanese audio, and it did the same to
+  # every other title this script has ever encoded. No `-ac`, so the source
+  # layout survives; bitrate scales with channels.
+  $aArgs = @()
+  for ($k = 0; $k -lt $it.AChan.Count; $k++) {
+    $ch = 2; if ("$($it.AChan[$k])" -match '^\d+$') { $ch = [int]$it.AChan[$k] }
+    $aArgs += @("-c:a:$k", 'aac', "-b:a:$k", "$(AacBitrate $ch)k")
+  }
   $ffArgs = @('-nostdin','-y','-hide_banner','-v','warning','-stats','-i',$it.Src,
-              '-map','0:v:0','-map','0:a:0',
-              '-c:v','libx265','-b:v',"${Bitrate}k",
-              '-c:a','aac','-b:a','160k','-ac','2',$va)
+              '-map','0:v:0','-map','0:a',
+              '-c:v','libx265','-b:v',"${Bitrate}k") + $aArgs + @($va)
   & $FF @ffArgs
   if ($LASTEXITCODE -ne 0) { Log "FAIL encode (exit $LASTEXITCODE): $name"; continue }
 
   # ---- FRAME-COUNT GATE: the check that would have caught this on day one ----
   # ffmpeg exits 0 having encoded 0.85% of the frames, so exit code proves
-  # nothing. Compare frames actually present against duration x frame rate.
-  $fps = Probe $va 'stream=r_frame_rate' 'v:0'
-  $num,$den = ($fps -split '/')
-  $fpsVal = if ($den) { [double]$num / [double]$den } else { [double]$num }
-  $expected = [math]::Round($it.Dur * $fpsVal)
-  $actual = [int](Probe $va 'stream=nb_frames' 'v:0')
+  # nothing. Compare frames actually present against the SOURCE's frame count.
+  # ⚠️ This used to be duration x r_frame_rate, which is wrong for any soft-
+  # telecined NTSC DVD: the MPEG-2 stream holds 23.976 progressive frames with
+  # pulldown flags, but the container reports 30000/1001 - and the encode
+  # inherits that tag. Measured 2026-10-05 on March of the Penguins: source and
+  # output both 115,408 frames, full 4,813 s duration, yet the gate computed
+  # ~144,260 expected (80%) and refused a perfect encode. The packet count is
+  # exact for both cases; the encode maps v:0 with no rate change, so a good
+  # run matches it frame for frame. Duration x rate stays as the fallback.
+  $expected = 0
+  $srcCnt = & $FP -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of default=nw=1:nk=1 $it.Src 2>$null
+  if ("$srcCnt".Trim() -match '^\d+$') { $expected = [int]"$srcCnt".Trim() }
+  # ⚠️ Field-coded (PAFF) interlaced H.264 stores each FIELD as its own packet,
+  # so the source reports twice as many packets as frames. Measured 2026-10-26
+  # on the Iron Giant Signature Edition SD extras: 6,000 source packets for a
+  # 100 s, 29.97 fps clip, a perfect 3,000-frame encode, and the gate refused it
+  # at exactly 50% - every 480i extra on the disc, while every 1080p title passed.
+  # When the packet count is ~2x what duration x rate allows, count frames, not
+  # fields. Soft telecine (above) goes the other way, so it is untouched.
+  if ($expected -gt 0) {
+    $sfps = Probe $it.Src 'stream=r_frame_rate' 'v:0'
+    $sn,$sd = ($sfps -split '/')
+    $sfpsVal = if ($sd) { [double]$sn / [double]$sd } else { [double]$sn }
+    $nominal = $it.Dur * $sfpsVal
+    if ($nominal -gt 0 -and $expected -gt 1.9 * $nominal) {
+      Log ("  field-coded source: $expected packets for ~" + [math]::Round($nominal) + " frames - expecting " + [math]::Round($expected / 2))
+      $expected = [math]::Round($expected / 2)
+    }
+  }
+  if ($expected -le 0) {
+    $fps = Probe $va 'stream=r_frame_rate' 'v:0'
+    $num,$den = ($fps -split '/')
+    $fpsVal = if ($den) { [double]$num / [double]$den } else { [double]$num }
+    $expected = [math]::Round($it.Dur * $fpsVal)
+  }
+  # nb_frames is 'N/A' for plenty of muxers - casting that to [int] throws, and
+  # with $ErrorActionPreference='Continue' the throw is printed as a scary
+  # stack trace in the middle of a run that then succeeds anyway. The packet
+  # count below is the real answer; treat an unparseable value as 0 and fall
+  # through to it quietly.
+  $nbRaw  = Probe $va 'stream=nb_frames' 'v:0'
+  $actual = 0
+  if ($nbRaw -match '^\d+$') { $actual = [int]$nbRaw }
   if ($actual -le 0) {
     $cnt = & $FP -v error -select_streams v:0 -count_packets -show_entries stream=nb_read_packets -of default=nw=1:nk=1 $va 2>$null
     $actual = [int]$cnt
@@ -158,7 +278,9 @@ foreach ($it in $runnable) {
   # STAGE 2 - mux the subtitle tracks back in a pure copy pass, where a sparse
   # stream cannot starve anything.
   if ($it.Subs -gt 0) {
-    & $FF -nostdin -y -hide_banner -v warning -i $va -i $it.Src -map '0:v:0' -map '0:a:0' -map '1:s' -c copy $local
+    # -map 0:a, not 0:a:0 - a copy pass that took only the first track would
+    # throw away exactly what stage 1 was just fixed to keep.
+    & $FF -nostdin -y -hide_banner -v warning -i $va -i $it.Src -map '0:v:0' -map '0:a' -map '1:s' -c copy $local
     if ($LASTEXITCODE -ne 0) { Log "FAIL subtitle mux: $name -- keeping $va"; continue }
     Remove-Item $va -Force
   } else { Move-Item $va $local -Force }
@@ -181,16 +303,128 @@ foreach ($it in $runnable) {
   $pngKB = [math]::Round((Get-Item $png).Length / 1KB)
   Remove-Item $png -Force
   if ($pngKB -lt $MinFrameKB) { Log "FAIL frame at ${mid}s only ${pngKB}KB (near-blank) : $name -- keeping local"; continue }
+  # ---- AUDIO-TRACK GATE ------------------------------------------------
+  # The same lesson as the frame-count gate: ffmpeg exits 0 while quietly
+  # dropping streams, so the exit code proves nothing. The old `-map 0:a:0`
+  # discarded four of Kaguya's five tracks and NOTHING complained - the file
+  # played, the duration matched, the bitrate was fine. Count them.
+  $outChan = @(Probe $local 'stream=channels' 'a')
+  if ($outChan.Count -ne $it.AChan.Count) {
+    Log ("FAIL audio tracks: $name has $($outChan.Count), source has $($it.AChan.Count) [$($it.ADesc)] -- keeping local")
+    VLedger 'VERIFY_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Bytes=$outLen
+                             Note="audio tracks $($outChan.Count) != source $($it.AChan.Count)" })
+    continue
+  }
+  # Channels must survive too: the bug was a downmix, not only a drop.
+  $chanOut = ($outChan -join ',')
+  $chanSrc = ($it.AChan -join ',')
+  if ($chanOut -ne $chanSrc) {
+    Log ("FAIL audio channels: $name is [$chanOut], source is [$chanSrc] -- keeping local")
+    VLedger 'VERIFY_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Bytes=$outLen
+                             Note="channels $chanOut != source $chanSrc" })
+    continue
+  }
+  Log ("  audio OK: $($outChan.Count) track(s), channels [$chanOut]")
   Log ("VALIDATED $name  " + [math]::Round($outLen/1GB,2) + "GB  ${kbps}kbps  dur_delta=" + [math]::Round($durDelta,3) + "%  frame=${pngKB}KB")
 
-  # ---- push, verify byte count, only then delete local -----------------
+  # ---- push, verify the BYTES, only then delete local -------------------
+  # ⚠️ This used to compare `stat -c %s` and delete the local copy on a size
+  # match. A size match is not an integrity check: a transfer that lands the
+  # right NUMBER of wrong bytes passes it, and the only other copy is then
+  # deleted. Hours of encode are not recoverable from a truncated remote file.
+  # Hash it, exactly as the music path does before it trusts a landed file.
+  $localSha = (Get-FileHash -LiteralPath $local -Algorithm SHA256).Hash.ToLower()
+  VLedger 'ENCODED' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$localSha; Bytes=$outLen
+                                         Src=$it.Src; Dest=$rel
+                                         Note="validated: duration, bitrate, decoded frame, audio [$($it.ADesc)]" })
+
   $tmp = "/tmp/mediapush_$([guid]::NewGuid().ToString('N')).mkv"
   scp -o BatchMode=yes $local "$($HST):$tmp" | Out-Null
-  if ($LASTEXITCODE -ne 0) { Log "FAIL scp: $name -- keeping local"; ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null; continue }
-  ssh -n -o BatchMode=yes $HST "sudo -n mkdir -p '$HBASE/$dest' && sudo -n mv '$tmp' '$HBASE/$rel' && sudo -n chown 1028:100 '$HBASE/$rel' && sudo -n chmod 644 '$HBASE/$rel'"
-  if ($LASTEXITCODE -ne 0) { Log "FAIL push: $name -- keeping local"; continue }
-  $remote = (ssh -n -o BatchMode=yes $HST "sudo -n stat -c %s '$HBASE/$rel'") -join ''
-  if ($remote.Trim() -eq "$outLen") { Remove-Item $local -Force; Log "DONE $name (hestia verified $remote bytes)" }
-  else { Log "FAIL size mismatch: local=$outLen remote=$remote : $name -- keeping local" }
+  if ($LASTEXITCODE -ne 0) {
+    VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Note='scp to hestia failed' })
+    Log "FAIL scp: $name -- keeping local"; ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null; continue
+  }
+  # ⚠️ Land at a staging name INSIDE the destination and verify THERE, then swap.
+  # This used to mv straight onto the final path and hash afterwards, which is
+  # fine for a new title and destructive for a re-encode: a corrupt transfer had
+  # already replaced a good library file by the time the hash disagreed. The
+  # swap is a rename within one dataset, so it is atomic, and a failed verify
+  # leaves the existing file untouched.
+  $inc = "$rel.incoming"
+  # ⚠️ Movie dirs must be group `apps` (gid 568, Radarr) with group write. This
+  # used to be a bare `sudo mkdir -p`, which made every new title dir
+  # root:truenas_admin 2755 - 71 of them by 2026-11-03, invisible to Radarr's
+  # writes while Jellyfin played them fine. Create each MISSING component
+  # explicitly and stamp it; never touch a dir that already exists. Outside
+  # movies/ nothing manages the tree, so the old behaviour stands.
+  if ($it.Dir -like 'movies/*') {
+    $mk = @(); $acc = "$HBASE/media/video"
+    foreach ($c in ($it.Dir -split '/')) {
+      $acc = "$acc/$c"
+      $mk += "{ [ -d '$acc' ] || { sudo -n mkdir '$acc' && sudo -n chown truenas_admin:apps '$acc' && sudo -n chmod 2775 '$acc'; }; }"
+    }
+    $mkCmd = $mk -join ' && '
+  } else {
+    $mkCmd = "sudo -n mkdir -p '$HBASE/$dest'"
+  }
+  ssh -n -o BatchMode=yes $HST $mkCmd
+  if ($LASTEXITCODE -ne 0) {
+    ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null
+    VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note='could not create destination dir' })
+    Log "FAIL mkdir: $name -- keeping local"; continue
+  }
+  if ($it.Dir -like 'movies/*') {
+    # Check BEFORE landing the file, the way import-music.ps1 checks ownership:
+    # a dir Radarr cannot write is a failure, not a warning. An existing dir from
+    # before this fix fails here too - run normalize-movie-dirs.ps1.
+    # Every dir below movies/ (title dir AND extras/), not just the leaf: an
+    # extras/ created now under a pre-fix root-owned title dir would otherwise
+    # pass while Radarr still cannot write the title dir.
+    $chk = @(); $acc = "$HBASE/media/video/movies"
+    foreach ($c in @(($it.Dir -split '/') | Select-Object -Skip 1)) { $acc = "$acc/$c"; $chk += "'$acc'" }
+    $lines = @(Invoke-SshRead -RemoteHost $HST -Cmd "stat -c '%G %A' $($chk -join ' ')" | Where-Object { $_ })
+    $ga = ($lines -join '; ')
+    $bad = ($lines.Count -ne $chk.Count)
+    foreach ($ln in $lines) {
+      $gs = "$ln".Trim() -split ' '
+      if ($gs.Count -ne 2 -or $gs[0] -ne 'apps' -or $gs[1].Length -lt 6 -or $gs[1][5] -ne 'w') { $bad = $true }
+    }
+    if ($bad) {
+      ssh -n -o BatchMode=yes $HST "rm -f '$tmp'" | Out-Null
+      VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note="dest dir is '$ga', not group apps with group write" })
+      Log "FAIL dir ownership: $HBASE/$dest is '$ga' (need group apps + g+w; see normalize-movie-dirs.ps1) -- keeping local"; continue
+    }
+  }
+  ssh -n -o BatchMode=yes $HST "sudo -n mv '$tmp' '$HBASE/$inc' && sudo -n chown 1028:100 '$HBASE/$inc' && sudo -n chmod 644 '$HBASE/$inc'"
+  if ($LASTEXITCODE -ne 0) {
+    VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note='move into library failed' })
+    Log "FAIL push: $name -- keeping local"; continue
+  }
+  $remoteSha = ((Invoke-SshRead -RemoteHost $HST -Cmd "sudo -n sha256sum '$HBASE/$inc'") -join '').Trim().Split(' ')[0].ToLower()
+  $remoteLen = ((Invoke-SshRead -RemoteHost $HST -Cmd "sudo -n stat -c %s '$HBASE/$inc'") -join '').Trim()
+  if ($remoteSha -eq $localSha -and $remoteLen -eq "$outLen") {
+    ssh -n -o BatchMode=yes $HST "sudo -n mv '$HBASE/$inc' '$HBASE/$rel'"
+    if ($LASTEXITCODE -ne 0) {
+      VLedger 'PUSH_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Dest=$rel; Note='verified but final swap failed' })
+      Log "FAIL swap: $name -- keeping local"; continue
+    }
+    # LANDED is written only here, after the hash is proven in the library, so a
+    # row means "this film is there and it matched" - not "we pushed it".
+    VLedger 'LANDED' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$remoteSha; Bytes=$remoteLen
+                                          Src=$it.Src; Dest=$rel; Note='sha256 verified on hestia' })
+    Remove-Item $local -Force
+    VLedger 'LOCAL_DELETED' @([pscustomobject]@{ Scope='title'; Title=$name; Src=$local
+                                                 Note='local copy removed after verification' })
+    Log "DONE $name (hestia verified $remoteLen bytes, sha256 $($remoteSha.Substring(0,12)))"
+  }
+  else {
+    # Never leave an unverified file where a reader could mistake it for the real
+    # one, and never let it displace what is already there.
+    ssh -n -o BatchMode=yes $HST "sudo -n rm -f '$HBASE/$inc'" | Out-Null
+    VLedger 'VERIFY_FAIL' @([pscustomobject]@{ Scope='title'; Title=$name; Sha=$localSha; Bytes=$outLen; Dest=$rel
+                                               Note="remote sha=$remoteSha len=$remoteLen (discarded .incoming, library untouched)" })
+    Log "FAIL verification: $name -- local sha=$localSha len=$outLen / remote sha=$remoteSha len=$remoteLen -- keeping local"
+  }
 }
+VLedgerRun 'RUN_END' "encoded and pushed $($runnable.Count) title(s)"
 Log '== ALL DONE =='

@@ -1,6 +1,9 @@
-# Transcode queue - TSV, one title per line: <source path>\t<Library Name>
-# Blank lines and # comments ignored. The Library Name becomes both the
-# directory and the filename on hestia: media/video/movies/<Name>/<Name>.mkv
+# Transcode queue - TSV, one title per line:
+#   <source path>\t<Library Name>[\t<Library Dir>]
+# Blank lines and # comments ignored. The Library Name is the filename; the
+# optional Library Dir is relative to media/video and defaults to
+# movies/<Name>, i.e. media/video/movies/<Name>/<Name>.mkv. TV episodes set it:
+#   ...\tShow (Year) - S01E01\ttv/Show (Year)/Season 01
 #
 # Pick the SOURCE by duration, not by filename - the main feature is NOT
 # always _t00. Check with:

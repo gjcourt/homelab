@@ -1,0 +1,89 @@
+# One replica, Recreate: the push store is SQLite on an RWO volume, and the
+# live-event fan-out (SSE) is in-process. Settings are env vars from the
+# overlay's ConfigMap (plane-mobile-config); every secret is a file under
+# /secrets, read through a *_FILE variable (backend/src/plane_mobile/config.py).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plane-mobile
+  namespace: plane-mobile
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: plane-mobile
+  template:
+    metadata:
+      labels:
+        # Plane's egress rule selects on this label.
+        app: plane-mobile
+    spec:
+      # uvicorn's 10 s graceful wait, then up to 20 s for a held write already
+      # being sent (SEND_GRACE), then closing clients: 30 s is too short.
+      terminationGracePeriodSeconds: 40
+      serviceAccountName: plane-mobile
+      imagePullSecrets:
+        - name: ghcr-secret
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534  # secret files are 0440 and the PVC must be writable
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: plane-mobile
+          # The tag is pinned in each overlay (images.newTag).
+          image: ghcr.io/gjcourt/plane-mobile
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: plane-mobile-config
+          env:
+            - {name: OIDC_CLIENT_SECRET_FILE, value: /secrets/oidc-client-secret}
+            - {name: SESSION_KEY_FILE, value: /secrets/session-key}
+            - {name: VAPID_PRIVATE_KEY_FILE, value: /secrets/vapid-private-key}
+            # Only read when PLANE_READ=on.
+            - {name: PLANE_API_KEY_FILE, value: /secrets/plane-api-key}
+            - {name: WEBHOOK_SECRET_FILE, value: /secrets/webhook-secret}
+          # /readyz waits for the startup Plane reads (always ok with
+          # PLANE_READ=off); /livez only says the process is serving. Distinct
+          # signals, so both probes, with the repo's locked timings.
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /livez, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 10m, memory: 96Mi}
+            limits: {memory: 256Mi}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: secrets, mountPath: /secrets, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: plane-mobile-data
+        - name: secrets
+          secret:
+            secretName: plane-mobile
+            defaultMode: 0440
+        - name: tmp
+          emptyDir: {sizeLimit: 64Mi}

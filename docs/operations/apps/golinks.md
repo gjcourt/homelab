@@ -13,6 +13,39 @@ GoLinks is deployed as a Kubernetes `Deployment` with a single replica in the `g
 ## 3. URLs
 - **Staging**: https://go.stage.burntbytes.com
 - **Production**: https://go.burntbytes.com
+- **Intranet shortcut**: `go/<link>` — http://go/ always; https://go/ on devices that trust the intranet CA (below)
+
+### HTTPS for bare `go`
+No public CA issues certificates for single-label names, so `https://go/` uses a
+private root: `intranet-root-ca` (`infra/configs/cert-manager-issuers/intranet-ca.yaml`),
+name-constrained to `go` so it can't vouch for any other site. cert-manager issues
+`go-intranet-tls` from it (90 days, auto-renewed); the gateway's `https-go` listener
+serves it. A device must trust the root once — until then `https://go/` shows a
+certificate error and `http://go/` keeps working.
+
+Export the root (public certificate only; the key stays in the cluster):
+
+```bash
+kubectl -n security get secret intranet-root-ca -o jsonpath='{.data.tls\.crt}' | base64 -d > intranet-root-ca.crt
+openssl x509 -in intranet-root-ca.crt -noout -subject -ext nameConstraints
+```
+
+Trust it:
+
+- **macOS** (Safari, Chrome): `sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain intranet-root-ca.crt`
+- **iOS / iPadOS**: AirDrop the `.crt`, install the profile in Settings, then enable it under
+  Settings → General → About → Certificate Trust Settings.
+
+Verify from the LAN:
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' --cacert intranet-root-ca.crt https://go/
+openssl s_client -connect go:443 -servername go </dev/null 2>/dev/null | openssl x509 -noout -subject -issuer -ext subjectAltName
+```
+
+The root lasts 10 years and its key is never rotated, so renewals don't need re-trusting.
+Once every device you use trusts it, `golinks-http-intranet` can redirect to HTTPS like
+`golinks-http` does.
 
 ## 4. Configuration
 - **Environment Variables**:

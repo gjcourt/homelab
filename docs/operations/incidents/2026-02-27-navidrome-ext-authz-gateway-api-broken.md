@@ -2,7 +2,7 @@
 
 **Date**: 2026-02-27  
 **Severity**: Medium — Navidrome accessible without Authelia authentication  
-**Status**: Ongoing — root cause confirmed as Cilium 1.18 architectural limitation; no resolution yet  
+**Status**: Resolved 2026-11-05 — replaced by per-route Gateway API `ExternalAuth` on Cilium 1.20 (homelab #1829, CCEC deleted in the step 6 PR; see `docs/architecture/gateway-auth.md`). Prod Navidrome itself is still ungated.  
 
 ---
 

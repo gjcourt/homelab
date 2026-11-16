@@ -620,16 +620,17 @@ alertmanager:
       - receiver: 'null'
         matchers:
           - alertname = "Watchdog"
-      # overture is intentionally OFF: the Deployment is scaled 0/0 and its CNPG
-      # cluster is hibernated (cnpg.io/hibernation=on), so the PodDisruptionBudget
-      # (minAvailable=1) permanently reports 0 healthy pods and
-      # KubePdbNotEnoughHealthyPods fires forever. This is expected, not an
-      # outage — mute it for overture-prod only. If overture is ever brought back
-      # up, delete this route so the PDB signal returns. See docs/STATUS.md.
-      - receiver: 'null'
+      # Exception to the staging-warning mute below: a failed
+      # immich-staging-bootstrap Job IS the signal that staging has sat empty
+      # (immich.md §10.5), so it must reach the alerts inbox. Matched by
+      # job_name so every other immich-stage Job stays muted. Must stay ABOVE
+      # the `.+-stage` null route — the first match wins.
+      - receiver: 'email-warning'
         matchers:
-          - alertname = "KubePdbNotEnoughHealthyPods"
-          - namespace = "overture-prod"
+          - alertname = "KubeJobFailed"
+          - namespace = "immich-stage"
+          - job_name =~ "immich-staging-bootstrap.*"
+        repeat_interval: 24h
       # Staging is an ephemeral PREVIEW environment, continuously rebuilt by CI
       # from `master + open PRs` (see AGENTS.md). Warning-severity alerts there
       # (failed/one-shot Jobs during a migration rehearsal, transient crashloops,
@@ -2699,6 +2700,14 @@ kube-state-metrics:
         resources: ["*"]
         verbs: ["list", "watch"]
   releaseLabel: true
+
+  # Job labels for the bench fleet dashboard (HOMELAB-94 / BENCH-DASH-1;
+  # docs/plans/2026-11-07-bench-fleet-dashboard-plan.md). Emits
+  # kube_job_labels{label_agent_desk_playbook, label_bench_cloud_task,
+  # label_agent_desk_ticket} so kube_job_status_* can be sliced by playbook.
+  # Only Jobs carry these labels (agent-desk sets them on bench-cloud Jobs).
+  metricLabelsAllowlist:
+    - jobs=[agent-desk/playbook,bench-cloud/task,agent-desk/ticket]
 
   # Emit gotk_resource_info{customresource_kind, exported_namespace, name,
   # ready, suspended, revision} for Flux objects, mirroring the upstream

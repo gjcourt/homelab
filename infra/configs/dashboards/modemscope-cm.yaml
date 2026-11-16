@@ -8,381 +8,1448 @@ metadata:
 data:
   modemscope.json: |
     {
-      "title": "Cable Modem / modemscope",
-      "uid": "modemscope-overview",
-      "tags": ["homelab", "modemscope", "docsis", "wan"],
-      "schemaVersion": 38,
-      "refresh": "30s",
-      "time": { "from": "now-24h", "to": "now" },
-      "timepicker": {},
+      "annotations": {
+        "list": []
+      },
+      "description": "Is my internet connection healthy? Status tiles first, then errors, signal quality, uptime.",
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Cluster net",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/netscope-overview"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Thermals",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/34ae4f48-4436-408b-9721-bb5fd18c1a78"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Storage",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/storage"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Bench fleet",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/bench-fleet"
+        },
+        {
+          "icon": "dashboard",
+          "targetBlank": false,
+          "title": "Jobs",
+          "tooltip": "",
+          "type": "link",
+          "url": "/d/homelabscope"
+        }
+      ],
       "panels": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "modemscope_up: 1 while the exporter can read the modem. DOWN = modem unreachable/wedged/mid-reboot.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                },
+                {
+                  "options": {
+                    "0": {
+                      "color": "red",
+                      "index": 0,
+                      "text": "DOWN"
+                    },
+                    "1": {
+                      "color": "green",
+                      "index": 1,
+                      "text": "Reachable"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 0
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 0,
+            "y": 0
+          },
           "id": 1,
-          "gridPos": { "x": 0, "y": 0, "w": 4, "h": 4 },
-          "type": "stat",
-          "title": "Modem Reachable",
-          "description": "modemscope_up — 1 while the exporter can read the modem's status endpoints. 0 means the modem is unreachable, wedged, or mid-reboot. Independent of whether Prometheus can scrape the exporter (see up{job=\"modemscope\"}).",
-          "targets": [
-            { "refId": "A", "expr": "modemscope_up", "legendFormat": "up" }
-          ],
           "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"] },
             "colorMode": "background",
-            "graphMode": "none"
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value",
+            "wideLayout": true
           },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "modemscope_up",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Modem reachable",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Number of times modem uptime dropped to zero in 24 h. 0 = stable.",
           "fieldConfig": {
             "defaults": {
-              "unit": "bool_on_off",
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  { "value": null, "color": "red" },
-                  { "value": 1, "color": "green" }
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 2
+                  }
                 ]
-              }
-            }
-          }
-        },
-        {
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 4,
+            "y": 0
+          },
           "id": 2,
-          "gridPos": { "x": 4, "y": 0, "w": 5, "h": 4 },
-          "type": "stat",
-          "title": "Reboots (24h)",
-          "description": "resets(modemscope_uptime_seconds[24h]) — how many times the modem's uptime went backwards. THE headline number. A healthy cable modem does not reboot at all; its uptime is measured in weeks. Every DOCSIS error counter resets on reboot, so a silently rebooting modem looks healthier the more it reboots — this is the only signal that catches it, and it is the evidence to hand the ISP. CAVEAT: resets() over a window younger than 24h returns 0, not 'no data' — so a green 0 here means 'healthy' ONLY once there is a full day of history. Until then, read the uptime sawtooth below, which shows data age honestly. Summed so an exporter redeploy (new pod/instance labels) does not split the count across tiles. Red at 3 matches the ModemRebootingRepeatedly alert (>= 3 per 24h).",
-          "targets": [
-            { "refId": "A", "expr": "sum(resets(modemscope_uptime_seconds[24h]))", "legendFormat": "reboots" }
-          ],
           "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"] },
             "colorMode": "background",
-            "graphMode": "none"
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
           },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(resets(modemscope_uptime_seconds[24h]))",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Reboots, last 24 h",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Uncorrectable codewords (real data loss) in the last hour, QAM + OFDM. Reset-safe: sums only forward deltas, because the modem's OFDM counter resets ~30x/day and rate()/increase() turn each reset into a phantom spike of billions. Thresholds (1k amber, 10k red per hour) are PROPOSED - tune against your normal.",
           "fieldConfig": {
             "defaults": {
-              "unit": "short",
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  { "value": null, "color": "green" },
-                  { "value": 1, "color": "yellow" },
-                  { "value": 3, "color": "red" }
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1000
+                  },
+                  {
+                    "color": "red",
+                    "value": 10000
+                  }
                 ]
-              }
-            }
-          }
-        },
-        {
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 8,
+            "y": 0
+          },
           "id": 3,
-          "gridPos": { "x": 9, "y": 0, "w": 5, "h": 4 },
-          "type": "stat",
-          "title": "Modem Uptime",
-          "description": "modemscope_uptime_seconds — time since the modem last booted. Weeks is healthy. Minutes means it is thermal-cycling or crashing.",
-          "targets": [
-            { "refId": "A", "expr": "modemscope_uptime_seconds", "legendFormat": "uptime" }
-          ],
           "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"] },
             "colorMode": "background",
-            "graphMode": "area"
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
           },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(sum_over_time(clamp_min(delta(modemscope_downstream_uncorrectables_total[5m]),0)[1h:5m])) + sum(sum_over_time(clamp_min(delta(modemscope_downstream_ofdm_uncorrectables_total[5m]),0)[1h:5m]))",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Link errors, 1 h",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Lowest signal-to-noise across bonded QAM channels, now. DOCSIS: below 30 dB is failing, 30-33 marginal, 33+ healthy.",
           "fieldConfig": {
             "defaults": {
-              "unit": "s",
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  { "value": null, "color": "red" },
-                  { "value": 3600, "color": "yellow" },
-                  { "value": 86400, "color": "green" }
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 30
+                  },
+                  {
+                    "color": "green",
+                    "value": 33
+                  }
                 ]
-              }
-            }
-          }
-        },
-        {
+              },
+              "unit": "dB"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 12,
+            "y": 0
+          },
           "id": 4,
-          "gridPos": { "x": 14, "y": 0, "w": 5, "h": 4 },
-          "type": "stat",
-          "title": "Uncorrectables /sec",
-          "description": "Rate of unrecoverable codewords across BOTH carriers (QAM + OFDM). Uncorrectables are data the modem could not repair — real loss, felt as packet loss and latency spikes. Shown as a RATE, not a total: a burst around each reboot is expected re-lock noise, whereas a sustained rate between reboots means the plant is genuinely degraded. Correcteds are deliberately excluded — they are repaired and lossless. BOTH terms are wrapped in `or vector(0)`: a bare `sum(A) + sum(B)` returns an EMPTY vector if EITHER side is absent, and either can vanish (only a locked receiver emits OFDM counters; the exporter drops any field the modem reports as NA). An absent side would otherwise blank this panel, which reads as 'nothing wrong'. Note the guard converts 'unknown' into 'zero': if a carrier stops reporting, this tile goes GREENER, so cross-check the OFDM Lock State panel before trusting a low number.",
-          "targets": [
-            {
-              "refId": "A",
-              "expr": "(sum(rate(modemscope_downstream_uncorrectables_total[15m])) or vector(0)) + (sum(rate(modemscope_downstream_ofdm_uncorrectables_total[15m])) or vector(0))",
-              "legendFormat": "uncorrectables/sec"
-            }
-          ],
           "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"] },
             "colorMode": "background",
-            "graphMode": "area"
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
           },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "min(modemscope_downstream_snr_db)",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Worst SNR",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Largest distance from 0 dBmV across downstream channels. Spec window is +/-7 dBmV; amber from 5.",
           "fieldConfig": {
             "defaults": {
-              "unit": "short",
-              "decimals": 2,
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  { "value": null, "color": "green" },
-                  { "value": 0.5, "color": "yellow" },
-                  { "value": 1, "color": "red" }
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 5
+                  },
+                  {
+                    "color": "red",
+                    "value": 7
+                  }
                 ]
-              }
-            }
-          }
-        },
-        {
+              },
+              "unit": "dBmV"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 16,
+            "y": 0
+          },
           "id": 5,
-          "gridPos": { "x": 19, "y": 0, "w": 5, "h": 4 },
-          "type": "stat",
-          "title": "Bonded Channels",
-          "description": "modemscope_downstream_channels / _upstream_channels — bonded channel counts. A drop means channels fell off the bond, which costs bandwidth directly.",
-          "targets": [
-            { "refId": "A", "expr": "modemscope_downstream_channels", "legendFormat": "downstream" },
-            { "refId": "B", "expr": "modemscope_upstream_channels", "legendFormat": "upstream" }
-          ],
           "options": {
-            "reduceOptions": { "calcs": ["lastNotNull"] },
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(abs(modemscope_downstream_power_dbmv))",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Power offset",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "1 if the OFDM (DOCSIS 3.1) downstream receiver is locked.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                },
+                {
+                  "options": {
+                    "0": {
+                      "color": "red",
+                      "index": 0,
+                      "text": "NOT LOCKED"
+                    },
+                    "1": {
+                      "color": "green",
+                      "index": 1,
+                      "text": "Locked"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 0
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 5,
+            "w": 4,
+            "x": 20,
+            "y": 0
+          },
+          "id": 6,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(modemscope_downstream_ofdm_locked)",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "OFDM channel",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Time since last modem boot. Informational.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 0,
+            "y": 5
+          },
+          "id": 7,
+          "options": {
             "colorMode": "value",
-            "graphMode": "none"
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
           },
-          "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "blue" } } }
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "modemscope_uptime_seconds",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Uptime",
+          "type": "stat"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Downstream / upstream channels bonded. Informational (expected counts not defined).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "text",
+                    "value": -1000000000
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 6,
+            "y": 5
+          },
+          "id": 8,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value_and_name",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "modemscope_downstream_channels",
+              "legendFormat": "down ",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "modemscope_upstream_channels",
+              "legendFormat": "up ",
+              "refId": "B"
+            }
+          ],
+          "title": "Bonded channels",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Min across the DOCSIS init stages (bpi, dhcp, ranging, ...). 1 = all stages passed.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                },
+                {
+                  "options": {
+                    "0": {
+                      "color": "red",
+                      "index": 0,
+                      "text": "INCOMPLETE"
+                    },
+                    "1": {
+                      "color": "green",
+                      "index": 1,
+                      "text": "Registered"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 0
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 12,
+            "y": 5
+          },
+          "id": 9,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "value",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "min(modemscope_docsis_init_state)",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "DOCSIS registration",
+          "type": "stat"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Highest upstream transmit level. Typical window 35-51 dBmV; higher means a weak return path (modem shouts to be heard).",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 1,
+              "mappings": [
+                {
+                  "options": {
+                    "match": "null+nan",
+                    "result": {
+                      "color": "#6c7480",
+                      "index": 99,
+                      "text": "No data"
+                    }
+                  },
+                  "type": "special"
+                }
+              ],
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#6c7480",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "orange",
+                    "value": 49
+                  },
+                  {
+                    "color": "red",
+                    "value": 51
+                  }
+                ]
+              },
+              "unit": "dBmV"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 3,
+            "w": 6,
+            "x": 18,
+            "y": 5
+          },
           "id": 10,
-          "gridPos": { "x": 0, "y": 4, "w": 24, "h": 9 },
-          "type": "timeseries",
-          "title": "Modem Uptime — every drop to zero is a reboot",
-          "description": "modemscope_uptime_seconds over time. A healthy modem draws one straight line climbing forever. A sawtooth means it is rebooting: each tooth is a WAN outage of 30-60s plus a burst of uncorrectables as it re-locks. This panel is the before/after for any cooling change — pull the cover or add a fan, then watch whether the teeth stop.",
-          "targets": [
-            { "refId": "A", "expr": "modemscope_uptime_seconds", "legendFormat": "uptime" }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "s",
-              "custom": {
-                "drawStyle": "line",
-                "lineInterpolation": "linear",
-                "lineWidth": 2,
-                "fillOpacity": 10,
-                "pointSize": 4,
-                "showPoints": "auto",
-                "thresholdsStyle": { "mode": "line" }
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  { "value": null, "color": "transparent" },
-                  { "value": 3600, "color": "yellow" }
-                ]
-              }
-            }
-          },
           "options": {
-            "legend": { "displayMode": "list", "placement": "bottom" },
-            "tooltip": { "mode": "single" }
-          }
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "textMode": "auto",
+            "wideLayout": true
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(modemscope_upstream_power_dbmv)",
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "title": "Upstream TX, max",
+          "type": "stat"
         },
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Forward deltas only (counter resets ignored). Spikes = genuine error bursts; zero between bursts = clean.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "drawStyle": "line",
+                "fillOpacity": 40,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                }
+              },
+              "min": 0,
+              "noValue": "No data",
+              "unit": "none"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 8
+          },
           "id": 11,
-          "gridPos": { "x": 0, "y": 13, "w": 24, "h": 9 },
-          "type": "timeseries",
-          "title": "Uncorrectable Codewords /sec — QAM vs OFDM",
-          "description": "rate() of uncorrectables on each carrier. Both are plotted because on DOCSIS 3.1 the OFDM carrier does most of the work: watching only the QAM channels can report a clean line while the carrier that actually matters is losing data. Read the SHAPE: spikes aligned with the uptime sawtooth above are reboot re-lock noise; a sustained plateau between reboots is genuine plant degradation.",
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
           "targets": [
             {
-              "refId": "A",
-              "expr": "sum(rate(modemscope_downstream_uncorrectables_total[5m]))",
-              "legendFormat": "QAM"
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(clamp_min(delta(modemscope_downstream_uncorrectables_total[5m]),0))",
+              "interval": "5m",
+              "legendFormat": "QAM",
+              "refId": "A"
             },
             {
-              "refId": "B",
-              "expr": "sum(rate(modemscope_downstream_ofdm_uncorrectables_total[5m]))",
-              "legendFormat": "OFDM"
-            },
-            {
-              "refId": "C",
-              "expr": "(sum(rate(modemscope_downstream_correcteds_total[5m])) or vector(0)) + (sum(rate(modemscope_downstream_ofdm_correcteds_total[5m])) or vector(0))",
-              "legendFormat": "correcteds (repaired, lossless)"
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "sum(clamp_min(delta(modemscope_downstream_ofdm_uncorrectables_total[5m]),0))",
+              "interval": "5m",
+              "legendFormat": "OFDM",
+              "refId": "B"
             }
           ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "short",
-              "custom": {
-                "drawStyle": "line",
-                "lineInterpolation": "linear",
-                "lineWidth": 2,
-                "fillOpacity": 10,
-                "showPoints": "auto"
-              }
-            },
-            "overrides": [
-              {
-                "matcher": { "id": "byName", "options": "correcteds (repaired, lossless)" },
-                "properties": [
-                  { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [10, 10] } },
-                  { "id": "color", "value": { "mode": "fixed", "fixedColor": "text" } },
-                  { "id": "custom.fillOpacity", "value": 0 }
-                ]
-              },
-              {
-                "matcher": { "id": "byName", "options": "OFDM" },
-                "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
-              }
-            ]
-          },
-          "options": {
-            "legend": { "displayMode": "list", "placement": "bottom" },
-            "tooltip": { "mode": "multi" }
-          }
+          "title": "Link errors over time (uncorrectable codewords per 5 min)",
+          "type": "timeseries"
         },
         {
-          "id": 12,
-          "gridPos": { "x": 0, "y": 22, "w": 12, "h": 8 },
-          "type": "timeseries",
-          "title": "Signal-to-Noise Ratio",
-          "description": "Downstream SNR. Below ~33 dB, 256QAM starts producing uncorrectable errors — the red threshold line. Min/max bracket every bonded QAM channel; OFDM is plotted separately. Low SNR with high uncorrectables points at a physical plant fault (loose/corroded connector, splitter, water ingress).",
-          "targets": [
-            { "refId": "A", "expr": "min(modemscope_downstream_snr_db)", "legendFormat": "QAM min" },
-            { "refId": "B", "expr": "max(modemscope_downstream_snr_db)", "legendFormat": "QAM max" },
-            { "refId": "C", "expr": "modemscope_downstream_ofdm_snr_db", "legendFormat": "OFDM rx{{receiver}}" }
-          ],
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Lines at 30 dB (fail) and 33 dB (healthy). Axis starts at 25 dB, not 0, to make drift visible.",
           "fieldConfig": {
             "defaults": {
-              "unit": "dB",
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 0,
-                "showPoints": "auto",
-                "thresholdsStyle": { "mode": "line" }
+              "color": {
+                "mode": "palette-classic"
               },
+              "custom": {
+                "axisLabel": "",
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "min": 25,
+              "noValue": "No data",
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
-                  { "value": null, "color": "transparent" },
-                  { "value": 33, "color": "red" }
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 30
+                  },
+                  {
+                    "color": "green",
+                    "value": 33
+                  }
                 ]
-              }
-            }
-          },
-          "options": {
-            "legend": { "displayMode": "list", "placement": "bottom" },
-            "tooltip": { "mode": "multi" }
-          }
-        },
-        {
-          "id": 13,
-          "gridPos": { "x": 12, "y": 22, "w": 12, "h": 8 },
-          "type": "timeseries",
-          "title": "Signal Power",
-          "description": "Downstream receive power should sit in -7..+7 dBmV; upstream transmit power in 35..51 dBmV. Rising upstream power means the modem is shouting to be heard — excessive line loss (long run, too many splitters, bad connection). Above ~54 dBmV it drops off the network entirely. Upstream is on the RIGHT axis: its 35..51 dBmV range is disjoint from downstream's -7..+7, and sharing one axis flattens the downstream lines into an unreadable band.",
-          "targets": [
-            { "refId": "A", "expr": "min(modemscope_downstream_power_dbmv)", "legendFormat": "DS min" },
-            { "refId": "B", "expr": "max(modemscope_downstream_power_dbmv)", "legendFormat": "DS max" },
-            { "refId": "C", "expr": "max(modemscope_upstream_power_dbmv)", "legendFormat": "US max" },
-            { "refId": "D", "expr": "modemscope_downstream_ofdm_plc_power_dbmv", "legendFormat": "OFDM PLC rx{{receiver}}" }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "suffix:dBmV",
-              "custom": {
-                "drawStyle": "line",
-                "lineWidth": 2,
-                "fillOpacity": 0,
-                "showPoints": "auto"
-              }
+              },
+              "unit": "dB"
             },
-            "overrides": [
-              {
-                "matcher": { "id": "byName", "options": "US max" },
-                "properties": [
-                  { "id": "custom.axisPlacement", "value": "right" },
-                  { "id": "custom.axisLabel", "value": "upstream TX (dBmV)" }
-                ]
-              }
-            ]
+            "overrides": []
           },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 8
+          },
+          "id": 12,
           "options": {
-            "legend": { "displayMode": "list", "placement": "bottom" },
-            "tooltip": { "mode": "multi" }
-          }
-        },
-        {
-          "id": 14,
-          "gridPos": { "x": 0, "y": 30, "w": 12, "h": 7 },
-          "type": "timeseries",
-          "title": "DOCSIS Registration State",
-          "description": "modemscope_docsis_init_state — each stage of the DOCSIS registration state machine (1 = healthy). A stage dropping to 0 means the modem fell off the CMTS and is re-joining. This is unambiguously an ISP-side or line event: nothing on your LAN can make a modem re-range.",
-          "targets": [
-            { "refId": "A", "expr": "modemscope_docsis_init_state", "legendFormat": "{{stage}}" }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bool_on_off",
-              "max": 1,
-              "min": 0,
-              "custom": {
-                "drawStyle": "line",
-                "lineInterpolation": "stepAfter",
-                "lineWidth": 2,
-                "fillOpacity": 5,
-                "showPoints": "never"
-              }
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
             }
           },
-          "options": {
-            "legend": { "displayMode": "list", "placement": "bottom" },
-            "tooltip": { "mode": "multi" }
-          }
-        },
-        {
-          "id": 15,
-          "gridPos": { "x": 12, "y": 30, "w": 12, "h": 7 },
-          "type": "timeseries",
-          "title": "OFDM Lock State",
-          "description": "modemscope_downstream_ofdm_lock — the three OFDM lock stages. plc=1 with ncp=0 or mdc1=0 is a PARTIAL lock: the receiver reports plausible values while carrying nothing, so its error counters freeze and the uncorrectables rate above misreads as a clean carrier. That is why the stages are broken out rather than collapsed into one number.",
           "targets": [
-            { "refId": "A", "expr": "modemscope_downstream_ofdm_lock", "legendFormat": "rx{{receiver}} {{stage}}" }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "unit": "bool_on_off",
-              "max": 1,
-              "min": 0,
-              "custom": {
-                "drawStyle": "line",
-                "lineInterpolation": "stepAfter",
-                "lineWidth": 2,
-                "fillOpacity": 5,
-                "showPoints": "never"
-              }
-            }
-          },
-          "options": {
-            "legend": { "displayMode": "list", "placement": "bottom" },
-            "tooltip": { "mode": "multi" }
-          }
-        },
-        {
-          "id": 16,
-          "gridPos": { "x": 0, "y": 37, "w": 24, "h": 5 },
-          "type": "table",
-          "title": "Modem",
-          "description": "modemscope_info — identity of the modem being polled, and the DOCSIS config file it booted with (a d11_* config means it is provisioned for DOCSIS 3.1).",
-          "targets": [
-            { "refId": "A", "expr": "modemscope_info", "instant": true, "format": "table" }
-          ],
-          "transformations": [
             {
-              "id": "organize",
-              "options": {
-                "excludeByName": { "Time": true, "Value": true, "__name__": true, "job": true, "instance": true, "container": true, "endpoint": true, "namespace": true, "pod": true, "service": true }
-              }
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "min(modemscope_downstream_snr_db)",
+              "legendFormat": "QAM worst",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(modemscope_downstream_snr_db)",
+              "legendFormat": "QAM best",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "min(modemscope_downstream_ofdm_snr_db)",
+              "legendFormat": "OFDM",
+              "refId": "C"
             }
-          ]
+          ],
+          "title": "Signal-to-noise ratio (dB): worst and best channel",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "Healthy window is -7..+7 dBmV.",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false,
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "max": 10,
+              "min": -10,
+              "noValue": "No data",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "transparent",
+                    "value": -7
+                  },
+                  {
+                    "color": "red",
+                    "value": 7
+                  }
+                ]
+              },
+              "unit": "dBmV"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 16
+          },
+          "id": 13,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "min(modemscope_downstream_power_dbmv)",
+              "legendFormat": "DS min",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "max(modemscope_downstream_power_dbmv)",
+              "legendFormat": "DS max",
+              "refId": "B"
+            }
+          ],
+          "title": "Downstream power (dBmV), min / max",
+          "type": "timeseries"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource}"
+          },
+          "description": "",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "lineWidth": 1,
+                "showPoints": "never",
+                "spanNulls": false
+              },
+              "min": 0,
+              "noValue": "No data",
+              "unit": "s"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 16
+          },
+          "id": 14,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "none",
+              "showLegend": false
+            },
+            "tooltip": {
+              "mode": "multi",
+              "sort": "desc"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "expr": "modemscope_uptime_seconds",
+              "legendFormat": "uptime",
+              "refId": "A"
+            }
+          ],
+          "title": "Modem uptime (each drop to zero is a reboot)",
+          "type": "timeseries"
+        },
+        {
+          "collapsed": true,
+          "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 24
+          },
+          "id": 100,
+          "panels": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "modemscope_docsis_init_state — each stage of the DOCSIS registration state machine (1 = healthy). A stage dropping to 0 means the modem fell off the CMTS and is re-joining. This is unambiguously an ISP-side or line event: nothing on your LAN can make a modem re-range.",
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 5,
+                    "lineInterpolation": "stepAfter",
+                    "lineWidth": 2,
+                    "showPoints": "never"
+                  },
+                  "max": 1,
+                  "min": 0,
+                  "unit": "bool_on_off"
+                }
+              },
+              "gridPos": {
+                "h": 7,
+                "w": 12,
+                "x": 0,
+                "y": 25
+              },
+              "id": 21,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "modemscope_docsis_init_state",
+                  "legendFormat": "{{stage}}",
+                  "refId": "A"
+                }
+              ],
+              "title": "DOCSIS Registration State",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "modemscope_downstream_ofdm_lock — the three OFDM lock stages. plc=1 with ncp=0 or mdc1=0 is a PARTIAL lock: the receiver reports plausible values while carrying nothing, so its error counters freeze and the uncorrectables rate above misreads as a clean carrier. That is why the stages are broken out rather than collapsed into one number.",
+              "fieldConfig": {
+                "defaults": {
+                  "custom": {
+                    "drawStyle": "line",
+                    "fillOpacity": 5,
+                    "lineInterpolation": "stepAfter",
+                    "lineWidth": 2,
+                    "showPoints": "never"
+                  },
+                  "max": 1,
+                  "min": 0,
+                  "unit": "bool_on_off"
+                }
+              },
+              "gridPos": {
+                "h": 7,
+                "w": 12,
+                "x": 12,
+                "y": 25
+              },
+              "id": 22,
+              "options": {
+                "legend": {
+                  "displayMode": "list",
+                  "placement": "bottom"
+                },
+                "tooltip": {
+                  "mode": "multi"
+                }
+              },
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "modemscope_downstream_ofdm_lock",
+                  "legendFormat": "rx{{receiver}} {{stage}}",
+                  "refId": "A"
+                }
+              ],
+              "title": "OFDM Lock State",
+              "type": "timeseries"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource}"
+              },
+              "description": "modemscope_info — identity of the modem being polled, and the DOCSIS config file it booted with (a d11_* config means it is provisioned for DOCSIS 3.1).",
+              "gridPos": {
+                "h": 5,
+                "w": 24,
+                "x": 0,
+                "y": 32
+              },
+              "id": 23,
+              "targets": [
+                {
+                  "datasource": {
+                    "type": "prometheus",
+                    "uid": "${datasource}"
+                  },
+                  "expr": "modemscope_info",
+                  "format": "table",
+                  "instant": true,
+                  "refId": "A"
+                }
+              ],
+              "title": "Modem",
+              "transformations": [
+                {
+                  "id": "organize",
+                  "options": {
+                    "excludeByName": {
+                      "Time": true,
+                      "Value": true,
+                      "__name__": true,
+                      "container": true,
+                      "endpoint": true,
+                      "instance": true,
+                      "job": true,
+                      "namespace": true,
+                      "pod": true,
+                      "service": true
+                    }
+                  }
+                }
+              ],
+              "type": "table"
+            }
+          ],
+          "title": "Details: DOCSIS registration, OFDM lock, modem identity",
+          "type": "row"
         }
-      ]
+      ],
+      "refresh": "1m",
+      "schemaVersion": 39,
+      "tags": [
+        "modemscope",
+        "critique-review"
+      ],
+      "templating": {
+        "list": [
+          {
+            "current": {},
+            "hide": 0,
+            "label": "Datasource",
+            "name": "datasource",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "type": "datasource"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "title": "Cable Modem / modemscope",
+      "uid": "modemscope-overview"
     }

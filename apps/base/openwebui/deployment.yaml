@@ -6,10 +6,9 @@ metadata:
   labels:
     app: openwebui
 spec:
-  # Disabled 2026-05-10: GPUs removed from hestia for sale, vLLM at
-  # http://10.42.2.10:8000 is unavailable. Restore replicas to 1 once
-  # GPU inference is back online (or the upstream URL is repointed).
-  replicas: 0
+  # Re-enabled 2026-09-16: backend repointed from the (removed) llama.cpp on
+  # hestia to the Anthropic API via its OpenAI-compat layer.
+  replicas: 1
   revisionHistoryLimit: 5
   selector:
     matchLabels:
@@ -21,6 +20,12 @@ spec:
     metadata:
       labels:
         app: openwebui
+      annotations:
+        # Nothing restarts this pod when openwebui-env changes (no Reloader, no
+        # hashed ConfigMap), and env vars are only read at startup — so a
+        # ConfigMap edit alone never takes effect. BUMP THIS VALUE in the same
+        # PR as any configmap.yaml or secret change to roll the pod.
+        homelab.burntbytes.com/config-revision: "2026-09-25-llmux-client-key"
     spec:
       serviceAccountName: openwebui
       automountServiceAccountToken: false
@@ -29,12 +34,24 @@ spec:
           type: RuntimeDefault
       containers:
         - name: openwebui
-          image: ghcr.io/open-webui/open-webui:v0.9.5@sha256:e045bde3b004cc7f8c319412345eb56c87ea6ac57031534a31ca37ad5424beb3
+          # NOTE: this MUST be the multi-arch index digest, not a platform-specific
+          # one. The cluster is amd64; resolving a digest via `podman inspect` on an
+          # arm64 Mac yields the arm64 manifest and the pod dies with
+          # `exec /usr/bin/bash: exec format error`. Get it with:
+          #   podman manifest inspect ghcr.io/open-webui/open-webui:<tag>
+          # or the registry's docker-content-digest header.
+          image: ghcr.io/open-webui/open-webui:v0.11.4@sha256:9591b13f13843c7721c2b8eaf7382846c81b3ffe126526d1888d1fed50c6a33f
           ports:
             - containerPort: 8080
           envFrom:
             - configMapRef:
                 name: openwebui-env
+            # Operator-managed, NOT in git (see secret-anthropic.yaml.example).
+            # optional: production has the funded key; staging deliberately does not,
+            # so the preview environment starts without reaching a paid API.
+            - secretRef:
+                name: openwebui-anthropic
+                optional: true
           volumeMounts:
             - name: data
               mountPath: /app/backend/data

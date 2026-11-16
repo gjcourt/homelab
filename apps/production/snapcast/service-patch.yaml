@@ -5,3 +5,11 @@ metadata:
   annotations:
     lbipam.cilium.io/ip-pool: home-compute-pool
     lbipam.cilium.io/ips: 10.42.2.37
+spec:
+  ports:
+    # Music Assistant web UI and API (HOMELAB-67 step 2). Reached through
+    # music.burntbytes.com, LAN only. Also on the LB IP, as on staging.
+    - name: music-assistant
+      port: 8095
+      targetPort: 8095
+      protocol: TCP

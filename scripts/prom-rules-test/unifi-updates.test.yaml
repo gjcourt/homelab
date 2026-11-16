@@ -1,0 +1,96 @@
+# promtool unit tests for the record-only UniFi update rules (unifi-updates
+# group in infra/configs/unpoller/prometheus-rule.yaml; phase 2 of
+# docs/plans/2026-11-14-switch-update-observability-plan.md). Run by
+# lint.yaml's prometheus-rules job.
+---
+rule_files:
+- rules.yaml
+evaluation_interval: 1m
+tests:
+- name: 'firmware change on a watched device fires; ip flip and unwatched devices do not'
+  interval: 1m
+  input_series:
+  # Rack Switch: 7.5.15 for t=0..30m, 7.6.11 from t=30m (one shared sample).
+  - series: unpoller_device_info{name="Rack Switch",version="7.5.15.17146",ip="10.42.1.100"}
+    values: 1x30
+  - series: unpoller_device_info{name="Rack Switch",version="7.6.11.17272",ip="10.42.1.100"}
+    values: _x30 1x150
+  # Home: one version throughout, but its ip flips between WAN and "unknown"
+  # (measured on the live gateway). Two raw series, one version: must not fire.
+  - series: unpoller_device_info{name="Home",version="5.1.35.34107",ip="67.180.218.139"}
+    values: 1x60
+  - series: unpoller_device_info{name="Home",version="5.1.35.34107",ip="unknown"}
+    values: _x60 1x120
+  # Unwatched device changing version: out of scope, must not fire.
+  - series: unpoller_device_info{name="Office Switch",version="7.5.15.17146",ip="10.42.1.103"}
+    values: 1x30
+  - series: unpoller_device_info{name="Office Switch",version="7.6.11.17272",ip="10.42.1.103"}
+    values: _x30 1x150
+  alert_rule_test:
+  # Before the new version appears: one version per device, nothing fires.
+  - eval_time: 20m
+    alertname: UniFiFirmwareChanged
+    exp_alerts: []
+  - eval_time: 40m
+    alertname: UniFiFirmwareChanged
+    exp_alerts:
+    - exp_labels:
+        severity: info
+        name: Rack Switch
+      exp_annotations:
+        summary: "UniFi device Rack Switch changed firmware"
+        description: "Rack Switch reported 2 firmware versions in the last 2h: the reboot was an update."
+  # Old version's last sample is t=30m, so it leaves the [2h] window after 150m.
+  - eval_time: 160m
+    alertname: UniFiFirmwareChanged
+    exp_alerts: []
+
+- name: 'reboot opens a 30-minute window on watched devices only'
+  interval: 1m
+  input_series:
+  # Up for a while, reboots at t=11m (uptime 60s), then counts up.
+  - series: unpoller_device_uptime_seconds{name="Rack Switch"}
+    values: 100000+60x10 60+60x60
+  - series: unpoller_device_uptime_seconds{name="Home"}
+    values: 500000+60x70
+  - series: unpoller_device_uptime_seconds{name="Bedroom AP"}
+    values: 60+60x70
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: UniFiDeviceRebooted
+    exp_alerts: []
+  - eval_time: 20m
+    alertname: UniFiDeviceRebooted
+    exp_alerts:
+    - exp_labels:
+        severity: info
+        name: Rack Switch
+      exp_annotations:
+        summary: "UniFi device Rack Switch rebooted"
+        description: "Rack Switch uptime is 10m 0s."
+  - eval_time: 50m
+    alertname: UniFiDeviceRebooted
+    exp_alerts: []
+
+- name: 'pending update on watched devices only'
+  interval: 1m
+  input_series:
+  - series: unpoller_device_upgradable{name="Rack Switch"}
+    values: 1x10 0x20
+  - series: unpoller_device_upgradable{name="Home"}
+    values: 0x30
+  - series: unpoller_device_upgradable{name="Kitchen Switch"}
+    values: 1x30
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: UniFiUpdatePending
+    exp_alerts:
+    - exp_labels:
+        severity: info
+        name: Rack Switch
+      exp_annotations:
+        summary: "UniFi device Rack Switch has a firmware update queued"
+        description: "Rack Switch reports upgradable=1. If device auto-update is on, it will reboot at the next update window."
+  - eval_time: 20m
+    alertname: UniFiUpdatePending
+    exp_alerts: []

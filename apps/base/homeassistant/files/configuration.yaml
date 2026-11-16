@@ -61,16 +61,14 @@ lovelace:
 # Laundry room lights (via Lutron Caseta):
 #   timer.laundry_room_light_timer / input_number.laundry_room_light_minutes
 #
-# Closet and bathroom lights, one pair per room (Lutron Caseta, three closets
-# via switch_as_x):
+# Closet lights, one pair per room (Lutron Caseta, three via switch_as_x).
+# The bathroom lights had these too until George had them removed on
+# 2026-11-15; the bathroom fan timers above are separate and unchanged:
 #   timer.front_foyer_closet_light_timer / input_number.front_foyer_closet_light_minutes
 #   timer.master_bedroom_closet_light_timer / input_number.master_bedroom_closet_light_minutes
 #   timer.office_closet_light_timer / input_number.office_closet_light_minutes
 #   timer.secondary_bedroom_closet_light_timer / input_number.secondary_bedroom_closet_light_minutes
 #   timer.nursery_bedroom_closet_light_timer / input_number.nursery_bedroom_closet_light_minutes
-#   timer.hall_bathroom_light_timer / input_number.hall_bathroom_light_minutes
-#   timer.master_bathroom_light_timer / input_number.master_bathroom_light_minutes
-#   timer.powder_bathroom_light_timer / input_number.powder_bathroom_light_minutes
 #
 # The auto-off automations in automations.yaml tie them to the corresponding
 # Lutron Caseta switch/light entities.
@@ -176,27 +174,6 @@ input_number:
     step: 1
     unit_of_measurement: min
     mode: slider
-  hall_bathroom_light_minutes:
-    name: Hall Bathroom Light Timer
-    min: 4
-    max: 45
-    step: 1
-    unit_of_measurement: min
-    mode: slider
-  master_bathroom_light_minutes:
-    name: Master Bathroom Light Timer
-    min: 4
-    max: 45
-    step: 1
-    unit_of_measurement: min
-    mode: slider
-  powder_bathroom_light_minutes:
-    name: Powder Bathroom Light Timer
-    min: 4
-    max: 45
-    step: 1
-    unit_of_measurement: min
-    mode: slider
 
 # restore: true (George, 2026-10-31): a running or paused timer resumes after
 # an HA restart with the time it had left. One that ran out while HA was down
@@ -228,15 +205,6 @@ timer:
     restore: true
   nursery_bedroom_closet_light_timer:
     name: Nursery Bedroom Closet Light Timer
-    restore: true
-  hall_bathroom_light_timer:
-    name: Hall Bathroom Light Timer
-    restore: true
-  master_bathroom_light_timer:
-    name: Master Bathroom Light Timer
-    restore: true
-  powder_bathroom_light_timer:
-    name: Powder Bathroom Light Timer
     restore: true
 
 automation: !include automations.yaml
@@ -402,9 +370,6 @@ template:
           - timer.office_closet_light_timer
           - timer.secondary_bedroom_closet_light_timer
           - timer.nursery_bedroom_closet_light_timer
-          - timer.hall_bathroom_light_timer
-          - timer.master_bathroom_light_timer
-          - timer.powder_bathroom_light_timer
       - trigger: event
         event_type: timer.finished
     sensor:
@@ -421,10 +386,7 @@ template:
               'timer.master_bedroom_closet_light_timer',
               'timer.office_closet_light_timer',
               'timer.secondary_bedroom_closet_light_timer',
-              'timer.nursery_bedroom_closet_light_timer',
-              'timer.hall_bathroom_light_timer',
-              'timer.master_bathroom_light_timer',
-              'timer.powder_bathroom_light_timer']
+              'timer.nursery_bedroom_closet_light_timer']
              | select('is_state', 'active') | list | count }}
         attributes:
           hall_bathroom_fan_timer: "{{ state_attr('timer.hall_bathroom_fan_timer', 'finishes_at') if is_state('timer.hall_bathroom_fan_timer', 'active') else none }}"
@@ -436,9 +398,6 @@ template:
           office_closet_light_timer: "{{ state_attr('timer.office_closet_light_timer', 'finishes_at') if is_state('timer.office_closet_light_timer', 'active') else none }}"
           secondary_bedroom_closet_light_timer: "{{ state_attr('timer.secondary_bedroom_closet_light_timer', 'finishes_at') if is_state('timer.secondary_bedroom_closet_light_timer', 'active') else none }}"
           nursery_bedroom_closet_light_timer: "{{ state_attr('timer.nursery_bedroom_closet_light_timer', 'finishes_at') if is_state('timer.nursery_bedroom_closet_light_timer', 'active') else none }}"
-          hall_bathroom_light_timer: "{{ state_attr('timer.hall_bathroom_light_timer', 'finishes_at') if is_state('timer.hall_bathroom_light_timer', 'active') else none }}"
-          master_bathroom_light_timer: "{{ state_attr('timer.master_bathroom_light_timer', 'finishes_at') if is_state('timer.master_bathroom_light_timer', 'active') else none }}"
-          powder_bathroom_light_timer: "{{ state_attr('timer.powder_bathroom_light_timer', 'finishes_at') if is_state('timer.powder_bathroom_light_timer', 'active') else none }}"
 
 # Which helpers have had their fresh-install default written (see "No
 # `initial:`" above and "Helpers — seed defaults on a fresh install" in
@@ -910,23 +869,15 @@ homeassistant:
                 key: maintenance_grill_cleaning
                 unit: years
                 default: 2
-    # Daily shot (HASS-11): a 7 pm reminder that says which side is next,
-    # alternating left and right. Done (on the dashboard or the phone
-    # notification) records the time and side and flips the next side; the
-    # automations are in automations.yaml under "Daily shot".
-    # To fix a mistake, set "Daily shot next side" (and, if needed, "Daily
-    # shot last done") by hand on the dashboard.
+    # Daily shot (HASS-11): a 7 pm reminder that says today's side. The side
+    # comes from the calendar, not from presses: it alternates every day from
+    # the first recorded shot, 2026-10-31 on the left (so even days since then
+    # are Left, odd days Right). A missed or unlogged night can't knock it out
+    # of step (George, 2026-11-11: "alternate automatically for me and done
+    # just logs it"). Done (on the dashboard or the phone notification) only
+    # records the time and side; the automations are in automations.yaml under
+    # "Daily shot".
     daily_shot:
-      input_select:
-        daily_shot_next_side:
-          name: Daily shot next side
-          icon: mdi:swap-horizontal
-          # Right first on purpose: a new input_select starts on its first
-          # option, and the shot on 2026-10-31 was on the left. No `initial:`,
-          # so the value survives restarts.
-          options:
-            - Right
-            - Left
       input_button:
         daily_shot_done:
           name: Daily shot done
@@ -944,6 +895,14 @@ homeassistant:
           max: 5
       template:
         - sensor:
+            # Today's side, from the date alone (see the package comment).
+            - name: Daily shot side
+              unique_id: daily_shot_side
+              default_entity_id: sensor.daily_shot_side
+              icon: mdi:swap-horizontal
+              state: >
+                {% set days = (now().date() - strptime('2026-10-31', '%Y-%m-%d').date()).days %}
+                {{ 'Left' if days % 2 == 0 else 'Right' }}
             # "Done" once a shot is logged today, otherwise "To do". Next side and
             # last shot are attributes for the dashboard and the notification.
             # A shot counts only if "last side" holds a side: only "Daily shot —
@@ -959,6 +918,6 @@ homeassistant:
                 {% set logged = states('input_text.daily_shot_last_side') in ['Left', 'Right'] %}
                 {{ 'Done' if logged and last is not none and as_local(last).date() == now().date() else 'To do' }}
               attributes:
-                next_side: "{{ states('input_select.daily_shot_next_side') }}"
+                next_side: "{{ states('sensor.daily_shot_side') }}"
                 last_side: "{{ states('input_text.daily_shot_last_side') }}"
                 last_done: "{{ states('input_datetime.daily_shot_last_done') }}"

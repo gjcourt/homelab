@@ -1,0 +1,29 @@
+# A stable LAN address for UniFi's SIEM Server setting, which takes exactly one
+# IPv4 address or hostname. Pointing it at a node IP loses every event while
+# that node is down, so give it a LoadBalancer IP instead: L2 announcements
+# move it to a healthy node, and the worker's BGP session to the UCGF advertises
+# it as a /32.
+#
+# externalTrafficPolicy: Local keeps the sender's real address (source_ip in
+# normalize_unifi). Every node runs a receiver (the Vector DaemonSet, host
+# network), so every node has a local endpoint and nothing is lost to Local.
+# Pinned rather than allocated so the UniFi setting never has to change.
+# 10.42.2.47 was free on 2026-11-15 (no Service held it, no ARP reply).
+apiVersion: v1
+kind: Service
+metadata:
+  name: vector-unifi-syslog
+  namespace: monitoring
+  annotations:
+    lbipam.cilium.io/ip-pool: home-c-pool
+    lbipam.cilium.io/ips: 10.42.2.47
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    talos-log-receiver: "true"
+  ports:
+    - name: unifi-syslog
+      port: 5514
+      targetPort: 5514
+      protocol: UDP

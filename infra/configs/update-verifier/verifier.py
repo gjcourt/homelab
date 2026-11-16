@@ -99,6 +99,7 @@ CHECKS = (
     "nodes_ready",
     "etcd",
     "flux",
+    "bgp",
     "loki_error",
     "loki_stale",
     "iscsi_log_errors",
@@ -370,6 +371,20 @@ def run_checks(api, boot, now, prom_ok, cfg):
             and _count(api.prom("sum(etcd_server_is_leader)", at=now)) == 1
         ))
         check("flux", lambda: _flux_ok(api, boot, now))
+        # Every node has an Established BGP session to the gateway. On
+        # 2026-11-15 gateway firmware 6.0.17 stopped FRR and BGP stayed down
+        # for 21 h; the verifier passed nothing it checked and said nothing
+        # about it. Counted per node, against every node in the cluster, so a
+        # node whose Cilium agent exports no BGP series at all also fails.
+        # It cannot see the gateway's side: a session that is up but whose
+        # routes the gateway rejects (seen the same day, a dropped
+        # prefix-list) still passes.
+        check("bgp", lambda: (
+            lambda nodes, up: nodes > 0 and up == nodes
+        )(
+            _count(api.prom("count(kube_node_info)", at=now)),
+            _count(api.prom("count(count by (node) (cilium_bgp_control_plane_session_state == 1))", at=now)),
+        ))
 
     # Loki is checked whatever Prometheus says: it is a separate store.
     try:

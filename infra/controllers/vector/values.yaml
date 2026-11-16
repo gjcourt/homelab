@@ -59,7 +59,7 @@ tolerations:
   - operator: Exists
     effect: NoSchedule
 
-# Ready once the socket source is listening, which is what the NodePort needs.
+# Ready once the Talos socket source is listening.
 # No livenessProbe: it would have no signal distinct from this one.
 readinessProbe:
   tcpSocket:
@@ -126,6 +126,23 @@ customConfig:
       decoding:
         codec: json
 
+    # UniFi syslog: Network app Settings → CyberSecure → Traffic Logging →
+    # Activity Logging (Syslog) → SIEM Server, pointed at 10.42.2.47:5514, the
+    # LoadBalancer IP in service-unifi-syslog-lb.yaml (that setting takes one
+    # address, so a node IP would have no failover). UDP on the host network
+    # (like talos_logs above); every node listens. A raw socket rather
+    # than the syslog source: that source drops lines it can't parse, and
+    # UniFi's CEF payloads may not be strict RFC 3164/5424. The parse happens
+    # in normalize_unifi instead, keeping the line either way.
+    # 5514 is unprivileged (the pod runs as 65534 with no capabilities) and
+    # was free on every node on 2026-11-15.
+    unifi_syslog:
+      type: socket
+      address: "0.0.0.0:5514"
+      mode: udp
+      decoding:
+        codec: bytes
+
     # Vector's own counters, for the per-node silence alert.
     vector_metrics:
       type: internal_metrics
@@ -164,7 +181,73 @@ customConfig:
           del(."talos-time")
         }
 
+    # Parse UniFi syslog where possible; keep the raw line when it doesn't parse.
+    # Arrival time is kept as the timestamp (device clocks are not trusted here,
+    # and a parsed time would let a skewed device fall outside Loki's window).
+    # Labels stay low-cardinality: a handful of devices and app names.
+    normalize_unifi:
+      type: remap
+      inputs:
+        - unifi_syslog
+      source: |
+        # The socket source puts the sender's address in .host; keep it as a
+        # field (not a label) before .host becomes the syslog hostname.
+        .source_ip = string(del(.host)) ?? ""
+        del(.port)
+        raw = string(del(.message)) ?? ""
+        parsed, err = parse_syslog(raw)
+        if err == null {
+          .host = string(parsed.hostname) ?? "unknown"
+          .appname = string(parsed.appname) ?? "unknown"
+          .level = string(parsed.severity) ?? "info"
+          .msg = string(parsed.message) ?? raw
+        } else {
+          .host = "unparsed"
+          .appname = "unparsed"
+          .level = "info"
+          .msg = raw
+        }
+        .category = "none"
+        # UniFi sends CEF over syslog ("<pri>... Home CEF:0|Ubiquiti|..."), which
+        # parse_syslog splits into appname "CEF" and a message starting "0|".
+        # Re-join and parse it so the event's name, CEF severity and UniFi category
+        # become fields, and category becomes a label.
+        if contains(raw, "CEF:") {
+          parts = split(raw, "CEF:", limit: 2)
+          cef, cerr = parse_cef("CEF:" + (string(parts[1]) ?? ""))
+          if cerr == null {
+            .appname = "cef"
+            .cef = cef
+            .category = string(cef.UNIFIcategory) ?? "none"
+            .event = string(cef.name) ?? ""
+            sev = to_int(cef.severity) ?? 0
+            .cef_severity = if sev >= 9 { "very-high" } else if sev >= 7 { "high" } else if sev >= 4 { "medium" } else { "low" }
+            .msg = string(cef.msg) ?? .event
+          }
+        }
+        .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
+
   sinks:
+    # UniFi syslog to Loki, as its own job so Talos queries are unaffected.
+    loki_unifi:
+      type: loki
+      inputs:
+        - normalize_unifi
+      endpoint: http://loki.monitoring.svc.cluster.local:3100
+      encoding:
+        codec: json
+      labels:
+        job: unifi-syslog
+        host: '{{ "{{" }} host {{ "}}" }}'
+        appname: '{{ "{{" }} appname {{ "}}" }}'
+        level: '{{ "{{" }} level {{ "}}" }}'
+        # UniFi's own event category (Audit, Client Devices, ...) for CEF
+        # lines, "none" otherwise. A handful of values.
+        category: '{{ "{{" }} category {{ "}}" }}'
+      batch:
+        max_events: 500
+        timeout_secs: 5
+
     # Forward all Talos log events to Loki with structured labels for querying.
     loki_output:
       type: loki

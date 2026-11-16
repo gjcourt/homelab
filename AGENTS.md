@@ -118,7 +118,8 @@ Recurrences: [2026-02-08](docs/operations/incidents/2026-02-08-pv-recovery.md) �
 [2026-02-27](docs/operations/incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md) ·
 [2026-02-28](docs/operations/incidents/2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md) ·
 [2026-08-13](docs/operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md) ·
-[2026-09-04](docs/operations/incidents/2026-09-04-hestia-down-mass-readonly.md) **(59/63 volumes — largest to date)**.
+[2026-09-04](docs/operations/incidents/2026-09-04-hestia-down-mass-readonly.md) **(59/63 volumes — largest to date)** ·
+[2026-11-13](docs/operations/incidents/2026-11-13-rack-switch-update-readonly-prometheus-blind.md) (switch firmware update; Prometheus blind 17h43m).
 Tracking issue: [#1080](https://github.com/gjcourt/homelab/issues/1080).
 
 ### Initiator `replacement_timeout` (600 s)
@@ -152,15 +153,31 @@ a throwaway volume on `talos-kot-7x7`. A new stage logged in at 600. Deleting th
 **unstaged the volume and deleted its node record**; recreating it restaged at 600
 with its data intact. So a drain moves every volume on the node to a new login at
 600, and the hundreds of stale records in `iscsiadm -m node` don't matter.
+Done on all four nodes on 2026-11-15: 80 of 80 sessions at 600.
+
+⚠️ **A plain `kubectl drain` hangs.** About 30 single-replica apps have had
+`maxUnavailable: 0` PDBs since May (`apps/base/*/pdb.yaml`), so eviction is refused
+for them indefinitely. Single-instance CNPG clusters (every `-stage` database) are
+blocked the same way by their `-primary` PDB. The rollout therefore cordons, evicts
+what it can, and **deletes** the blocked pods. Each single-replica app on the node
+is down for about a minute while it restages.
 
 1. Only with #1933 merged and reconciled. Never during a switch or gateway update
    window (device auto-update 03:00, gateway Sunday 00:00).
-2. `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data`. CNPG switches
-   a primary away first; every PDB allows one disruption (checked 2026-11-15). Memory
-   headroom: no node above 22%.
-3. Wait until every moved pod is Ready, then confirm the sessions that landed on the
-   other nodes show 600 (loop above). `kubectl uncordon <node>`.
-4. Next node. Done when every node prints only `Recovery Timeout: 600`.
+2. `kubectl cordon <node>`. CNPG switches multi-instance primaries off a cordoned
+   node by itself, **but not while the cluster is unhealthy**: on 2026-11-15
+   `plane-prod` had a broken replica and its primary stayed put. Wait until no
+   primary of a cluster with `instances > 1` is on the node, and for any that stays,
+   `kubectl cnpg promote -n <ns> <cluster> <healthy-replica-on-another-node>`.
+3. `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data --timeout=120s`.
+   It evicts everything the PDBs allow, then times out on the rest.
+4. `kubectl delete pod` every pod still on the node **except** DaemonSet pods and
+   static control-plane pods (owner kind `Node`). Postgres can take about 3 minutes
+   to shut down; wait for it.
+5. Wait until every moved pod is Ready, then confirm the sessions that landed on the
+   other nodes show 600 (loop above) and the drained node shows none.
+   `kubectl uncordon <node>`.
+6. Next node. Done when every node prints only `Recovery Timeout: 600`.
 
 The alternative, `iscsiadm -m node -o update` on every record plus an `ext-iscsid`
 restart, reconnects every session on a node at once under the old 120 s and has

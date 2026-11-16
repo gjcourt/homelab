@@ -389,6 +389,26 @@ logcli query '{job="talos-kernel", node="talos-kot-7x7"}'
 # Via Grafana: Explore → Loki → {job="talos-kernel"}
 ```
 
+### UniFi syslog (same Vector pods)
+
+The same DaemonSet also receives UniFi syslog on **UDP 5514** on the host network
+(`unifi_syslog` → `normalize_unifi` → `loki_unifi`). UniFi's **SIEM Server** setting
+(Network app → Settings → CyberSecure → Traffic Logging → Activity Logging) points at one
+node IP, `10.42.2.25:5514`. Any node works; there's no failover if that node is down.
+
+Labels: `job="unifi-syslog"`, `host` (the syslog hostname, e.g. the gateway), `appname`,
+`level`. The sender's address is the `source_ip` field, not a label. Lines that don't parse
+as syslog are kept with `host="unparsed"`, so a format change shows up as a label value,
+not as silence.
+
+```bash
+logcli query '{job="unifi-syslog"}'
+logcli query '{job="unifi-syslog", host="unparsed"}'   # format check
+```
+
+Arrival time is the timestamp (device clocks aren't trusted). Lines sent while the
+Rack Switch itself is down are lost: UDP, no retry.
+
 ## 6. Testing
 
 ### Verify the workload rendered

@@ -48,6 +48,11 @@ update also stopped FRR on the gateway (`frr.service` is `not-found` on 6.0.17),
 BGP session from talos-kot-7x7 to 10.42.2.1 has been down since 00:54 (`CiliumBGPSessionDown`).
 LoadBalancer IPs still answered from the LAN at 04:30. The verifier has no BGP check.
 
+**2026-11-15, 21:52:** BGP restored. 6.0.17 runs FRR from the Network app (Routing Table →
+BGP config upload) instead of `frr.service`; the config is uploaded there as `k8s-lb-bgp`
+and the gateway again learns the 8 LoadBalancer /32s from talos-kot-7x7. Details and the
+importer's prefix-list quirk: `docs/architecture/networking/cluster-load-balancing.md`.
+
 **2026-11-15, later:** the Talos log patch is applied on all four nodes, so the verifier's
 Loki check now has data and the next update should get past `loki_stale`. Loki lines now
 carry a `node` label and Talos's own timestamps, and `TalosNodeLogsSilent` catches a single

@@ -274,11 +274,6 @@ views:
           'switch.powder_bathroom_exhaust_fan': ['timer.powder_bathroom_fan_timer', 'input_number.powder_bathroom_fan_minutes'],
           'light.laundry_room_main_lights': ['timer.laundry_room_light_timer', 'input_number.laundry_room_light_minutes'],
           'light.laundry_room_cove': ['timer.laundry_room_light_timer', 'input_number.laundry_room_light_minutes'],
-          'light.hall_bathroom_main_lights': ['timer.hall_bathroom_light_timer', 'input_number.hall_bathroom_light_minutes'],
-          'light.hall_bathroom_vanity_lights': ['timer.hall_bathroom_light_timer', 'input_number.hall_bathroom_light_minutes'],
-          'light.master_bathroom_vanity': ['timer.master_bathroom_light_timer', 'input_number.master_bathroom_light_minutes'],
-          'light.master_bathroom_ceiling': ['timer.master_bathroom_light_timer', 'input_number.master_bathroom_light_minutes'],
-          'light.powder_bathroom_chandelier': ['timer.powder_bathroom_light_timer', 'input_number.powder_bathroom_light_minutes'],
           'light.front_foyer_closet': ['timer.front_foyer_closet_light_timer', 'input_number.front_foyer_closet_light_minutes'],
           'light.master_bedroom_closet_light': ['timer.master_bedroom_closet_light_timer', 'input_number.master_bedroom_closet_light_minutes'],
           'light.office_closet': ['timer.office_closet_light_timer', 'input_number.office_closet_light_minutes'],
@@ -311,36 +306,6 @@ views:
         perform_action: timer.cancel
         target:
           entity_id: timer.hall_bathroom_fan_timer
-    - type: custom:mushroom-template-card
-      entity: light.hall_bathroom_main_lights
-      primary: Main lights
-      secondary: *auto_off_status
-      icon: mdi:ceiling-light
-      icon_color: *onoff_color
-      tap_action:
-        action: toggle
-      icon_tap_action:
-        action: more-info
-      hold_action:
-        action: perform-action
-        perform_action: timer.cancel
-        target:
-          entity_id: timer.hall_bathroom_light_timer
-    - type: custom:mushroom-template-card
-      entity: light.hall_bathroom_vanity_lights
-      primary: Vanity
-      secondary: *auto_off_status
-      icon: mdi:vanity-light
-      icon_color: *onoff_color
-      tap_action:
-        action: toggle
-      icon_tap_action:
-        action: more-info
-      hold_action:
-        action: perform-action
-        perform_action: timer.cancel
-        target:
-          entity_id: timer.hall_bathroom_light_timer
     - type: heading
       heading: Master bath
       heading_style: subtitle
@@ -359,36 +324,6 @@ views:
         perform_action: timer.cancel
         target:
           entity_id: timer.master_bathroom_fan_timer
-    - type: custom:mushroom-template-card
-      entity: light.master_bathroom_vanity
-      primary: Vanity
-      secondary: *auto_off_status
-      icon: mdi:vanity-light
-      icon_color: *onoff_color
-      tap_action:
-        action: toggle
-      icon_tap_action:
-        action: more-info
-      hold_action:
-        action: perform-action
-        perform_action: timer.cancel
-        target:
-          entity_id: timer.master_bathroom_light_timer
-    - type: custom:mushroom-template-card
-      entity: light.master_bathroom_ceiling
-      primary: Ceiling
-      secondary: *auto_off_status
-      icon: mdi:ceiling-light
-      icon_color: *onoff_color
-      tap_action:
-        action: toggle
-      icon_tap_action:
-        action: more-info
-      hold_action:
-        action: perform-action
-        perform_action: timer.cancel
-        target:
-          entity_id: timer.master_bathroom_light_timer
     - type: heading
       heading: Powder bath
       heading_style: subtitle
@@ -407,21 +342,6 @@ views:
         perform_action: timer.cancel
         target:
           entity_id: timer.powder_bathroom_fan_timer
-    - type: custom:mushroom-template-card
-      entity: light.powder_bathroom_chandelier
-      primary: Chandelier
-      secondary: *auto_off_status
-      icon: mdi:chandelier
-      icon_color: *onoff_color
-      tap_action:
-        action: toggle
-      icon_tap_action:
-        action: more-info
-      hold_action:
-        action: perform-action
-        perform_action: timer.cancel
-        target:
-          entity_id: timer.powder_bathroom_light_timer
   - type: grid
     column_span: 3
     cards:
@@ -570,7 +490,7 @@ views:
       heading: Auto-off after
       heading_style: title
     - type: markdown
-      content: '**How it works:** turning on a bathroom fan or a bathroom, closet or laundry light starts its timer from the **Auto-off after** value below; when the timer runs out, it turns off. Turning it off yourself cancels the timer. Lights in the same room share one timer and one value (the hall and master bath lights, the laundry lights): any of them starts it, it turns them all off, and it''s cancelled only when they''re all off. Fans have their own timer. Each value can be 4 to 45 min.'
+      content: '**How it works:** turning on a bathroom fan or a closet or laundry light starts its timer from the **Auto-off after** value below; when the timer runs out, it turns off. Turning it off yourself cancels the timer. Lights in the same room share one timer and one value (the laundry lights): any of them starts it, it turns them all off, and it''s cancelled only when they''re all off. Fans have their own timer. Each value can be 4 to 45 min.'
     - type: heading
       heading: Bathrooms
       heading_style: subtitle
@@ -578,17 +498,6 @@ views:
       entity: input_number.hall_bathroom_fan_minutes
       primary: Hall bath fan
       icon: mdi:fan
-      icon_color: blue
-      tap_action:
-        action: more-info
-      features_position: bottom
-      features:
-      - type: numeric-input
-        style: buttons
-    - type: custom:mushroom-template-card
-      entity: input_number.hall_bathroom_light_minutes
-      primary: Hall bath lights
-      icon: mdi:ceiling-light
       icon_color: blue
       tap_action:
         action: more-info
@@ -608,31 +517,9 @@ views:
       - type: numeric-input
         style: buttons
     - type: custom:mushroom-template-card
-      entity: input_number.master_bathroom_light_minutes
-      primary: Master bath lights
-      icon: mdi:ceiling-light
-      icon_color: blue
-      tap_action:
-        action: more-info
-      features_position: bottom
-      features:
-      - type: numeric-input
-        style: buttons
-    - type: custom:mushroom-template-card
       entity: input_number.powder_bathroom_fan_minutes
       primary: Powder bath fan
       icon: mdi:fan
-      icon_color: blue
-      tap_action:
-        action: more-info
-      features_position: bottom
-      features:
-      - type: numeric-input
-        style: buttons
-    - type: custom:mushroom-template-card
-      entity: input_number.powder_bathroom_light_minutes
-      primary: Powder bath lights
-      icon: mdi:ceiling-light
       icon_color: blue
       tap_action:
         action: more-info

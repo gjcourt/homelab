@@ -70,6 +70,7 @@ names are.
 | `archived` | `x-deploy.archived: true` |
 | `missing` | no TrueNAS app of that name (a new app still needs an operator `app.create`) |
 | `invalid` | bad `x-deploy`, unparsable compose, duplicate name, not a Custom App, or an unrecognised `app.config` shape |
+| `adoptable` | compose backend (alcatraz) only, never on hestia: a hand-made project that matches Git apart from the deployer's ownership label |
 | `failed` | not used until Phase 2 |
 
 An app that is `STOPPED` in SCALE on purpose is still compared (config, and
@@ -100,6 +101,12 @@ keeps a shell's or image's bare `HOST` / `JOB` from reaching the deployer. A
 malformed value stops the deployer with `ConfigError`, naming the variable,
 never its value. `APPLY_ENABLED` is per backend: hestia's cutover flips
 `APPLY_ENABLED["truenas"]` only; `"compose"` (alcatraz) stays `False`.
+
+**Compose backend.** The same image carries `compose_backend.py` and the
+`docker-cli` / `docker-cli-compose` packages for alcatraz (HOMELAB-118),
+selected with `DEPLOYER_BACKEND=compose`. Unset (hestia) means `truenas`: the
+loop in `deployer.sh` and everything above are unchanged. Any other value
+stops the entrypoint with exit 2.
 
 ## 4. Reading the shadow
 

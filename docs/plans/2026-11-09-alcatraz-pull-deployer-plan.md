@@ -302,7 +302,8 @@ backend computes the following:
    generated override (`-f - -f <override>`). It is part of the hash on both the predict
    side and the apply side.
    - A project whose containers lack the label is `blocked` with the reason
-     "project exists and is not deployer-owned". The deployer will not `up
+     "project exists and is not deployer-owned". If it matches Git apart from the
+     label it is `adoptable` instead (implementation notes below). The deployer will not `up
      --remove-orphans` over a project someone made by hand in Container Manager.
    - To adopt such a project, add `x-deploy.adopt: true` for one deploy.
 6. **Unmanaged** = compose projects (from `docker compose ls -a`) and unlabelled
@@ -402,6 +403,8 @@ gets `host="hestia"` or `host="alcatraz"`. The heartbeat is
 - **Alerts.** These are the hestia D9 set (hestia plan `:364-371`), written **once**,
   host-generic: `HomelabDeployAppFailed`, `...Blocked`, `...Lagging`, `...Missing`,
   `...Paused`, with `{{ $labels.host }}` in the summary.
+  - `adoptable` (compose backend only) is expected during the soak and gets no alert of
+    its own. Any rule that lists states must include it.
   - If HOMELAB-112 has already added them as `HestiaDeploy*`, alcatraz's cutover PR
     renames them and adds `host` to their grouping, rather than copying them as
     `AlcatrazDeploy*`.
@@ -496,6 +499,284 @@ These mirror `deployer.py:7-19`, and each one is tested:
     `discover` on every push** to `hosts/alcatraz/**`.
   - The CI lint guard gets the same one exemption as A3.
 
+### Implementation notes (the apply-path PR, before cutover)
+
+The compose apply path (A5) is now in code. It stays unreachable until the cutover
+PR sets `APPLY_ENABLED["compose"] = True`, which is George's call.
+
+- **Mutations get their own guard.** `docker_write()` refuses before any process
+  unless mutations are allowed for the compose backend. Even then it allows only
+  exact shapes:
+  - the preflight `run`;
+  - `compose ... pull --quiet`;
+  - `compose ... up -d --remove-orphans --wait --wait-timeout 300`;
+  - `compose ... up --no-start --remove-orphans`.
+
+  `reconcile` calls `apply_compose()` only when mutations are on and there is no
+  global PAUSE.
+- **Preflight: the symlink requirement above is met.**
+  - A helper container from the deployer's own image (found through
+    `inspect --format {{.Image}}` on its own container id) runs `compose_backend.py
+    resolve`. The host roots it needs are mounted read-only under `/host` (see the
+    review round below). The helper has no network and a read-only root. Every
+    capability is dropped except `CAP_DAC_READ_SEARCH` (to traverse DSM's 0700
+    homes), and it runs with `no-new-privileges`.
+  - `resolve_under()` follows symlinks inside `/host`. An absolute target restarts
+    at `/host`, never at the helper's own `/`, and `..` never leaves the root.
+  - It resolves every bind source, every allow-list entry and `DATA_DIR`, then
+    re-checks each resolved source against the same mount policy. An allow-list
+    entry that resolves into a denied root is dropped, which covers
+    `/var/services/homes`-style links.
+  - The own-subtree rule is applied lexically to the resolved path, so a
+    `/volume1/docker/<name>` that is itself a link elsewhere does not count.
+  - A missing, unreadable or looping source blocks the app (fails closed). On a
+    host with SELinux the helper may be denied; it then fails closed too.
+    alcatraz has no SELinux.
+- **Review round (#1894).**
+  - **Mount paths are exact.** A bind source must be *exactly* the app's own
+    `/volume1/docker/<name>`, or *exactly* an `x-deploy.allow-host-paths` entry.
+    Sub-paths are refused. In addition, no source may lie under any app's writable
+    bind (`nested_write_reasons`, checked across all apps in the tick).
+    - The reason is a race. A container that can write a directory could replace a
+      path below it with a symlink between the preflight and `up`. With these rules
+      no app can write the parent of anything that is bind-mounted.
+    - `immich-photos-pull`'s allow-list now names each mounted file.
+  - **The preflight runs after `pull`**, immediately before `up`.
+  - **The helper mounts only the roots it needs.** That is the first path
+    component, or the first two under `/var` and `/usr`. Each is mounted read-only,
+    never `/` (a plain read-only bind is not recursive on Docker < 25 or kernels
+    < 5.12), and never `/run`, `/var/run`, `/proc`, `/sys` or `/dev`, so the docker
+    socket is unreachable. A link that points outside those roots resolves as
+    missing, and fails closed.
+  - **Sources must be a file or a directory.** A device, fifo or socket is refused.
+  - **Other refusals.** `container_name` must be the app's name or start with
+    `<name>-`. Every volume other than `/volume1` (and `/volumeUSB*`) is denied.
+  - **Failures are kept** for apps that are unevaluated in a tick. Any exception in
+    `apply_compose` makes the app `failed`, with backoff, and the tick still writes
+    state.
+  - **A bad `SETTLE_SECONDS`** raises `ConfigError` (naming the variable, never
+    the value).
+  - **One-shot services** (ones that exit by design) fail the settle check. v1
+    supports long-running services only.
+- **Review round 2 (#1894).**
+  - **The writable set is live.** It is built from every container on the host:
+    `docker inspect --format '{{json .Name}}\t{{json .Mounts}}'` over
+    `ps -a -q`, taking every mount with `RW: true`. Hand-made containers count
+    too. The mounts this tick plans are added to it.
+  - **Every path must be its own realpath.** In the preflight, each bind source
+    and allow-list entry must equal its realpath, so the lexical policy is the
+    real one. DSM's `/var/services/homes/...` must therefore be listed as
+    `/volume1/homes/...`.
+  - **The nested-write check runs again in the preflight**, against the
+    *resolved* paths of the live writable mounts.
+  - **Path components must match `[A-Za-z0-9._@-]` and are never `.` or `..`.**
+    This is checked when the compose is validated, so such a path makes the app
+    `invalid` instead of tripping the helper's argv guard. The guard uses the
+    same rule.
+  - **An armed tick survives a guard refusal.** If the argv guard refuses an
+    app's preflight while the backend is armed, that one app fails (with
+    backoff) and the tick carries on.
+  - **`container_name`** must be exactly `<app>` or `<app>-<service>`, and must not
+    equal another app's name or the deployer's.
+  - **Trust boundary: host users with SMB, NFS or SSH access to alcatraz's
+    shares are trusted.**
+    - They can create or swap symlinks and directories at any time. The
+      preflight checks paths as they are at check time; it cannot defend against
+      someone writing the host filesystem directly.
+    - The policy guards against *containers* writing their way out, not against
+      people with share access, who are George's household.
+- **Review round 3 (#1894).**
+  - **Named volumes are checked at their real host path.** A local volume with a
+    `device` option (`docker volume inspect --format`, a new exact read shape)
+    counts as writable at that device path, but only for a plain bind: `type: none`
+    with `o` containing `bind` or `rbind` (round 4). Any other local volume with
+    options hides where it writes: nfs (`device=:/path`), cifs
+    (`//server/share`), or a block device (`type=ext4`). So does a non-local
+    driver. Both count as writable at `/`. Only the volume name and `type` are
+    logged, never `o`, which can hold a password. UNC-style `//` paths are never
+    mounted by the preflight helper. That makes every bind on the host `invalid`,
+    which fails closed; apps without binds are unaffected.
+  - **A container vanishing between `ps` and `inspect`** no longer fails the
+    tick. The deployer's own `--rm` preflight helper can do this. The backend
+    re-lists, drops the vanished ids and retries once. A malformed `.Mounts` or
+    volume shape is `DockerUnavailable`: the tick fails cleanly, with no crash.
+  - **Container names are unique.** They are the declared `container_name`, or
+    compose's default `<project>-<service>-1`, so `foo` with service `bar-x`
+    collides with `foo-bar` with service `x`. A name must be unique across all
+    apps, and must not be taken by a live container outside the project.
+  - **New A-Phase 2 step 5:** before the soak, list the hand-made containers that
+    write `/`, `/volume1` or `/volume1/homes`.
+- **`/var/log`.** An allow-list entry may not be `/var/log` itself, and a source
+  under `/var/log` must resolve to a regular file.
+- **Top-level volume and network keys may not contain `_`.** `<project>_<key>` is
+  otherwise ambiguous: project `foo` with key `a_b`, and project `foo_a` with key
+  `b`, are both `foo_a_b`.
+- **A top-level change makes a project not `adoptable`.**
+- **`x-deploy.create: true`** is planned like `pending`, so the shadow's
+  `would_apply` now lists the canary. It is applied only once the backend is
+  armed.
+- **The per-app sequence:** preflight, then pull, then `up`, then settle.
+  - Settle waits `SETTLE_SECONDS` (60) and then checks each service. Every service
+    must have containers carrying the desired hash and the ownership label. They
+    must be running, unless the project is stopped on purpose, and must not have
+    restarted during the settle.
+  - A failure makes the app `failed`, with a 1 h backoff per (app, sha). A new
+    SHA retries at once.
+  - Apply errors are logged by exception type only.
+- **Self-apply (the detached helper) is still not implemented.** The deployer
+  refuses its own project, and George re-runs the bootstrap command. It must exist
+  before the cutover's self-apply test.
+- **Measured end to end** with the apply path forced on in a local test harness
+  against the podman engine, not alcatraz:
+  - a bind app and a no-bind app were created, then `synced` on the next tick;
+  - a `mem_limit` change read `pending` with `services.s.mem_limit` and was
+    applied;
+  - an app binding a symlink to `/` was refused at the preflight and held as
+    `failed`.
+
+  Run by hand in the helper, the resolver mapped `esc -> /` to `/`,
+  `esc/etc/passwd` to `/etc/passwd`, and `/home` to `/var/home`.
+
+### Implementation notes (A-Phase 1 PR 2, `compose_backend.py`)
+
+Where the code differs from the design above, and why. The second round follows the
+review of #1890.
+
+- **Validation is an allowlist, in two passes (A3).**
+  1. *On the raw Git file*, for what parsing hides: `${VAR}` interpolation; bare
+     env keys (`environment: [HOME]`), which compose fills from its own environment,
+     the deployer's; the reserved ownership label; and the key allowlists, so
+     `env_file`, `label_file`, `include` and `extends` never reach the compose CLI,
+     which would read those files inside the deployer container.
+  2. *On `docker compose config --format json`*, which is what `up` applies: real
+     long-syntax volume sources, and booleans already converted (`privileged: "true"`
+     becomes `true`).
+
+  Each of these must be on an allowlist: service keys, top-level keys (`name`,
+  `services`, `networks`, `volumes`), mount types (`bind`, `volume`, `tmpfs`), bind
+  options (private propagation only, no SELinux relabel), top-level volumes (local
+  driver, no `driver_opts`, not `external`), top-level networks (bridge, not
+  `external`), `network_mode` (`none`, `bridge` or `service:`) and `deploy` (only
+  `resources` cpus, memory and pids). So `devices`, `volumes_from`, `security_opt`,
+  `userns_mode`, `ipc`, `cgroup`, `pid`, `sysctls`, `cap_add`, `privileged` and GPU
+  reservations are all refused, however they are spelled.
+- **Mounts are an allowlist of roots (A3, replaces the CI port).** A bind source
+  must be one of:
+  - the app's own `/volume1/docker/<name>/...`;
+  - an `x-deploy.allow-host-paths` entry;
+  - for the deployer only, the docker socket.
+
+  An allow-list entry may not overlap (lie under, or contain) a denied root: `/`,
+  `/volume1`, `/volume2`, `/volumeUSB1`, `/etc`, `/proc`, `/sys`, `/boot`, `/dev`,
+  `/var/run`, `/run`, `/root`, `/var/lib`, `/usr` (with `/usr/syno`), `/opt`,
+  `/var/packages`, `/volume1/docker` (every app's subtree), any `/volume1/@*`, or
+  the deployer's `DATA_DIR`. Anything else is refused, which
+  is stricter than the CI guard (an unlisted `/volume1/misc` used to pass).
+- **No borrowed volumes or networks.** A top-level volume or network may carry
+  `name` only as compose's own default, `<project>_<key>`. Any other name would
+  attach an existing volume or network: another project's, a hand-made bind volume
+  that would get past the mount allowlist, or `host`. Logging is limited to the
+  `json-file` and `local` drivers.
+- **HARD REQUIREMENT for the apply-path PR (A5): symlinks.** A container can write a
+  symlink inside its own `/volume1/docker/<name>` (for example `x -> /`), and a later
+  commit can then bind `x`. The policy here checks the path lexically, so it cannot
+  see this. The A5 `--mount` preflight must therefore resolve every bind source on
+  the host with `realpath` and re-check the resolved path against this same policy
+  before `up`. A source that resolves elsewhere makes the app `blocked`. Cutover
+  must not happen without it.
+- **The allow-list comes from Git, not `desired.json`.** `reconcile` rediscovers
+  every app from the bare git cache at `refs/deployer/head`, which must equal
+  `desired.json`'s sha. `desired.json` only says which commit.
+- **Ownership (A4.5).** The label is injected in memory, not through an override
+  file. The backend also hashes the compose without the label. A project whose
+  containers match that hash but lack the label is `adoptable` ("matches Git apart
+  from the ownership label"), a new state, rather than only `blocked`. This lets the
+  shadow show a hand-made project is in sync before anything is ever deployer-owned.
+- **Baseline for "what changed".** The baseline is recorded on an app's first
+  evaluation, moved only when the project is deployer-owned and `synced`, and kept
+  for apps that are unevaluated in a tick. It never moves while an app is
+  `adoptable` or unowned, so a top-level change stays visible. At cutover it also becomes the tree last
+  applied.
+- **The interpolation check reads the uninterpolated render.** Comparing it with
+  the interpolated form does not work: compose 5.6.1 normalises the interpolated
+  form, so the two differ for every app. The rule is that no string compose read
+  may still hold an unescaped `$`. `$$` escapes are allowed.
+- **Limits, documented, not detected:**
+  - A mutable image tag that moves on the registry changes no hash. Pin images by
+    digest, as Renovate does.
+  - Top-level `networks` and `volumes` are in no service hash. Changes to them are
+    detected against the baseline and reported as drift, but not on an app's first
+    evaluation.
+  - A symlink in an allowed path is not seen in shadow; see the A5 requirement above.
+- **One-off containers** (`compose run`) are excluded with
+  `label=com.docker.compose.oneoff=False`.
+- **No compose text in `desired.json` (A2).** The parsed dict is fed to
+  `docker compose -f -` as JSON, so `desired.json` keeps hestia's format. The project
+  directory is a fixed, empty `DATA_DIR/compose-project/`; a non-empty one fails the
+  tick, because compose reads `.env` from it.
+- **Docker argv shapes are pinned exactly.** `ps` comes in two fixed shapes;
+  `inspect` uses the fixed `--format` (labels, image, state, restart count; never
+  `Config.Env`) with hex ids; `version` uses a fixed format; plus `compose version
+  --short` and `compose ... config` with exactly `--hash *`, `--format json`, or
+  `--format json --no-interpolate`. The CLI gets a minimal environment (`PATH`,
+  `HOME`, `DOCKER_*`, `TZ`).
+- **Unmanaged** comes from one `docker ps -a --format`, not `compose ls`.
+- **The compose version** is fixed per image digest, not pinned in the Dockerfile.
+  One image predicts and applies.
+- **Apply (A5) is not in this PR.** `apply_compose()` refuses while mutations are
+  off, and otherwise raises `NotImplementedError`. The pull / up / settle path, the
+  `--mount` preflight and the self-apply helper land before alcatraz's cutover.
+- **Measured end to end** against a real compose 5.6.1 CLI and engine (podman,
+  locally), with the git cache:
+  - a project brought up with the owner-labelled compose reads `synced`;
+  - one brought up by hand from the same file reads `adoptable`;
+  - after an image bump in Git, the owned one reads `pending` with
+    `services.s.image: <old> -> <new>`.
+
+  The reviewer's bypass probes run as tests through the real `docker compose
+  config`. They are skipped where no compose CLI exists, and they ran in the
+  deployer image.
+
+### Implementation notes (A-Phase 1 PR 3, the relay)
+
+- **Off by default.** `ALCATRAZ_DEPLOY_RELAY=1` in hestia's heartbeat compose turns it
+  on, as a one-line PR after George bootstraps alcatraz-deployer. Until then
+  hestia's heartbeat behaves exactly as before and writes no new file.
+- **The `JobMetricAbsent` arm is gated on the relay.** It reads
+  `absent(...{job="alcatraz-deployer"}) and on() (homelabscope_relay_enabled == 1)`,
+  so a deployer that does not exist yet never pages, and turning the relay on arms
+  it. This was checked with `promtool test rules` for three cases: relay off, relay
+  on with the series absent, and relay on with the series present.
+- **Validation** accepts only the following, and rejects the whole file on any
+  other line:
+  - `# HELP` lines whose text equals `deployer.py`'s byte for byte (a test pins
+    the parity);
+  - `# TYPE ... gauge` lines;
+  - `homelabscope_deploy_*{host="alcatraz",...}` samples, with label names from
+    `commit`, `app`, `state` and `scope`, and values from `[A-Za-z0-9._-]`;
+  - `homelabscope_job_*{job="alcatraz-deployer"}` samples;
+  - blank lines, and a file of at most 256 KiB.
+
+  The log names the line number, never the line.
+- **Turning it off disarms it.** With `ALCATRAZ_DEPLOY_RELAY` not `1`, the relay
+  deletes `homelabscope-deploy-alcatraz.prom` and `homelabscope-relay.prom`. That
+  way neither `HomelabscopeJobStale` (on the relayed `job_*` series) nor the gated
+  absent arm can page.
+- **More refusals (review of #1891):**
+  - NUL bytes;
+  - a duplicate label name within a sample;
+  - a second HELP or TYPE for a family, or one that comes after that family's
+    samples;
+  - a duplicate series.
+- **promtool unit tests run in CI** (`lint.yaml` job `prometheus-rules`, using
+  `quay.io/prometheus/prometheus:v3.5.0`, the cluster's version). They cover four
+  cases: relay off, `relay_enabled 0`, the deployer series present, and the series
+  absent (fires at 90 m, not at 30 m). Removing the gate makes the first two fail.
+- **Status as a gauge, not a counter.** `homelabscope_relay_last_status{source="alcatraz-deploy"}`
+  is 0 (accepted), 1 (rejected) or 2 (fetch failed). `homelabscope_relay_enabled`
+  and `homelabscope_relay_last_success_seconds` go in `homelabscope-relay.prom`.
+  The cutover's `HomelabDeployRelayRejected` reads `last_status == 1`.
+
 ## Migration (faster, evidence-gated)
 
 Each phase is its own PR, and nothing is retired until the step before it has run clean.
@@ -536,6 +817,22 @@ George's steps on alcatraz (over SSH; the agent does not SSH):
 4. **First start.** Copy the compose from `master` and run
    `sudo docker compose -f docker-compose.yml -p alcatraz-deployer up -d`. This is the one
    hand-run compose, the same role the runner had.
+5. **Pre-soak: list the containers that write broad host paths.** Any hand-made
+   Container Manager container that mounts `/`, `/volume1` or `/volume1/homes`
+   read-write (or uses a named volume whose local `device` is one of them) makes
+   every allow-listed bind below it `invalid`. That is the live nested-write rule
+   from the apply-path PR. List them before the soak, so that `invalid` is
+   expected rather than a surprise:
+
+   ```bash
+   sudo docker ps -aq | xargs -r sudo docker inspect \
+     --format '{{.Name}}{{range .Mounts}}{{if .RW}} {{.Type}}:{{if .Name}}{{.Name}}={{end}}{{.Source}}{{end}}{{end}}' \
+     | grep -E ':(/|/volume1|/volume1/homes)( |$)|volume:'
+   ```
+
+   For each `volume:` entry, check `sudo docker volume inspect <name>` for a
+   `device` option. Record what you find in the soak notes, and either make
+   such mounts read-only or accept that binds below them stay `invalid`.
 
 The soak exits only when **all** of the following are true. The 24 h is a minimum, not
 a deadline:

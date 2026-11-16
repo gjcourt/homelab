@@ -21,6 +21,33 @@ set -uo pipefail
 INTERVAL_SECONDS="${INTERVAL_SECONDS:-300}"
 SCRIPT=/app/deployer.py
 
+# DEPLOYER_BACKEND=compose (alcatraz, HOMELAB-118): both halves run IN THE
+# CONTAINER (compose_backend.py), talking to the host engine through the
+# mounted docker socket. No nsenter, no host python. Unset or "truenas" is
+# hestia's path below, unchanged.
+case "${DEPLOYER_BACKEND:-truenas}" in
+  truenas) ;;
+  compose)
+    COMPOSE=/app/compose_backend.py
+    echo "hestia-deployer (compose backend): tick every ${INTERVAL_SECONDS}s, DRY_RUN=${DRY_RUN:-1 (default)}"
+    python3 "$COMPOSE" version
+    while true; do
+      python3 "$COMPOSE" fetch
+      rc=$?
+      [ "$rc" -ne 0 ] && echo "fetch exited $rc"
+      python3 "$COMPOSE" reconcile
+      rc=$?
+      [ "$rc" -ne 0 ] && echo "reconcile exited $rc"
+      sleep "$INTERVAL_SECONDS"
+    done
+    ;;
+  *)
+    # The value is not echoed: never print env values.
+    echo "hestia-deployer: unknown DEPLOYER_BACKEND (want truenas or compose)" >&2
+    exit 2
+    ;;
+esac
+
 echo "hestia-deployer: tick every ${INTERVAL_SECONDS}s, DRY_RUN=${DRY_RUN:-1 (default)}"
 while true; do
   python3 "$SCRIPT" fetch

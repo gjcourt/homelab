@@ -75,6 +75,11 @@ class Config:
     # notification links to {base}/t/{key} in the app instead of Plane; other
     # links (a PR description's ticket link) stay on Plane.
     app_web_url: str = ""
+    # George's orchestrator's Plane account (George, 2026-11-09): a `ready` it
+    # adds counts like George's. Nothing else does: its comments neither wake
+    # an agent nor answer a Blocked ticket, and `over-cap` stays George's.
+    # Empty means only George's `ready` counts.
+    orchestrator_email: str = ""
 
 
 def _read_file(env: str) -> str:
@@ -125,6 +130,7 @@ def load(path: str | None = None, env=os.environ) -> Config:
         plane_web_url=raw.get("planeWebUrl", ""),
         app_web_url=raw.get("appWebUrl", "") or "",
         github_owner=raw.get("githubOwner", "") or "",
+        orchestrator_email=str(raw.get("orchestratorEmail", "") or "").strip(),
     )
     for key in ("job_namespace", "job_template", "console_deployment", "run_record",
                 "jobs_token_secret"):

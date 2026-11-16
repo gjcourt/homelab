@@ -415,8 +415,13 @@ def commit_time(git_dir: str, sha: str) -> int:
     return int(git("log", "-1", "--format=%ct", sha, git_dir=git_dir).strip())
 
 
-def fetch_main(data_dir: str = DATA_DIR, url: str = REPO_URL) -> int:
-    """Container half of a tick. Writes desired.json for exactly one commit."""
+def fetch_main(data_dir: str = DATA_DIR, url: str = REPO_URL, discover_fn=None) -> int:
+    """Container half of a tick. Writes desired.json for exactly one commit.
+
+    discover_fn: the compose backend passes its own discovery (the shared
+    discover() plus its per-app validator, compose_backend.py). The TrueNAS
+    path passes nothing and uses discover().
+    """
     import yaml  # container-only dependency (py3-yaml)
 
     git_dir = os.path.join(data_dir, "cache.git")
@@ -437,7 +442,7 @@ def fetch_main(data_dir: str = DATA_DIR, url: str = REPO_URL) -> int:
     except (OSError, subprocess.SubprocessError, ValueError) as e:
         log(f"fetch: git fetch failed ({type(e).__name__}); keeping {str(prev.get('sha', 'none'))[:7]}")
         return 1
-    entries = discover(files, yaml.safe_load)
+    entries = (discover_fn or discover)(files, yaml.safe_load)
     doc = {"version": DESIRED_VERSION, "sha": sha, "commit_time": ctime,
            "fetched_at": int(time.time()), "apps": entries}
     atomic_write(desired_path, json.dumps(doc, sort_keys=True))
@@ -866,6 +871,35 @@ def app_containers(name: str, docker=docker_read) -> dict[str, dict]:
     return out
 
 
+def log_tick(*, dry_run: bool, sha: str, results: list[dict], would: list[str], deferred: list[str],
+             global_paused: bool, unmanaged: list[str], unevaluated: list[str],
+             stopped_note: str = "app STOPPED: would update, never start") -> None:
+    """The per-tick log: one summary line, then one line per app that is not
+    synced/archived. Paths and public images only, never values. Shared by
+    both backends so the format is one format."""
+    mode = "DRY-RUN" if dry_run else "APPLY"
+    counts: dict[str, int] = {}
+    for r in results:
+        counts[r["state"]] = counts.get(r["state"], 0) + 1
+    log(f"tick {mode} sha={sha[:7]} {json.dumps(counts, sort_keys=True)} "
+        f"pending={[r['app'] for r in results if r['state'] == 'pending']} "
+        f"would_apply={would} deferred={deferred} global_pause={global_paused} unmanaged={unmanaged}"
+        + (f" unevaluated={unevaluated}" if unevaluated else ""))
+    for r in results:
+        if r["state"] in ("synced", "archived"):
+            continue
+        detail = []
+        if r["changes"]:
+            detail.append("changes: " + "; ".join(r["changes"]))
+        if r["drift"]:
+            detail.append("drift: " + "; ".join(r["drift"]))
+        if r["reasons"]:
+            detail.append("reason: " + "; ".join(r["reasons"]))
+        if r.get("stopped"):
+            detail.append(stopped_note)
+        log(f"  {r['app']} [{r['state']}] ({r['file']}) " + " | ".join(detail))
+
+
 def reconcile(client, *, docker=docker_read, data_dir: str = DATA_DIR, textfile_dir: str = TEXTFILE_DIR,
               dry_run: bool = True, now: float | None = None) -> int:
     """Host half of a tick. `client` is anything with .call(method, *args)."""
@@ -943,27 +977,8 @@ def reconcile(client, *, docker=docker_read, data_dir: str = DATA_DIR, textfile_
                             "drift": [], "blocked": [], "merged": None, "stopped": False})
 
     would, deferred = plan_applies(results)
-    mode = "DRY-RUN" if dry_run else "APPLY"
-    counts: dict[str, int] = {}
-    for r in results:
-        counts[r["state"]] = counts.get(r["state"], 0) + 1
-    log(f"tick {mode} sha={sha[:7]} {json.dumps(counts, sort_keys=True)} "
-        f"pending={[r['app'] for r in results if r['state'] == 'pending']} "
-        f"would_apply={would} deferred={deferred} global_pause={global_paused} unmanaged={unmanaged}"
-        + (f" unevaluated={unevaluated}" if unevaluated else ""))
-    for r in results:
-        if r["state"] in ("synced", "archived"):
-            continue
-        detail = []
-        if r["changes"]:
-            detail.append("changes: " + "; ".join(r["changes"]))
-        if r["drift"]:
-            detail.append("drift: " + "; ".join(r["drift"]))
-        if r["reasons"]:
-            detail.append("reason: " + "; ".join(r["reasons"]))
-        if r.get("stopped"):
-            detail.append("app STOPPED: would update, never start")
-        log(f"  {r['app']} [{r['state']}] ({r['file']}) " + " | ".join(detail))
+    log_tick(dry_run=dry_run, sha=sha, results=results, would=would, deferred=deferred,
+             global_paused=global_paused, unmanaged=unmanaged, unevaluated=unevaluated)
 
     # Phase 1: nothing is applied. In Phase 2 the apply loop over `would`
     # (apply_app + verify + per-(app, sha) backoff + self-apply) goes here.

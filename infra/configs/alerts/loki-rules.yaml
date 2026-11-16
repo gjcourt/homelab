@@ -310,3 +310,88 @@ spec:
               PromtailDroppingEntries are blind, so log shipping could stop
               without any alert. The Service is `promtail-metrics` (the chart
               only renders it when serviceMonitor.enabled is true).
+
+    # =========================================================================
+    # Talos log shipping (vector DaemonSet -> Loki)
+    #
+    # From install (2026-03-05) until the `role: Agent` fix, the vector chart
+    # was given `role: DaemonSet`, which it does not recognise. It rendered no
+    # workload, the HelmRelease still reported Ready, and no Talos log reached
+    # Loki. Nothing noticed for eight months. This alert makes a missing or
+    # short DaemonSet visible. TalosLogsAbsent (Loki ruler,
+    # infra/controllers/loki/alerting-rules.yaml) covers the stream itself.
+    # =========================================================================
+    - name: loki.talos-log-shipping
+      rules:
+        # Ready pods are compared with the node count, not with
+        # desiredNumberScheduled: a DaemonSet that a nodeSelector or taint keeps
+        # off a node still reports desired == ready, but that node's logs go
+        # nowhere. absent() covers the case above, where the DaemonSet does not
+        # exist and kube-state-metrics has no series at all.
+        #
+        # Checked live 2026-11-14 (4 nodes): returns 1 for daemonset="vector"
+        # (absent), nothing for daemonset="loki-canary" (4/4 ready); flipping
+        # `<` to `>=` on loki-canary returns 4, and subtracting one ready pod
+        # returns 3, so the on() join binds.
+        - alert: VectorAgentNotReady
+          expr: >
+            kube_daemonset_status_number_ready{namespace="monitoring", daemonset="vector"}
+              < on() group_left() count(kube_node_info)
+            or absent(kube_daemonset_status_number_ready{namespace="monitoring", daemonset="vector"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "vector DaemonSet is missing or not ready on every node"
+            description: >
+              The vector DaemonSet that receives Talos kernel and service logs
+              is absent or has fewer ready pods than there are nodes. Logs from
+              the uncovered nodes are not reaching Loki, so
+              BTRFSCorruptionDetected and ISCSIKernelError are blind for them.
+              If it is absent, run `helm -n monitoring get manifest vector` and
+              check that a DaemonSet rendered (the chart's role must be
+              "Agent"). Otherwise: kubectl -n monitoring get pods -l
+              talos-log-receiver=true -o wide. The absent() branch also fires
+              if kube-state-metrics itself is down, so check that first if
+              other kube_* alerts are firing.
+
+        # One node not sending. TalosLogsAbsent (Loki ruler) is cluster-wide:
+        # the other nodes' lines satisfy it, so a single silent node never
+        # fires it. This works from Vector's own counters instead. Every node
+        # sends only to the Vector pod on that node (it listens on the host
+        # network, see infra/controllers/vector/values.yaml), so a pod whose
+        # talos_logs source received nothing for 30m means that node stopped
+        # sending.
+        #
+        # It starts from kube_pod_info rather than the counter, because Vector
+        # creates the counter only at the first event: a node that never sends
+        # after a pod restart has no series at all, and a plain `== 0` would
+        # miss it. A node with no Vector pod is VectorAgentNotReady's job.
+        # If every node fires at once, suspect the PodMonitor or scraping, not
+        # the nodes. Check `up{job="vector"}` first.
+        #
+        # Silence is normal for nothing here: on 2026-11-15 every node sent
+        # 7,000-10,500 lines per 5 min.
+        - alert: TalosNodeLogsSilent
+          expr: >
+            count by (node) (
+              kube_pod_info{namespace="monitoring", created_by_kind="DaemonSet", created_by_name="vector"}
+            )
+            unless on (node)
+            sum by (node) (
+              rate(vector_component_received_events_total{namespace="monitoring", component_id="talos_logs"}[30m]) > 0
+            )
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No Talos logs from {{ $labels.node }} for 30m"
+            description: >
+              The vector pod on {{ $labels.node }} has received no Talos log
+              line in 30 minutes, so BTRFSCorruptionDetected and
+              ISCSIKernelError are blind for that node. Check the node's
+              logging config (talosctl -n <node-ip> get kmsglogconfigs, and
+              talosctl -n <node-ip> get machineconfig -o yaml | grep -A4
+              logging), then the vector pod on that node (kubectl -n
+              monitoring get pods -l talos-log-receiver=true -o wide). See
+              docs/reference/kernel-log-shipping.md.

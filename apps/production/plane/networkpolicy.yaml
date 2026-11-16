@@ -11,7 +11,7 @@ metadata:
     app.kubernetes.io/part-of: network-policies
 spec:
   description: >-
-    Gateway ingress to the web, space, admin, live, api and MinIO ports; bench-cloud, plane-sync and agent-desk to the api; anything within the namespace; egress DNS, the namespace (CNPG included) and agent-desk webhooks.
+    Gateway ingress to the web, space, admin, live, api and MinIO ports; bench-cloud, plane-sync, agent-desk and plane-mobile-prod to the api; anything within the namespace; egress DNS, the namespace (CNPG included) and agent-desk / plane-mobile-prod webhooks.
   endpointSelector:
     matchLabels:
       app.kubernetes.io/name: plane-ce
@@ -55,6 +55,15 @@ spec:
         - ports:
             - port: "8000"
               protocol: TCP
+    # plane-mobile (production) reads and updates tickets for the phone client.
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-mobile-prod
+            app: plane-mobile
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
   egress:
     - toEndpoints:
         - matchLabels:
@@ -68,12 +77,22 @@ spec:
               protocol: TCP
     - toEndpoints:
         - {}
-    # Webhook deliveries to the agent-desk dispatcher, the one host in
+    # Webhook deliveries to the agent-desk dispatcher, listed in
     # WEBHOOK_ALLOWED_HOSTS (release-patch.yaml).
     - toEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: agent-desk
             app: agent-desk
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+    # Webhook deliveries to plane-mobile-prod (POST /plane), also listed in
+    # WEBHOOK_ALLOWED_HOSTS.
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-mobile-prod
+            app: plane-mobile
       toPorts:
         - ports:
             - port: "8080"

@@ -405,9 +405,13 @@ def test_deploy_help_strings_are_pinned():
 
 
 def test_no_other_writer_uses_the_deploy_families():
+    # The heartbeat relays alcatraz's file (HOMELAB-118): it only validates
+    # and re-publishes deployer output, and its tests pin its HELP copy to
+    # this file's. Nothing else may name the families.
+    relay = os.path.join("images", "homelabscope-heartbeat", "")
     hits = []
     for path in glob.glob(os.path.join(ROOT, "images/**/*"), recursive=True):
-        if "hestia-deployer" in path or not os.path.isfile(path):
+        if "hestia-deployer" in path or not os.path.isfile(path) or relay in os.path.relpath(path, ROOT) + "/":
             continue
         with open(path, errors="ignore") as f:
             if "homelabscope_deploy_" in f.read():

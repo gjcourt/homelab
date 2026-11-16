@@ -5,7 +5,7 @@ import itertools
 
 from agent_desk.plane import PlaneError
 
-OWNER, BOT, OTHER = "u-george", "u-bot", "u-agent"
+OWNER, BOT, OTHER, ORCH = "u-george", "u-bot", "u-agent", "u-orchestrator"
 _clock = itertools.count(1)
 
 
@@ -17,7 +17,8 @@ class FakePlane:
     def __init__(self):
         self.members = [{"id": OWNER, "email": "gjcourt@gmail.com"},
                         {"id": BOT, "email": "gjcourt+agent-desk@gmail.com"},
-                        {"id": OTHER, "email": "other@example.com"}]
+                        {"id": OTHER, "email": "other@example.com"},
+                        {"id": ORCH, "email": "gjcourt+bench-orchestrator@gmail.com"}]
         self.projs = {}
         self.writes = []
         self.listed = 0  # full work-item listings

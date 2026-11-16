@@ -11,6 +11,7 @@ resources:
   - certificates
   - changes
   - cloudflare-tunnel
+  - domestique
   - excalidraw
   - external-services
   - finance-dashboard
@@ -33,6 +34,7 @@ resources:
   - navidrome
   - openwebui
   - plane
+  - plane-mobile
   - plane-sync
   - snapcast
   - thermalscope

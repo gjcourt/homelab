@@ -118,6 +118,11 @@ spec:
               mountPath: /data
             - name: navidrome-music
               mountPath: /music
+              # The PV is ReadOnlyMany with nfs.readOnly, but without this the
+              # kernel mount is still rw, and pvc-writeprobe tries to write into
+              # the library (Permission denied → homelab_pvc_probe_unknown).
+              # Navidrome only reads music, so mount it ro and the probe skips it.
+              readOnly: true
       volumes:
         - name: navidrome-data
           persistentVolumeClaim:

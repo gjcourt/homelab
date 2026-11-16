@@ -533,7 +533,8 @@ with the Vector address once the receiver exists. Its "All UniFi Device Manageme
 detailed record (download, flash, reboot, port up) next to the iSCSI and kernel logs. Not needed for phases 1–4.
 
 **2026-11-15:** receiver added (`unifi_syslog` in `infra/controllers/vector/values.yaml`,
-Loki `job="unifi-syslog"`). Point **SIEM Server** at `10.42.2.25:5514`. Send device
+Loki `job="unifi-syslog"`), plus a LoadBalancer IP for it, `10.42.2.47`. Point **SIEM Server**
+at `10.42.2.47:5514` (the field takes one address, so a node IP has no failover). Send device
 management and threat (IPS) events only, not per-flow traffic logs: those would flood Loki.
 Syslog over UDP is lost while the Rack Switch itself is down; events before and after arrive.
 

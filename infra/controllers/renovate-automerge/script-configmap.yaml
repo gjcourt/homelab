@@ -50,6 +50,12 @@ data:
     # a PR needs a human. Honoured here so that hold is binding rather than
     # advisory -- the reviewer has no merge rights and cannot enforce it itself.
     HOLD_LABEL = "held-by-review"
+    # Applied by Renovate itself (renovate.json addLabels) to updates that must
+    # never self-merge whatever their update type: the hash-pinned --no-deps
+    # plane-mcp-requirements.txt, where a lone bump broke every ticket Job on
+    # 2026-11-08. Same effect as HOLD_LABEL, different author.
+    NO_AUTOMERGE_LABEL = "no-automerge"
+    HOLD_LABELS = {HOLD_LABEL, NO_AUTOMERGE_LABEL}
 
     # Update types Renovate may report, and the subset we auto-merge.
     UPDATE_TYPES = ("major", "minor", "patch", "digest", "pin", "pinDigest", "rollback")
@@ -294,7 +300,7 @@ data:
         An ALLOWLIST (the author -- self-hosted Renovate opens PRs as George),
         not a denylist of the App: GraphQL names bots without the "[bot]"
         suffix REST uses, and an allowlist does not care. Adding a label is not
-        gated -- the only label read here is HOLD_LABEL, and adding it holds.
+        gated -- the only labels read here are HOLD_LABELS, and adding one holds.
         Fails CLOSED: an API error, a missing/deleted actor, or more than one
         page of history is a hold."""
         owner, name = repo.split("/", 1)
@@ -559,8 +565,9 @@ data:
                 print(f"    -> hold: {reason}", flush=True)
                 held.append({"pr": pr, "reason": reason})
                 continue
-            if any((lab or {}).get("name") == HOLD_LABEL for lab in pr.get("labels") or []):
-                reason = f"held by dependency review ({HOLD_LABEL})"
+            hold_labels = sorted({(lab or {}).get("name") for lab in pr.get("labels") or []} & HOLD_LABELS)
+            if hold_labels:
+                reason = "held by label (" + ", ".join(hold_labels) + ")"
                 print(f"    -> hold: {reason}", flush=True)
                 held.append({"pr": pr, "reason": reason})
                 continue

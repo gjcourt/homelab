@@ -1,0 +1,54 @@
+# The fitness folder for Domestique (staging): a read-only NFS mount of hestia's
+# /mnt/main/family/fitness (TrueNAS NFS share 19, ro, 10.42.2.0/24, no root
+# mapping — DOMESTIQUE-55). Files are 0644 and directories 2775, so the pod's
+# UID 65534 can read without supplementalGroups.
+#
+# Read-only is enforced three times here and once on hestia: the export is ro,
+# the PV has nfs.readOnly and ReadOnlyMany, and the Deployment mounts it
+# readOnly (DOMESTIQUE-56).
+#
+# Bound by the PV's claimRef only. The PVC has no volumeName: Flux's
+# server-side apply would try to clear a binder-set volumeName and fail with
+# "spec is immutable".
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: domestique-fitness-pv-stage
+  labels:
+    app: domestique
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadOnlyMany
+  persistentVolumeReclaimPolicy: Retain
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: domestique-fitness
+    namespace: domestique-stage
+  mountOptions:
+    - nfsvers=3
+    - hard
+    - timeo=600
+    - retrans=2
+    - nolock
+  nfs:
+    server: 10.42.2.10
+    path: /mnt/main/family/fitness
+    readOnly: true
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: domestique-fitness
+  namespace: domestique-stage
+  labels:
+    app: domestique
+spec:
+  accessModes:
+    - ReadOnlyMany
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: ""

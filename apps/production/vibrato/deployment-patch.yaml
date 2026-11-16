@@ -12,3 +12,8 @@ spec:
           env:
             - name: LEVA_NODE_ID
               value: "espresso"
+            # Keep every shot. vibrato#97 adds a retention cap that defaults to
+            # 5000 and deletes older shots on first boot; George chose 0 for
+            # prod (2026-11-15). Harmless on images that predate #97.
+            - name: LEVA_HISTORY_MAX_SHOTS
+              value: "0"

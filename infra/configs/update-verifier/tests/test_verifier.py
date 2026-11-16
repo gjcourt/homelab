@@ -50,6 +50,7 @@ class FakeApi:
             'count(kube_node_status_condition{condition="Ready",status="true"} == 1)': [({}, 4)],
             "count(etcd_server_has_leader == 1)": [({}, 3)],
             "sum(etcd_server_is_leader)": [({}, 1)],
+            BGP_UP: [({}, 4)],
             "count(gotk_resource_info{": [({}, 19)],
             FLUX_NOW: [],
             FLUX_BEFORE: [],
@@ -106,6 +107,7 @@ class FakeApi:
         self.posts.append((url, alerts))
 
 
+BGP_UP = "count(count by (node) (cilium_bgp_control_plane_session_state == 1))"
 FLUX_NOW = 'gotk_resource_info{customresource_kind=~"Kustomization|HelmRelease",ready="False"}'
 FLUX_BEFORE = f"last_over_time({FLUX_NOW}[10m])"
 NOW = BOOT + 1200  # uptime 20 min
@@ -156,19 +158,24 @@ def test_result_not_repeated_on_next_loop():
     ({"max(homelab_pvc_writeprobe_last_run_seconds)": [({}, BOOT + 300)]}, "pvc_writeprobe_stale"),
     ({'count(ALERTS{alertname="PvcNotWritable"})': [({}, 1)]}, "pvc_not_writable_alert"),
     ({'count(kube_node_status_condition{condition="Ready",status="true"} == 1)': [({}, 3)]}, "nodes_ready"),
-    ({"count(kube_node_info)": []}, "nodes_ready"),
+    # No node count: nodes_ready can't pass, and bgp has nothing to compare against.
+    ({"count(kube_node_info)": []}, "nodes_ready,bgp"),
     ({"count(etcd_server_has_leader == 1)": [({}, 2)]}, "etcd"),
     ({"sum(etcd_server_is_leader)": [({}, 0)]}, "etcd"),
     ({FLUX_NOW:
       [({"customresource_kind": "HelmRelease", "exported_namespace": "monitoring", "name": "loki"}, 1)]}, "flux"),
     ({"count(gotk_resource_info{": []}, "flux"),
     ({"count(etcd_server_has_leader == 1)": v.ApiError("boom")}, "etcd"),  # a query error is a fail
+    # 2026-11-15: gateway 6.0.17 stopped FRR; every session showed 0.
+    ({BGP_UP: []}, "bgp"),
+    ({BGP_UP: [({}, 3)]}, "bgp"),  # one node not Established, or exporting nothing
+    ({BGP_UP: v.ApiError("boom")}, "bgp"),
 ])
 def test_each_prometheus_check_fails(override, expected):
     api = FakeApi(**override)
     _, rec, _ = run(api)
     assert rec[0].result == "fail"
-    assert rec[0].failed == [expected]
+    assert rec[0].failed == expected.split(",")
 
 
 def test_flux_failure_present_before_boot_is_not_new():

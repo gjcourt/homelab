@@ -1,0 +1,100 @@
+# update-verifier: after a Rack Switch or gateway reboot, check the cluster
+# recovered and record one pass/fail per boot. Plan:
+# docs/plans/2026-11-14-switch-update-observability-plan.md, phase 3.
+#
+# A Deployment, not a CronJob: the result is a gauge Prometheus scrapes, a
+# CronJob pod is gone before it can be scraped, and there is no Pushgateway.
+# Same shape as pvc-writeprobe.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: update-verifier
+  namespace: monitoring
+  labels:
+    app: update-verifier
+spec:
+  replicas: 1
+  # Recreate, not RollingUpdate: two verifiers alive at once during a rollout
+  # could both verify the same boot before either result reaches Prometheus.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: update-verifier
+  template:
+    metadata:
+      labels:
+        app: update-verifier
+    spec:
+      # It only talks HTTP to Prometheus, Loki, unpoller and Alertmanager.
+      # No Kubernetes API access, so no token in the pod.
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: verifier
+          # python 3.14-slim, the same digest truenas-iscsi-monitor and
+          # renovate-automerge pin. Standard library only, no pip install.
+          image: python@sha256:e06cc1111ed84189e91866447f562b89faadbfbbb9937cd67e6bf4172cdb45df
+          command: ["python", "/app/verifier.py"]
+          env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+            - name: DEVICES
+              value: "Rack Switch|Home"
+            - name: INTERVAL_SECONDS
+              value: "300"
+            - name: PROMETHEUS_URL
+              value: "http://kube-prometheus-stack-prometheus.monitoring.svc:9090"
+            - name: LOKI_URL
+              value: "http://loki.monitoring.svc:3100"
+            # Read directly when Prometheus is stale (2026-11-13: no samples
+            # for ~18h after the switch update), so the reboot is still seen.
+            - name: UNPOLLER_URL
+              value: "http://unpoller.monitoring.svc:9130/metrics"
+            # Each replica by pod DNS name: Alertmanager HA does not gossip
+            # alerts between peers (only silences and the notification log), so
+            # a POST to the Service would reach one of two at random. The
+            # notification log still dedups the email across the pair.
+            - name: ALERTMANAGER_URLS
+              value: "http://alertmanager-kube-prometheus-stack-alertmanager-0.alertmanager-operated.monitoring.svc:9093,http://alertmanager-kube-prometheus-stack-alertmanager-1.alertmanager-operated.monitoring.svc:9093"
+            # Prometheus' external label. The direct POST carries it too, so the
+            # POSTed alert and the UpdateVerificationFailed rule's alert have one
+            # label set and Alertmanager treats them as the same alert.
+            - name: ALERT_EXTRA_LABELS
+              value: '{"prometheus":"monitoring/kube-prometheus-stack-prometheus"}'
+          ports:
+            - name: metrics
+              containerPort: 9106
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: script
+              mountPath: /app
+              readOnly: true
+          resources:
+            requests:
+              cpu: 5m
+              memory: 32Mi
+            limits:
+              memory: 96Mi
+      volumes:
+        - name: script
+          configMap:
+            name: update-verifier-script

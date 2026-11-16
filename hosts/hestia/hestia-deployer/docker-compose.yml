@@ -32,7 +32,7 @@ x-deploy:
 
 services:
   hestia-deployer:
-    image: ghcr.io/gjcourt/hestia-deployer:2026-11-09-551bf91@sha256:7d009fed74d16b30a0ef4f0f02f1a785bc9ad73de259f0e47739458970702033
+    image: ghcr.io/gjcourt/hestia-deployer:2026-11-10-480c542@sha256:b649c8c4e027dc4eb8a54d92f8844348105abbda80c799190979f1f794b54f85
     container_name: hestia-deployer
     restart: unless-stopped
     privileged: true

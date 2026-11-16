@@ -139,17 +139,41 @@ continue running with the old config — L2 silently doesn't work.
 
 ### UCGF side
 
-The UCGF runs FRRouting (FRR). Authoritative config snapshot in
-[`docs/reference/ucgf-bgp-frr.conf`](../../reference/ucgf-bgp-frr.conf).
+The UCGF runs FRRouting (FRR). Authoritative config in
+[`docs/reference/ucgf-bgp-frr.conf`](../../reference/ucgf-bgp-frr.conf), which is the exact
+file uploaded to the gateway (keep it free of comments so it can be re-uploaded as-is).
+
+**Since UniFi OS 6.0.17 (2026-11-15) the gateway runs FRR itself.** The config lives in the
+Network app, **Settings → Routing Table → `k8s-lb-bgp` → Manage** (Configuration File), not
+in `/etc/frr`. Firmware 6.0.17 removed `frr.service`, so the old setup (`bgpd=yes` in
+`/etc/frr/daemons`, `systemctl enable --now frr`) no longer starts; BGP was down from 00:54
+until the config was uploaded at about 21:52. The upload is stored in the Network app and
+should survive firmware updates; check after the next one.
+
+Two rules from the importer:
+
+- **It drops `ip prefix-list` lines.** The upload is stored intact, but only `router bgp`
+  and `route-map` blocks are applied, so a route-map that matches a prefix-list rejects
+  every route (the neighbor shows Established with **0 received**). `K8S-LB-IN` therefore
+  uses `match ip address prefix-len 32`, not a prefix-list. The `/24` destination check
+  this loses is covered by the listen range, the peer AS and `DENY-ALL out`.
+- **Only BGP configuration is allowed.** Leave out `frr version`, `hostname`, `log` and
+  `service` lines, and `access-list`.
+
+Check from the gateway: `ssh root@10.42.2.1 'vtysh -c "show bgp summary"; vtysh -c "show ip
+route bgp"'`, or the Neighbors table on the same Network app page.
+
 Key elements:
 
 - **`bgp listen range 10.42.2.0/24 peer-group K8S-NODES`** — accepts BGP
   from any LAN host asserting AS 65010. Lets new workers join automatically.
 - **`maximum-paths 8`** — installs all 3 worker next-hops in the routing
   table for ECMP. Without this, FRR keeps only one path per prefix.
-- **`ip prefix-list K8S-LB-IPS`** — restricts inbound to `/32`s in the LB
-  pool subnet. A misconfigured cluster cannot push arbitrary routes
-  (e.g. a default route).
+- **`route-map K8S-LB-IN` (`match ip address prefix-len 32`)** — accepts
+  only `/32`s inbound, so a misconfigured cluster cannot push a default route
+  or a covering prefix. Until 2026-11-15 this was a prefix-list that also
+  required the `/32` to be inside `10.42.2.0/24`; the UniFi importer drops
+  prefix-lists (see above).
 - **`route-map DENY-ALL` outbound** — gateway never advertises its own
   routes back to the cluster.
 
@@ -170,8 +194,9 @@ ssh root@10.42.2.1 'vtysh -c "show ip route bgp"'
 | One worker's BGP session drops | UCGF removes that next-hop after hold-time (90s); ECMP collapses to 2 paths | Automatic on session re-establishment |
 | Two workers' BGP sessions drop | One next-hop remains; no traffic loss but no HA | Automatic on session re-establishment |
 | All 3 worker BGP sessions drop | UCGF has no route; cross-subnet clients lose access | Automatic on first session re-establishment |
-| UCGF FRR daemon crashes | All BGP routes removed; cross-subnet access fails | `ssh root@10.42.2.1 systemctl restart frr` |
-| UCGF firmware upgrade reverts `/etc/frr/frr.conf` and `/etc/frr/daemons` | BGP not running at all | Re-apply `docs/reference/ucgf-bgp-frr.conf`; re-set `bgpd=yes` in `/etc/frr/daemons`; `systemctl enable --now frr` |
+| UCGF FRR daemon crashes | All BGP routes removed; cross-subnet access fails | `ubios-udapi-server` owns the FRR daemons since 6.0.17; toggle or re-save `k8s-lb-bgp` in the Network app. There is no `frr.service` |
+| UCGF firmware upgrade loses the BGP config | BGP not running at all (`CiliumBGPSessionDown`) | Network app → Routing Table → Create New Route → BGP, upload `docs/reference/ucgf-bgp-frr.conf`. Don't recreate `frr.service` by hand: the gateway would run two FRRs |
+| Neighbor Established but 0 received routes | Route-map references something the importer dropped (seen 2026-11-15 with a prefix-list) | Compare `vtysh -c "show running-config"` with the reference file |
 
 ### Graceful restart
 

@@ -3,6 +3,7 @@ kind: Kustomization
 resources:
   - release.yaml
   - repository.yaml
+  - service-unifi-syslog-lb.yaml
 
 configMapGenerator:
   - name: vector-helm-values

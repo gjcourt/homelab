@@ -48,6 +48,11 @@ update also stopped FRR on the gateway (`frr.service` is `not-found` on 6.0.17),
 BGP session from talos-kot-7x7 to 10.42.2.1 has been down since 00:54 (`CiliumBGPSessionDown`).
 LoadBalancer IPs still answered from the LAN at 04:30. The verifier has no BGP check.
 
+**2026-11-15, 21:52:** BGP restored. 6.0.17 runs FRR from the Network app (Routing Table →
+BGP config upload) instead of `frr.service`; the config is uploaded there as `k8s-lb-bgp`
+and the gateway again learns the 8 LoadBalancer /32s from talos-kot-7x7. Details and the
+importer's prefix-list quirk: `docs/architecture/networking/cluster-load-balancing.md`.
+
 **2026-11-15, later:** the Talos log patch is applied on all four nodes, so the verifier's
 Loki check now has data and the next update should get past `loki_stale`. Loki lines now
 carry a `node` label and Talos's own timestamps, and `TalosNodeLogsSilent` catches a single
@@ -528,7 +533,8 @@ with the Vector address once the receiver exists. Its "All UniFi Device Manageme
 detailed record (download, flash, reboot, port up) next to the iSCSI and kernel logs. Not needed for phases 1–4.
 
 **2026-11-15:** receiver added (`unifi_syslog` in `infra/controllers/vector/values.yaml`,
-Loki `job="unifi-syslog"`). Point **SIEM Server** at `10.42.2.25:5514`. Send device
+Loki `job="unifi-syslog"`), plus a LoadBalancer IP for it, `10.42.2.47`. Point **SIEM Server**
+at `10.42.2.47:5514` (the field takes one address, so a node IP has no failover). Send device
 management and threat (IPS) events only, not per-flow traffic logs: those would flood Loki.
 Syslog over UDP is lost while the Rack Switch itself is down; events before and after arrive.
 

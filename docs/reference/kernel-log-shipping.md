@@ -393,8 +393,11 @@ logcli query '{job="talos-kernel", node="talos-kot-7x7"}'
 
 The same DaemonSet also receives UniFi syslog on **UDP 5514** on the host network
 (`unifi_syslog` → `normalize_unifi` → `loki_unifi`). UniFi's **SIEM Server** setting
-(Network app → Settings → CyberSecure → Traffic Logging → Activity Logging) points at one
-node IP, `10.42.2.25:5514`. Any node works; there's no failover if that node is down.
+(Network app → Settings → CyberSecure → Traffic Logging → Activity Logging) takes exactly
+one IPv4 address or hostname, so it points at the LoadBalancer IP **`10.42.2.47:5514`**
+(`infra/controllers/vector/service-unifi-syslog-lb.yaml`), not a node. L2 announcements move
+that IP to a healthy node, and `externalTrafficPolicy: Local` keeps the sender's address.
+UDP has no retry: datagrams sent while the IP is moving are lost.
 
 Labels: `job="unifi-syslog"`, `host` (the syslog hostname, e.g. the gateway), `appname`,
 `level`. The sender's address is the `source_ip` field, not a label. Lines that don't parse

@@ -127,9 +127,10 @@ customConfig:
         codec: json
 
     # UniFi syslog: Network app Settings → CyberSecure → Traffic Logging →
-    # Activity Logging (Syslog) → SIEM Server, pointed at one node IP, port
-    # 5514. UDP on the host network (like talos_logs above), so any node's IP
-    # works; there is no failover if that node is down. A raw socket rather
+    # Activity Logging (Syslog) → SIEM Server, pointed at 10.42.2.47:5514, the
+    # LoadBalancer IP in service-unifi-syslog-lb.yaml (that setting takes one
+    # address, so a node IP would have no failover). UDP on the host network
+    # (like talos_logs above); every node listens. A raw socket rather
     # than the syslog source: that source drops lines it can't parse, and
     # UniFi's CEF payloads may not be strict RFC 3164/5424. The parse happens
     # in normalize_unifi instead, keeping the line either way.

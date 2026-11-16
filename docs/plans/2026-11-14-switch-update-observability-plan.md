@@ -53,6 +53,34 @@ Loki check now has data and the next update should get past `loki_stale`. Loki l
 carry a `node` label and Talos's own timestamps, and `TalosNodeLogsSilent` catches a single
 silent node (`docs/reference/kernel-log-shipping.md`).
 
+**2026-11-15, evening:** phase 1 is live. Every node was drained in turn (14:20–15:00 PST),
+and all 80 iSCSI sessions now report `Recovery Timeout: 600`. The drain needed pod deletes,
+because the single-replica `maxUnavailable: 0` PDBs block eviction; the procedure in
+`AGENTS.md` is updated.
+
+**2026-11-15, game day (phase 4 step 1): pass.** George restarted the Rack Switch from the
+UniFi app at about 18:09 PST. Hestia and the nodes were unreachable from 18:09:06 to
+18:11:56 (about 2m50s, from a 5 s ping recorder). Results against the test above:
+
+- Hestia: `conn_rsp_timer_fn` closed 6 connections, then fresh logins; no `TSIH` or
+  `Requested` rejects; SCST timers read `30 30 90`. Session count 80 after (81 before;
+  the 81st was not a cluster session, since the cluster has 80).
+- Nodes: every one of the 80 live sessions logged `detected conn error (1022)` and then
+  `operational after recovery` (~56 attempts). No `session recovery timed out`,
+  `rejecting I/O`, `Buffer I/O error` or `EXT4-fs error`.
+- Writes: all 92 probed volumes writable; direct write exec passed on all 12 CNPG
+  primaries, Prometheus and Loki.
+- Verifier: `homelab_update_verification{device="Rack Switch",result="pass"}` at 982 s
+  uptime, no email.
+- Also confirmed: iscsid `noop_out_interval`/`noop_out_timeout` are 5/5, and the Talos
+  kernel has no `hung_task_*` sysctls (no hung-task detector, so no panic risk).
+
+Side effects, all self-recovered: controllers that lost the API restarted (democratic-csi
+controller sidecars, the CNPG operator, which crash-looped ~3 min until its barman-cloud
+plugin came back, and several system pods). One pvc-writeprobe sweep ran during the
+outage, listed 0 volumes and published no series instead of `unknown`. That is a probe
+blind spot worth fixing. Next: phase 4 step 2, device auto-update back on.
+
 ## What already exists (do not rebuild)
 
 - **unpoller → Prometheus:** `unpoller_device_uptime_seconds`, `unpoller_device_info{version}`,

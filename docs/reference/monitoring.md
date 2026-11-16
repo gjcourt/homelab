@@ -305,8 +305,11 @@ Setup and troubleshooting: [`hosts/hestia/actions-runner/README.md`](../../hosts
 phase 3). When the Rack Switch or the gateway (`Home`) reboots, it waits until
 uptime reaches 15 min, then checks once per boot through the Prometheus and Loki
 APIs: PVC write probes, `PvcNotWritable`, nodes Ready, etcd 3 members with a
-leader, no new Flux failures, and no iSCSI kernel errors in Loki after boot +
-10 min. It records `homelab_update_verification{device, boot, from_version,
+leader, no new Flux failures, every node's Cilium BGP session to the gateway
+Established (`bgp`), and no iSCSI kernel errors in Loki after boot + 10 min.
+`bgp` sees the cluster's side only: a session that is up while the gateway
+rejects the routes still passes (see
+[cluster-load-balancing.md](../architecture/networking/cluster-load-balancing.md)). It records `homelab_update_verification{device, boot, from_version,
 to_version, result, failed_checks}`, whose value is the boot start time.
 
 | Alert | Fires when |

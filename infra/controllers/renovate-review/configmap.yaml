@@ -6,9 +6,11 @@ metadata:
 data:
   # Same watched set as the Renovate and automerge CronJobs. Keep in sync.
   GITHUB_REPOS: gjcourt/homelab,gjcourt/golinks,gjcourt/llmux,gjcourt/Pingo,gjcourt/soundbyte,gjcourt/tempo-interview,gjcourt/vitals,gjcourt/drift,gjcourt/python-nginx-signing,gjcourt/toppingctl,gjcourt/workstation
-  # Reviewer model. Opus-tier is deliberate: the job runs on ~22% of PRs and the
-  # whole point is catching what a cheaper reader would miss.
-  REVIEW_MODEL: claude-opus-4-8
+  # Reviewer model and effort. Opus-tier is deliberate: the whole point is
+  # catching what a cheaper reader would miss. Each reviewed PR costs two or
+  # three calls (review.py: passes A and B, then C only when either holds).
+  REVIEW_MODEL: claude-opus-5-5
+  REVIEW_EFFORT: high
   # dry-run | shadow | live. Starts in shadow: calls the model, posts nothing.
   # Promote to live only after a week of observed output.
   REVIEW_MODE: shadow

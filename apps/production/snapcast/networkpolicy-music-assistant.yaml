@@ -1,0 +1,58 @@
+# Adds the Music Assistant UI port to the base snapcast policy (Cilium policies
+# are additive). Same shape as apps/staging/snapcast/, pointed at prod:
+# ingress 8095 from the gateway and prod Home Assistant; egress to prod HA 8123
+# (TTS audio for announcements) and prod Audiobookshelf (MA's ABS provider;
+# George, 2026-11-06: prod MA gets ABS, so MA playback writes listening progress
+# to prod ABS). MA's Chromecast, DLNA and AirPlay providers stay disabled in its
+# settings and their ports are not in the egress rules.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: snapcast-music-assistant
+  namespace: snapcast
+  labels:
+    app.kubernetes.io/name: snapcast
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: Music Assistant web UI (8095) from the gateway and prod HA; egress to prod HA 8123 for TTS and prod ABS.
+  endpointSelector:
+    matchLabels:
+      app: snapcast
+  ingress:
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8095"
+              protocol: TCP
+    # Prod Home Assistant's Music Assistant integration (API + websocket).
+    - fromEndpoints:
+        - matchLabels:
+            app: homeassistant
+            k8s:io.kubernetes.pod.namespace: homeassistant-prod
+      toPorts:
+        - ports:
+            - port: "8095"
+              protocol: TCP
+  egress:
+    # TTS audio for announcements: HA hands MA a URL on its own 8123.
+    - toEndpoints:
+        - matchLabels:
+            app: homeassistant
+            k8s:io.kubernetes.pod.namespace: homeassistant-prod
+      toPorts:
+        - ports:
+            - port: "8123"
+              protocol: TCP
+    # Audiobookshelf provider (library, covers, audio). Pod port 13378 (the
+    # Service maps 3005 -> 13378).
+    - toEndpoints:
+        - matchLabels:
+            app: audiobookshelf
+            k8s:io.kubernetes.pod.namespace: audiobookshelf-prod
+      toPorts:
+        - ports:
+            - port: "13378"
+              protocol: TCP

@@ -43,6 +43,7 @@ Env in `apps/base/vibrato/deployment.yaml`; overlays override per environment.
 | `LEVA_MQTT_URL` | `mqtt://mosquitto.mosquitto.svc:1883` | Anonymous. HASS bridge. |
 | `LEVA_NODE_ID` | `espresso` (prod) / `vibrato-stage` (staging) | HASS node + `/healthz` label. |
 | `LEVA_TRANSPORT` | **`sim`** on staging only | Staging runs the **simulator** — see the staging rule below. |
+| `LEVA_HISTORY_MAX_SHOTS` | `0` (prod) / unset → `5000` (staging) | Shot-history retention cap from vibrato#97; shots past it are deleted on start and after each save. `0` keeps every shot. Do not drop it from prod. |
 
 **Staging MUST NOT share the physical ito.** The ito serves a single telemetry
 stream; a second client (staging's watchdog + re-handshake) re-grabs it on a cycle

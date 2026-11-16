@@ -64,7 +64,7 @@ spec:
       # whatever is in the bucket, which is data loss, not recovery.
       initContainers:
         - name: litestream-restore
-          image: litestream/litestream:0.5.17@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
+          image: litestream/litestream:0.5.18@sha256:513bff62a88fc0c86c73d27333c41c54c89fe890a7c32a551600adff9309b11b
           args:
             - restore
             - -config
@@ -169,7 +169,7 @@ spec:
         # Revisit as a native sidecar (initContainer + restartPolicy: Always)
         # if that coupling ever bites.
         - name: litestream
-          image: litestream/litestream:0.5.17@sha256:4b02b9859a6b6b4087d8b8944e15f7e984bd7957cba322bbeee38b0e27b9656a
+          image: litestream/litestream:0.5.18@sha256:513bff62a88fc0c86c73d27333c41c54c89fe890a7c32a551600adff9309b11b
           args:
             - replicate
             # Kept as a backstop only. ⚠️ It does NOT fire in this pod: the app

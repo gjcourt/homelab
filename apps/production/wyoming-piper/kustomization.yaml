@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: wyoming-piper-prod
 resources:
   - ../../base/wyoming-piper/
+  - nfs-voices.yaml
 
 labels:
   - pairs:

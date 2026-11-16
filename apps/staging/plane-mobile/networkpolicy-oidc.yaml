@@ -1,0 +1,33 @@
+# OIDC back-channel to staging Authelia (discovery, token, JWKS, userinfo).
+# auth.stage.burntbytes.com is pinned to the staging gateway VIP by the
+# overlay's hostAliases, so the call goes pod -> gateway VIP:443 -> Envoy ->
+# Authelia pod:9091. Envoy enforces THIS pod's egress policy against the
+# upstream it selects (cilium/proxy#1172), so both rules are needed: the VIP
+# alone still gets Envoy 403s (see apps/base/audiobookshelf/networkpolicy.yaml
+# for the measurement).
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: plane-mobile-oidc
+  namespace: plane-mobile
+  labels:
+    app.kubernetes.io/name: plane-mobile
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "plane-mobile-stage -> staging gateway VIP 10.42.2.42:443 and authelia-stage pods:9091 (OIDC via the gateway)."
+  endpointSelector:
+    matchLabels:
+      app: plane-mobile
+  egress:
+    - toCIDRSet:
+        - cidr: 10.42.2.42/32
+      toPorts:
+        - ports:
+            - {port: "443", protocol: TCP}
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: authelia-stage
+            app: authelia
+      toPorts:
+        - ports:
+            - {port: "9091", protocol: TCP}

@@ -1,0 +1,19 @@
+Windows Registry Editor Version 5.00
+
+; Captured read-only from daedalus (winpc-5600x) on 2026-11-03. See ../README.md.
+; Redacted values are commented out (";") so the file still imports cleanly.
+
+[HKEY_CURRENT_USER\Software\MakeMKV]
+; "kslc_<REDACTED-ID>"=<REDACTED>
+"app_UpdateLastCheck"=dword:00005115
+; "app_SiteInfoString"=<REDACTED>
+"sdf_Stop"=""
+; "speed_HL-DT-ST_BD-RE__BH16NS40_1.03_<REDACTED-SERIAL>"=""  (name contains a drive serial; redacted)
+"path_DestDirMRU"=""
+"io_ErrorRetryCount"=dword:00000019
+"app_DestinationDir"=""
+"app_Java"=""
+"app_ccextractor"=""
+; "app_Proxy"=<REDACTED>
+"path_OpenFile"="E:/VIDEO_TS/"
+; "app_Key"=<REDACTED>

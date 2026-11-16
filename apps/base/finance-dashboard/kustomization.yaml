@@ -6,6 +6,8 @@ resources:
   - deployment.yaml
   - service.yaml
   - networkpolicy.yaml
+  # Gated by Authelia via the route's ExternalAuth filter (HOMELAB-90). This site
+  # has no login of its own: never deploy the route without that filter.
   - httproute.yaml
   # SOPS-encrypted, operator-created from the .example templates. CI / kustomize
   # build fails until both exist — the intended gate.

@@ -8,7 +8,7 @@ Audiobookshelf is deployed as a standard Kubernetes `Deployment` with a single r
 - **Storage**:
   - **Config**: Uses a PersistentVolumeClaim (`audiobookshelf-data-pvc`) backed by the `synology-iscsi` storage class to store its SQLite database and configuration.
   - **Metadata**: Uses a PersistentVolumeClaim (`audiobookshelf-meta-data-pvc`) backed by the `synology-iscsi` storage class to store downloaded metadata (covers, author images).
-  - **Media**: (Note: The media volume is typically mounted via NFS or iSCSI depending on the specific configuration, check the `storage.yaml` for exact details).
+  - **Media**: read-only NFS from hestia (`/mnt/main/family/media/audiobooks` → `/audiobooks`, `/mnt/main/family/media/podcasts` → `/podcasts`). Both overlays mount the same tree through their own PVs (`apps/{production,staging}/audiobookshelf/nfs-media.yaml`), so staging can't change the files. Staging keeps its own listening progress in its own database; staging Music Assistant reads that one, never prod's.
 - **Networking**: Exposed via Cilium Gateway API (`HTTPRoute`).
 
 ## 3. URLs

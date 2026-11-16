@@ -22,7 +22,7 @@ The historical `docs/apps/`, `docs/guides/`, `docs/incidents/`, and `docs/infra/
 - [Networking](architecture/networking/README.md) — physical topology, VLANs, L2+BGP load balancing, traffic flows
 - [Overlays and structure](architecture/overlays-and-structure.md) — base vs staging vs production
 - [DNS strategy](architecture/dns-strategy.md) — split-horizon DNS with wildcard records
-- [Gateway authentication](architecture/gateway-auth.md) — Global Forward Auth and Envoy filters
+- [Gateway authentication](architecture/gateway-auth.md) — per-route Authelia gate (Gateway API ExternalAuth)
 
 ### Operations
 

@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - prometheus-rules.yaml
+  - bench-fleet-rules.yaml
   - prometheus-ingestion-rules.yaml
   - cert-manager-rules.yaml
   - loki-rules.yaml

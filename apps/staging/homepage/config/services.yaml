@@ -3,64 +3,94 @@
         icon: immich.png
         href: https://photos.stage.burntbytes.com
         description: Photo and video management
+        siteMonitor: https://photos.stage.burntbytes.com
     - Jellyfin:
         icon: jellyfin.png
         href: https://jellyfin.stage.burntbytes.com
         description: Media streaming server
+        siteMonitor: https://jellyfin.stage.burntbytes.com
+    # Music Assistant at music.stage (MA plan). Prod gets this tile in step 2.
+    - Music Assistant:
+        icon: music-assistant.png
+        href: https://music.stage.burntbytes.com
+        description: Play music to the speakers
+        siteMonitor: https://music.stage.burntbytes.com
     - Navidrome:
         icon: navidrome.png
-        href: https://music.stage.burntbytes.com
+        href: https://navidrome.stage.burntbytes.com
         description: Music server and streamer
+        siteMonitor: https://navidrome.stage.burntbytes.com
     - Snapcast:
         icon: mdi-speaker-multiple
         href: https://snapcast.stage.burntbytes.com
         description: Multi-room audio (Snapweb)
+        siteMonitor: https://snapcast.stage.burntbytes.com
     - Audiobookshelf:
         icon: audiobookshelf.png
         href: https://audiobooks.stage.burntbytes.com
         description: Audiobook and podcast server
+        siteMonitor: https://audiobooks.stage.burntbytes.com
 
-- Tools:
+- Home & Life:
+    # Moved Infrastructure -> Home & Life 2026-10-19 at George's request; its
+    # click series forks at that date (see the GoLinks note in Infrastructure).
+    - Home Assistant:
+        icon: home-assistant.png
+        href: https://hass.stage.burntbytes.com
+        description: Home automation platform
+        siteMonitor: https://hass.stage.burntbytes.com
     - Vibrato:
         icon: mdi-coffee-maker
         href: https://vibrato.stage.burntbytes.com
         description: Espresso machine monitor & control (ito + leva!)
-    - Memos:
-        icon: memos.png
-        href: https://memos.stage.burntbytes.com
-        description: Lightweight note-taking service
-    - Linkding:
-        icon: linkding.png
-        href: https://links.stage.burntbytes.com
-        description: Bookmark manager
+        siteMonitor: https://vibrato.stage.burntbytes.com/healthz
     - Mealie:
         icon: mealie.png
         href: https://mealie.stage.burntbytes.com
         description: Recipe management
-    - Excalidraw:
-        icon: excalidraw.png
-        href: https://excalidraw.stage.burntbytes.com
-        description: Virtual whiteboard for sketching
-    - Flashcards:
-        icon: mdi-cards
-        href: https://flashcards.stage.burntbytes.com
-        description: Spaced-repetition flashcards (FSRS)
+        siteMonitor: https://mealie.stage.burntbytes.com
     - Vitals:
         icon: mdi-heart-pulse
         href: https://vitals.stage.burntbytes.com
         description: Health and fitness tracker
+        siteMonitor: https://vitals.stage.burntbytes.com
+
+- Notes & Learning:
+    - Memos:
+        icon: memos.png
+        href: https://memos.stage.burntbytes.com
+        description: Lightweight note-taking service
+        siteMonitor: https://memos.stage.burntbytes.com
+    - Linkding:
+        icon: linkding.png
+        href: https://links.stage.burntbytes.com
+        description: Bookmark manager
+        siteMonitor: https://links.stage.burntbytes.com
+    - Excalidraw:
+        icon: excalidraw.png
+        href: https://excalidraw.stage.burntbytes.com
+        description: Virtual whiteboard for sketching
+        siteMonitor: https://excalidraw.stage.burntbytes.com
+    - Flashcards:
+        icon: mdi-cards
+        href: https://flashcards.stage.burntbytes.com
+        description: Spaced-repetition flashcards (FSRS)
+        siteMonitor: https://flashcards.stage.burntbytes.com/healthz
     - Open WebUI:
         icon: open-webui.png
         href: https://chat.stage.burntbytes.com
         description: AI chat interface
+        siteMonitor: https://chat.stage.burntbytes.com/health
     - Changes:
         icon: mdi-music-clef-treble
         href: https://changes.stage.burntbytes.com
         description: Jazz chord progressions
+        siteMonitor: https://changes.stage.burntbytes.com/api/health
     - Kokoro:
         icon: mdi-account-voice
         href: https://voice.stage.burntbytes.com/web/
         description: Local text-to-speech (web player)
+        siteMonitor: https://voice.stage.burntbytes.com/health
 
 - Infrastructure:
     - Synology NAS:
@@ -72,22 +102,21 @@
           url: https://10.42.2.11:5001
           username: "{{HOMEPAGE_VAR_SYNOLOGY_USER}}"
           password: "{{HOMEPAGE_VAR_SYNOLOGY_PASS}}"
-    - Home Assistant:
-        icon: home-assistant.png
-        href: https://hass.stage.burntbytes.com
-        description: Home automation platform
     - GoLinks:
         icon: mdi-link-variant
         href: https://go.stage.burntbytes.com
         description: URL shortener
+        siteMonitor: https://go.stage.burntbytes.com
     - AdGuard Home:
         icon: adguard-home.png
         href: https://adguard.stage.burntbytes.com
         description: DNS ad blocker
+        siteMonitor: https://adguard.stage.burntbytes.com
     - Authelia:
         icon: mdi-shield-account
         href: https://auth.stage.burntbytes.com
         description: Authentication portal (SSO)
+        siteMonitor: https://auth.stage.burntbytes.com
     - Zigbee2MQTT:
         icon: zigbee2mqtt.png
         href: https://zigbee.stage.burntbytes.com
@@ -115,7 +144,7 @@
                 options:
                   maximumFractionDigits: 1
             - label: "PVC (%)"
-              query: '100 * sum(kubelet_volume_stats_used_bytes{persistentvolumeclaim!=""}) / sum(kubelet_volume_stats_capacity_bytes{persistentvolumeclaim!=""})'
+              query: '100 * sum((max by (vol) (label_replace((kubelet_volume_stats_used_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=""},"volumename","$1","persistentvolume","(.*)"),"vol","$1","nfs_path","/mnt/main/(.*)")) or max by (vol) (label_join((kubelet_volume_stats_used_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left() label_replace(kube_persistentvolume_info{nfs_path=""},"volumename","$1","persistentvolume","(.*)"),"vol","/","namespace","persistentvolumeclaim")))) / sum((max by (vol) (label_replace((kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) group_left(nfs_path) label_replace(kube_persistentvolume_info{nfs_path!=""},"volumename","$1","persistentvolume","(.*)"),"vol","$1","nfs_path","/mnt/main/(.*)")) or max by (vol) (label_join((kubelet_volume_stats_capacity_bytes) * on(namespace,persistentvolumeclaim) group_left(volumename) kube_persistentvolumeclaim_info * on(volumename) label_replace(kube_persistentvolume_info{nfs_path=""},"volumename","$1","persistentvolume","(.*)"),"vol","/","namespace","persistentvolumeclaim"))))'
               format:
                 type: number
                 options:

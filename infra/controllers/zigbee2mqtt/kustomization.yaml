@@ -8,6 +8,12 @@ resources:
   - storage.yaml
   - httproute.yaml
 configMapGenerator:
+  # Copied into /app/data/external_converters/ by the init container, so it is
+  # replaced on every rollout. See external_converters/yale-yrd410-pb.mjs.
+  - name: zigbee2mqtt-external-converters
+    namespace: zigbee2mqtt
+    files:
+      - external_converters/yale-yrd410-pb.mjs
   - name: zigbee2mqtt-env
     namespace: zigbee2mqtt
     literals:

@@ -11,6 +11,10 @@
 #     covers it).
 #   - hestia (10.42.2.10) on 22 only — the `bench-agent` user, whose key is
 #     restricted to rrsync on agent-inbox (rw) and media (ro) on the hestia side.
+#   - Plane's api (plane-stage and plane-prod, 8000) — the agent desk (lab
+#     03-042). Only the api pods: the web, admin and MinIO pods aren't
+#     reachable. Plane's own policy in each namespace admits this namespace on
+#     the same port.
 #
 # No ingress at all: nothing connects to an agent. Kubelet exec probes don't use
 # pod networking. Remote Control is outbound (the pod dials claude.ai).
@@ -22,7 +26,7 @@ metadata:
   labels:
     app.kubernetes.io/part-of: network-policies
 spec:
-  description: "Agents: no ingress; egress to DNS, API server, public internet 80/443, hestia 22."
+  description: "Agents: no ingress; egress to DNS, API server, public internet 80/443, hestia 22, Plane api 8000."
   endpointSelector: {}
   enableDefaultDeny:
     ingress: true
@@ -65,4 +69,15 @@ spec:
       toPorts:
         - ports:
             - port: "22"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-stage
+            app.name: plane-stage-plane-api
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: plane-prod
+            app.name: plane-prod-plane-api
+      toPorts:
+        - ports:
+            - port: "8000"
               protocol: TCP

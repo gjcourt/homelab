@@ -75,7 +75,7 @@ spec:
               # so its gh wrapper falls through to GH_TOKEN. `command:` replaces
               # the image's ENTRYPOINT (bench-entrypoint), so nothing writes
               # $WORKSPACE or ~/.claude.json and the read-only root FS is fine.
-              image: ghcr.io/gjcourt/bench-cloud:2026-09-26-129c30d
+              image: ghcr.io/gjcourt/bench-cloud:2026-10-01-60e3604
               # A failed clone aborts (set -e). A failed --apply does not skip
               # --check: the check is read-only, and it is the only step that
               # verifies George can still bypass the rulesets --apply just wrote

@@ -11,9 +11,9 @@ spec:
   description: >-
     Gateway ingress on 3000; egress for DNS, Kubernetes API, in-cluster widget
     Services (AdGuard admin, Prometheus), and HTTP/HTTPS to the world for the
-    Synology DSM widget (10.42.2.11:5001), gateway VIP siteMonitor probes
-    (*.burntbytes.com → 10.42.2.40+
-    LoadBalancer IPs), and the Unsplash background image. The previous selector
+    Synology DSM widget (10.42.2.11:5001), Cloudflare-fronted hostnames and
+    the Unsplash background image. siteMonitor probes through the Gateway
+    need more than this; see each overlay's homepage-sitemonitor policy. The previous selector
     (`app: homepage`) matched zero pods — homepage's pods are labelled
     `app.kubernetes.io/name: homepage`.
   endpointSelector:
@@ -87,9 +87,13 @@ spec:
               protocol: TCP
     # World egress on HTTP/HTTPS covers:
     #   - Synology DSM widget on the LAN (10.42.2.11:5001 — see port rule below).
-    #   - Gateway VIP siteMonitor probes (*.burntbytes.com → 10.42.2.40+ LB pool).
-    #   - Cloudflare-tunnel-fronted hostnames (e.g. https://hestia.burntbytes.com).
+    #   - Cloudflare-tunnel-fronted hostnames.
     #   - Unsplash background image (https://images.unsplash.com).
+    # It does NOT make siteMonitor probes to *.burntbytes.com work on its own:
+    # the connection reaches the Gateway VIP, but the Gateway's Envoy then
+    # checks this pod's egress against the backend pod and port, and answers
+    # `403 Access denied` (which homepage shows as up) unless a rule allows
+    # it. Those rules live in each overlay's networkpolicy-sitemonitor.yaml.
     # FQDN restriction would add DNS-policy complexity for a public dashboard
     # whose tile list changes; egress to ports 80/443/5001 is the pragmatic scope.
     - toEntities:

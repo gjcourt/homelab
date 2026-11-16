@@ -45,13 +45,18 @@ spec:
           type: RuntimeDefault
       containers:
         - name: wyoming-piper
-          image: rhasspy/wyoming-piper:2.5.2@sha256:7d39aafac409c2b6b09d999ed04d84c311d632e558b35baa60fad6aac722af7a
+          image: rhasspy/wyoming-piper:2.5.3@sha256:0f4598a8f8a984275f67c066d7cd96d26ef2601947d0372b8f32c82ae18fb7cd
           args:
             # Default voice until the 03-036 Phase 1 audition picks one. Any
             # other voice can still be selected per request from Home
             # Assistant; it downloads on first use.
             - --voice
             - en_US-lessac-medium
+            # Custom voices: every *.onnx (+ .onnx.json) here is advertised to
+            # Home Assistant alongside the catalog voices. Downloads still go
+            # to /data, the first data dir.
+            - --data-dir
+            - /voices
           env:
             - name: HOME
               value: /tmp
@@ -102,6 +107,9 @@ spec:
               mountPath: /data
             - name: tmp
               mountPath: /tmp
+            - name: voices
+              mountPath: /voices
+              readOnly: true
       volumes:
         - name: data
           emptyDir:
@@ -109,3 +117,10 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        # Read-only NFS export of hestia's voice/serve folder (custom voices
+        # only; training data and other models are not exported). PV and PVC
+        # live in each overlay (nfs-voices.yaml).
+        - name: voices
+          persistentVolumeClaim:
+            claimName: wyoming-piper-voices
+            readOnly: true

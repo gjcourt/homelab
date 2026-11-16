@@ -60,7 +60,7 @@ See `docs/architecture/` for component-level architecture (DNS strategy, gateway
 
 ## Domain
 
-4-node Talos Kubernetes cluster (3 control-plane + 1 worker, Talos v1.12.4, Kubernetes v1.35.0; current topology in `docs/STATUS.md`) running ~14 self-hosted apps (Audiobookshelf, Authelia, Excalidraw, Golinks, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Pingo, Snapcast, Vitals + Adguard / Vitals etc.) plus infrastructure (Cilium 1.19 VXLAN, cert-manager, CNPG, monitoring, Authelia SSO). GitOps via Flux CD with an automatic preview environment (`staging` branch) rebuilt by CI from `master + open PRs`.
+4-node Talos Kubernetes cluster (3 control-plane + 1 worker, Talos v1.12.4, Kubernetes v1.35.0; current topology in `docs/STATUS.md`) running ~14 self-hosted apps (Audiobookshelf, Authelia, Excalidraw, Golinks, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Pingo, Snapcast, Vitals + Adguard / Vitals etc.) plus infrastructure (Cilium 1.20 VXLAN, cert-manager, CNPG, monitoring, Authelia SSO). GitOps via Flux CD with an automatic preview environment (`staging` branch) rebuilt by CI from `master + open PRs`.
 
 ## Cross-service dependencies
 
@@ -118,8 +118,85 @@ Recurrences: [2026-02-08](docs/operations/incidents/2026-02-08-pv-recovery.md) �
 [2026-02-27](docs/operations/incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md) ·
 [2026-02-28](docs/operations/incidents/2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md) ·
 [2026-08-13](docs/operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md) ·
-[2026-09-04](docs/operations/incidents/2026-09-04-hestia-down-mass-readonly.md) **(59/63 volumes — largest to date)**.
+[2026-09-04](docs/operations/incidents/2026-09-04-hestia-down-mass-readonly.md) **(59/63 volumes — largest to date)** ·
+[2026-11-13](docs/operations/incidents/2026-11-13-rack-switch-update-readonly-prometheus-blind.md) (switch firmware update; Prometheus blind 17h43m).
 Tracking issue: [#1080](https://github.com/gjcourt/homelab/issues/1080).
+
+### Initiator `replacement_timeout` (600 s)
+
+The I/O errors come from the initiator giving up. open-iscsi's
+`node.session.timeo.replacement_timeout` (default **120 s**) is how long a broken
+session queues I/O before failing it. A Rack Switch firmware update reboots the
+switch for longer than that, which is what happened on 2026-11-13 (18 volumes
+read-only, and Prometheus wrote no samples from 03:14 to 20:58).
+
+**The fix sets 600 s** through each StorageClass's `node-stage-secret` in
+`infra/controllers/democratic-csi/values.yaml` (key
+`node-db.node.session.timeo.replacement_timeout`). democratic-csi runs
+`iscsiadm -m node -o update` with it before every login.
+Plan: [switch-update observability](docs/plans/2026-11-14-switch-update-observability-plan.md), phase 1.
+
+**It applies at login only.** A session keeps the value it logged in with until the
+volume is staged again. Check which value is live, since the Helm values don't tell
+you:
+
+```bash
+for p in $(kubectl -n democratic-csi get pods -l app.kubernetes.io/csi-role=node -o name); do
+  echo "== $p"
+  kubectl -n democratic-csi exec "$p" -c csi-driver -- \
+    iscsiadm -m session -P 3 | grep 'Recovery Timeout' | sort | uniq -c
+done
+```
+
+**Rolling existing sessions to 600: drain one node at a time.** Tested 2026-11-15 on
+a throwaway volume on `talos-kot-7x7`. A new stage logged in at 600. Deleting the pod
+**unstaged the volume and deleted its node record**; recreating it restaged at 600
+with its data intact. So a drain moves every volume on the node to a new login at
+600, and the hundreds of stale records in `iscsiadm -m node` don't matter.
+Done on all four nodes on 2026-11-15: 80 of 80 sessions at 600.
+
+⚠️ **A plain `kubectl drain` hangs.** About 30 single-replica apps have had
+`maxUnavailable: 0` PDBs since May (`apps/base/*/pdb.yaml`), so eviction is refused
+for them indefinitely. Single-instance CNPG clusters (every `-stage` database) are
+blocked the same way by their `-primary` PDB. The rollout therefore cordons, evicts
+what it can, and **deletes** the blocked pods. Each single-replica app on the node
+is down for about a minute while it restages.
+
+1. Only with #1933 merged and reconciled. Never during a switch or gateway update
+   window (device auto-update 03:00, gateway Sunday 00:00).
+2. `kubectl cordon <node>`. CNPG switches multi-instance primaries off a cordoned
+   node by itself, **but not while the cluster is unhealthy**: on 2026-11-15
+   `plane-prod` had a broken replica and its primary stayed put. Wait until no
+   primary of a cluster with `instances > 1` is on the node, and for any that stays,
+   `kubectl cnpg promote -n <ns> <cluster> <healthy-replica-on-another-node>`.
+3. `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data --timeout=120s`.
+   It evicts everything the PDBs allow, then times out on the rest.
+4. `kubectl delete pod` every pod still on the node **except** DaemonSet pods and
+   static control-plane pods (owner kind `Node`). Postgres can take about 3 minutes
+   to shut down; wait for it.
+5. Wait until every moved pod is Ready, then confirm the sessions that landed on the
+   other nodes show 600 (loop above) and the drained node shows none.
+   `kubectl uncordon <node>`.
+6. Next node. Done when every node prints only `Recovery Timeout: 600`.
+
+The alternative, `iscsiadm -m node -o update` on every record plus an `ext-iscsid`
+restart, reconnects every session on a node at once under the old 120 s and has
+**not** been tested here. Don't use it.
+
+**What 600 s changes.** An outage under 10 minutes now **hangs** writes instead of
+failing them, so volumes don't go read-only. Expect side effects, which are not
+failures:
+
+- **Restarts.** Liveness windows are far shorter than 600 s (CNPG `postgres` and
+  Prometheus ~30 s, most apps ~120 s). A probe that blocks on disk restarts the
+  container, which stays stuck until I/O returns. All 12 CNPG clusters use the same
+  target, so a failover has nowhere healthy to go.
+- **pvc-writeprobe.** It reports a hung write as `homelab_pvc_probe_unknown`, not
+  `homelab_pvc_writable 0` (15 s exec timeout, 3 tries). It probes one volume at a
+  time, so during the hang a sweep runs late.
+
+An outage **over** 600 s still fails I/O, and the volumes go read-only as before.
+Detection then starts about 8 minutes later than it did at 120 s.
 
 ### Recognising it
 

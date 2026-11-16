@@ -1,0 +1,101 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: plane-sync
+  namespace: plane-sync
+  labels:
+    app.kubernetes.io/name: plane-sync
+spec:
+  # Every 30 minutes. On an empty workspace the first run creates the projects
+  # and items from the repos' statuses, so it doubles as the production import.
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      # The client paces at 1 req/s; the first run is ~300 requests.
+      activeDeadlineSeconds: 1500
+      backoffLimit: 0
+      # Delete finished jobs after 1h so a stray failure doesn't linger as a
+      # persistent KubeJobFailed alert.
+      ttlSecondsAfterFinished: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: plane-sync
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            fsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: plane-sync
+              image: ghcr.io/gjcourt/plane-sync
+              args: ["reconcile"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+              env:
+                # FQDN: the cluster's ndots/search-list DNS loss (see the plane
+                # runbook) makes short names flaky.
+                - name: PLANE_URL
+                  value: http://plane-api.plane-prod.svc.cluster.local:8000
+                - name: PLANE_WORKSPACE
+                  value: home
+                - name: OWNER_EMAIL
+                  value: gjcourt@gmail.com
+                # Every active repo's docs/plans, each into its existing Plane
+                # project (George, 2026-11-01). plane-sync never creates these
+                # projects; the bot must be a Member of each, or it is skipped.
+                - name: REPO_PROJECTS
+                  value: >-
+                    homelab:HOMELAB:Homelab:plans,domestique:DOMESTIQUE:Domestique:plans,plane-mobile:PLANEMOBILE:Plane Mobile:plans,toppingctl:TOPPINGCTL:toppingctl:plans,modemscope:MODEMSCOPE:modemscope:plans,fax:FAX:fax:plans
+                - name: STATE_FILE
+                  value: /state/plane-sync-state.json
+                - name: PLANE_API_KEY_FILE
+                  value: /secrets/plane-api-key
+                - name: GITHUB_TOKEN_FILE
+                  value: /secrets/github-token
+                # write_back sets user.name/email on its commit; the merge of
+                # main into an existing sync branch needs an identity too.
+                - name: GIT_AUTHOR_NAME
+                  value: plane-sync
+                - name: GIT_AUTHOR_EMAIL
+                  value: plane-sync@users.noreply.github.com
+                - name: GIT_COMMITTER_NAME
+                  value: plane-sync
+                - name: GIT_COMMITTER_EMAIL
+                  value: plane-sync@users.noreply.github.com
+              volumeMounts:
+                - name: tmp
+                  mountPath: /tmp
+                - name: state
+                  mountPath: /state
+                - name: secrets
+                  mountPath: /secrets
+                  readOnly: true
+          volumes:
+            - name: tmp
+              emptyDir:
+                sizeLimit: 1Gi
+            - name: state
+              persistentVolumeClaim:
+                claimName: plane-sync-state
+            - name: secrets
+              secret:
+                secretName: plane-sync
+                defaultMode: 0440

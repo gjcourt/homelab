@@ -6,6 +6,7 @@
 ## Current applications
 <!-- apps:list:start -->
 - [adguard](base/adguard/)
+- [agent-desk](base/agent-desk/)
 - [audiobookshelf](base/audiobookshelf/)
 - [authelia](base/authelia/)
 - [bench-cloud](base/bench-cloud/)
@@ -13,6 +14,7 @@
 - [cadence-site](base/cadence-site/)
 - [changes](base/changes/)
 - [couchdb](base/couchdb/)
+- [domestique](base/domestique/) — namespace + read-only fitness-folder PV/PVC only (workload: DOMESTIQUE-56)
 - [excalidraw](base/excalidraw/)
 - [finance-dashboard](base/finance-dashboard/)
 - [flashcards-sync](base/flashcards-sync/)
@@ -34,6 +36,9 @@
 - [navidrome](base/navidrome/)
 - [netscope](base/netscope/)
 - [openwebui](base/openwebui/)
+- [plane-mobile](base/plane-mobile/)
+- [plane-sync](base/plane-sync/)
+- [plane](base/plane/)
 - [snapcast](base/snapcast/)
 - [thermalscope-smart](base/thermalscope-smart/)
 - [thermalscope](base/thermalscope/)

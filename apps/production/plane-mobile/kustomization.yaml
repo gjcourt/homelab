@@ -1,0 +1,92 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Production plane-mobile: https://desk.burntbytes.com (LAN and WireGuard only,
+# not in the Cloudflare tunnel), against production Plane (plane-prod) and
+# production Authelia (auth.burntbytes.com). Build step 8 of plane-mobile's
+# docs/plans/2026-10-25-architecture-plan.md; runbook
+# docs/operations/apps/plane-mobile.md.
+#
+# OPERATOR GATE: not deployable until George has added the SOPS-encrypted
+# secret-plane-mobile.yaml from its .example, set VAPID_PUBLIC_KEY below and
+# replaced the placeholder plane-mobile client_secret digest in
+# apps/production/authelia/configuration.yaml, all in one commit. Until then
+# `kustomize build apps/production` fails on the missing file, on purpose: the
+# PR can't be merged with the placeholder digest, which would otherwise reach
+# production Authelia.
+namespace: plane-mobile-prod
+resources:
+  - ../../base/plane-mobile/
+  - httproute.yaml
+  - networkpolicy-plane.yaml
+  - networkpolicy-oidc.yaml
+  # SOPS-encrypted by the operator from secret-plane-mobile.yaml.example
+  # (agents never run sops in this repo); Flux decrypts it at apply time.
+  - secret-plane-mobile.yaml
+
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false
+
+# Env vars for backend/src/plane_mobile/config.py, by their exact names.
+# Secrets are not here: they are files under /secrets (base deployment.yaml).
+configMapGenerator:
+  - name: plane-mobile-config
+    literals:
+      - PUBLIC_URL=https://desk.burntbytes.com
+      - OIDC_ISSUER=https://auth.burntbytes.com
+      - OIDC_CLIENT_ID=plane-mobile
+      # The one Authelia user name allowed in (matched against
+      # preferred_username). Production Authelia's users.yml is SOPS-only;
+      # "george" is staging's. George confirms it before merging.
+      - ALLOWED_USER=george
+      # The public half of the PRODUCTION VAPID key pair (base64url); the
+      # private half is the Secret's vapid-private-key. The app refuses to
+      # start if they don't match. Never staging's key.
+      - VAPID_PUBLIC_KEY=BO30D4wuwVUdIyCwP1QFyHZzZUmX5xoIXG5rqLg18FJCn6EOaWKbRSJnluzJYfYbwtJZosgFtu7jntD_jW5--Wg
+      - VAPID_SUBJECT=mailto:gjcourt@gmail.com
+      - DATA_PATH=/data/plane-mobile.db
+      - PUSH_HOSTS=*.push.apple.com
+      - PLANE_READ=on
+      - PLANE_API_URL=http://plane-api.plane-prod.svc.cluster.local:8000
+      - PLANE_WORKSPACE=home
+      # agent-desk's projects (apps/production/agent-desk/config.yaml,
+      # `projects:`), so every notification link agent-desk sends after C6
+      # opens in the app. Keep the two lists in sync. An identifier Plane
+      # doesn't know (or that the token's user can't see) keeps /readyz at
+      # 503, so check them all exist before adding one.
+      - PROJECTS=SANDBOX,PLANEMOBILE,DOMESTIQUE,TOPPINGCTL,MODEMSCOPE,FAX,VIBRATO,HOMELAB,HASS
+      - OWNER_EMAIL=gjcourt@gmail.com
+      # The agent-desk bot (apps/production/agent-desk/config.yaml, botEmail).
+      - BOT_EMAIL=gjcourt+agent-desk@gmail.com
+
+patches:
+  - target:
+      kind: Namespace
+      name: plane-mobile
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: plane-mobile-prod
+  # OIDC back-channel: the issuer host has to resolve from inside the pod.
+  # AdGuard's rewrites aren't visible to CoreDNS, so pin it to the production
+  # gateway VIP (app-gateway-production, 10.42.2.40), as audiobookshelf does.
+  # Keep the IP in sync with networkpolicy-oidc.yaml.
+  - target:
+      kind: Deployment
+      name: plane-mobile
+    patch: |
+      - op: add
+        path: /spec/template/spec/hostAliases
+        value:
+          - ip: "10.42.2.40"
+            hostnames:
+              - auth.burntbytes.com
+
+# Newest main build of gjcourt/plane-mobile's build.yml (main @ 6d9f1fa). Its
+# code is the same as staging's 2026-11-01-321bf87, which George tried in
+# T1-T6; 6d9f1fa only adds docs.
+images:
+  - name: ghcr.io/gjcourt/plane-mobile
+    newTag: 2026-11-02-6d9f1fa

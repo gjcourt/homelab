@@ -1,0 +1,13 @@
+ingress:
+  appHost: plane.stage.burntbytes.com
+# Staging's chart-local backing services hold throwaway data, so they use the
+# Delete-reclaim class.
+redis:
+  storageClass: truenas-iscsi-ephemeral
+  volumeSize: 1Gi
+rabbitmq:
+  storageClass: truenas-iscsi-ephemeral
+  volumeSize: 1Gi
+minio:
+  storageClass: truenas-iscsi-ephemeral
+  volumeSize: 5Gi

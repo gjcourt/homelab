@@ -5,6 +5,6 @@ metadata:
   labels:
     # Admits the voice.burntbytes.com HTTPRoute to the LAN gateway. The gateway
     # holds a LAN IP only and voice.* is not in the Cloudflare tunnel, so this is
-    # LAN-only. No login yet: the gateway's Authelia ext_authz is not enforcing
-    # (see infra/configs/gateway/cilium-envoy-config-production.yaml).
+    # LAN-only. No login and no Authelia gate (docs/architecture/gateway-auth.md
+    # says how to add one).
     http-ingress: "true"

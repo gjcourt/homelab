@@ -74,10 +74,13 @@ spec:
             #        SELECT missing, count(*) FROM media_file GROUP BY missing;
             - name: ND_SESSIONTIMEOUT
               value: 24h
-            - name: ND_EXTAUTH_TRUSTEDSOURCES
-              value: "10.0.0.0/8,192.168.0.0/16,172.16.0.0/12"
-            - name: ND_EXTAUTH_USERHEADER
-              value: "Remote-User"
+            # No reverse-proxy (Remote-User) auth in base: ND_EXTAUTH_* stay
+            # unset. The overlays turn it on (deployment-extauth-patch.yaml)
+            # together with a gated route that sets the header and ungated
+            # rules that strip it. Never set it without both: in 2026-11 the
+            # header was trusted from every private range with nothing
+            # stripping it, so any LAN client could log in as any user, and an
+            # unknown name was auto-created (docs/operations/apps/navidrome.md).
           # Last.fm credentials are injected from the navidrome-lastfm Secret
           # (defined per-environment overlay). They enable album cover art and
           # artist biography/image fetching, and allow per-user scrobbling.
@@ -115,6 +118,11 @@ spec:
               mountPath: /data
             - name: navidrome-music
               mountPath: /music
+              # The PV is ReadOnlyMany with nfs.readOnly, but without this the
+              # kernel mount is still rw, and pvc-writeprobe tries to write into
+              # the library (Permission denied → homelab_pvc_probe_unknown).
+              # Navidrome only reads music, so mount it ro and the probe skips it.
+              readOnly: true
       volumes:
         - name: navidrome-data
           persistentVolumeClaim:

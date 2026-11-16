@@ -13,7 +13,14 @@
       "Bash(git push origin master:*)",
       "Bash(git push origin HEAD:main:*)",
       "Bash(git push origin HEAD:master:*)",
-      "Bash(sops:*)"
+      "Bash(sops:*)",
+      "Bash(git push --no-verify*)",
+      "Bash(git push * --no-verify*)",
+      "Bash(git * push --no-verify*)",
+      "Bash(git * push * --no-verify*)",
+      "Bash(git -c core.hooksPath*)",
+      "Bash(git * core.hooksPath*)",
+      "Bash(git * core.hookspath*)"
     ]
   }
 }

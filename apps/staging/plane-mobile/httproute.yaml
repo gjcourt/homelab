@@ -1,0 +1,55 @@
+# Staging front door: https://desk.stage.burntbytes.com via the Cilium gateway.
+# No Authelia forward-auth: the app does its own OIDC sign-in against Authelia
+# and enforces it on /api/* itself; the static shell (/, manifest.webmanifest,
+# sw.js, /static/) is served without sign-in (George, 2026-10-26). The explicit
+# bypass rule for this host is in apps/staging/authelia/configuration.yaml.
+#
+# /plane (the Plane webhook) is not routed: staging Plane delivers it
+# in-cluster to the Service, never through the gateway. The /plane rule has no
+# backendRefs; Cilium (1.19, operator/pkg/model/ingestion/gateway.go) turns a
+# rule with no usable backend into a direct 500, and PathPrefix /plane beats /
+# as the longer match. If it were ever ignored the request would fall through
+# to the app, which HMAC-verifies every delivery anyway.
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: plane-mobile-http
+  namespace: plane-mobile-stage
+spec:
+  hostnames:
+    - desk.stage.burntbytes.com
+  parentRefs:
+    - name: app-gateway-staging
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: plane-mobile-https
+  namespace: plane-mobile-stage
+spec:
+  hostnames:
+    - desk.stage.burntbytes.com
+  parentRefs:
+    - name: app-gateway-staging
+      namespace: default
+      sectionName: https
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /plane
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: plane-mobile
+          port: 80

@@ -33,9 +33,9 @@ attrs==26.1.0 \
     #   jsonschema
     #   jsonschema-path
     #   referencing
-authlib==1.8.0 \
-    --hash=sha256:88aebbd9af6757e14e912d5dc007ae1dc1f3e27e3b2152ce7c552ee2c3b3c121 \
-    --hash=sha256:f3ecd5f1da737262fb53bf1a4d95c4ea1ad9dd509316587a255c99ab1838a4f0
+Authlib==1.9.6 \
+    --hash=sha256:1caa0791c0ea6bde6b4ef91b1731f720a97a0f00d3955878d4a493b4ce673247 \
+    --hash=sha256:96564699a43281b9e3473717a135407a1170bdc850ebe21313539d672c2a6682
     # via
     #   fastmcp
     #   plane-mcp-server

@@ -207,6 +207,24 @@ customConfig:
           .level = "info"
           .msg = raw
         }
+        .category = "none"
+        # UniFi sends CEF over syslog ("<pri>... Home CEF:0|Ubiquiti|..."), which
+        # parse_syslog splits into appname "CEF" and a message starting "0|".
+        # Re-join and parse it so the event's name, CEF severity and UniFi category
+        # become fields, and category becomes a label.
+        if contains(raw, "CEF:") {
+          parts = split(raw, "CEF:", limit: 2)
+          cef, cerr = parse_cef("CEF:" + (string(parts[1]) ?? ""))
+          if cerr == null {
+            .appname = "cef"
+            .cef = cef
+            .category = string(cef.UNIFIcategory) ?? "none"
+            .event = string(cef.name) ?? ""
+            sev = to_int(cef.severity) ?? 0
+            .cef_severity = if sev >= 9 { "very-high" } else if sev >= 7 { "high" } else if sev >= 4 { "medium" } else { "low" }
+            .msg = string(cef.msg) ?? .event
+          }
+        }
         .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
 
   sinks:
@@ -223,6 +241,9 @@ customConfig:
         host: '{{ "{{" }} host {{ "}}" }}'
         appname: '{{ "{{" }} appname {{ "}}" }}'
         level: '{{ "{{" }} level {{ "}}" }}'
+        # UniFi's own event category (Audit, Client Devices, ...) for CEF
+        # lines, "none" otherwise. A handful of values.
+        category: '{{ "{{" }} category {{ "}}" }}'
       batch:
         max_events: 500
         timeout_secs: 5

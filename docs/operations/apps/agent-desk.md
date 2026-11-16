@@ -2,8 +2,8 @@
 
 ## 1. Overview
 
-The dispatcher for lab 03-042's agent desk. When George labels a Plane ticket `ready`, it starts a
-bench-cloud task Job to work the ticket into a PR, and it moves the ticket through In Progress,
+The dispatcher for lab 03-042's agent desk. When George labels a Plane ticket `ready` (or his orchestrator
+does, see below), it starts a bench-cloud task Job to work the ticket into a PR, and it moves the ticket through In Progress,
 In review, Blocked and Done as the work goes.
 Plan: [`docs/plans/2026-10-22-agent-desk-loop.md`](../../plans/2026-10-22-agent-desk-loop.md).
 Code: [`images/agent-desk/`](../../../images/agent-desk/README.md).
@@ -29,7 +29,8 @@ Code: [`images/agent-desk/`](../../../images/agent-desk/README.md).
 - **Config:** `apps/<env>/agent-desk/config.yaml`, which sets:
   - the project → repo map;
   - the deny list;
-  - the playbooks: their caps, deadlines and prompts.
+  - the playbooks: their caps, deadlines and prompts;
+  - `orchestratorEmail` (optional), George's orchestrator's Plane user (below).
 
   It's a ConfigMap reviewed in this repo. Since #1757, HOMELAB and HASS map to `gjcourt/homelab`
   and `denyRepos` is empty. Agents may open homelab PRs only in `apps/**` and `docs/**`, and
@@ -48,6 +49,27 @@ Code: [`images/agent-desk/`](../../../images/agent-desk/README.md).
   - in: Plane's worker on 8080, plus kubelet probes;
   - out: DNS, Plane's api on 8000, the kube-apiserver, and the internet on 443 (0.0.0.0/0 minus
     private ranges).
+
+- **Who counts (trust).** The owner (`ownerEmail`), the bot (`botEmail`) and the orchestrator
+  (`orchestratorEmail`) are resolved to Plane user ids from the workspace members at every refresh.
+  Production sets `orchestratorEmail: gjcourt+bench-orchestrator@gmail.com` (display name
+  "orchestrator"), the Plane user George created for his /desk orchestrator (2026-11-09); staging
+  doesn't set it.
+
+  | Signal | George | Orchestrator | Bot, agents, anyone else |
+  | --- | --- | --- | --- |
+  | `ready` label starts a ticket | yes | **yes** | no |
+  | `over-cap` label starts past the cap | yes | no | no |
+  | Comment wakes an In review or Blocked ticket, or answers a Blocked question | yes | no | no |
+  | Comment on a closed ticket asks to reopen, `reopen` reopens | yes | no | no |
+  | Comment relayed to a running Job by its hook (`owner_id`) | yes | no | no |
+  | Label on comments in the task prompt | "George" | "orchestrator" | "agent-desk" / "someone else" |
+
+  Every comment, whoever wrote it, sits inside the prompt's fenced block as untrusted data.
+  Unset or empty `orchestratorEmail` means only George's `ready` counts. A set email that isn't a
+  workspace member is logged once (`orchestrator ... isn't a workspace member`) and counts for
+  nothing. An email that resolves to the owner or the bot fails the refresh, so a typo can't make
+  the bot's own labels count.
 
 ## 3. Webhook setup (operator)
 
@@ -128,8 +150,9 @@ kubectl -n bench-cloud get jobs -l agent-desk/ticket        # dispatcher Jobs (n
   Flux restores it on the next reconcile, so for a longer stop, suspend that environment's apps
   Kustomization, or set `replicas: 0` in a PR.
 - **A ticket won't start:** in order, check that:
-  1. `ready` was added by George; a `ready` added by anyone else, or removed and re-added by an
-     agent, doesn't count;
+  1. `ready` was added by George or the orchestrator (`orchestratorEmail`); a `ready` added by
+     anyone else, or removed and re-added by an agent, doesn't count. The skip reason still reads
+     `ready not applied by George`;
   2. the ticket has exactly one `playbook:` label;
   3. the project is in `projects`;
   4. the ticket isn't already In Progress or In review;

@@ -4,15 +4,12 @@ kind: CiliumBGPClusterConfig
 metadata:
   name: homelab-bgp
 spec:
-  # Phase 2b: every node EXCEPT control-plane peers. Workers establish BGP;
-  # CP nodes are excluded — they wouldn't advertise LB IPs anyway because of
-  # node.kubernetes.io/exclude-from-external-load-balancers, so a BGP session
-  # from them would just be noise. New workers are picked up automatically as
-  # soon as they join the cluster.
-  nodeSelector:
-    matchExpressions:
-      - key: node-role.kubernetes.io/control-plane
-        operator: DoesNotExist
+  # Every node peers. Until 2026-11-15 this selected workers only (control-plane
+  # nodes were assumed idle), which left one worker (.25) as the only BGP next
+  # hop: one node down and the UCGF lost every LB route. The control-plane nodes
+  # run workloads and already hold most L2 announcement leases, so BGP follows
+  # suit. No nodeSelector = all nodes. The UCGF side needs no change: it listens
+  # on 10.42.2.0/24 for AS 65010 with maximum-paths 8.
   bgpInstances:
     - name: homelab
       localASN: 65010

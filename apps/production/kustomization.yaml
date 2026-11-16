@@ -11,6 +11,7 @@ resources:
   - certificates
   - changes
   - cloudflare-tunnel
+  - domestique
   - excalidraw
   - external-services
   - finance-dashboard

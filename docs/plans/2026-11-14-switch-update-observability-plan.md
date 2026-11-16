@@ -519,12 +519,18 @@ Only after phase 1 is verified on every node and phases 2–3 are live:
 
 ## Phase 5 (optional) — UniFi syslog to Loki
 
-A syslog source on the existing Vector DaemonSet (UDP NodePort), with UniFi remote logging
+A syslog source on the existing Vector DaemonSet (UDP 5514 on the host network, like the Talos
+receiver; no NodePort), with UniFi remote logging
 pointed at it. In Network 10.6 that setting is **Settings → CyberSecure → Traffic Logging →
 Activity Logging (Syslog)**. It's currently **Internally Stored**; switch it to **SIEM Server**
 with the Vector address once the receiver exists. Its "All UniFi Device Management" flow
 (currently off) is the one that carries device events. That would give each update a
 detailed record (download, flash, reboot, port up) next to the iSCSI and kernel logs. Not needed for phases 1–4.
+
+**2026-11-15:** receiver added (`unifi_syslog` in `infra/controllers/vector/values.yaml`,
+Loki `job="unifi-syslog"`). Point **SIEM Server** at `10.42.2.25:5514`. Send device
+management and threat (IPS) events only, not per-flow traffic logs: those would flood Loki.
+Syslog over UDP is lost while the Rack Switch itself is down; events before and after arrive.
 
 ## Out of scope
 

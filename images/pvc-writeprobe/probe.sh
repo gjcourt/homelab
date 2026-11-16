@@ -75,10 +75,23 @@ emit() {
 }
 
 sweep() {
-  local body; body="$(mktemp)"
+  local body pods targets; body="$(mktemp)"
   # Every running pod, with the PVCs it mounts and the container to exec into.
-  kubectl get pods -A -o json --field-selector=status.phase=Running 2>/dev/null \
-  | jq -r --arg skip "$SKIP_NS" --arg ann "$SKIP_ANNOTATION" '
+  #
+  # A failed or empty listing is NOT a sweep. Until 2026-11-15 this piped
+  # kubectl straight into jq with errors discarded, so a sweep during an API
+  # outage (the Rack Switch game day) found 0 volumes, published no series
+  # at all, and still advanced last_run_seconds -- so PvcWriteProbeStale
+  # could not fire either. Now the previous metrics file is kept untouched:
+  # its last_run_seconds stops advancing and the staleness alert does its
+  # job. Zero targets from a successful listing is treated the same way;
+  # this cluster always has RW PVC mounts, so 0 means the listing is wrong.
+  if ! pods="$(kubectl get pods -A -o json --field-selector=status.phase=Running 2>&1)"; then
+    log "SWEEP SKIPPED: cannot list pods: $(echo "$pods" | tr '\n' ' ' | cut -c1-200)"
+    rm -f "$body"
+    return 1
+  fi
+  if ! targets="$(printf '%s' "$pods" | jq -r --arg skip "$SKIP_NS" --arg ann "$SKIP_ANNOTATION" '
       ($skip | split(",")) as $s
       | .items[]
       | select(.metadata.namespace as $n | ($s | index($n)) | not)
@@ -95,7 +108,17 @@ sweep() {
       | . as $c
       | (($c.volumeMounts // [])[] | select(.name == $v.vol and (.readOnly // false) == false))
       | [$pod.metadata.namespace, $pod.metadata.name, $c.name, $v.pvc, .mountPath]
-      | @tsv' 2>/dev/null \
+      | @tsv' 2>&1)"; then
+    log "SWEEP SKIPPED: cannot parse pod list: $(echo "$targets" | tr '\n' ' ' | cut -c1-200)"
+    rm -f "$body"
+    return 1
+  fi
+  if [ -z "$targets" ]; then
+    log "SWEEP SKIPPED: pod list has no RW PVC mounts; refusing to publish an empty sweep"
+    rm -f "$body"
+    return 1
+  fi
+  printf '%s\n' "$targets" \
   | sort -u \
   `# Whole-line dedupe, NOT -k1,1 -k4,4. Keying on (namespace, pvc) drops every`\
   `# pod but one when several share an RWX volume -- immich-microservices runs 4`\
@@ -164,7 +187,8 @@ sweep() {
 mkdir -p "$(dirname "$OUT")"
 log "pvc-writeprobe starting; interval=${INTERVAL}s probe_file=${PROBE_FILE}"
 while true; do
-  sweep
-  log "sweep complete: $(grep -c '^homelab_pvc_writable' "$OUT" 2>/dev/null || echo 0) volume(s)"
+  if sweep; then
+    log "sweep complete: $(grep -c '^homelab_pvc_writable' "$OUT" 2>/dev/null || echo 0) volume(s)"
+  fi
   sleep "$INTERVAL"
 done

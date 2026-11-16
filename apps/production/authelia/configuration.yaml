@@ -46,6 +46,13 @@ access_control:
     # gateway must authenticate every request before it reaches the pod.
     - domain: "chat.burntbytes.com"
       policy: one_factor
+    # plane-mobile does its own OIDC sign-in (client plane-mobile below) and
+    # enforces it on /api/*; the static shell (/, manifest.webmanifest,
+    # sw.js, /static/) is public by design (George, 2026-10-26). Explicit
+    # bypass so a later default_policy change can't put forward-auth in
+    # front of the app's own sign-in flow. LAN and WireGuard only.
+    - domain: "desk.burntbytes.com"
+      policy: bypass
     - domain: "auth.burntbytes.com"
       policy: bypass
       resources:
@@ -168,6 +175,28 @@ identity_providers:
           - https://links.burntbytes.com/oidc/callback/
         scopes:
           - email
+          - openid
+          - profile
+        userinfo_signed_response_alg: none
+      # plane-mobile (desk.burntbytes.com), as on staging. The app sends PKCE
+      # S256 and authenticates with HTTP Basic; scopes are openid + profile
+      # (preferred_username). PLACEHOLDER client_secret: George replaces it
+      # with the pbkdf2 digest whose plaintext goes in the plane-mobile Secret
+      # (apps/production/plane-mobile/secret-plane-mobile.yaml.example), in the
+      # same commit as that Secret. The placeholder is not a valid digest and
+      # must not reach a running Authelia; the missing Secret file keeps
+      # `kustomize build apps/production` failing until then.
+      - client_id: plane-mobile
+        client_name: plane-mobile
+        client_secret: '$pbkdf2-sha512$310000$Qfj726QToJ86ziTudG3CxQ$tHncdRRcbEaydsb8kMQCa5bxaNxa4AdYSuHFmf5QsFPNyORxASmZ7QSbAS/WGLYPP7vTozee6kfZobPYNtbjqA'
+        public: false
+        authorization_policy: two_factor
+        require_pkce: true
+        pkce_challenge_method: S256
+        token_endpoint_auth_method: client_secret_basic
+        redirect_uris:
+          - https://desk.burntbytes.com/auth/callback
+        scopes:
           - openid
           - profile
         userinfo_signed_response_alg: none

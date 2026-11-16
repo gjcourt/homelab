@@ -210,12 +210,16 @@ views:
       - state
       - last_side
     - type: tile
-      entity: input_select.daily_shot_next_side
-      name: Next side
-      features:
-      - type: select-options
+      entity: sensor.daily_shot_side
+      name: Today's side
+    # Shown only until today's shot is logged: a second press would be
+    # ignored by "Daily shot — log it" anyway, so don't offer it.
     - type: tile
       entity: input_button.daily_shot_done
+      visibility:
+      - condition: state
+        entity: sensor.daily_shot
+        state: To do
       name: Done
       icon: mdi:check-circle
       hide_state: true
@@ -225,7 +229,7 @@ views:
         target:
           entity_id: input_button.daily_shot_done
         confirmation:
-          text: Log today's shot and switch the next side?
+          text: Log today's shot?
 - title: Auto-shutoff
   theme: Tinted
   path: auto-shutoff
@@ -249,24 +253,32 @@ views:
     column_span: 3
     cards:
     - type: markdown
-      content: Tap a card to switch it on or off. Hold a fan or light to cancel its timer and keep it on.
+      content: Tap a card to switch it on or off. Hold a fan or light to cancel its timer and keep it on. Lights in one room share a timer.
   - type: grid
     column_span: 3
     cards:
     - type: heading
       heading: Bathrooms
       heading_style: title
+    - type: heading
+      heading: Hall bath
+      heading_style: subtitle
     - type: custom:mushroom-template-card
       entity: switch.hall_bathroom_exhaust_fan
-      primary: Hall bath fan
+      primary: Fan
       secondary: &auto_off_status >-
-        {#- device -> [its timer, its auto-off minutes]; the laundry lights share one -#}
+        {#- device -> [its timer, its auto-off minutes]; lights in one room share one -#}
         {%- set cfg = {
           'switch.hall_bathroom_exhaust_fan': ['timer.hall_bathroom_fan_timer', 'input_number.hall_bathroom_fan_minutes'],
           'switch.master_bathroom_exhaust_fan': ['timer.master_bathroom_fan_timer', 'input_number.master_bathroom_fan_minutes'],
           'switch.powder_bathroom_exhaust_fan': ['timer.powder_bathroom_fan_timer', 'input_number.powder_bathroom_fan_minutes'],
           'light.laundry_room_main_lights': ['timer.laundry_room_light_timer', 'input_number.laundry_room_light_minutes'],
-          'light.laundry_room_cove': ['timer.laundry_room_light_timer', 'input_number.laundry_room_light_minutes']
+          'light.laundry_room_cove': ['timer.laundry_room_light_timer', 'input_number.laundry_room_light_minutes'],
+          'light.front_foyer_closet': ['timer.front_foyer_closet_light_timer', 'input_number.front_foyer_closet_light_minutes'],
+          'light.master_bedroom_closet_light': ['timer.master_bedroom_closet_light_timer', 'input_number.master_bedroom_closet_light_minutes'],
+          'light.office_closet': ['timer.office_closet_light_timer', 'input_number.office_closet_light_minutes'],
+          'light.secondary_bedroom_closet_light': ['timer.secondary_bedroom_closet_light_timer', 'input_number.secondary_bedroom_closet_light_minutes'],
+          'light.nursery_bedroom_closet_light': ['timer.nursery_bedroom_closet_light_timer', 'input_number.nursery_bedroom_closet_light_minutes']
         } -%}
         {%- set t = cfg.get(entity, ['', ''])[0] -%}
         {%- set mins = states(cfg.get(entity, ['', ''])[1]) | int(none) -%}
@@ -275,9 +287,9 @@ views:
         {%- elif is_state(entity, 'on') -%}On ·
         {%- if is_state(t, 'active') and state_attr(t, 'finishes_at') %} off in {{ ((as_datetime(state_attr(t, 'finishes_at')) - now()).total_seconds() / 60) | round(0, 'ceil') | int }} min
         {%- elif is_state(t, 'paused') %} timer paused
-        {%- else %} no timer running
+        {%- else %} no timer
         {%- endif -%}
-        {%- else -%}Off{{ ' · auto-off after ' ~ mins ~ ' min' if mins is not none }}
+        {%- else -%}Off{{ ' · ' ~ mins ~ ' min timer' if mins is not none }}
         {%- endif -%}
       icon: mdi:fan
       icon_color: &onoff_color >-
@@ -294,9 +306,12 @@ views:
         perform_action: timer.cancel
         target:
           entity_id: timer.hall_bathroom_fan_timer
+    - type: heading
+      heading: Master bath
+      heading_style: subtitle
     - type: custom:mushroom-template-card
       entity: switch.master_bathroom_exhaust_fan
-      primary: Master bath fan
+      primary: Fan
       secondary: *auto_off_status
       icon: mdi:fan
       icon_color: *onoff_color
@@ -309,9 +324,12 @@ views:
         perform_action: timer.cancel
         target:
           entity_id: timer.master_bathroom_fan_timer
+    - type: heading
+      heading: Powder bath
+      heading_style: subtitle
     - type: custom:mushroom-template-card
       entity: switch.powder_bathroom_exhaust_fan
-      primary: Powder bath fan
+      primary: Fan
       secondary: *auto_off_status
       icon: mdi:fan
       icon_color: *onoff_color
@@ -328,11 +346,92 @@ views:
     column_span: 3
     cards:
     - type: heading
-      heading: Lights
+      heading: Closets
+      heading_style: title
+    - type: custom:mushroom-template-card
+      entity: light.front_foyer_closet
+      primary: Entryway
+      secondary: *auto_off_status
+      icon: mdi:wardrobe-outline
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: perform-action
+        perform_action: timer.cancel
+        target:
+          entity_id: timer.front_foyer_closet_light_timer
+    - type: custom:mushroom-template-card
+      entity: light.master_bedroom_closet_light
+      primary: Master bedroom
+      secondary: *auto_off_status
+      icon: mdi:wardrobe-outline
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: perform-action
+        perform_action: timer.cancel
+        target:
+          entity_id: timer.master_bedroom_closet_light_timer
+    - type: custom:mushroom-template-card
+      entity: light.office_closet
+      primary: Office
+      secondary: *auto_off_status
+      icon: mdi:wardrobe-outline
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: perform-action
+        perform_action: timer.cancel
+        target:
+          entity_id: timer.office_closet_light_timer
+    - type: custom:mushroom-template-card
+      entity: light.secondary_bedroom_closet_light
+      primary: Niccolo
+      secondary: *auto_off_status
+      icon: mdi:wardrobe-outline
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: perform-action
+        perform_action: timer.cancel
+        target:
+          entity_id: timer.secondary_bedroom_closet_light_timer
+    - type: custom:mushroom-template-card
+      entity: light.nursery_bedroom_closet_light
+      primary: Nursery
+      secondary: *auto_off_status
+      icon: mdi:wardrobe-outline
+      icon_color: *onoff_color
+      tap_action:
+        action: toggle
+      icon_tap_action:
+        action: more-info
+      hold_action:
+        action: perform-action
+        perform_action: timer.cancel
+        target:
+          entity_id: timer.nursery_bedroom_closet_light_timer
+  - type: grid
+    column_span: 3
+    cards:
+    - type: heading
+      heading: Laundry room
       heading_style: title
     - type: custom:mushroom-template-card
       entity: light.laundry_room_main_lights
-      primary: Laundry main lights
+      primary: Main lights
       secondary: *auto_off_status
       icon: mdi:ceiling-light
       icon_color: *onoff_color
@@ -368,7 +467,7 @@ views:
       heading_style: title
     - type: custom:mushroom-template-card
       primary: Auto-shutoff settings
-      secondary: Auto-off time for each fan and light
+      secondary: Auto-off time for each fan and room's lights
       icon: mdi:cog-outline
       icon_color: blue
       grid_options:
@@ -391,7 +490,7 @@ views:
       heading: Auto-off after
       heading_style: title
     - type: markdown
-      content: '**How it works:** turning on a bathroom fan or a laundry light starts its timer from the **Auto-off after** value below; when the timer runs out, it turns off. Turning it off yourself cancels the timer. The two laundry lights share one timer and one value: either light starts it, it turns both off, and it''s cancelled only when both are off.'
+      content: '**How it works:** turning on a bathroom fan or a closet or laundry light starts its timer from the **Auto-off after** value below; when the timer runs out, it turns off. Turning it off yourself cancels the timer. Lights in the same room share one timer and one value (the laundry lights): any of them starts it, it turns them all off, and it''s cancelled only when they''re all off. Fans have their own timer. Each value can be 4 to 45 min.'
     - type: heading
       heading: Bathrooms
       heading_style: subtitle
@@ -429,7 +528,65 @@ views:
       - type: numeric-input
         style: buttons
     - type: heading
-      heading: Lights
+      heading: Closets
+      heading_style: subtitle
+    - type: custom:mushroom-template-card
+      entity: input_number.front_foyer_closet_light_minutes
+      primary: Entryway closet
+      icon: mdi:wardrobe-outline
+      icon_color: blue
+      tap_action:
+        action: more-info
+      features_position: bottom
+      features:
+      - type: numeric-input
+        style: buttons
+    - type: custom:mushroom-template-card
+      entity: input_number.master_bedroom_closet_light_minutes
+      primary: Master bedroom closet
+      icon: mdi:wardrobe-outline
+      icon_color: blue
+      tap_action:
+        action: more-info
+      features_position: bottom
+      features:
+      - type: numeric-input
+        style: buttons
+    - type: custom:mushroom-template-card
+      entity: input_number.office_closet_light_minutes
+      primary: Office closet
+      icon: mdi:wardrobe-outline
+      icon_color: blue
+      tap_action:
+        action: more-info
+      features_position: bottom
+      features:
+      - type: numeric-input
+        style: buttons
+    - type: custom:mushroom-template-card
+      entity: input_number.secondary_bedroom_closet_light_minutes
+      primary: Niccolo bedroom closet
+      icon: mdi:wardrobe-outline
+      icon_color: blue
+      tap_action:
+        action: more-info
+      features_position: bottom
+      features:
+      - type: numeric-input
+        style: buttons
+    - type: custom:mushroom-template-card
+      entity: input_number.nursery_bedroom_closet_light_minutes
+      primary: Nursery closet
+      icon: mdi:wardrobe-outline
+      icon_color: blue
+      tap_action:
+        action: more-info
+      features_position: bottom
+      features:
+      - type: numeric-input
+        style: buttons
+    - type: heading
+      heading: Laundry room
       heading_style: subtitle
     - type: custom:mushroom-template-card
       entity: input_number.laundry_room_light_minutes

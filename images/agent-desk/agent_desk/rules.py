@@ -19,8 +19,10 @@ AWAITING, DONE, CANCELLED = "Awaiting approval", "Done", "Cancelled"
 WAITING_STATES = {TODO, AWAITING}  # plus anything in the backlog/unstarted groups
 
 
-def label_applied_by(activities: list[dict], label_id: str, user_id: str) -> bool:
-    """True iff the latest change to `label_id` was an add by `user_id`.
+def label_applied_by(activities: list[dict], label_id: str,
+                     user_id: str | set[str] | frozenset[str]) -> bool:
+    """True iff the latest change to `label_id` was an add by `user_id` (or,
+    given a set, by one of those users; empty ids never match).
 
     Plane logs one activity per label change: `field == "labels"`, with the
     label's id in `new_identifier` (added) or `old_identifier` (removed), and
@@ -33,6 +35,8 @@ def label_applied_by(activities: list[dict], label_id: str, user_id: str) -> boo
     no rows at all was set at creation, and counts as added by whoever
     created the ticket. Any later change has a row, which then decides.
     """
+    trusted = {user_id} if isinstance(user_id, str) else set(user_id)
+    trusted.discard("")
     latest, created_by = None, None
     for a in activities:  # oldest first
         if a.get("verb") == "created" and not a.get("field"):
@@ -42,9 +46,9 @@ def label_applied_by(activities: list[dict], label_id: str, user_id: str) -> boo
         if label_id in (a.get("new_identifier"), a.get("old_identifier")):
             latest = a
     if latest is None:
-        return bool(created_by) and created_by == user_id
+        return bool(created_by) and created_by in trusted
     return bool(latest.get("new_identifier") == label_id
-                and latest.get("actor") == user_id)
+                and latest.get("actor") in trusted)
 
 
 def last_entered(activities: list[dict], state_id: str) -> str:
@@ -178,8 +182,9 @@ def decide(t: Ticket, *, repo: str | None, deny_repos: set[str], known_playbooks
         return Decision("skip", f"already {t.state_name}")
     if "ready" not in t.label_names:
         return Decision("skip", "no ready label")
-    # 3. ready applied by George (checked before rule 2 so an unready ticket
-    # with a typo'd playbook label doesn't draw a comment)
+    # 3. ready applied by George, or by his orchestrator (`orchestratorEmail`);
+    # ready_by_owner is true for either. Checked before rule 2 so an unready
+    # ticket with a typo'd playbook label doesn't draw a comment.
     if not ready_by_owner:
         return Decision("skip", "ready not applied by George")
     # 2. exactly one known playbook

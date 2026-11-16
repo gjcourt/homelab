@@ -18,6 +18,8 @@ allow:
 # ...and none of these. A deny always wins over an allow.
 deny:
   - "apps/*/agent-desk/**"
+  # Reserved ahead of the agent-desk -> bench-desk rename (HOMELAB-114).
+  - "apps/*/bench-desk/**"
   - "apps/*/bench-cloud/**"
   - "clusters/**"
   - "infra/**"

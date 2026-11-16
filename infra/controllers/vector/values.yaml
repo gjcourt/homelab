@@ -1,11 +1,105 @@
-# Deploy Vector as a DaemonSet so it runs on every Talos node and processes
-# kernel/service logs sent from Talos machine.logging destinations.
-role: DaemonSet
+# Deploy Vector as a DaemonSet so it runs on every Talos node and receives
+# that node's Talos logs over TCP: service logs from
+# machine.logging.destinations and kernel logs from a KmsgLogConfig document
+# (see docs/reference/kernel-log-shipping.md).
+#
+# The chart's DaemonSet role is called "Agent". The valid roles are "Agent"
+# (DaemonSet), "Aggregator" (StatefulSet) and "Stateless-Aggregator"
+# (Deployment). Any other value renders NO workload at all, and the chart does
+# not fail: from install (2026-03-05) until this was fixed, `role: DaemonSet`
+# rendered only a ServiceAccount, a ConfigMap and two Services, the HelmRelease
+# reported Ready, and no Talos log ever reached Loki. VectorAgentNotReady
+# (infra/configs/alerts/loki-rules.yaml) and TalosLogsAbsent
+# (infra/controllers/loki/alerting-rules.yaml) exist so that cannot recur
+# silently.
+role: Agent
 
-# Add a well-known label so the NodePort service can select the pods without
-# depending on Vector's internal chart labels.
+# The Agent role is built for scraping container logs off the host. This
+# pipeline only listens on a TCP socket, so turn off what that role adds by
+# default and this config never uses:
+#   - hostPath mounts of /var/log, /var/lib, /proc and /sys
+#   - a ClusterRole/Binding to list+watch pods, nodes and namespaces (only the
+#     kubernetes_logs source needs it)
+#   - a hostPath data dir at /var/lib/vector (an emptyDir is enough: the
+#     socket source keeps no checkpoints and the Loki sink buffers in memory)
+defaultVolumes: []
+defaultVolumeMounts: []
+rbac:
+  create: false
+# With no RBAC there is nothing for an API token to do.
+serviceAccount:
+  automountToken: false
+persistence:
+  hostPath:
+    enabled: false
+
+# Without hostPath mounts the pod needs no privileges, so run it to the
+# restricted Pod Security profile even though the namespace allows more.
+# Checked 2026-11-14: the 0.53.0-distroless-libc image runs this config as
+# uid 65534 with a read-only root, all capabilities dropped and
+# no-new-privileges, writing only to the data dir.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+# Every node must run a receiver, including one with a NoSchedule taint.
+# Same toleration as the prometheus-node-exporter chart default. A custom
+# NoExecute taint would still evict it, and VectorAgentNotReady would fire.
+tolerations:
+  - operator: Exists
+    effect: NoSchedule
+
+# Ready once the Talos socket source is listening.
+# No livenessProbe: it would have no signal distinct from this one.
+readinessProbe:
+  tcpSocket:
+    port: 6000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+# Receive on the HOST network, so each node's Talos connects to a real socket
+# on that same node: tcp://<node-ip>:6000. Until 2026-11-15 this went through a
+# NodePort (30600) with externalTrafficPolicy: Local, which was meant to keep
+# each node's logs on its own pod. It didn't: traffic a node sends to its own
+# NodePort is internal traffic, and Cilium 1.20 (socket LB, kube-proxy
+# replacement) spread it across all four Vector pods. internalTrafficPolicy:
+# Local was tested live and changed nothing (the internal NodePort entry kept
+# all four backends), and hostPort is not enabled in this Cilium. A host
+# socket is the only option here that guarantees locality, and the node label
+# and TalosNodeLogsSilent both depend on it.
+#
+# Port 6000 is outside the NodePort range (30000-32767), so a future Service
+# can't take it over through socket LB, and no node listened on 6000 or 9598
+# on 2026-11-15. Like the old NodePort, it is reachable from the LAN.
+# ClusterFirstWithHostNet keeps cluster DNS for the Loki sink.
+podHostNetwork: true
+dnsPolicy: ClusterFirstWithHostNet
+
+# A well-known label for selecting the receiver pods without depending on
+# Vector's internal chart labels.
 podLabels:
   talos-log-receiver: "true"
+
+# Scrape Vector's own metrics (the prom_exporter sink below). The relabeling
+# copies the pod's node onto every series, so TalosNodeLogsSilent
+# (infra/configs/alerts/loki-rules.yaml) can name the node that stopped
+# sending. The chart names the generated container port after the sink:
+# prom_exporter -> prom-exporter, the PodMonitor default.
+podMonitor:
+  enabled: true
+  relabelings:
+    - sourceLabels: [__meta_kubernetes_pod_node_name]
+      targetLabel: node
 
 resources:
   requests:
@@ -20,7 +114,8 @@ customConfig:
   data_dir: /vector-data-dir
 
   sources:
-    # Receive Talos kernel and service logs sent via machine.logging.destinations.
+    # Receive Talos service logs (machine.logging.destinations) and kernel logs
+    # (KmsgLogConfig).
     # Format: newline-delimited JSON (Talos json_lines format, one event per line).
     talos_logs:
       type: socket
@@ -31,20 +126,128 @@ customConfig:
       decoding:
         codec: json
 
+    # UniFi syslog: Network app Settings → CyberSecure → Traffic Logging →
+    # Activity Logging (Syslog) → SIEM Server, pointed at 10.42.2.47:5514, the
+    # LoadBalancer IP in service-unifi-syslog-lb.yaml (that setting takes one
+    # address, so a node IP would have no failover). UDP on the host network
+    # (like talos_logs above); every node listens. A raw socket rather
+    # than the syslog source: that source drops lines it can't parse, and
+    # UniFi's CEF payloads may not be strict RFC 3164/5424. The parse happens
+    # in normalize_unifi instead, keeping the line either way.
+    # 5514 is unprivileged (the pod runs as 65534 with no capabilities) and
+    # was free on every node on 2026-11-15.
+    unifi_syslog:
+      type: socket
+      address: "0.0.0.0:5514"
+      mode: udp
+      decoding:
+        codec: bytes
+
+    # Vector's own counters, for the per-node silence alert.
+    vector_metrics:
+      type: internal_metrics
+
   transforms:
     # Normalise Talos field names. Talos uses "talos-service" (hyphenated) which
-    # is invalid in VRL without quoting; rename to talos_service. Also ensure
-    # that level and msg are always present.
+    # is invalid in VRL without quoting; rename to talos_service. Kernel (kmsg)
+    # events carry no talos-service, so they get "kernel". Talos puts the level
+    # in "talos-level" (service and kmsg events alike), not "level"; reading
+    # .level alone labelled every line "info". Also ensure msg is present.
     normalize_talos:
       type: remap
       inputs:
         - talos_logs
       source: |
         .talos_service = string(del(."talos-service")) ?? "kernel"
-        .level = string(.level) ?? "info"
+        .level = string(del(."talos-level")) ?? string(.level) ?? "info"
         .msg = string(.msg) ?? ""
 
+        # Each node sends to its own IP, and this pod listens on that node's
+        # host network, so this pod's node is the sender.
+        .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
+
+        # Use the time Talos logged the line, not the time it arrived. When a
+        # node first connects, Talos sends its in-memory buffer from boot, and
+        # arrival time would make those old lines look new (on 2026-11-15 a
+        # replay of old iscsid errors fired ISCSIKernelError). Lines more than
+        # Loki's out-of-order window behind are rejected by Loki, which is
+        # what we want for a replay; the rest of the batch is accepted.
+        # Extension services (ext-iscsid) log plain stdout with no time of
+        # their own, so Talos stamps those when it sends them and they keep
+        # arrival time either way.
+        ts, err = parse_timestamp(string(."talos-time") ?? "", "%+")
+        if err == null {
+          .timestamp = ts
+          del(."talos-time")
+        }
+
+    # Parse UniFi syslog where possible; keep the raw line when it doesn't parse.
+    # Arrival time is kept as the timestamp (device clocks are not trusted here,
+    # and a parsed time would let a skewed device fall outside Loki's window).
+    # Labels stay low-cardinality: a handful of devices and app names.
+    normalize_unifi:
+      type: remap
+      inputs:
+        - unifi_syslog
+      source: |
+        # The socket source puts the sender's address in .host; keep it as a
+        # field (not a label) before .host becomes the syslog hostname.
+        .source_ip = string(del(.host)) ?? ""
+        del(.port)
+        raw = string(del(.message)) ?? ""
+        parsed, err = parse_syslog(raw)
+        if err == null {
+          .host = string(parsed.hostname) ?? "unknown"
+          .appname = string(parsed.appname) ?? "unknown"
+          .level = string(parsed.severity) ?? "info"
+          .msg = string(parsed.message) ?? raw
+        } else {
+          .host = "unparsed"
+          .appname = "unparsed"
+          .level = "info"
+          .msg = raw
+        }
+        .category = "none"
+        # UniFi sends CEF over syslog ("<pri>... Home CEF:0|Ubiquiti|..."), which
+        # parse_syslog splits into appname "CEF" and a message starting "0|".
+        # Re-join and parse it so the event's name, CEF severity and UniFi category
+        # become fields, and category becomes a label.
+        if contains(raw, "CEF:") {
+          parts = split(raw, "CEF:", limit: 2)
+          cef, cerr = parse_cef("CEF:" + (string(parts[1]) ?? ""))
+          if cerr == null {
+            .appname = "cef"
+            .cef = cef
+            .category = string(cef.UNIFIcategory) ?? "none"
+            .event = string(cef.name) ?? ""
+            sev = to_int(cef.severity) ?? 0
+            .cef_severity = if sev >= 9 { "very-high" } else if sev >= 7 { "high" } else if sev >= 4 { "medium" } else { "low" }
+            .msg = string(cef.msg) ?? .event
+          }
+        }
+        .node = get_env_var("VECTOR_SELF_NODE_NAME") ?? "unknown"
+
   sinks:
+    # UniFi syslog to Loki, as its own job so Talos queries are unaffected.
+    loki_unifi:
+      type: loki
+      inputs:
+        - normalize_unifi
+      endpoint: http://loki.monitoring.svc.cluster.local:3100
+      encoding:
+        codec: json
+      labels:
+        job: unifi-syslog
+        host: '{{ "{{" }} host {{ "}}" }}'
+        appname: '{{ "{{" }} appname {{ "}}" }}'
+        level: '{{ "{{" }} level {{ "}}" }}'
+        # UniFi's own event category (Audit, Client Devices, ...) for CEF
+        # lines, "none" otherwise. A handful of values.
+        category: '{{ "{{" }} category {{ "}}" }}'
+      batch:
+        max_events: 500
+        timeout_secs: 5
+
     # Forward all Talos log events to Loki with structured labels for querying.
     loki_output:
       type: loki
@@ -59,6 +262,14 @@ customConfig:
         # which is the Vector field-reference syntax for dynamic Loki labels.
         talos_service: '{{ "{{" }} talos_service {{ "}}" }}'
         level: '{{ "{{" }} level {{ "}}" }}'
+        node: '{{ "{{" }} node {{ "}}" }}'
       batch:
         max_events: 500
         timeout_secs: 5
+
+    # Vector's own metrics, scraped by the PodMonitor above.
+    prom_exporter:
+      type: prometheus_exporter
+      inputs:
+        - vector_metrics
+      address: "0.0.0.0:9598"

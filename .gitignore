@@ -19,3 +19,7 @@ docs/plans/george.md
 hosts/*/actions-runner/.env
 .env
 .gstack/
+
+# Python bytecode
+__pycache__/
+*.pyc

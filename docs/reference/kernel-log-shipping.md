@@ -399,14 +399,24 @@ one IPv4 address or hostname, so it points at the LoadBalancer IP **`10.42.2.47:
 that IP to a healthy node, and `externalTrafficPolicy: Local` keeps the sender's address.
 UDP has no retry: datagrams sent while the IP is moving are lost.
 
-Labels: `job="unifi-syslog"`, `host` (the syslog hostname, e.g. the gateway), `appname`,
-`level`. The sender's address is the `source_ip` field, not a label. Lines that don't parse
-as syslog are kept with `host="unparsed"`, so a format change shows up as a label value,
-not as silence.
+Labels: `job="unifi-syslog"`, `host` (the syslog hostname; the gateway is `Home`), `appname`,
+`level`, `category`. The sender's address is the `source_ip` field, not a label. Lines that
+don't parse as syslog are kept with `host="unparsed"`, so a format change shows up as a label
+value, not as silence.
+
+UniFi sends **CEF** inside syslog (`… Home CEF:0|Ubiquiti|UniFi Network|…`). Those lines get
+`appname="cef"` and `category` from UniFi's own `UNIFIcategory` (seen so far: `Audit`,
+`Client Devices`); every other line has `category="none"`. Fields in the JSON body: `event`
+(the CEF name, e.g. `Network Accessed`, `WiFi Client Roamed`), `cef_severity`
+(`low`/`medium`/`high`/`very-high` from CEF 0–10), `msg` (UniFi's own sentence), and
+`cef` (every CEF field, including the `UNIFI*` extensions). `level` stays the syslog
+severity, which UniFi sets to `info` for everything.
 
 ```bash
 logcli query '{job="unifi-syslog"}'
-logcli query '{job="unifi-syslog", host="unparsed"}'   # format check
+logcli query '{job="unifi-syslog", category="Audit"}'           # admin logins and changes
+logcli query '{job="unifi-syslog"} | json | cef_severity=~"high|very-high"'
+logcli query '{job="unifi-syslog", host="unparsed"}'           # format check
 ```
 
 Arrival time is the timestamp (device clocks aren't trusted). Lines sent while the

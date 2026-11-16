@@ -126,14 +126,18 @@ continue running with the old config — L2 silently doesn't work.
    `bgpControlPlane.enabled: true`. This makes every cilium-agent capable
    of running BGP.
 2. `CiliumBGPClusterConfig` (`infra/configs/cilium/bgp-cluster-config.yaml`)
-   selects which nodes actually peer. Current selector: every node **except
-   control-plane**, which selects all 3 workers.
+   selects which nodes actually peer. It has **no `nodeSelector`**, so all 4
+   nodes peer, control-plane included (since 2026-11-15, #1953; before that only
+   workers peered, which with one worker left `.25` as the only next hop). Cilium's
+   BGP does **not** skip nodes labelled
+   `node.kubernetes.io/exclude-from-external-load-balancers`: the control-plane
+   nodes carry it and advertise every LB IP.
 3. `CiliumBGPPeerConfig` defines timers, address families, and which
    `CiliumBGPAdvertisement` resources feed each family.
 4. `CiliumBGPAdvertisement` declares what to advertise. Current advertisement
    matches every LoadBalancer service (`matchLabels: {}`), advertising each
    service's LB IP as a `/32`.
-5. Each worker initiates a TCP connection to UCGF `10.42.2.1:179`,
+5. Each node initiates a TCP connection to UCGF `10.42.2.1:179`,
    negotiates an eBGP session (AS 65010 ↔ AS 65100), and announces its `/32`s
    with itself as the next-hop.
 
@@ -166,8 +170,8 @@ route bgp"'`, or the Neighbors table on the same Network app page.
 Key elements:
 
 - **`bgp listen range 10.42.2.0/24 peer-group K8S-NODES`** — accepts BGP
-  from any LAN host asserting AS 65010. Lets new workers join automatically.
-- **`maximum-paths 8`** — installs all 3 worker next-hops in the routing
+  from any LAN host asserting AS 65010. Lets new nodes join automatically.
+- **`maximum-paths 8`** — installs all 4 node next-hops in the routing
   table for ECMP. Without this, FRR keeps only one path per prefix.
 - **`route-map K8S-LB-IN` (`match ip address prefix-len 32`)** — accepts
   only `/32`s inbound, so a misconfigured cluster cannot push a default route
@@ -181,19 +185,21 @@ Key elements:
 
 ```bash
 ssh root@10.42.2.1 'vtysh -c "show ip route bgp"'
-# Each LB IP /32 with 3 next-hops (one per worker), ECMP weighted equally:
-# B>* 10.42.2.40/32 [20/0] via 10.42.2.23, eth0, weight 1
-#                       via 10.42.2.24, eth0, weight 1
-#                       via 10.42.2.25, eth0, weight 1
+# Each LB IP /32 with 4 next-hops (one per node), ECMP weighted equally
+# (captured 2026-11-15):
+# B>* 10.42.2.40/32 [20/0] via 10.42.2.20, br2, weight 1
+#   *                      via 10.42.2.21, br2, weight 1
+#   *                      via 10.42.2.23, br2, weight 1
+#   *                      via 10.42.2.25, br2, weight 1
 ```
 
 ### Failure modes
 
 | Failure | Behavior | Recovery |
 |---|---|---|
-| One worker's BGP session drops | UCGF removes that next-hop after hold-time (90s); ECMP collapses to 2 paths | Automatic on session re-establishment |
-| Two workers' BGP sessions drop | One next-hop remains; no traffic loss but no HA | Automatic on session re-establishment |
-| All 3 worker BGP sessions drop | UCGF has no route; cross-subnet clients lose access | Automatic on first session re-establishment |
+| One node's BGP session drops | UCGF removes that next-hop after hold-time (90s); ECMP collapses to 3 paths | Automatic on session re-establishment |
+| Three nodes' BGP sessions drop | One next-hop remains; no traffic loss but no HA | Automatic on session re-establishment |
+| All 4 BGP sessions drop | UCGF has no route; cross-subnet clients lose access (same-subnet clients still have L2) | Automatic on first session re-establishment |
 | UCGF FRR daemon crashes | All BGP routes removed; cross-subnet access fails | `ubios-udapi-server` owns the FRR daemons since 6.0.17; toggle or re-save `k8s-lb-bgp` in the Network app. There is no `frr.service` |
 | UCGF firmware upgrade loses the BGP config | BGP not running at all (`CiliumBGPSessionDown`) | Network app → Routing Table → Create New Route → BGP, upload `docs/reference/ucgf-bgp-frr.conf`. Don't recreate `frr.service` by hand: the gateway would run two FRRs |
 | Neighbor Established but 0 received routes | Route-map references something the importer dropped (seen 2026-11-15 with a prefix-list) | Compare `vtysh -c "show running-config"` with the reference file |
@@ -209,27 +215,27 @@ restart completes inside 120s.
 
 ## ECMP behavior
 
-The UCGF installs 3 next-hops per LB IP. For each new flow, FRR picks one
+The UCGF installs 4 next-hops per LB IP. For each new flow, FRR picks one
 next-hop (typically by 5-tuple hash). Existing flows are sticky to their
 chosen next-hop until expiration.
 
-### Once a packet reaches a worker
+### Once a packet reaches a node
 
 Both L2 and BGP paths converge on the same in-cluster behavior:
 
-1. Frame arrives on the worker's NIC (via L2 ARP for same-subnet, via UCGF
+1. Frame arrives on the node's NIC (via L2 ARP for same-subnet, via UCGF
    forwarding for routed).
 2. Cilium's BPF kube-proxy replacement looks up the destination IP+port in
    the BPF service map.
 3. It rewrites the packet's destination to a backend pod IP (which may be
    on any node) and forwards via VXLAN tunnel.
 4. The backend pod responds; reply traverses the same VXLAN back to the
-   ingress worker, which un-rewrites and sends the frame back to the LAN.
+   ingress node, which un-rewrites and sends the frame back to the LAN.
 
 `externalTrafficPolicy: Cluster` (the current default for all LB services)
-means **the ingress worker may not host the backend pod** — there's a
+means **the ingress node may not host the backend pod** — there's a
 second hop. `Local` would skip the second hop but reduce ECMP path count
-to "workers running the backing pod." The plan
+to "nodes running the backing pod." The plan
 `2026-05-06-network-resilience-and-bgp-completion.md` Phase F.3 covers
 per-service review of this.
 
@@ -239,15 +245,15 @@ Because of the above, the HA story is asymmetric for the two client types:
 
 | | L2 (wired VLAN 2) | BGP (cross-subnet) |
 |---|---|---|
-| Active speakers per IP | 1 (lease holder) | 3 (all workers) |
-| Failover trigger | Lease expiry on speaker death | BGP hold-time on worker death |
+| Active speakers per IP | 1 (lease holder) | 4 (all nodes) |
+| Failover trigger | Lease expiry on speaker death | BGP hold-time on node death |
 | Failover time | ~5–15s (depends on lease tuning) | ~90s (hold-time) |
-| Concurrent path count | 1 (no aggregate bandwidth across nodes) | 3 (ECMP) |
-| Single point of failure | The elected speaker node | Any single worker (other 2 cover) |
+| Concurrent path count | 1 (no aggregate bandwidth across nodes) | 4 (ECMP) |
+| Single point of failure | The elected speaker node | None: any single node (other 3 cover) |
 
 Practical implication: when the elected L2 speaker reboots, wired VLAN-2
 clients lose access for ~5–15s. Wireless clients are unaffected. When a
-worker reboots, no one notices.
+single node reboots, BGP clients don't notice.
 
 ## Observability — Hubble
 
@@ -288,7 +294,7 @@ cilium hubble ui
 
 - ✅ Pod-to-pod traffic (every packet, both directions, with verdict).
 - ✅ Pod-to-LB and LB-to-pod (the BPF rewrite is visible).
-- ✅ External-to-LB after the packet enters a worker node.
+- ✅ External-to-LB after the packet enters a node.
 - ✅ DNS lookups when L7 visibility is enabled for the namespace.
 - ❌ Traffic between two LAN devices that doesn't traverse a cluster node
   (e.g. Apple TV to UCGF). That stays on the wire and never hits BPF.

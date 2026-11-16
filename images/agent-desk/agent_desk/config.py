@@ -71,6 +71,11 @@ class Config:
     notify_webhook: str = ""
     # Plane's browser URL, for the link in a notification ({base}/{ws}/browse/{key}/).
     plane_web_url: str = ""
+    # George's orchestrator's Plane account (George, 2026-11-09): a `ready` it
+    # adds counts like George's. Nothing else does: its comments neither wake
+    # an agent nor answer a Blocked ticket, and `over-cap` stays George's.
+    # Empty means only George's `ready` counts.
+    orchestrator_email: str = ""
 
 
 def _read_file(env: str) -> str:
@@ -120,6 +125,7 @@ def load(path: str | None = None, env=os.environ) -> Config:
         notify_webhook=_read_file("NOTIFY_WEBHOOK_FILE"),
         plane_web_url=raw.get("planeWebUrl", ""),
         github_owner=raw.get("githubOwner", "") or "",
+        orchestrator_email=str(raw.get("orchestratorEmail", "") or "").strip(),
     )
     for key in ("job_namespace", "job_template", "console_deployment", "run_record",
                 "jobs_token_secret"):

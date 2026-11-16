@@ -48,10 +48,45 @@ update also stopped FRR on the gateway (`frr.service` is `not-found` on 6.0.17),
 BGP session from talos-kot-7x7 to 10.42.2.1 has been down since 00:54 (`CiliumBGPSessionDown`).
 LoadBalancer IPs still answered from the LAN at 04:30. The verifier has no BGP check.
 
+**2026-11-15, 21:52:** BGP restored. 6.0.17 runs FRR from the Network app (Routing Table →
+BGP config upload) instead of `frr.service`; the config is uploaded there as `k8s-lb-bgp`
+and the gateway again learns the 8 LoadBalancer /32s from talos-kot-7x7. Details and the
+importer's prefix-list quirk: `docs/architecture/networking/cluster-load-balancing.md`.
+
 **2026-11-15, later:** the Talos log patch is applied on all four nodes, so the verifier's
 Loki check now has data and the next update should get past `loki_stale`. Loki lines now
 carry a `node` label and Talos's own timestamps, and `TalosNodeLogsSilent` catches a single
 silent node (`docs/reference/kernel-log-shipping.md`).
+
+**2026-11-15, evening:** phase 1 is live. Every node was drained in turn (14:20–15:00 PST),
+and all 80 iSCSI sessions now report `Recovery Timeout: 600`. The drain needed pod deletes,
+because the single-replica `maxUnavailable: 0` PDBs block eviction; the procedure in
+`AGENTS.md` is updated.
+
+**2026-11-15, game day (phase 4 step 1): pass.** George restarted the Rack Switch from the
+UniFi app at about 18:09 PST. Hestia and the nodes were unreachable from 18:09:06 to
+18:11:56 (about 2m50s, from a 5 s ping recorder). Results against the test above:
+
+- Hestia: `conn_rsp_timer_fn` closed 6 connections, then fresh logins; no `TSIH` or
+  `Requested` rejects; SCST timers read `30 30 90`. Session count 80 after (81 before;
+  the 81st was not a cluster session, since the cluster has 80).
+- Nodes: every one of the 80 live sessions logged `detected conn error (1022)` and then
+  `operational after recovery` (~56 attempts). No `session recovery timed out`,
+  `rejecting I/O`, `Buffer I/O error` or `EXT4-fs error`.
+- Writes: all 92 probed volumes writable; direct write exec passed on all 12 CNPG
+  primaries, Prometheus and Loki.
+- Verifier: `homelab_update_verification{device="Rack Switch",result="pass"}` at 982 s
+  uptime, no email.
+- Also confirmed: iscsid `noop_out_interval`/`noop_out_timeout` are 5/5, and the Talos
+  kernel has no `hung_task_*` sysctls (no hung-task detector, so no panic risk).
+
+Side effects, all self-recovered: controllers that lost the API restarted (democratic-csi
+controller sidecars, the CNPG operator, which crash-looped ~3 min until its barman-cloud
+plugin came back, and several system pods). One pvc-writeprobe sweep ran during the
+outage, listed 0 volumes and published no series instead of `unknown`. That is a probe
+blind spot worth fixing. **Fixed 2026-11-15** (`images/pvc-writeprobe/probe.sh`): a failed, unparseable or empty
+pod listing now skips the sweep and keeps the previous metrics, so `last_run_seconds` stops
+advancing and `PvcWriteProbeStale` fires instead of the volumes silently disappearing. Next: phase 4 step 2, device auto-update back on.
 
 ## What already exists (do not rebuild)
 
@@ -491,12 +526,19 @@ Only after phase 1 is verified on every node and phases 2–3 are live:
 
 ## Phase 5 (optional) — UniFi syslog to Loki
 
-A syslog source on the existing Vector DaemonSet (UDP NodePort), with UniFi remote logging
+A syslog source on the existing Vector DaemonSet (UDP 5514 on the host network, like the Talos
+receiver; no NodePort), with UniFi remote logging
 pointed at it. In Network 10.6 that setting is **Settings → CyberSecure → Traffic Logging →
 Activity Logging (Syslog)**. It's currently **Internally Stored**; switch it to **SIEM Server**
 with the Vector address once the receiver exists. Its "All UniFi Device Management" flow
 (currently off) is the one that carries device events. That would give each update a
 detailed record (download, flash, reboot, port up) next to the iSCSI and kernel logs. Not needed for phases 1–4.
+
+**2026-11-15:** receiver added (`unifi_syslog` in `infra/controllers/vector/values.yaml`,
+Loki `job="unifi-syslog"`), plus a LoadBalancer IP for it, `10.42.2.47`. Point **SIEM Server**
+at `10.42.2.47:5514` (the field takes one address, so a node IP has no failover). Send device
+management and threat (IPS) events only, not per-flow traffic logs: those would flood Loki.
+Syslog over UDP is lost while the Rack Switch itself is down; events before and after arrive.
 
 ## Out of scope
 

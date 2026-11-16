@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: update-verifier
+  namespace: monitoring
+  labels:
+    app: update-verifier
+spec:
+  selector:
+    app: update-verifier
+  ports:
+    - name: metrics
+      port: 9106
+      targetPort: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: update-verifier
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  selector:
+    matchLabels:
+      app: update-verifier
+  endpoints:
+    - port: metrics
+      interval: 60s
+      # honorLabels stays false (unlike pvc-writeprobe): the verifier's labels
+      # (device, boot, ...) never collide with the target's namespace/pod, so
+      # nothing gets renamed to exported_*.

@@ -60,10 +60,11 @@ see `scripts/plans-index/`).
 
 <!-- BEGIN PLANS INDEX -->
 
-### In progress (26)
+### In progress (27)
 
 | File | Last modified | Summary |
 | :--- | :--- | :--- |
+| [2026-11-14-switch-update-observability-plan.md](2026-11-14-switch-update-observability-plan.md) | 2026-11-15 | Let UniFi auto-update the Rack Switch and gateway unattended: raise the iSCSI replacement_timeout so a reboot can't remount volumes read-only, then detect each reboot, verify recovery automatically, and email only on failure |
 | [2026-11-09-hestia-pull-deployer-plan.md](2026-11-09-hestia-pull-deployer-plan.md) | 2026-11-09 | Replace the hestia self-hosted GitHub runner with a hestia-side Git-pull deployer (gha-runner-watchdog generalised to hestia-deployer); shadow, cut over, then retire the runner, its token, deploy-hestia.yml and the runner canary |
 | [2026-11-09-alcatraz-pull-deployer-plan.md](2026-11-09-alcatraz-pull-deployer-plan.md) | 2026-11-09 | Give alcatraz the hestia pull model: the same hestia-deployer image with a docker-compose backend (one commit per tick, config-hash diff, compose up -d per project), dry-run beside hestia's, a 24h evidence-gated soak, cutover about a week after hestia's (HOMELAB-112), then delete the never-registered alcatraz runner path (HOMELAB-118) |
 | [2026-11-04-accuraterip-on-import-plan.md](2026-11-04-accuraterip-on-import-plan.md) | 2026-11-04 | AccurateRip-check every CD at import time, record results in the rip ledger, archive EAC logs, and generate a bad-disc tally from the ledger |

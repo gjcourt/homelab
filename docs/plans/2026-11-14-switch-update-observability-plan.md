@@ -84,7 +84,9 @@ Side effects, all self-recovered: controllers that lost the API restarted (democ
 controller sidecars, the CNPG operator, which crash-looped ~3 min until its barman-cloud
 plugin came back, and several system pods). One pvc-writeprobe sweep ran during the
 outage, listed 0 volumes and published no series instead of `unknown`. That is a probe
-blind spot worth fixing. Next: phase 4 step 2, device auto-update back on.
+blind spot worth fixing. **Fixed 2026-11-15** (`images/pvc-writeprobe/probe.sh`): a failed, unparseable or empty
+pod listing now skips the sweep and keeps the previous metrics, so `last_run_seconds` stops
+advancing and `PvcWriteProbeStale` fires instead of the volumes silently disappearing. Next: phase 4 step 2, device auto-update back on.
 
 ## What already exists (do not rebuild)
 

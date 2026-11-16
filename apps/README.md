@@ -14,6 +14,7 @@
 - [cadence-site](base/cadence-site/)
 - [changes](base/changes/)
 - [couchdb](base/couchdb/)
+- [domestique](base/domestique/) — namespace + read-only fitness-folder PV/PVC only (workload: DOMESTIQUE-56)
 - [excalidraw](base/excalidraw/)
 - [finance-dashboard](base/finance-dashboard/)
 - [flashcards-sync](base/flashcards-sync/)

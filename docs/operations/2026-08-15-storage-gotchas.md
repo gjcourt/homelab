@@ -2,7 +2,7 @@
 title: Storage gotchas — PVCs, PVs, ZFS, TrueNAS, Synology
 status: Stable
 created: 2026-08-15
-updated: 2026-08-15
+updated: 2026-10-06
 updated_by: gjcourt
 tags: [operations, storage, pvc, zfs, truenas, synology, gotchas]
 ---
@@ -48,24 +48,24 @@ pod=$(kubectl get pods -n $NS -o json | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 for p in d['items']:
- for v in p['spec'].get('volumes',[]):
- if v.get('persistentVolumeClaim',{}).get('claimName')=='$PVC':
- for c in p['spec']['containers']:
- for m in c.get('volumeMounts',[]):
- if m['name']==v['name']:
- print(p['metadata']['name'], c['name'], m['mountPath'])
- sys.exit(0)
+    for v in p['spec'].get('volumes',[]):
+        if v.get('persistentVolumeClaim',{}).get('claimName')=='$PVC':
+            for c in p['spec']['containers']:
+                for m in c.get('volumeMounts',[]):
+                    if m['name']==v['name']:
+                        print(p['metadata']['name'], c['name'], m['mountPath'])
+                        sys.exit(0)
 ")
 
 # 2. Look at sizes + file types
 kubectl exec -n $NS $POD -c $CONTAINER -- sh -c "du -sh $MOUNT; ls -la $MOUNT" 
 
 # 3. RED FLAGS for "lossy":
-# - any .sqlite / .db file > 0 bytes (user data)
-# - .yaml/.json config (state)
-# - .storage/ directory (Home Assistant)
-# - files >1MB total
-# - mtime within last 7 days (active use)
+#    - any .sqlite / .db file > 0 bytes (user data)
+#    - .yaml/.json config (state)
+#    - .storage/ directory (Home Assistant)
+#    - files >1MB total
+#    - mtime within last 7 days (active use)
 ```
 
 **Heuristic:** "X-cache" or "X-transcodes" or "X-state" PVCs are usually lossy. "X-data" or "X-config" or just "X" without a qualifier are usually preserve. Empty dirs (0K) are obviously lossy.
@@ -120,9 +120,9 @@ kubectl get pv -o json | python3 -c "
 import json,sys
 d = json.load(sys.stdin)
 for pv in d['items']:
- cr = pv['spec'].get('claimRef', {})
- if cr.get('namespace')=='$NS' and cr.get('name')=='$OLD_PVC_NAME':
- print(pv['metadata']['name'], pv['status']['phase'], pv['spec']['persistentVolumeReclaimPolicy'])
+    cr = pv['spec'].get('claimRef', {})
+    if cr.get('namespace')=='$NS' and cr.get('name')=='$OLD_PVC_NAME':
+        print(pv['metadata']['name'], pv['status']['phase'], pv['spec']['persistentVolumeReclaimPolicy'])
 "
 
 # 2. Clear claimRef so it becomes Available
@@ -133,22 +133,22 @@ cat <<YAML | kubectl apply -f -
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
- name: ${OLD_PVC_NAME}-recovery-source
- namespace: $NS
+  name: ${OLD_PVC_NAME}-recovery-source
+  namespace: $NS
 spec:
- accessModes: [ReadWriteOnce]
- storageClassName: $OLD_STORAGE_CLASS # e.g. truenas-iscsi (must match the PV's class)
- resources:
- requests:
- storage: $SIZE
- volumeName: $OLD_PV_NAME # binds to specific PV
+  accessModes: [ReadWriteOnce]
+  storageClassName: $OLD_STORAGE_CLASS # e.g. truenas-iscsi (must match the PV's class)
+  resources:
+    requests:
+      storage: $SIZE
+  volumeName: $OLD_PV_NAME              # binds to specific PV
 YAML
 
 # 4. Scale workload to 0 (release the new PVC)
 
 # 5. Run a Job that mounts BOTH old + new PVCs, rsync/cp old -> new
-# (use a permissive image like alpine + rsync, OR the same app image
-# to avoid ImagePullBackOff if cluster DNS is impaired)
+#    (use a permissive image like alpine + rsync, OR the same app image
+#     to avoid ImagePullBackOff if cluster DNS is impaired)
 
 # 6. Scale workload back up
 # 7. Clean up: delete the recovery-source PVC. Old PV goes back to Released (or Available depending on reclaim).
@@ -305,7 +305,7 @@ Next failure mode to watch for (not yet observed):
 
 - [synology per user photo symlinks](#synology-per-user-photo-symlinks) — sibling Synology permission trap on `family/images/photos/<user>` symlinks. Different mechanism (symlink ACL), same outcome (silent rsync skip).
 - [rsync verify destination](#rsync-verify-destination) — generic rule: always verify destination after a low-bytes rsync; both Synology traps masquerade as "clean" rsync runs.
-- see [the hestia photos plan](./plans/2026-06-01-hestia-photos-sot.md) — the migration that surfaced this trap. Caused Immich to silently miss all 2026 photos until 2026-06-02.
+- [The hestia photos plan](../plans/2026-06-01-hestia-photos-sot.md) — the migration that surfaced this trap. Caused Immich to silently miss all 2026 photos until 2026-06-02.
 
 ---
 
@@ -348,12 +348,12 @@ If rsync hits this and you forget the rule:
 - `du -sh` as the service user shows real sizes on the family path (directory ACL works)
 - BUT `cat` on any individual file returns Permission denied
 
-Reproduced 2026-06-01 in the hestia-SOT bulk seed (Phase 3 of see [the hestia photos plan](./plans/2026-06-01-hestia-photos-sot.md)). Wasted ~2 hours of retries before the user surfaced the symlink fact.
+Reproduced 2026-06-01 in the hestia-SOT bulk seed (Phase 3 of [the hestia photos plan](../plans/2026-06-01-hestia-photos-sot.md)). Wasted ~2 hours of retries before the user surfaced the symlink fact.
 
 ### Related
 
 - — uses this pattern in production
-- see [the hestia photos plan](./plans/2026-06-01-hestia-photos-sot.md) — the plan that hit this trap during Phase 3 bulk seed
+- [The hestia photos plan](../plans/2026-06-01-hestia-photos-sot.md) — the plan that hit this trap during Phase 3 bulk seed
 
 ---
 
@@ -390,6 +390,72 @@ When using `--ignore-errors` or `--partial`, always pipe stderr to a file (`2>/t
 ### Related
 
 - [synology per user photo symlinks](#synology-per-user-photo-symlinks) — the specific ACL trap that produced the silent skip in the hestia-SOT case
-- see [the hestia photos plan](./plans/2026-06-01-hestia-photos-sot.md) — the plan where this misread happened
+- [The hestia photos plan](../plans/2026-06-01-hestia-photos-sot.md) — the plan where this misread happened
+
+---
+
+## democratic-csi driver and PVC expansion
+
+**The working driver is the SSH one. The API-only driver cannot provision on TrueNAS 26.x — don't
+re-attempt the swap without an api-proxy fix. Online iSCSI PVC growth works since v1.9.5.**
+
+**Driver.** `truenas-iscsi` resolves to `FreeNASSshDriver` with an `sshConnection` to hestia
+(`10.42.2.10`) as `truenas_admin`. The SSH→API migration
+([plan](../plans/2026-06-28-democratic-csi-ssh-to-api-driver.md)) was attempted in #1004 and reverted
+in #1005 (2026-06-28). Auth was fine — the least-privilege API key worked through the
+`truenas-api-proxy` — but `CreateVolume`'s by-id dataset GET maps through the proxy to
+`pool.dataset.get_instance`, which TrueNAS 26.x's JSON-RPC API rejects with
+`500 "Method does not exist"`. So the API driver cannot provision any volume. Re-run validation only
+after the proxy maps that GET to a method 26.x serves. Same family of method-naming quirks as the
+ones in [the TrueNAS API reference](../reference/storage.md#11-truenas-api).
+
+**Expansion.** On v1.9.0 every expand failed at the controller:
+`sudo: simple-file-writer: command not found` — the SCST reload helper is baked into the image and
+does not exist on TrueNAS SCALE (upstream #390). `sudo` was never the blocker. #1019 bumped the
+image to v1.9.5, which writes `resync_size` directly, and on 2026-07-03 the stuck jellyfin-cache
+expand completed **online** (5Gi → 20Gi, pod Running, `FileSystemResizeSuccessful`). The node-side
+`resize2fs` EPERM seen earlier was a v1.9.0-era artifact, not a Talos limit.
+
+To grow a PVC: bump `spec.resources.requests.storage`, merge, `flux reconcile`. Keep `truenas_admin`
+passwordless sudo on — the `resync_size` reload needs root on every expand.
+
+> **Stale text to ignore.** The comment above the xfs StorageClasses in
+> `infra/controllers/democratic-csi/values.yaml` still says ext4 cannot grow online and needs
+> recreate-to-grow. That predates the v1.9.5 result recorded at the top of the same file. The
+> `*-xfs` classes (#1003) remain valid; they just aren't required for growth any more.
+
+See also [the 2026-07-02 incident](./incidents/2026-07-02-jellyfin-cache-pvc-expand-simple-file-writer.md).
+
+---
+
+## hestia media library moves
+
+**Moving or renaming things under `/mnt/main/family/media/` on hestia: four traps, all from the
+2026-07-21/22 reorg that retired `main/media`.**
+
+The canonical media root is `/mnt/main/family/media/`; every media dataset lives under
+`main/family`. Renaming or destroying one of them hits the "busy" trap in
+[zfs destroy busy container mount](#zfs-destroy-busy-container-mount) first. The other four:
+
+1. **Cross-dataset moves are copies, and they count against the quota.** `main/family` carries a
+   quota. Moving a plain directory into a child dataset (for example `video/tv` → the `tv-anime`
+   dataset) copies the data, and on 2026-07-21 the 2T quota filled mid-move with
+   `Disk quota exceeded`. It was raised to 3T. **As of 2026-10-06 `main/family` is at 2.54T of 3T** —
+   check `zfs get quota,used main/family` before any large move.
+2. **A static NFS PV needs a matching TrueNAS share.** Adding a PV for a new path without a share
+   for it makes the mount fail with exit 32. Create the share first (`sharing.nfs.create` with the
+   path, `networks: [10.42.2.0/24]`, `maproot_user: root`, `maproot_group: wheel`); list the
+   current ones with `midclt call sharing.nfs.query`.
+3. **`video/movies` is the seeding torrent library.** qBittorrent's `/downloads` *is*
+   `/mnt/main/family/media/video/movies` (see `hosts/hestia/qbittorrent/`). A filesystem rename,
+   dedup or transcode-and-delete there breaks the torrents. When `main/media` was retired, 69 torrents
+   went to missing-files until qBittorrent was repointed. Rename through qBittorrent's own Rename
+   (which updates the torrent's file map); Jellyfin matches scene names fine without it.
+4. **Navidrome shows phantoms after a bulk move.** Duplicate or ghost albums after mass renames are
+   stale scan state, not real duplicates — Navidrome scans hourly (`ND_SCANSCHEDULE=1h`) and only
+   indexes `family/media/music`. To force it, `kubectl -n navidrome-prod rollout restart
+   deploy/navidrome` (it scans and prunes on start). Audiobookshelf reads
+   `family/media/audiobooks` and `family/media/podcasts` only, and its file watcher does not see
+   server-side NFS changes — trigger a library scan in its UI.
 
 ---

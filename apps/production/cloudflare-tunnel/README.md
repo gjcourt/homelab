@@ -64,7 +64,9 @@ Before adding an entry:
 3. Add the Cloudflare DNS `CNAME` → `<tunnel-uuid>.cfargotunnel.com`.
    **DNS is not managed in this repo** and there is no external-dns; the record
    is created by hand in the Cloudflare dashboard. Without it the tunnel entry
-   is inert.
+   is inert. **The zone apex is the exception:** a hand-made apex CNAME fails
+   with error 1016 — use `cloudflared tunnel route dns production <host>`. See
+   [networking gotchas](../../../docs/operations/2026-08-15-networking-gotchas.md#cloudflare-tunnel-apex-and-access).
 
 No manual restart is needed: the `configMapGenerator` content-hashes the
 ConfigMap name, so any change to `config.yaml` renames it, rewrites the

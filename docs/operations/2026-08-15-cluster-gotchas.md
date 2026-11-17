@@ -2,7 +2,7 @@
 title: Cluster gotchas — Talos, kubectl, Flux
 status: Stable
 created: 2026-08-15
-updated: 2026-08-15
+updated: 2026-10-06
 updated_by: gjcourt
 tags: [operations, talos, kubectl, flux, gotchas]
 ---
@@ -27,6 +27,10 @@ failure independence. See
 
 **Shelves couple pairs mechanically.** Pulling a shelf to service one node takes both of its
 occupants down. That is a handling and thermal coupling, separate from the power path above.
+The pairs, as recorded during the 2026-06-18 maintenance: **`.22`+`.23` share one shelf and
+`.24`+`.25` share another; `.20` and `.21` are on their own.** With `.22` decommissioned and `.24`
+out, each shared shelf currently holds one live node (`.23`, `.25`). Anything racked back into an
+empty slot is coupled to its neighbour again.
 
 **Why it mattered.** During the 2026-06-18 DIMM work, an action on the shared path dropped a
 control-plane survivor that was supposed to be untouched, plus a worker, at the same time — not
@@ -178,14 +182,14 @@ sleep 2
 
 # 2. Set claimRef to namespace + name only (no UID)
 kubectl patch pv $PV --type=merge -p '{
- "spec": {
- "claimRef": {
- "apiVersion": "v1",
- "kind": "PersistentVolumeClaim",
- "namespace": "'$NS'",
- "name": "'$PVC'"
- }
- }
+  "spec": {
+    "claimRef": {
+      "apiVersion": "v1",
+      "kind": "PersistentVolumeClaim",
+      "namespace": "'$NS'",
+      "name": "'$PVC'"
+    }
+  }
 }'
 
 # 3. Apply the PVC manifest WITHOUT volumeName (let Flux's manifest stand)
@@ -193,14 +197,14 @@ kubectl apply -f - <<YAML
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
- name: $PVC
- namespace: $NS
+  name: $PVC
+  namespace: $NS
 spec:
- accessModes: [ReadWriteOnce]
- storageClassName: <whatever the manifest says>
- resources:
- requests:
- storage: $SIZE
+  accessModes: [ReadWriteOnce]
+  storageClassName: <whatever the manifest says>
+  resources:
+    requests:
+      storage: $SIZE
 YAML
 # The binder will see the PV's matching claimRef and bind without volumeName being set by the manifest.
 ```
@@ -225,5 +229,49 @@ GA Flux controllers (helm-controller v1.x, kustomize-controller v1.x, source-con
 **Per-object readiness comes from kube-state-metrics instead** (the upstream `flux2-monitoring-example` pattern): a `customResourceState` config makes ksm emit `gotk_resource_info{customresource_kind, exported_namespace, name, ready, suspended, revision}` (an Info gauge, value always 1). Alert on `gotk_resource_info{customresource_kind="Kustomization", ready="False"} == 1`. Note the namespace label is **`exported_namespace`**, not `namespace`.
 
 Implemented in homelab PRs #937 (PodMonitor for controller metrics) + #940 (ksm CRS config + rewritten rules). Config lives in `infra/controllers/kube-prometheus-stack/values.yaml` under `kube-state-metrics.customResourceState` + `rbac.extraRules` (list/watch on the Flux API groups). Served CRD versions when built: Kustomization v1, HelmRelease v2, GitRepository v1 — verify with `kubectl get crd <x> -o jsonpath='{.spec.versions[?(@.served==true)].name}'` before pinning. This was Phase 3 of the homelab monitoring-enhancement plan (`docs/plans/2026-05-09-monitoring-enhancement.md`). Relates to [verify api versions](./2026-08-15-operating-principles.md#verify-api-versions).
+
+---
+
+## ssa recreate strategy patch
+
+**Switching an existing Deployment to `strategy: Recreate` fails under Flux's server-side apply
+while the API-server-defaulted `rollingUpdate` is still on the live object. `rollingUpdate: null`
+and `rollingUpdate: {}` do not clear it; a one-time JSON patch per namespace does.**
+
+Flux applies with server-side apply. A Deployment created without an explicit strategy carries the
+defaulted `rollingUpdate: {maxSurge: 25%, maxUnavailable: 25%}`, and no field manager owns those
+fields — so SSA merges `type: Recreate` into them instead of replacing them, and the API server
+rejects the result:
+
+```
+spec.strategy.rollingUpdate: Forbidden: may not be specified when strategy `type` is 'Recreate'
+```
+
+**Tested against the live object** with `kubectl apply --server-side --dry-run=server
+--field-manager=kustomize-controller` during #1430 (vitals, 2026-09-17): the manifest as-is, plus
+`rollingUpdate: null`, plus `rollingUpdate: {}` — all three fail identically. The `null` trick is
+client-side-apply folklore and does not carry over.
+
+**Fix — one out-of-band patch per environment, before the manifest merges:**
+
+```bash
+kubectl -n <ns> patch deploy <name> --type=json \
+  -p '[{"op":"replace","path":"/spec/strategy","value":{"type":"Recreate"}}]'
+```
+
+**Why it matters:** the failure blocks the whole Kustomization, not just one object — `apps-staging`
+sat `Ready=False` for four days and flapped a critical alert overnight. The workload itself stays
+healthy throughout, so diagnose from the Kustomization's dry-run error, not from the pods.
+
+**How to apply:** when a PR adds `strategy: Recreate` to an existing Deployment (typically for an RWO
+volume), patch every namespace that already runs it *before* merging. **The patch is not durable
+while the manifest lacks the field:** if Flux applies a revision *without* `strategy` after one
+*with* it, SSA removes the field it now owns and the API server re-defaults to RollingUpdate. That
+is exactly what happens when a staging preview branch drops the PR again. Once the change is on the
+default branch it stops mattering.
+
+Related: [flux pvc volumename anti pattern](#flux-pvc-volumename-anti-pattern) (the same "Flux SSA vs
+a field the manifest doesn't set" family) and [flux ga no reconcile condition](#flux-ga-no-reconcile-condition)
+(how a stuck Kustomization surfaces as an alert).
 
 ---

@@ -2,7 +2,7 @@
 title: Gotchas index
 status: Stable
 created: 2026-08-15
-updated: 2026-08-15
+updated: 2026-10-06
 updated_by: gjcourt
 tags: [operations, gotchas, index]
 ---
@@ -17,11 +17,17 @@ available to whoever is actually debugging at 2am, rather than only inside a too
 
 | Runbook | Covers |
 | ------------------------------------------------------------ | ------------------------------------------------- |
-| [Networking](./2026-08-15-networking-gotchas.md) | Cilium netpol for Gateway API, LoadBalancer SNAT |
-| [Storage](./2026-08-15-storage-gotchas.md) | PVC/PV immutability, Retain recovery, ZFS busy, TrueNAS, Synology |
-| [Cluster](./2026-08-15-cluster-gotchas.md) | Talos topology and sysfs, kubectl selectors, Flux |
+| [Networking](./2026-08-15-networking-gotchas.md) | Cilium netpol for Gateway API, LoadBalancer SNAT, Cloudflare tunnel apex + Access, Loki fill from Cilium debug logging |
+| [Storage](./2026-08-15-storage-gotchas.md) | PVC/PV immutability, Retain recovery, ZFS busy, TrueNAS apps, Synology, rsync verification, democratic-csi driver + PVC expansion, hestia media-library moves |
+| [Cluster](./2026-08-15-cluster-gotchas.md) | Talos topology and sysfs, kubectl selectors, Flux (suspend, volumeName, readiness metrics, SSA vs `strategy: Recreate`) |
 | [Services](./2026-08-15-services-gotchas.md) | CNPG, SOPS, mosquitto, Spotify, Mopidy |
 | [Operating principles](./2026-08-15-operating-principles.md) | Staging, registries, cluster access, API versions |
+
+Related references that live outside these five: the TrueNAS 26.x API (method names, `wss://`
+only) in [reference/storage.md](../reference/storage.md#11-truenas-api); per-app traps in
+[apps/snapcast.md](./apps/snapcast.md) (Spotify re-auth), [apps/finance-dashboard.md](./apps/finance-dashboard.md)
+(cache-busting deploy checks) and [apps/bluetooth-presence/espresense-nodes.md](./apps/bluetooth-presence/espresense-nodes.md)
+(IRK enrolment).
 
 **Read the storage runbook before destroying anything.** Several entries there are data-loss
 adjacent — PVCs holding SQLite databases that look empty, PVs whose Retain policy is the only thing

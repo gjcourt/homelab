@@ -4,7 +4,7 @@
 # so the same tool can run as an in-cluster CronJob (a periodic fleet sweep that
 # alerts on a non-zero exit code). It needs Python (stdlib only) plus a `kubectl`
 # binary and `bash` (the per-instance df/du probe runs `bash -c`).
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 # kubectl — pinned, strictly increasing. Bump alongside the cluster's server
 # version (currently Kubernetes v1.35.0).

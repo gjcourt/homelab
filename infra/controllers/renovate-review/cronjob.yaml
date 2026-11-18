@@ -43,7 +43,7 @@ spec:
               # replaces the image's ENTRYPOINT (bench-entrypoint), so no GitHub
               # App config or workspace setup runs here. Tag matches the
               # bench-cloud console (apps/production/bench-cloud).
-              image: ghcr.io/gjcourt/bench-cloud:2026-10-01-60e3604
+              image: ghcr.io/gjcourt/bench-cloud:2026-11-17-1d9f128
               command: ["python3", "/scripts/review.py"]
               args: ["--mode", "$(REVIEW_MODE)"]
               env:

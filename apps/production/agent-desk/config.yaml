@@ -5,6 +5,10 @@
 ownerEmail: gjcourt@gmail.com
 # Plane in the browser, for the link in a phone notification.
 planeWebUrl: https://plane.burntbytes.com
+# plane-mobile (C6 of its architecture plan): phone notifications link to
+# {appWebUrl}/t/<KEY> in the app. Other links stay on planeWebUrl. Remove this
+# line to roll back. Needs an agent-desk image with appWebUrl support.
+appWebUrl: https://desk.burntbytes.com
 # The agent-desk bot (plan, "Plane identity"): a Member of each mapped project's
 # Plane project, and of no others.
 botEmail: gjcourt+agent-desk@gmail.com

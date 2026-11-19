@@ -38,8 +38,13 @@ spec:
           type: RuntimeDefault
       containers:
         - name: exporter
-          # python 3.14-slim
-          image: python@sha256:df3f05ff4d74833f52146edd195c8f7913581b57796a820fb7e373457ace9bad
+          # Held on Python 3.14, deliberately behind the other python pins
+          # (3.15). pip installs `kubernetes` at startup, which needs PyYAML,
+          # and PyYAML 6.0.3 has no cp315 wheel: on 3.15 pip compiles it from
+          # source on every start, blows the 256Mi limit and OOM-loops (488
+          # restarts, 2026-11-16..18, after #1462 moved the untagged digest to
+          # 3.15). Move to 3.15 once PyYAML ships cp315 wheels.
+          image: python:3.14-slim@sha256:9aaa474097d094040649f2162a627c0049b408f52138d980916788d80f04802f
           command: ["/bin/sh", "-c"]
           args:
             - |

@@ -4,6 +4,7 @@ namespace: homepage-stage
 resources:
   - ../../base/homepage/
   - httproute.yaml
+  - networkpolicy-sitemonitor.yaml
   - rbac.yaml
   - secret-synology.yaml
 

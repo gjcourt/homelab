@@ -7,7 +7,7 @@
 # path to the broker and MQTT credentials that can read $SYS and read/write the
 # probe topic.
 
-FROM python:3.12-slim
+FROM python:3.15-slim
 
 WORKDIR /app
 

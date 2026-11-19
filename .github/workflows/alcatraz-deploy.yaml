@@ -143,6 +143,14 @@ jobs:
               if path.startswith("hosts/alcatraz/actions-runner/"):
                   print(f"skip (runner self-deploy): {path}", file=sys.stderr)
                   continue
+              # alcatraz-deployer (HOMELAB-118) is started by George by hand and
+              # never by this workflow: it mounts /var/run/docker.sock, which the
+              # guard below hard-denies, so without this skip every push to
+              # hosts/alcatraz/** would fail discover. (The deployer does not
+              # manage its own directory either.)
+              if path.startswith("hosts/alcatraz/alcatraz-deployer/"):
+                  print(f"skip (alcatraz-deployer, started by hand): {path}", file=sys.stderr)
+                  continue
 
               try:
                   with open(path) as f:
@@ -174,6 +182,13 @@ jobs:
               else:
                   default_name = os.path.basename(os.path.dirname(path))
               name = deploy_meta.get("name") or default_name
+
+              # deploy-canary (HOMELAB-118) is for the pull deployer only. No
+              # alcatraz runner exists, so an apply job here would sit queued
+              # waiting for one.
+              if name == "deploy-canary":
+                  print(f"skip (deploy-canary, pull deployer only): {path}", file=sys.stderr)
+                  continue
 
               # Protected-path guard runs on the non-archived, to-be-deployed set.
               v = guard(path, name, deploy_meta)

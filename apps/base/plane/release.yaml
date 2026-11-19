@@ -1,0 +1,421 @@
+# Plane CE via the upstream chart. Apps here are plain manifests; Plane is the
+# exception because its seven Deployments change together every release.
+# Plan: docs/plans/2026-10-18-plane-staging.md
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: plane
+  namespace: plane
+
+spec:
+  interval: 30m
+  # The migrator Job runs on every install and upgrade, and Helm waits for it.
+  timeout: 15m
+  chart:
+    spec:
+      chart: plane-ce
+      version: 1.8.4
+      sourceRef:
+        kind: HelmRepository
+        name: plane
+      interval: 12h
+
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    # Never roll back: Plane's migrations are forward-only, so a rollback puts
+    # old code on a migrated schema. Fix forward, or restore the CNPG backup.
+    remediation:
+      retries: 0
+
+  driftDetection:
+    mode: enabled
+
+  valuesFrom:
+    - kind: ConfigMap
+      name: plane-helm-values
+
+  # Closes the chart's gaps: readiness probes (makeplane/helm-charts#318; the
+  # api already has one) and security contexts (#339). Probes follow
+  # docs/operations/2026-05-02-adding-an-app.md#health-probes. Readiness only:
+  # none of these has a liveness signal distinct from readiness.
+  #
+  # Non-root (uid 1000) where the image allows it: the backend image makes
+  # /code world-writable, and the space and live images are node:22-alpine,
+  # whose `node` user is 1000. web and admin are nginx images built to start
+  # as root, and Valkey, RabbitMQ and MinIO chown their data dirs, so those
+  # stay root with privilege escalation off and the default seccomp profile.
+  #
+  # Environment-specific patches (DATABASE_URL, the webhook allowlist) are
+  # appended to this list by the overlay.
+  postRenderers:
+    - kustomize:
+        patches:
+          # --- frontends -------------------------------------------------
+          - target:
+              kind: Deployment
+              name: plane-web-wl
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: plane-web-wl
+              spec:
+                template:
+                  spec:
+                    securityContext:
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                      - name: plane-web
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                        readinessProbe:
+                          httpGet:
+                            path: /
+                            port: 3000
+                          initialDelaySeconds: 5
+                          periodSeconds: 10
+                          timeoutSeconds: 3
+                          failureThreshold: 3
+          - target:
+              kind: Deployment
+              name: plane-admin-wl
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: plane-admin-wl
+              spec:
+                template:
+                  spec:
+                    securityContext:
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                      - name: plane-admin
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                        readinessProbe:
+                          httpGet:
+                            path: /
+                            port: 3000
+                          initialDelaySeconds: 5
+                          periodSeconds: 10
+                          timeoutSeconds: 3
+                          failureThreshold: 3
+          - target:
+              kind: Deployment
+              name: plane-space-wl
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: plane-space-wl
+              spec:
+                template:
+                  spec:
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      runAsGroup: 1000
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                      - name: plane-space
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                          capabilities:
+                            drop:
+                              - ALL
+                        readinessProbe:
+                          httpGet:
+                            path: /spaces/
+                            port: 3000
+                          initialDelaySeconds: 5
+                          periodSeconds: 10
+                          timeoutSeconds: 3
+                          failureThreshold: 3
+          - target:
+              kind: Deployment
+              name: plane-live-wl
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: plane-live-wl
+              spec:
+                template:
+                  spec:
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      runAsGroup: 1000
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                      - name: plane-live
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                          capabilities:
+                            drop:
+                              - ALL
+                        readinessProbe:
+                          httpGet:
+                            path: /live/health
+                            port: 3000
+                          initialDelaySeconds: 5
+                          periodSeconds: 10
+                          timeoutSeconds: 3
+                          failureThreshold: 3
+          # --- backend (one image: api, worker, beat, migrator) -----------
+          - target:
+              kind: Deployment
+              name: plane-api-wl
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: plane-api-wl
+              spec:
+                template:
+                  spec:
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      runAsGroup: 1000
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                      - name: plane-api
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                          capabilities:
+                            drop:
+                              - ALL
+          - target:
+              kind: Deployment
+              name: plane-worker-wl
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: plane-worker-wl
+              spec:
+                template:
+                  spec:
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      runAsGroup: 1000
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                      - name: plane-worker
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                          capabilities:
+                            drop:
+                              - ALL
+                        # No listener; the Celery process existing is the signal.
+                        readinessProbe:
+                          exec:
+                            command: ["pgrep", "-f", "celery"]
+                          initialDelaySeconds: 5
+                          periodSeconds: 10
+                          timeoutSeconds: 3
+                          failureThreshold: 3
+          - target:
+              kind: Deployment
+              name: plane-beat-worker-wl
+            patch: |
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: plane-beat-worker-wl
+              spec:
+                template:
+                  spec:
+                    securityContext:
+                      runAsNonRoot: true
+                      runAsUser: 1000
+                      runAsGroup: 1000
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                      - name: plane-beat-worker
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                          capabilities:
+                            drop:
+                              - ALL
+                        readinessProbe:
+                          exec:
+                            command: ["pgrep", "-f", "celery"]
+                          initialDelaySeconds: 5
+                          periodSeconds: 10
+                          timeoutSeconds: 3
+                          failureThreshold: 3
+          # The migrator's name carries the Helm revision (plane-api-migrate-N).
+          #
+          # Wait for Postgres before migrating. The image's own wait step,
+          # `manage.py wait_for_db`, never opens a connection, so it reports
+          # "Database available!" even when Postgres is down. On a first install
+          # the migrator then fails `migrate` while CNPG is still starting, uses
+          # up backoffLimit 3 (about 70 s) and fails the install. Seen on
+          # staging 2026-10-19. This loop opens a real connection, for about
+          # 12 minutes (80 tries of ~4 s check + 5 s sleep, inside the 15m Helm
+          # timeout), then runs the stock entrypoint, which still fails loudly
+          # if the database never came up.
+          - target:
+              kind: Job
+              name: plane-api-migrate-.*
+            patch: |
+              - op: replace
+                path: /spec/template/spec/containers/0/command
+                value:
+                  - /bin/bash
+                  - -c
+                  - |
+                    for i in $(seq 1 80); do
+                      python manage.py shell -c "from django.db import connection; connection.ensure_connection()" >/dev/null 2>&1 && break
+                      echo "Postgres not accepting connections yet ($i/80); retrying in 5s"
+                      sleep 5
+                    done
+                    exec ./bin/docker-entrypoint-migrator.sh
+              - op: add
+                path: /spec/template/spec/securityContext
+                value:
+                  runAsNonRoot: true
+                  runAsUser: 1000
+                  runAsGroup: 1000
+                  seccompProfile:
+                    type: RuntimeDefault
+              - op: add
+                path: /spec/template/spec/containers/0/securityContext
+                value:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+          # --- DNS lookups ----------------------------------------------
+          #
+          # ndots:1 on Plane's own workloads (every Deployment, which includes
+          # the backing services' consumers, plus the migrator Job). With the
+          # cluster default ndots:5, every name with fewer than five dots walks
+          # the three search domains before being tried as written, so one
+          # lookup of `plane-redis.plane-prod.svc.cluster.local` was four DNS
+          # queries (A and AAAA each). Django opens a new database connection
+          # per request (dj_database_url.config() is called without
+          # conn_max_age, and Plane has no env knob for it), so that cost is
+          # paid on every request. On 2026-10-21 about 2% of production api
+          # requests failed with "failed to resolve host ... Try again".
+          #
+          # Every name these pods resolve still works with ndots:1:
+          #   - the *.svc.cluster.local names (Redis, RabbitMQ, the api, and
+          #     the database through the overlays' `fqdn-uri`) are tried as
+          #     written, first, and answer;
+          #   - `plane-minio` (no dots) still uses the search list;
+          #   - public names (sites.plane.so, GitHub for link previews) are
+          #     tried as written first, which is now one query instead of four.
+          # The chart-local Redis, RabbitMQ and MinIO StatefulSets are left on
+          # the default: they resolve almost nothing, and RabbitMQ's Erlang
+          # node naming is not worth the risk for no gain.
+          - target:
+              kind: Deployment
+              labelSelector: app.kubernetes.io/instance=plane
+            patch: |
+              - op: add
+                path: /spec/template/spec/dnsConfig
+                value:
+                  options:
+                    - name: ndots
+                      value: "1"
+          - target:
+              kind: Job
+              name: plane-api-migrate-.*
+            patch: |
+              - op: add
+                path: /spec/template/spec/dnsConfig
+                value:
+                  options:
+                    - name: ndots
+                      value: "1"
+          # --- chart-local backing services ------------------------------
+          - target:
+              kind: StatefulSet
+              name: plane-redis-wl
+            patch: |
+              apiVersion: apps/v1
+              kind: StatefulSet
+              metadata:
+                name: plane-redis-wl
+              spec:
+                template:
+                  spec:
+                    securityContext:
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                      - name: plane-redis
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                        readinessProbe:
+                          tcpSocket:
+                            port: 6379
+                          initialDelaySeconds: 5
+                          periodSeconds: 10
+                          timeoutSeconds: 3
+                          failureThreshold: 3
+          - target:
+              kind: StatefulSet
+              name: plane-rabbitmq-wl
+            patch: |
+              apiVersion: apps/v1
+              kind: StatefulSet
+              metadata:
+                name: plane-rabbitmq-wl
+              spec:
+                template:
+                  spec:
+                    securityContext:
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                      - name: plane-rabbitmq
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                        readinessProbe:
+                          tcpSocket:
+                            port: 5672
+                          initialDelaySeconds: 5
+                          periodSeconds: 10
+                          timeoutSeconds: 3
+                          failureThreshold: 3
+          - target:
+              kind: StatefulSet
+              name: plane-minio-wl
+            patch: |
+              apiVersion: apps/v1
+              kind: StatefulSet
+              metadata:
+                name: plane-minio-wl
+              spec:
+                template:
+                  spec:
+                    securityContext:
+                      seccompProfile:
+                        type: RuntimeDefault
+                    containers:
+                      - name: plane-minio
+                        securityContext:
+                          allowPrivilegeEscalation: false
+                        readinessProbe:
+                          httpGet:
+                            path: /minio/health/ready
+                            port: 9000
+                          initialDelaySeconds: 5
+                          periodSeconds: 10
+                          timeoutSeconds: 3
+                          failureThreshold: 3

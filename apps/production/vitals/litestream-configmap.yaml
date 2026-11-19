@@ -1,0 +1,35 @@
+---
+# Litestream replication config — vitals production.
+#
+# Separate S3 prefix from the retired Barman one (production/vitals), which is
+# frozen and holds the old PostgreSQL WALs. Nothing writes there any more.
+#
+# v0.5 syntax: a single `replica:` per database, not the 0.3.x `replicas:` list.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vitals-litestream
+  namespace: vitals
+  labels:
+    app: vitals
+    env: production
+data:
+  litestream.yml: |
+    # Prometheus metrics; also the readinessProbe target, since the repo
+    # requires a readinessProbe on every container (AGENTS.md gate 8).
+    addr: ":9090"
+
+    # Retention. Litestream defaults to snapshot interval 24h AND retention
+    # 24h, which would silently be a regression from the CNPG scheme this
+    # replaces (30d production). Retention enforcement deletes snapshots
+    # AND their LTX files, so a point-in-time older than this is gone.
+    snapshot:
+      interval: 24h
+      retention: 720h
+
+    dbs:
+      - path: /data/vitals.db
+        replica:
+          url: s3://gjcourt-homelab-backup/production/vitals-sqlite
+          region: us-east-2
+          sync-interval: 10s

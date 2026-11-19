@@ -2,10 +2,14 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - adguard
+  - agent-desk
   - audiobookshelf
   - authelia
+  - cadence-site
   - certificates
   - changes
+  - couchdb
+  - domestique
   - excalidraw
   - flashcards
   - flashcards-sync
@@ -15,12 +19,17 @@ resources:
   - immich
   - ingress
   - jellyfin
+  - kokoro
   - linkding
+  - llmux
   - mealie
   - memos
   - navidrome
   - netscope
   - openwebui
+  - plane
+  - plane-mobile
   - snapcast
   - vibrato
   - vitals
+  - wyoming-piper

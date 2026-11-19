@@ -448,8 +448,9 @@ Pictures/Aperture Library/Previews/
 
 ## Open questions / inputs needed (TBD — not invented)
 
-0. **Q0 — Windows machine id**: prior notes said `winpc-5800x`; coordinator says
-   **5600X**. Which CPU / dataset name is correct? (Cosmetic; reconcile the label.)
+0. ~~**Q0 — Windows machine id**~~ — **ANSWERED 2026-08-29: `winpc-5600x`.** The
+   CPU was verified on the machine as an AMD Ryzen 5 5600X (6c/12t); `winpc-5800x`
+   was wrong. `archive/winpc-5800x` renamed to match. See `hosts/winpc-5600x/`.
 1. **Q1 — Per-machine facts** for `macbook-2010` and `macbook-older`: exact model,
    year, macOS version, **boot status**, **HDD vs SSD**, **drive health** (SMART /
    beachballing), and **available TDM ports/adapters** (FW800 / Thunderbolt / USB-C

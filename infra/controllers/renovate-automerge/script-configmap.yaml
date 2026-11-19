@@ -45,65 +45,446 @@ data:
             return json.loads(resp.read())
 
 
+    RENOVATE_BRANCH_PREFIX = "renovate/"
+    # Applied by the renovate-review CronJob when two independent reviewers agree
+    # a PR needs a human. Honoured here so that hold is binding rather than
+    # advisory -- the reviewer has no merge rights and cannot enforce it itself.
+    HOLD_LABEL = "held-by-review"
+    # Applied by Renovate itself (renovate.json addLabels) to updates that must
+    # never self-merge whatever their update type: the hash-pinned --no-deps
+    # plane-mcp-requirements.txt, where a lone bump broke every ticket Job on
+    # 2026-11-08. Same effect as HOLD_LABEL, different author.
+    NO_AUTOMERGE_LABEL = "no-automerge"
+    HOLD_LABELS = {HOLD_LABEL, NO_AUTOMERGE_LABEL}
+
+    # Update types Renovate may report, and the subset we auto-merge.
+    UPDATE_TYPES = ("major", "minor", "patch", "digest", "pin", "pinDigest", "rollback")
+    SAFE_TYPES = {"patch", "digest", "pin", "pindigest", "minor"}
+
+    # Language/interpreter runtimes are never auto-merged, whatever Renovate
+    # calls the update. Renovate's version model treats the x in "3.x" as the
+    # MINOR field, so a Python 3.12 -> 3.14 jump arrives tagged "minor", lands
+    # inside SAFE_TYPES above, and merges itself. An interpreter change is
+    # breaking in practice regardless of what semver says.
+    #
+    # Observed live: toppingctl#1 "Update dependency python to 3.14" carries
+    # "| python | uses-with | minor | 3.12 -> 3.14 |".
+    #
+    # Digest updates are held here too, unlike everywhere else in this file. A
+    # floating runtime tag such as python:3.12 gets re-pointed at a new build,
+    # so "same logical version" is not true for runtimes the way it is for a
+    # pinned application image.
+    #
+    # Two independent signals, because they become available at different times:
+    #   - the branch prefix from the shared preset's runtime carve-out
+    #     (additionalBranchPrefix: "runtime-"): precise, but only in repos that
+    #     have adopted the preset.
+    #   - the dependency name in the summary table: works in every repo,
+    #     including ones that never adopt it.
+    # Neither is load-bearing alone, and the preset's own automerge:false does
+    # NOT bind this script -- that governs Renovate's merging; this script
+    # merges through the API on its own schedule.
+    RUNTIME_BRANCH_MARKER = "runtime-"
+    # Matched as WHOLE dep names, never by path segment. "cloud.google.com/go"
+    # and "@types/node" both end in a runtime word and are ordinary libraries;
+    # holding them would be noise that teaches people to ignore holds.
+    #
+    # Both spellings of each runtime are needed. The setup-action form
+    # ("java", "dotnet-sdk") is what Renovate reports for a uses-with bump; the
+    # image form ("eclipse-temurin", "mcr.microsoft.com/dotnet/sdk") is what it
+    # reports for a base-image bump. Listing only the first lets a JDK 21 -> 22
+    # base image through as "minor".
+    RUNTIME_DEPS = {
+        # toolchains / setup actions
+        "python", "go", "golang", "node", "nodejs", "java", "ruby",
+        "dotnet-sdk", "rust", "php", "erlang", "pypy",
+        # JVM images
+        "eclipse-temurin", "openjdk", "amazoncorretto", "ibm-semeru-runtimes",
+        "bellsoft/liberica-openjdk-alpine",
+        # .NET images
+        "mcr.microsoft.com/dotnet/sdk", "mcr.microsoft.com/dotnet/runtime",
+        "mcr.microsoft.com/dotnet/aspnet",
+        # other runtime images
+        "oven/bun", "denoland/deno",
+    }
+
+    # Packages held for review whatever the update type: Home Assistant's
+    # monthly release is a "minor" to Renovate (2026.9 -> 2026.10) but carries
+    # breaking changes and one-way config migrations. renovate.json holds it
+    # from Renovate's own automerge too. Matched on the whole name, like
+    # RUNTIME_DEPS.
+    HELD_DEPS = {
+        "ghcr.io/home-assistant/home-assistant",
+    }
+
+    # Renovate renders the arrow as a literal, an entity, or '->' depending
+    # on the platform and on whether the cell is inside a link.
+    _ARROW = r"(?:->|-&gt;|\u2192|&#8594;|&rarr;)"
+    # Every "`old` -> `new`" cell in the Change column, whatever it holds:
+    # versions, suffixed tags, digests, junk. cell_kind() then decides per
+    # cell, and anything it cannot decide fails the whole PR closed.
+    CHANGE_CELL_RE = re.compile(
+        r"`([^`\n]{1,60})`\s*" + _ARROW + r"\s*`([^`\n]{1,60})`"
+    )
+    VERSION_ONLY_RE = re.compile(r"^v?(\d+(?:\.\d+)*)$")
+    DIGEST_RE = re.compile(r"^(?:sha256:)?[0-9a-f]{7,}$", re.IGNORECASE)
+    # pip-style pinned requirements render as "==0.16.9" -> "==0.16.10"; strip a
+    # shared specifier before comparing, the same way a shared suffix is
+    # stripped below. Only when both sides agree -- "==1.0" -> ">=1.0" is an
+    # actual change, not a version bump, and should stay unparseable.
+    SPECIFIER_RE = re.compile(r"^(==|>=|<=|~=|!=|>|<)")
+    # Renovate's digest titles always end "... digest to <short sha>".
+    DIGEST_TITLE_RE = re.compile(r"\bdigest to [0-9a-f]{7,}\s*$")
+
+
+    def updates_table(body):
+        """Return just Renovate's summary table.
+
+        Everything below the release-notes separator is upstream changelog
+        prose, which can contain its own tables and version strings. Parsing
+        the whole body risks classifying a PR off someone else's changelog."""
+        for marker in ("### Release Notes", "### Configuration", "\n---\n"):
+            idx = body.find(marker)
+            if idx != -1:
+                body = body[:idx]
+        return body
+
+
+    def bump_kind(a_str, b_str):
+        """Classify a version pair as major / minor / patch."""
+        a = [int(x) for x in a_str.split(".")]
+        b = [int(x) for x in b_str.split(".")]
+        while len(a) < 3:
+            a.append(0)
+        while len(b) < 3:
+            b.append(0)
+        if a[0] != b[0]:
+            return "major"
+        if a[1] != b[1]:
+            return "minor"
+        return "patch"
+
+
+    def cell_kind(a_raw, b_raw):
+        """Classify one "`a` -> `b`" Change cell.
+
+        Returns major / minor / patch / digest, or None when the cell
+        cannot be compared. None is deliberately not "safe": an unparsed
+        cell must never be silently dropped from a multi-row table, or a
+        major bump hiding behind a suffix ("1.26-alpine" -> "2.0-alpine")
+        would automerge on the strength of its well-formed neighbours."""
+        a, b = a_raw.strip(), b_raw.strip()
+        # Shared non-numeric suffix ("1.26-alpine" -> "1.27-alpine",
+        # "1.2.3-rc1" -> "2.0.0-rc1"): compare the numeric heads. A
+        # differing suffix stays uncomparable and falls through to None.
+        for sep in ("-", "+"):
+            if sep in a and sep in b:
+                a_head, _, a_tail = a.partition(sep)
+                b_head, _, b_tail = b.partition(sep)
+                if a_tail == b_tail:
+                    a, b = a_head, b_head
+                    break
+        a_spec, b_spec = SPECIFIER_RE.match(a), SPECIFIER_RE.match(b)
+        if a_spec and b_spec and a_spec.group(1) == b_spec.group(1):
+            a, b = a[a_spec.end():], b[b_spec.end():]
+        ma, mb = VERSION_ONLY_RE.match(a), VERSION_ONLY_RE.match(b)
+        if ma and mb:
+            return bump_kind(ma.group(1), mb.group(1))
+        if DIGEST_RE.match(a) and DIGEST_RE.match(b):
+            return "digest"
+        return None
+
+
     def is_renovate_pr(pr):
+        """Renovate PRs are identified by branch prefix.
+
+        Title and author are both unreliable here: self-hosted Renovate
+        authenticates with a PAT, so it authors PRs as the token owner
+        (gjcourt) rather than renovate[bot], and not every Renovate preset
+        emits the 'chore(deps):' title prefix. The branch name is the one
+        signal Renovate always controls -- every branch it opens is created
+        under branchPrefix, which defaults to 'renovate/'.
+
+        The branch prefix is the ONLY signal accepted. It used to fall back to
+        a 'chore(deps):' title or a 'renovate' author login, but a title is
+        free text: the bench-cloud GitHub App (Contents + PRs write on every
+        repo) could open a PR from any branch titled 'chore(deps): ...' and
+        this job would merge it with George's token. The prefix is trustworthy
+        only because the `renovate-branch-guard` ruleset
+        (scripts/github-rulesets.sh) lets nobody but the Admin role -- George's
+        PAT, i.e. Renovate and this job -- create or push refs/heads/renovate/**.
+
+        A FORK's branch can be named renovate/anything too -- the ruleset only
+        guards this repo's own refs -- so the head must also live in the base
+        repo. Without that, any stranger could open a fork PR from a branch
+        called renovate/x and this job would merge it."""
+        head = pr.get("head") or {}
+        head_repo = (head.get("repo") or {}).get("full_name")
+        base_repo = ((pr.get("base") or {}).get("repo") or {}).get("full_name")
         return (
-            pr["title"].startswith("chore(deps):")
-            or "renovate" in pr["user"]["login"].lower()
+            (head.get("ref") or "").startswith(RENOVATE_BRANCH_PREFIX)
+            and head_repo is not None
+            and head_repo == base_repo
         )
+
+
+    # The bench-cloud agents' GitHub App. Anything it authored or committed to
+    # is never auto-merged here, whatever its branch: under "option 2" the App
+    # can open and merge PRs, and George's rule is that agent-written code on a
+    # default branch goes through him. (renovate-branch-guard already stops the
+    # App touching renovate/ branches; this is a second check, not a proof.)
+    #
+    # Limits, so nobody leans on it harder than it bears: commit author and
+    # committer logins come from the commit's email, which a `git push` can set
+    # to anything -- a commit pushed with George's email maps to George. It is
+    # reliable for commits the App makes through the API (GitHub stamps those
+    # as the bot) and for the PR author, which cannot be forged. The ruleset is
+    # the control; this catches the honest and the API-made cases.
+    APP_LOGIN = os.environ.get("BENCH_CLOUD_APP_LOGIN", "bench-cloud[bot]")
+
+
+    def touched_by_app(repo, pr):
+        """True if the App opened or committed to the PR. Fails CLOSED: an API
+        error or a commit list too long to read in one page counts as touched,
+        so the PR is held rather than merged unexamined (and one flaky call
+        does not abort the run for every repo after it)."""
+        if (pr.get("user") or {}).get("login") == APP_LOGIN:
+            return True
+        try:
+            commits = gh(f"/repos/{repo}/pulls/{pr['number']}/commits?per_page=100")
+        except Exception as exc:
+            print(f"    commit list error ({exc}); holding", flush=True)
+            return True
+        if len(commits) >= 100:
+            return True
+        for c in commits:
+            for who in ((c.get("author") or {}).get("login"), (c.get("committer") or {}).get("login")):
+                if who == APP_LOGIN:
+                    return True
+        return False
+
+
+    # One query per Renovate PR: who edited the body, retitled it, removed a
+    # label or moved its base. Everything classify_pr() and the hold check read
+    # is PR metadata the App can change with Pull requests / Issues: write --
+    # without touching the branch -- e.g. rewrite a major's table to say patch,
+    # or strip held-by-review.
+    PR_EDITS_QUERY = """
+    query($owner: String!, $name: String!, $number: Int!) {
+      repository(owner: $owner, name: $name) {
+        pullRequest(number: $number) {
+          author { login }
+          userContentEdits(first: 100) {
+            pageInfo { hasNextPage }
+            nodes { editor { login } }
+          }
+          timelineItems(first: 100, itemTypes: [RENAMED_TITLE_EVENT, UNLABELED_EVENT, BASE_REF_CHANGED_EVENT]) {
+            pageInfo { hasNextPage }
+            nodes {
+              __typename
+              ... on RenamedTitleEvent { actor { login } }
+              ... on UnlabeledEvent { actor { login } }
+              ... on BaseRefChangedEvent { actor { login } }
+            }
+          }
+        }
+      }
+    }
+    """
+
+
+    def edited_by_other(repo, pr):
+        """Return a hold reason if anyone but the PR's author edited its body,
+        retitled it, removed a label or changed its base; else None.
+
+        An ALLOWLIST (the author -- self-hosted Renovate opens PRs as George),
+        not a denylist of the App: GraphQL names bots without the "[bot]"
+        suffix REST uses, and an allowlist does not care. Adding a label is not
+        gated -- the only labels read here are HOLD_LABELS, and adding one holds.
+        Fails CLOSED: an API error, a missing/deleted actor, or more than one
+        page of history is a hold."""
+        owner, name = repo.split("/", 1)
+        try:
+            res = gh("/graphql", method="POST", body={
+                "query": PR_EDITS_QUERY,
+                "variables": {"owner": owner, "name": name, "number": pr["number"]},
+            })
+            node = res["data"]["repository"]["pullRequest"]
+        except Exception as exc:
+            return f"could not read edit history ({exc})"
+        author = (node.get("author") or {}).get("login")
+        if not author:
+            return "PR author unknown"
+        edits = node["userContentEdits"]
+        events = node["timelineItems"]
+        if edits["pageInfo"]["hasNextPage"] or events["pageInfo"]["hasNextPage"]:
+            return "edit history longer than one page"
+        for e in edits["nodes"]:
+            who = (e.get("editor") or {}).get("login")
+            if who != author:
+                return f"description edited by {who or 'unknown'}, not {author}"
+        for ev in events["nodes"]:
+            who = (ev.get("actor") or {}).get("login")
+            if who != author:
+                return f"{ev.get('__typename')} by {who or 'unknown'}, not {author}"
+        return None
+
+
+    def _cell_name(cell):
+        """Normalise one table cell to a bare dependency name, lowercased.
+
+        Renovate renders the package cell as `python`, **python**,
+        [golang](url), or "golang ([source](url))" depending on what metadata
+        the dep has.
+        """
+        name = cell.strip()
+        link = re.match(r"\[([^\]]+)\]", name)
+        if link:
+            name = link.group(1)
+        else:
+            # "golang ([source](url))" -> "golang"
+            name = name.split(" (", 1)[0]
+        return name.strip("`*_ ").lower()
+
+
+    def runtime_deps_in_table(table):
+        """Language runtimes named anywhere in Renovate's summary table.
+
+        Every cell is checked rather than column 0, so a reordered
+        prBodyColumns cannot hide the package name. Matching is on the WHOLE
+        name: the other columns hold update types, ages and version strings,
+        none of which collide with a runtime name.
+        """
+        found = set()
+        for line in table.splitlines():
+            line = line.strip()
+            if not line.startswith("|"):
+                continue
+            for cell in line.strip("|").split("|"):
+                name = _cell_name(cell)
+                if name in RUNTIME_DEPS:
+                    found.add(name)
+        return found
+
+
+    def held_deps_in_table(table):
+        """HELD_DEPS named anywhere in Renovate's summary table."""
+        found = set()
+        for line in table.splitlines():
+            line = line.strip()
+            if not line.startswith("|"):
+                continue
+            for cell in line.strip("|").split("|"):
+                name = _cell_name(cell)
+                if name in HELD_DEPS:
+                    found.add(name)
+        return found
 
 
     def classify_pr(pr):
         """Return (safe: bool, reason: str) based on title and PR body."""
         title = pr["title"].lower()
 
-        # Digest pins are always safe — content-addressed, same logical version.
-        if "digest" in title:
-            return True, "digest pin"
+        # Renovate's summary table. Parse only the table, never the
+        # release notes below it.
+        table = updates_table(pr.get("body") or "")
 
-        # Renovate includes an update-type column in its PR body table.
-        # Values: digest, pinDigest, pin, patch, minor, major, rollback
-        body = pr.get("body") or ""
+        # Runtime upgrades are held before any update-type reasoning, because
+        # the update type is exactly what is misleading about them.
+        branch = (pr.get("head") or {}).get("ref") or ""
+        if branch.startswith(RENOVATE_BRANCH_PREFIX + RUNTIME_BRANCH_MARKER):
+            return False, "language runtime upgrade (runtime- branch)"
+        runtimes = runtime_deps_in_table(table)
+        if runtimes:
+            return False, "language runtime upgrade: " + ", ".join(sorted(runtimes))
+        held = held_deps_in_table(table)
+        if held:
+            return False, "held for review: " + ", ".join(sorted(held))
+
+        # Preferred signal: the explicit Update column. The closing pipe is
+        # matched by lookahead rather than consumed, so two type words that
+        # share a pipe ("| minor | major |") both register -- consuming it
+        # would hide the second and let a major bump read as safe.
         types = re.findall(
-            r"\|\s*(major|minor|patch|digest|pin|pinDigest|rollback)\s*\|",
-            body,
+            r"\|\s*(" + "|".join(UPDATE_TYPES) + r")\s*(?=\|)",
+            table,
             re.IGNORECASE,
         )
         if types:
             kinds = {t.lower() for t in types}
-            if kinds <= {"patch", "digest", "pin", "pindigest", "minor"}:
+            if kinds <= SAFE_TYPES:
                 return True, "update type: " + ", ".join(sorted(kinds))
             return False, "update type: " + ", ".join(sorted(kinds))
 
-        # Fallback: parse two version strings from title and compare.
+        # Not every table has an Update column -- with the merge-confidence
+        # columns enabled Renovate renders
+        # | Package | Change | Age | Confidence |. The Change column still
+        # carries both versions ("`2.55.16` -> `2.55.19`"), so derive the
+        # bump from there before falling back to the title, which usually
+        # names only the target version.
+        cells = CHANGE_CELL_RE.findall(table)
+        if cells:
+            kinds = {cell_kind(a, b) for a, b in cells}
+            detail = ", ".join(f"{a} -> {b}" for a, b in cells[:3])
+            if len(cells) > 3:
+                detail += f", +{len(cells) - 3} more"
+            if None in kinds:
+                # At least one row is uncomparable. Classifying off the
+                # rows we *could* parse would let a major bump ride along
+                # with its patch-bump neighbours, so hold the whole PR.
+                return False, f"unparseable change cell ({detail})"
+            label = "/".join(sorted(kinds)) + " bump"
+            if kinds <= SAFE_TYPES:
+                return True, f"{label} ({detail})"
+            return False, f"{label} ({detail})"
+
+        # The paths below run only when the table said nothing, which means the
+        # body was cleared or hand-edited. Both of them return "safe" without
+        # any runtime awareness, so re-check the title first: a runtime word in
+        # a PR whose table we could not read is exactly the case to fail closed
+        # on rather than fall through to a version-string comparison.
+        if any(re.search(r"(?<![\w./-])" + re.escape(d) + r"(?![\w./-])", title)
+               for d in RUNTIME_DEPS | HELD_DEPS):
+            return False, "possible runtime or held-package upgrade, unreadable update table"
+
+        # Digest pins are content-addressed -- same logical version -- but
+        # trust the title only once the table has said nothing, and only for
+        # Renovate's own "... digest to <sha>" phrasing. A bare "digest"
+        # substring also matches package names like "node-digest", which
+        # would wave a major bump of that package straight through.
+        if DIGEST_TITLE_RE.search(title):
+            return True, "digest pin"
+
+        # Last resort: two version strings in the title.
         versions = re.findall(r"\d+\.\d+(?:\.\d+)*", pr["title"])
         if len(versions) >= 2:
-            a = [int(x) for x in versions[0].split(".")]
-            b = [int(x) for x in versions[-1].split(".")]
-            while len(a) < 3:
-                a.append(0)
-            while len(b) < 3:
-                b.append(0)
-            if a[0] != b[0]:
-                return False, f"major bump ({versions[0]} -> {versions[-1]})"
-            if a[1] != b[1]:
-                return True, f"minor bump ({versions[0]} -> {versions[-1]})"
-            return True, f"patch bump ({versions[0]} -> {versions[-1]})"
+            kind = bump_kind(versions[0], versions[-1])
+            detail = f"{kind} bump ({versions[0]} -> {versions[-1]})"
+            return kind in SAFE_TYPES, detail
 
         return False, "cannot determine update type"
 
 
     def ci_passing(repo, pr):
-        """True only when every completed check has succeeded."""
+        """True only when CI has FINISHED and passed on this head: every check
+        run completed as success/neutral/skipped, and the combined commit
+        status is success. A queued or running check, or a pending status, is
+        not passing -- it used to be, so a PR could merge before its CI ran.
+        A head with no check runs and no statuses at all (a repo without CI)
+        still passes, as before."""
         sha = pr["head"]["sha"]
         try:
-            result = gh(f"/repos/{repo}/commits/{sha}/check-runs")
+            result = gh(f"/repos/{repo}/commits/{sha}/check-runs?per_page=100")
             runs = result.get("check_runs", [])
-            if not runs:
-                combined = gh(f"/repos/{repo}/commits/{sha}/status")
-                state = combined.get("state", "")
-                return state in ("success", "pending")
-            completed = [r for r in runs if r["status"] == "completed"]
-            return all(r["conclusion"] == "success" for r in completed)
+            if result.get("total_count", len(runs)) > len(runs):
+                return False  # more than one page: don't guess
+            for r in runs:
+                if r.get("status") != "completed" or r.get("conclusion") not in ("success", "neutral", "skipped"):
+                    return False
+            combined = gh(f"/repos/{repo}/commits/{sha}/status")
+            if combined.get("total_count", 0) == 0:
+                return True  # no commit statuses; check runs (if any) decided
+            return combined.get("state") == "success"
         except Exception as exc:
             print(f"    CI check error: {exc}", flush=True)
             return False
@@ -140,7 +521,10 @@ data:
         number = pr["number"]
         last_405 = False
         for method in ("squash", "rebase", "merge"):
-            body = {"merge_method": method}
+            # Pin the merge to the head this run examined (touched_by_app, the
+            # table, CI). If anything pushed since, GitHub answers 409 and we
+            # bail rather than merge commits nobody looked at.
+            body = {"merge_method": method, "sha": pr["head"]["sha"]}
             if method in ("squash", "merge"):
                 body["commit_title"] = pr["title"]
             try:
@@ -170,6 +554,24 @@ data:
         merged, held = [], []
         for pr in renovate:
             print(f"\n  PR #{pr['number']}: {pr['title']}", flush=True)
+            if touched_by_app(repo, pr):
+                reason = f"authored or committed to by {APP_LOGIN} -- George reviews"
+                print(f"    -> hold: {reason}", flush=True)
+                held.append({"pr": pr, "reason": reason})
+                continue
+            edit_reason = edited_by_other(repo, pr)
+            if edit_reason:
+                reason = f"PR metadata changed by someone other than its author: {edit_reason} -- George reviews"
+                print(f"    -> hold: {reason}", flush=True)
+                held.append({"pr": pr, "reason": reason})
+                continue
+            hold_labels = sorted({(lab or {}).get("name") for lab in pr.get("labels") or []} & HOLD_LABELS)
+            if hold_labels:
+                reason = "held by label (" + ", ".join(hold_labels) + ")"
+                print(f"    -> hold: {reason}", flush=True)
+                held.append({"pr": pr, "reason": reason})
+                continue
+
             safe, reason = classify_pr(pr)
             if not safe:
                 print(f"    -> hold: {reason}", flush=True)

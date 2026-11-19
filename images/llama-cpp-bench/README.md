@@ -23,7 +23,7 @@ docker buildx build -t llama-cpp-bench:latest -f images/llama-cpp-bench/Dockerfi
 Built automatically on push to `master` (triggered by changes to `images/llama-cpp-bench/**`).
 Also available via `workflow_dispatch` from the GitHub Actions tab.
 
-Tags: `YYYY-MM-DD` (first build) / `YYYY-MM-DD-N` (retries).
+Tags: immutable `YYYY-MM-DD-<sha7>` (UTC date + 7-char commit SHA).
 
 ## Usage
 

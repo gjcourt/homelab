@@ -47,7 +47,7 @@ on a worker node.
 | How does a packet from device X reach service Y? | [traffic-flows.md](traffic-flows.md) |
 | What does <term> mean? | [glossary.md](glossary.md) |
 | How does DNS resolution work (split-horizon)? | [../dns-strategy.md](../dns-strategy.md) |
-| How is ingress authentication wired (Authelia + Envoy ext_authz)? | [../gateway-auth.md](../gateway-auth.md) |
+| How is ingress authentication wired (Authelia + Gateway API ExternalAuth)? | [../gateway-auth.md](../gateway-auth.md) |
 | Detailed Cilium config reference (Helm values, BGP CRDs)? | [../../reference/cilium.md](../../reference/cilium.md) |
 | Why does the current state look like this — what migrations happened? | [../../plans/](../../plans/) (search for `network`, `bgp`, `migration`) |
 

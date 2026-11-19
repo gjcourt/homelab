@@ -1,8 +1,8 @@
 # Immich v2.7.5 → v3.0.1 upgrade runbook
 
 **Date:** 2026-07-02 (revised 2026-07-03 after staging rehearsal)
-**Status:** staged (two PRs open, NOT applied). Operator-gated — do not merge/reconcile
-without executing the ordered steps below.
+**Status:** applied 2026-07-03 (#1029 DB migration image, #1031 app → v3.0.1, #1032 drop vectors.so from config, #1033 VectorChord-only image).
+Kept as the record of how the one-way migration was done. Later upgrades: v3.2.4 on 2026-10-01 (#1520).
 **Scope:** Immich server + machine-learning bump to `v3.0.1`, plus the mandatory
 pgvecto.rs → VectorChord database migration that Immich v3 forces.
 

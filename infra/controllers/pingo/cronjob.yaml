@@ -23,7 +23,7 @@ spec:
               type: RuntimeDefault
           containers:
             - name: pingo
-              image: ghcr.io/gjcourt/pingo:2026-06-20
+              image: ghcr.io/gjcourt/pingo:2026-09-05-9929447
               imagePullPolicy: IfNotPresent
               envFrom:
                 - secretRef:

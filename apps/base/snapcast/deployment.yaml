@@ -34,7 +34,7 @@ spec:
       initContainers:
         - name: init-fifo
           # busybox 1.37
-          image: busybox@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
+          image: busybox@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -63,7 +63,7 @@ spec:
 
         - name: init-spotify-fifo
           # busybox 1.37
-          image: busybox@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
+          image: busybox@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -90,7 +90,7 @@ spec:
 
         - name: init-navidrome-fifo
           # busybox 1.37
-          image: busybox@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
+          image: busybox@sha256:a46257e06c82ad85242d0d38077d0a52d9896389ca60a1a59d3463db586e5fa4
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -233,11 +233,11 @@ spec:
               memory: 512Mi
 
         - name: mopidy
-          # ghcr.io/gjcourt/mopidy:2026-06-11 — first-party image built by
+          # ghcr.io/gjcourt/mopidy:2026-08-27-d482f8d — first-party image built by
           # .github/workflows/build-mopidy.yml from images/mopidy/. Digest-pinned;
           # this build adds Mopidy-Iris (#901) on top of the Debian + system
           # GStreamer/gi base.
-          image: ghcr.io/gjcourt/mopidy:2026-06-11@sha256:bcbec138dc9c29a2ac56b5e265b825a82a93d57a7eece9349c8f2f5b18df6382
+          image: ghcr.io/gjcourt/mopidy:2026-08-27-d482f8d@sha256:01d74c18c659ce69070e565a78fd0777218aceb2692a7220a5577a3ac25a0acd
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

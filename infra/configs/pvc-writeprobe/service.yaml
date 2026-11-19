@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: pvc-writeprobe
+  namespace: monitoring
+  labels:
+    app: pvc-writeprobe
+spec:
+  selector:
+    app: pvc-writeprobe
+  ports:
+    - name: metrics
+      port: 9105
+      targetPort: metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pvc-writeprobe
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
+spec:
+  # busybox httpd serves a file named `metrics` (no extension) and sends NO
+  # Content-Type header. Prometheus 3.x rejects that outright:
+  #
+  #   non-compliant scrape target sending blank Content-Type and no
+  #   fallback_scrape_protocol specified for target
+  #
+  # So the probe served correct metrics, Prometheus could reach it, and the
+  # target still stayed down -- TargetDown + PvcWriteProbeAbsent firing while
+  # the endpoint was perfectly healthy. Declare what it actually speaks, which
+  # is what emit() writes.
+  fallbackScrapeProtocol: PrometheusText0.0.4
+  selector:
+    matchLabels:
+      app: pvc-writeprobe
+  endpoints:
+    - port: metrics
+      interval: 60s
+      # The probe exports the AFFECTED workload's namespace/pod as labels, but
+      # prometheus-operator stamps every scraped series with the TARGET's
+      # namespace/pod -- always monitoring / pvc-writeprobe-* here. With the
+      # default honorLabels=false the target wins and the probe's own labels are
+      # renamed `exported_namespace` / `exported_pod`, which breaks three things
+      # at once:
+      #
+      #   1. Alert annotations render "PVC monitoring/config-adguard-0" and send
+      #      the operator to the wrong namespace.
+      #   2. Alertmanager `group_by: ['namespace']` collapses every PvcNotWritable
+      #      in the cluster into one `monitoring` group.
+      #   3. The `namespace =~ ".+-stage"` mute route can never match, so staging
+      #      PVC warnings bypass a silence written to stop exactly that nagging.
+      #      29 of 75 probed volumes are in *-stage namespaces.
+      #
+      # honorLabels=true keeps the metric's own namespace/pod, which IS the
+      # subject of these alerts. Same decision and same reasoning as
+      # infra/controllers/cert-manager/values.yaml, and the pattern
+      # kube-prometheus-stack itself uses for kube-state-metrics.
+      honorLabels: true

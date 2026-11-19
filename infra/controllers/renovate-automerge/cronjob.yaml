@@ -17,7 +17,7 @@ spec:
           containers:
             - name: automerge
               # python 3.14-slim
-              image: python@sha256:4fad23465a06cc5149a541fbec6f87e234a64dc0550f6bfdd2d290d8f03240df
+              image: python@sha256:df3f05ff4d74833f52146edd195c8f7913581b57796a820fb7e373457ace9bad
               command: ["python3", "/scripts/automerge.py"]
               env:
                 - name: GITHUB_TOKEN

@@ -1,6 +1,6 @@
 # Homelab Documentation
 
-GitOps repo for a 6-node Talos Kubernetes cluster (`melodic-muse`, 3 control-plane + 3 workers). Documentation is organized into a fixed six-folder taxonomy.
+GitOps repo for a 4-node Talos Kubernetes cluster (`melodic-muse`, 3 control-plane + 1 worker). Documentation is organized into a fixed six-folder taxonomy.
 
 > **Current state at a glance:** [`STATUS.md`](STATUS.md) — cluster/hosts summary, in-flight work, known issues.
 
@@ -22,7 +22,7 @@ The historical `docs/apps/`, `docs/guides/`, `docs/incidents/`, and `docs/infra/
 - [Networking](architecture/networking/README.md) — physical topology, VLANs, L2+BGP load balancing, traffic flows
 - [Overlays and structure](architecture/overlays-and-structure.md) — base vs staging vs production
 - [DNS strategy](architecture/dns-strategy.md) — split-horizon DNS with wildcard records
-- [Gateway authentication](architecture/gateway-auth.md) — Global Forward Auth and Envoy filters
+- [Gateway authentication](architecture/gateway-auth.md) — per-route Authelia gate (Gateway API ExternalAuth)
 
 ### Operations
 

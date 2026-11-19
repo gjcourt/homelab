@@ -1,6 +1,6 @@
 services:
   runner:
-    image: myoung34/github-runner:ubuntu-noble@sha256:de596f586947d12b6894faba4d69fa126e07c07419586c45f32c7d7b71f5a3b7
+    image: myoung34/github-runner:ubuntu-noble@sha256:81a71afaeb21ba3559aff799716a75339ea4eb681f4c9815a5271a1c48bb132c
     container_name: gha-runner
     restart: unless-stopped
     environment:
@@ -9,8 +9,52 @@ services:
       RUNNER_SCOPE: repo
       LABELS: hestia,truenas
       RUNNER_WORKDIR: /tmp/runner-work
-      EPHEMERAL: "false"
-      DISABLE_AUTO_UPDATE: "false"
+      # =====================================================================
+      # TRAP — READ BEFORE EDITING THE TWO VARIABLES BELOW.
+      #
+      # The image entrypoint tests these for PRESENCE, not truthiness:
+      #
+      #   /entrypoint.sh:161  if [ -n "${EPHEMERAL}" ];           then ARGS+=("--ephemeral")
+      #   /entrypoint.sh:166  if [ -n "${DISABLE_AUTO_UPDATE}" ]; then ARGS+=("--disableupdate")
+      #
+      # `[ -n ... ]` is "non-empty string". ANY non-empty value turns the flag
+      # ON — including the strings "false", "no" and "0". The ONLY way to turn
+      # one of these OFF is to REMOVE the variable entirely.
+      #
+      # DISABLE_AUTO_UPDATE is SET (auto-update OFF) as of 2026-11-08,
+      # HOMELAB-102. History, because both settings have caused an outage:
+      #
+      # - 2026-08-19: it was set, runner 2.334.0 was deprecated, --disableupdate
+      #   blocked the upgrade, and the runner looped 13,173 times. #1324
+      #   removed the variable so the runner could self-update.
+      # - 2026-09-02 and again 2026-10-23: the self-update itself broke the
+      #   runner. It stages the new version in the PERSISTED work dir
+      #   (_update/) and applies it into the container layer; an ephemeral
+      #   restart mid-apply left /actions-runner/bin with 107 files deleted
+      #   (libhostpolicy.so missing). restart: unless-stopped reuses the same
+      #   container, so it looped 24,912 times and never recovered.
+      #
+      # A self-update failure is permanent; a deprecation is fixed by applying
+      # the Renovate digest bump below. This path is excluded from
+      # deploy-hestia.yml; the gha-runner-watchdog app applies the image pin
+      # while the runner is idle and recreates a dead runner (HOMELAB-108). Anything else here is applied by hand.
+      # See docs/operations/apps/gha-runner.md §6. Keep the pin current.
+      # =====================================================================
+      DISABLE_AUTO_UPDATE: "true"
+
+      # Deliberately ON. This container bind-mounts /var/run/docker.sock and is
+      # therefore root-equivalent on the host; a fresh runner per job, with its
+      # registration credentials removed after each one, is the posture GitHub
+      # recommends for exactly that exposure.
+      #
+      # Consequence: the container exits 0 and restarts after EVERY job, so a
+      # restart count that tracks job count is normal here and is NOT a crash
+      # loop. Container alerting distinguishes the two via a `lifecycle` label
+      # that gives ephemeral runners a different restart threshold from
+      # long-lived containers, so do not flip this to off (i.e. delete it)
+      # without re-tuning those thresholds.
+      EPHEMERAL: "true"
+
       # ACCESS_TOKEN: a long-lived PAT (classic) or GitHub App installation
       # token with `actions:write` + `metadata:read` on this repo. The runner
       # entrypoint exchanges it for a registration token at startup so the

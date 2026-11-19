@@ -10,7 +10,7 @@ Prometheus scrapes it directly (`infra/configs/netscope/scrapeconfig.yaml`).
 |---|---|
 | Image | `ghcr.io/gjcourt/netscope` (built from [`gjcourt/netscope`](https://github.com/gjcourt/netscope)) |
 | Tag | pinned to the **same digest** the cluster DaemonSet uses (`apps/base/netscope/daemonset.yaml`) — bump both together |
-| Tag scheme | git short SHA from the source repo (NOT the homelab YYYY-MM-DD convention) |
+| Tag scheme | git short SHA from the source repo (NOT the homelab `YYYY-MM-DD-<sha7>` convention) |
 | Network | `host` (Prometheus scrapes hestia directly on `:9101`) |
 | Privileges | `privileged: true` — eBPF tcx attach + BPF map/program pinning |
 | Bind mounts | `/sys/fs/bpf` (rw, bpffs), `/sys/kernel/btf` (ro, CO-RE) |

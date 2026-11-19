@@ -1,0 +1,358 @@
+# Reusable Go CI for the gjcourt Go repos.
+#
+# This workflow is `workflow_call`-only on purpose: homelab is a GitOps repo
+# with no Go code, so this file must never run standalone here. It exists so a
+# change like "bump go-arch-lint" is one line in one place instead of six PRs.
+#
+# Canonical job names (these become the `<caller-job> / <job>` check contexts):
+#   Build, Test, Format, Vet, Lint, Module tidy, and the arch job whose name is
+#   caller-supplied via `arch-job-name` (repos disagree: arch-guard / arch-lint /
+#   Architecture guard).
+#
+# Minimal usage in a consumer repo's .github/workflows/ci.yml:
+#
+#   jobs:
+#     go-ci:
+#       uses: gjcourt/homelab/.github/workflows/go-ci.yml@master
+#       with:
+#         arch-job-name: arch-lint
+#
+# Every job also publishes its result as a workflow output (build, test, format,
+# vet, lint, tidy, arch) so a consumer can keep its existing required status
+# check names with thin alias jobs and avoid a branch-protection edit. See the
+# "Alias jobs" section at the bottom of this file.
+
+name: Go CI
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: 'Explicit Go version (e.g. "1.27"). Empty means use go-version-file.'
+        type: string
+        default: ''
+      go-version-file:
+        description: 'File to read the Go version from when go-version is empty.'
+        type: string
+        default: 'go.mod'
+      golangci-lint-version:
+        description: 'golangci-lint version passed to golangci/golangci-lint-action.'
+        type: string
+        default: 'v2.13.1'
+      go-arch-lint-version:
+        description: 'go-arch-lint version. v1.16.0 cannot read Go 1.27 export data.'
+        type: string
+        default: 'v1.18.0'
+      arch-check:
+        description: 'Run the architecture boundary check.'
+        type: boolean
+        default: true
+      arch-job-name:
+        description: 'Display name of the architecture job (varies per repo).'
+        type: string
+        default: 'Architecture guard'
+      build:
+        description: 'Run the Build job.'
+        type: boolean
+        default: true
+      test:
+        description: 'Run the Test job.'
+        type: boolean
+        default: true
+      format:
+        description: 'Run the Format job (gofmt -l).'
+        type: boolean
+        default: true
+      vet:
+        description: 'Run the Vet job.'
+        type: boolean
+        default: true
+      lint:
+        description: 'Run the Lint job (golangci-lint).'
+        type: boolean
+        default: true
+      tidy:
+        description: 'Run the Module tidy job.'
+        type: boolean
+        default: true
+      build-command:
+        description: 'Command run by the Build job.'
+        type: string
+        default: 'go build ./...'
+      test-command:
+        description: 'Command run by the Test job.'
+        type: string
+        default: 'go test -race -count=1 -timeout 120s ./...'
+      lint-args:
+        description: 'Extra args for golangci-lint.'
+        type: string
+        default: '--timeout=5m'
+      apt-packages:
+        description: 'Space-separated apt packages to install before every job (e.g. libasound2-dev).'
+        type: string
+        default: ''
+      cache:
+        description: 'Enable the setup-go module/build cache.'
+        type: boolean
+        default: true
+      runs-on:
+        description: 'Runner label.'
+        type: string
+        default: 'ubuntu-latest'
+      working-directory:
+        description: 'Directory holding the Go module.'
+        type: string
+        default: '.'
+    outputs:
+      build:
+        description: 'Result of the Build job (success/failure/skipped/cancelled).'
+        value: ${{ jobs.build.result }}
+      test:
+        description: 'Result of the Test job.'
+        value: ${{ jobs.test.result }}
+      format:
+        description: 'Result of the Format job.'
+        value: ${{ jobs.format.result }}
+      vet:
+        description: 'Result of the Vet job.'
+        value: ${{ jobs.vet.result }}
+      lint:
+        description: 'Result of the Lint job.'
+        value: ${{ jobs.lint.result }}
+      tidy:
+        description: 'Result of the Module tidy job.'
+        value: ${{ jobs.tidy.result }}
+      arch:
+        description: 'Result of the architecture job.'
+        value: ${{ jobs.arch.result }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    if: inputs.build
+    runs-on: ${{ inputs.runs-on }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install apt packages
+        if: inputs.apt-packages != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ inputs.apt-packages }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.go-version == '' && format('{0}/{1}', inputs.working-directory, inputs.go-version-file) || '' }}
+          cache: ${{ inputs.cache }}
+          cache-dependency-path: |
+            ${{ inputs.working-directory }}/go.sum
+            ${{ inputs.working-directory }}/go.mod
+      - name: Build
+        run: ${{ inputs.build-command }}
+
+  test:
+    name: Test
+    if: inputs.test
+    runs-on: ${{ inputs.runs-on }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install apt packages
+        if: inputs.apt-packages != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ inputs.apt-packages }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.go-version == '' && format('{0}/{1}', inputs.working-directory, inputs.go-version-file) || '' }}
+          cache: ${{ inputs.cache }}
+          cache-dependency-path: |
+            ${{ inputs.working-directory }}/go.sum
+            ${{ inputs.working-directory }}/go.mod
+      - name: Test
+        run: ${{ inputs.test-command }}
+
+  format:
+    name: Format
+    if: inputs.format
+    runs-on: ${{ inputs.runs-on }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.go-version == '' && format('{0}/{1}', inputs.working-directory, inputs.go-version-file) || '' }}
+          cache: ${{ inputs.cache }}
+          cache-dependency-path: |
+            ${{ inputs.working-directory }}/go.sum
+            ${{ inputs.working-directory }}/go.mod
+      - name: Check gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not gofmt'd:"
+            echo "$unformatted"
+            echo ""
+            gofmt -d .
+            echo "Run 'go fmt ./...' to fix."
+            exit 1
+          fi
+
+  vet:
+    name: Vet
+    if: inputs.vet
+    runs-on: ${{ inputs.runs-on }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install apt packages
+        if: inputs.apt-packages != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ inputs.apt-packages }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.go-version == '' && format('{0}/{1}', inputs.working-directory, inputs.go-version-file) || '' }}
+          cache: ${{ inputs.cache }}
+          cache-dependency-path: |
+            ${{ inputs.working-directory }}/go.sum
+            ${{ inputs.working-directory }}/go.mod
+      - name: go vet
+        run: go vet ./...
+
+  lint:
+    name: Lint
+    if: inputs.lint
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install apt packages
+        if: inputs.apt-packages != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ inputs.apt-packages }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.go-version == '' && format('{0}/{1}', inputs.working-directory, inputs.go-version-file) || '' }}
+          cache: ${{ inputs.cache }}
+          cache-dependency-path: |
+            ${{ inputs.working-directory }}/go.sum
+            ${{ inputs.working-directory }}/go.mod
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ inputs.golangci-lint-version }}
+          args: ${{ inputs.lint-args }}
+          working-directory: ${{ inputs.working-directory }}
+
+  tidy:
+    name: Module tidy
+    if: inputs.tidy
+    runs-on: ${{ inputs.runs-on }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.go-version == '' && format('{0}/{1}', inputs.working-directory, inputs.go-version-file) || '' }}
+          cache: ${{ inputs.cache }}
+          cache-dependency-path: |
+            ${{ inputs.working-directory }}/go.sum
+            ${{ inputs.working-directory }}/go.mod
+      - name: Check go mod tidy
+        run: |
+          go mod tidy
+          if ! git diff --quiet -- go.mod; then
+            echo "go.mod out of sync - run 'go mod tidy'"
+            git diff -- go.mod
+            exit 1
+          fi
+          if [ -f go.sum ] && ! git diff --quiet -- go.sum; then
+            echo "go.sum out of sync - run 'go mod tidy'"
+            git diff -- go.sum
+            exit 1
+          fi
+
+  arch:
+    name: ${{ inputs.arch-job-name }}
+    if: inputs.arch-check
+    runs-on: ${{ inputs.runs-on }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install apt packages
+        if: inputs.apt-packages != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ inputs.apt-packages }}
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ inputs.go-version }}
+          go-version-file: ${{ inputs.go-version == '' && format('{0}/{1}', inputs.working-directory, inputs.go-version-file) || '' }}
+          cache: ${{ inputs.cache }}
+          cache-dependency-path: |
+            ${{ inputs.working-directory }}/go.sum
+            ${{ inputs.working-directory }}/go.mod
+      - name: Install go-arch-lint
+        run: go install github.com/fe3dback/go-arch-lint@${{ inputs.go-arch-lint-version }}
+      - name: Add GOPATH bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Check hexagonal boundaries
+        run: go-arch-lint check
+
+# ── Alias jobs ────────────────────────────────────────────────────────────────
+#
+# A reusable workflow's checks are always reported as `<caller-job> / <job>`
+# (e.g. `go-ci / Test`). There is no way to emit a single-segment context name
+# from a called workflow, so a repo whose required status checks are bare names
+# (`test`, `lint`, `arch-guard`, `Format Check`, ...) has two choices:
+#
+#   1. Update branch protection to the new `go-ci / <name>` contexts, or
+#   2. Keep the old names alive with alias jobs that assert this workflow's
+#      outputs. No protection edit needed:
+#
+#        jobs:
+#          go-ci:
+#            uses: gjcourt/homelab/.github/workflows/go-ci.yml@master
+#            with:
+#              arch-job-name: arch-guard
+#          test:
+#            name: test
+#            needs: go-ci
+#            if: always()
+#            runs-on: ubuntu-latest
+#            steps:
+#              - run: |
+#                  r='${{ needs.go-ci.outputs.test }}'
+#                  echo "reusable Test job: $r"
+#                  [ "$r" = success ]
+#
+# Alias jobs cost a few seconds of runner time each and must use `if: always()`
+# so they still run (and fail) when the upstream job failed.
+#
+# Assert `success` ONLY -- do not also accept `skipped`. A required status check
+# is a branch-protection control; if the alias passes on `skipped`, then setting
+# `test: false` in a caller's `with:` block turns that required check green with
+# nothing having run. That converts a gate only a repo admin can change into one
+# any repo writer can switch off from a workflow file. To genuinely retire a job,
+# remove it from the required contexts (step 5), do not silently satisfy it.

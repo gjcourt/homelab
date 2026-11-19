@@ -1,0 +1,126 @@
+<#
+.SYNOPSIS
+  Shared media-pipeline module: the append-only movement ledger, plus the
+  remote-read primitive every script that talks to hestia needs.
+
+.DESCRIPTION
+  One record of what moved, where, and whether it was verified - written to
+  hestia AS IT HAPPENS rather than at the end of a successful run.
+
+  ⚠️ Why this file exists rather than a copy in each script: transcode.ps1's own
+  header records that transcode-batch{,2,3}.ps1, transcode-extras.ps1 and
+  chain-extras.ps1 "had all drifted apart while re-implementing the same push
+  logic". A ledger duplicated into two scripts is the same mistake with a
+  shorter fuse - the copies diverge, and the one that matters is the one that
+  was not updated.
+
+  ⚠️ The ledger must never fail a run. A lost row is bad; a lost album or a
+  half-pushed film is worse. Every failure here warns and returns.
+
+  Schema (TSV, no header - the file is append-only and read by tools):
+    ts  run_id  event  scope  title  item  disc  track  sha256  bytes  src  dest  note
+
+  scope is 'run' | 'album' | 'file' | 'name' | 'title'. For music, title=artist
+  and item=album; for video, title=the library name and item is the file.
+#>
+
+# ⚠️ [IO.File]::WriteAllLines terminates every line with Environment.NewLine,
+# which on Windows is CRLF. EVERY file these scripts write is then read by a
+# Linux tool - the ledger by awk, path manifests by a shell `read` loop,
+# checksum manifests by sha256sum -c - and a trailing CR rides along inside the
+# last field. Measured 2026-09-20: a one-line candidate list produced
+# "media/video/.../The Tale of the Princess Kaguya (2013).mkv\r", hestia could
+# not open it, the indexer reported MISSING, and the verifier refused to clear a
+# film whose hash was in fact identical on both sides. Every ledger row written
+# before that fix carries the same trailing CR.
+#
+# Write LF explicitly. There is no case here where CRLF is wanted.
+function Write-LfLines {
+  param([Parameter(Mandatory)][string]$Path, [string[]]$Lines)
+  $text = $(if ($Lines -and $Lines.Count -gt 0) { ($Lines -join "`n") + "`n" } else { '' })
+  [IO.File]::WriteAllText($Path, $text, [Text.UTF8Encoding]::new($false))
+}
+
+$script:LedgerHost = $null
+$script:LedgerRunId = $null
+$script:LedgerPath = '/mnt/main/archive/_inventory/rips/ledger.tsv'
+$script:LedgerSeq  = 0
+
+function Initialize-Ledger {
+  param([Parameter(Mandatory)][string]$RemoteHost,
+        [Parameter(Mandatory)][string]$RunId,
+        [string]$Path)
+  $script:LedgerHost  = $RemoteHost
+  $script:LedgerRunId = $RunId
+  if ($Path) { $script:LedgerPath = $Path }
+}
+
+function Write-Ledger {
+  param([Parameter(Mandatory)][string]$Event, [object[]]$Records)
+  if (-not $script:LedgerHost) { return }          # not initialised: stay silent
+  if (-not $Records -or $Records.Count -eq 0) { return }
+  $script:LedgerSeq++
+  $ts = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+  $lines = foreach ($r in $Records) {
+    @(
+      $ts; $script:LedgerRunId; $Event
+      $(if ($r.Scope) { $r.Scope } else { 'item' })
+      $(if ($r.Title) { $r.Title } else { '' })
+      $(if ($r.Item)  { $r.Item }  else { '' })
+      $(if ($null -ne $r.Disc)  { $r.Disc }  else { '' })
+      $(if ($null -ne $r.Track) { $r.Track } else { '' })
+      $(if ($r.Sha)   { $r.Sha }   else { '' })
+      $(if ($null -ne $r.Bytes) { $r.Bytes } else { '' })
+      $(if ($r.Src)   { $r.Src }   else { '' })
+      $(if ($r.Dest)  { $r.Dest }  else { '' })
+      $(if ($r.Note)  { $r.Note }  else { '' })
+    ) -join "`t"
+  }
+  $chunk  = Join-Path $env:TEMP "$($script:LedgerRunId).ledger.$($script:LedgerSeq).tsv"
+  Write-LfLines -Path $chunk -Lines $lines
+  $remote = "/tmp/.ledger.$($script:LedgerRunId).$($script:LedgerSeq).tsv"
+  & cmd /c "scp -B -o BatchMode=yes `"$chunk`" $($script:LedgerHost):$remote >nul 2>nul" | Out-Null
+  Remove-Item $chunk -Force -ErrorAction SilentlyContinue
+  $dir = Split-Path -Parent $script:LedgerPath
+  # flock: a second import, or a retry, must not interleave half-written lines.
+  & cmd /c "ssh -n -o BatchMode=yes $($script:LedgerHost) `"sudo -n mkdir -p '$dir' && sudo -n touch '$($script:LedgerPath)' && sudo -n flock '$($script:LedgerPath).lock' -c 'cat $remote >> $($script:LedgerPath)' && rm -f $remote`" >nul 2>nul" | Out-Null
+}
+
+function Write-LedgerRun {
+  param([Parameter(Mandatory)][string]$Event, [string]$Note)
+  Write-Ledger -Event $Event -Records @([pscustomobject]@{ Scope = 'run'; Note = $Note })
+}
+
+# ---- remote reads -------------------------------------------------------
+# Win32-OpenSSH stalls ssh.exe when stdout is a non-console handle and the
+# output grows past a buffer. Reproduced on a clean box: a 227-line library
+# listing dies at EXACTLY 12288 bytes (3 x 4096) with ssh.exe blocked forever,
+# while the same query piped through `head -3` returns in milliseconds. It is
+# below PowerShell - redirecting to a file does not help, because the stall is
+# inside ssh itself.
+#
+# So never stream a large remote read through ssh stdout. Have the remote write
+# to a file and fetch it with scp, which is a different code path and moved
+# 3.6 GB without trouble.
+#
+# Lives here, not in one script, for the reason in this file's header: the
+# ledger, the import and the verifier all need it, and a third copy is how the
+# five transcode scripts drifted apart in the first place.
+function Invoke-SshRead {
+  param([Parameter(Mandatory)][string]$RemoteHost, [Parameter(Mandatory)][string]$Cmd)
+  $rtmp = "/tmp/.sshread." + [Guid]::NewGuid().ToString('N').Substring(0,12)
+  $ltmp = [IO.Path]::GetTempFileName()
+  try {
+    & cmd /c "ssh -n -o BatchMode=yes $RemoteHost `"$Cmd > $rtmp 2>/dev/null`" >nul 2>nul" | Out-Null
+    & cmd /c "scp -B -o BatchMode=yes $($RemoteHost):$rtmp `"$ltmp`" >nul 2>nul" | Out-Null
+    & cmd /c "ssh -n -o BatchMode=yes $RemoteHost `"rm -f $rtmp`" >nul 2>nul" | Out-Null
+    # MUST read as UTF-8. Get-Content's default is the ANSI codepage, which
+    # turned every library path containing a curly apostrophe into "Whoâ€™s".
+    # That is not merely cosmetic: Norm() runs FormKD, which decomposes the
+    # mojibake's "™" into the LETTERS "TM", so "whos" never matched "whotms"
+    # and two albums already in the library were reported NEW on every run
+    # (measured 2026-09-19: The Who / Who's Next, Lightnin' Hopkins / Mojo Hand).
+    if (Test-Path $ltmp) { return @([IO.File]::ReadAllLines($ltmp, [Text.UTF8Encoding]::new($false))) }
+    return @()
+  } finally { Remove-Item $ltmp -Force -ErrorAction SilentlyContinue }
+}

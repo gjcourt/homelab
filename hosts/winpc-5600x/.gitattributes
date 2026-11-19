@@ -1,0 +1,4 @@
+# Windows batch files must keep CRLF - cmd.exe can mis-parse labels and goto
+# in LF-terminated .bat files. PowerShell tolerates either, pinned for consistency.
+*.bat text eol=crlf
+*.ps1 text eol=crlf

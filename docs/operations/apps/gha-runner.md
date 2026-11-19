@@ -1,0 +1,628 @@
+# gha-runner — self-hosted GitHub Actions runner on hestia
+
+## 1. Overview
+
+`gha-runner` is the self-hosted GitHub Actions runner that applies every
+`hosts/hestia/**/docker-compose*.yml` change to the TrueNAS Apps subsystem. It
+is the **only** path by which hestia Custom Apps get deployed from Git — if it
+is down, every hestia deploy silently queues instead of failing.
+
+| Attribute | Value |
+|---|---|
+| Host | hestia (`10.42.2.10`), TrueNAS SCALE Custom App |
+| Compose | [`hosts/hestia/actions-runner/docker-compose.yml`](../../../hosts/hestia/actions-runner/docker-compose.yml) |
+| Bootstrap / token rotation | [`hosts/hestia/actions-runner/README.md`](../../../hosts/hestia/actions-runner/README.md) |
+| Image | `myoung34/github-runner` (digest-pinned) |
+| Container name | `gha-runner` (docker: `ix-gha-runner-runner-1`) |
+| Runner name / labels | `hestia` / `hestia`, `truenas` |
+| Consumer | `.github/workflows/deploy-hestia.yml`, job on `runs-on: [self-hosted, hestia]` |
+| Design | [`docs/plans/2026-05-02-hestia-gha-runner.md`](../../plans/2026-05-02-hestia-gha-runner.md) |
+| Monitoring | [`docs/plans/2026-08-18-hestia-deploy-monitoring-gap.md`](../../plans/2026-08-18-hestia-deploy-monitoring-gap.md) |
+
+## 2. The three facts that make this runner surprising
+
+### 2.1 It is ephemeral, so constant restarting is NORMAL
+
+The image's `/entrypoint.sh` gates on **variable presence, not truth**:
+
+```sh
+if [ -n "${EPHEMERAL}" ]; then
+  ARGS+=("--ephemeral")
+fi
+if [ -n "${DISABLE_AUTO_UPDATE}" ]; then
+  ARGS+=("--disableupdate")
+fi
+```
+
+`[ -n "$VAR" ]` is true for *any non-empty string*. `EPHEMERAL: "false"` in the
+compose file is a non-empty string, so **`--ephemeral` is active** despite the
+value reading `false`.
+
+Consequence: the runner registers, executes **exactly one job**, deregisters,
+exits 0, and `restart: unless-stopped` starts a fresh container for the next
+job. Measured: `RestartCount` went **0 → 9 across a single 10-job deploy**.
+
+**Do not read a rising `RestartCount` as a fault.** Tens of restarts per hour is
+a busy deploy day. Thousands is a crash loop. See §4 for where the line is.
+
+### 2.2 Auto-update is DISABLED (since 2026-11-08), and "false" would not turn it off
+
+> **Current state (2026-11-08, HOMELAB-102):** `DISABLE_AUTO_UPDATE: "true"` is
+> set again, so the runner runs with `--disableupdate`. The self-update failure
+> in §2.3 recurred on 2026-10-23 (2.337.0 -> 2.338.0) and this time broke the
+> container layer itself: `docker diff` showed 107 files deleted from
+> `/actions-runner/bin` (`libhostpolicy.so ... not found`, exit 131), and
+> because `restart: unless-stopped` reuses the same container it looped 24,912
+> times. A failed self-update is permanent; a deprecation is fixed by applying
+> the Renovate digest bump (§6). **Runner upgrades now come only from the Git
+> pin.** Since HOMELAB-108 a merged pin bump is applied automatically by
+> the `gha-runner-watchdog` app (§6.1); if that stops working, apply it by hand (§6.2),
+> or GitHub will eventually deprecate the pinned version (§3). The history below
+> explains why it was off from 2026-08-19 to 2026-11-08.
+
+Same presence-test bug: setting `DISABLE_AUTO_UPDATE: "false"` still passes
+`--disableupdate`. **The only way to turn auto-update off is to ADD the variable
+back; the only way to leave it on is for the variable to be ABSENT** — a value of
+`false` means "disabled", not "enabled".
+
+**As of 2026-08-19 the variable is absent, so the runner self-updates.** That was
+the deliberate fix for the deprecation loop in §3: with `--disableupdate` the
+runner could not climb past GitHub's mandated minimum version, and because
+`hosts/hestia/actions-runner/` is **unconditionally excluded** from
+`deploy-hestia.yml` (chicken-and-egg: the runner cannot reliably recreate its own
+container mid-job) it could not self-deploy the digest bump either. Upgrades are
+manual (§6) — that has always been true and is unaffected by this setting.
+
+⚠️ **Enabling auto-update introduced a different failure**, because the runner
+writes its update into a bind-mounted directory that survives container
+restarts. See §2.3. The two settings trade one failure mode for another; neither
+is strictly safer.
+
+### 2.3 A failed self-update poisons the persisted work dir
+
+**This is the failure that auto-update buys you, and it is worse than a
+deprecation loop because it does not clear itself.**
+
+`RUNNER_WORKDIR=/tmp/runner-work` is bind-mounted from
+`/mnt/main/apps/actions-runner/work`, so it **persists across container
+restarts**. When the runner self-updates it stages the new version there as
+`_update/` (the full new runner tree) plus a generated `_update.sh` that copies
+it over `rootfolder`.
+
+⚠️ **The staged payload is not corrupt — that is what makes this confusing.** On
+2026-09-02 `_update/bin/` held **264 files / 53 MB**, including the very assembly
+the runner then failed to load. The break is in *applying* it across a container
+restart:
+
+```text
+_update.sh header, generated by the runner itself:
+  existrunnerversion=2.336.0        <- what the IMAGE ships
+  downloadrunnerversion=2.337.0     <- what was staged in the PERSISTED work dir
+  rootfolder="/actions-runner"      <- EPHEMERAL, resets to 2.336.0 every start
+  logfile="/actions-runner/_diag/SelfUpdate-20260902-153221.log"
+```
+
+`rootfolder` is ephemeral and `_update/` is persistent, so every restart pits a
+fresh **2.336.0** tree against a staged **2.337.0** update. The result is a mixed
+install, and .NET reports a version mismatch as a *missing* assembly:
+
+```text
+Obtaining the token of the runner
+Ephemeral option is enabled
+Configuring
+Unhandled exception. System.IO.FileNotFoundException: Could not load file or
+  assembly 'System.Diagnostics.Tracing, Version=8.0.0.0, ...'
+./config.sh: line 81: Aborted (core dumped) ./bin/Runner.Listener configure
+```
+
+Container exits **134** (SIGABRT), `restart: unless-stopped` restarts it, and it
+fails identically. Forever.
+
+**The trap: `/actions-runner` is NOT persisted, so the image looks innocent.**
+Every diagnostic aimed at the image passes, which sends you looking in the wrong
+place. All of these came back clean while the app was crash-looping:
+
+```bash
+# assembly present in the image?
+docker run --rm --network none --entrypoint /bin/bash \
+  myoung34/github-runner:ubuntu-noble \
+  -c 'ls -la /actions-runner/bin/System.Diagnostics.Tracing.dll'   # -> present, 16168 bytes
+
+# binary runs?
+docker run --rm --network none --entrypoint /bin/bash \
+  myoung34/github-runner:ubuntu-noble \
+  -c 'cd /actions-runner && ./bin/Runner.Listener --version'       # -> 2.336.0
+
+# the exact failing code path?
+docker run --rm --network none --entrypoint /bin/bash \
+  myoung34/github-runner:ubuntu-noble \
+  -c 'cd /actions-runner && ./bin/Runner.Listener configure --url … --token XXXX --unattended'
+                                                                    # -> registration banner, no abort
+```
+
+**The image, the digest pin and the compose file are all irrelevant here.** The
+poison is host state.
+
+#### Recognising it
+
+```bash
+ssh truenas_admin@10.42.2.10 \
+  'sudo ls -la /mnt/main/apps/actions-runner/work/'
+```
+
+`_update/` and `_update.sh` present, with an **mtime matching when deploys
+stopped working**, is the signature. On 2026-09-04 both were stamped
+`Sep 2 08:32`; the last successful `deploy-hestia` run was `Sep 2 06:00`.
+
+**Read the `_update.sh` header** — the runner writes the exact versions and a
+timestamp into it, which dates the breakage precisely:
+
+```bash
+ssh truenas_admin@10.42.2.10 \
+  'sudo head -20 /mnt/main/apps/actions-runner/work/_update.sh'
+```
+
+⚠️ The `SelfUpdate-*.log` it names lives under `/actions-runner/_diag/`, which is
+**ephemeral** — it is destroyed on the restart the failure causes, so it is never
+there when you look. The header is the only surviving record of what it tried.
+
+Cross-check the last good deploy — a queued run is not a failed run (§4):
+
+```bash
+gh run list --repo gjcourt/homelab --workflow deploy-hestia.yml --limit 20 \
+  --json createdAt,status,conclusion \
+  --jq '.[] | "\(.createdAt[0:16])  \(.status)/\(.conclusion // "-")"'
+```
+
+#### Recovery
+
+**Quarantine, do not delete** — the artifacts are evidence, and `_update.sh` names
+the version it was trying to install.
+
+```bash
+W=/mnt/main/apps/actions-runner/work
+sudo mkdir -p $W/.broken-$(date +%F)
+sudo mv $W/_update $W/_update.sh $W/.broken-$(date +%F)/
+```
+
+⚠️ **Leave `_PipelineMapping/`, `_temp/` and the repo checkout alone.** Only the
+two `_update*` entries are the payload.
+
+Verify **before** restarting the app, using the real entrypoint against the
+cleaned work dir with a deliberately invalid token:
+
+```bash
+sudo timeout 90 docker run --rm --name gha-runner-TEST \
+  -e REPO_URL=https://github.com/gjcourt/homelab \
+  -e RUNNER_NAME=hestia-test -e RUNNER_SCOPE=repo \
+  -e RUNNER_WORKDIR=/tmp/runner-work -e EPHEMERAL=true \
+  -e ACCESS_TOKEN=invalid-on-purpose \
+  -v /mnt/main/apps/actions-runner/work:/tmp/runner-work \
+  myoung34/github-runner:ubuntu-noble
+```
+
+**Pass condition is reaching authentication**, because that is *past* the abort
+point:
+
+```text
+# Authentication
+Invalid configuration provided for token. Terminating unattended configuration.
+curl: (22) The requested URL returned error: 401
+```
+
+A clean `401` means the poison is gone. A `System.Diagnostics.Tracing` abort means
+it is not. Then start the app:
+
+```bash
+sudo midclt call app.start gha-runner
+```
+
+Use the app API, not `docker start` — middleware owns this container and will
+revert a manual change.
+
+#### Why this recurs
+
+**This is structural, not bad luck.** The runner stages into *persistent*
+storage and applies into *ephemeral* storage, and `EPHEMERAL: "true"` (§2.1)
+restarts the container after **every job** — so a restart between staging and
+applying is close to unavoidable.
+
+⚠️ **There is no evidence any self-update has ever succeeded on this
+deployment.** Auto-update was enabled 2026-08-19 (#1324); the image already
+shipped 2.336.0, so the first attempt it actually needed was
+2.336.0 -> 2.337.0 on 2026-09-02, and that is the one that broke. **n=1** — too
+few to call it certain, but the mechanism predicts recurrence and nothing has
+been changed to prevent it.
+
+Options (the second was taken on 2026-11-08, HOMELAB-102, after a second
+occurrence; see the note at the top of §2.2):
+
+- **Stop persisting the work dir**, or persist a narrower path than the one the
+  updater writes into. `RUNNER_WORKDIR` exists for job workspaces; the updater
+  colonising it is incidental, and it is the persistence that turns a failed
+  update into a permanent one. **Most likely the right fix.**
+- **Re-add `DISABLE_AUTO_UPDATE`** and accept manual upgrades — this trades back
+  to the §3 failure, so it is not obviously better.
+- **Alert on the artifacts directly**, since neither existing rule catches this:
+  the container restarts at Docker's 60s backoff cap, which the §4 thresholds
+  treat as ephemeral-normal.
+
+⚠️ **The 2026-08-19 fix caused this incident.** Removing `DISABLE_AUTO_UPDATE`
+was correct for the deprecation loop and is what enabled the self-update that
+broke on 2026-09-02. Read §2.2 and §2.3 together before changing either.
+
+## 3. The 2026-08-18 incident (why this runbook exists)
+
+A merge to `master` touching `hosts/hestia/**` produced a `deploy-hestia.yml`
+run that sat **queued indefinitely**. The runner was crash-looping:
+
+```
+Current runner version: '2.334.0'
+An error occurred: Runner version v2.334.0 is deprecated and cannot receive messages.
+RestartCount = 11894
+```
+
+It registered successfully every time, was told its version was too old, exited,
+and was restarted forever. GitHub reported the runner `status=offline`. An
+earlier Renovate deploy run had been sitting queued, unnoticed, for well over a
+day.
+
+**Nothing alerted**, for four independent reasons:
+
+1. **hestia has no per-container metrics.** Its four scrape targets are
+   node-exporter (`:9100`), netscope (`:9101`), thermalscope (`:9102`),
+   ipmi-exporter (`:9290`). There is no cAdvisor and no docker exporter —
+   `count({__name__=~"container_.*", instance="hestia"})` returns an empty
+   vector. The node-exporter runs `--collector.disable-defaults
+   --collector.textfile`; it is a textfile courier, deliberately.
+2. **The Kubernetes-shaped alerts create false confidence.**
+   `ContainerCrashLoopBackOff` / `ContainerOOMKilled` / `ContainerHighCPU` in
+   `infra/configs/alerts/prometheus-rules.yaml` read `kube_pod_container_status_*`
+   and cAdvisor. hestia is not a node in this cluster. Those alert *names* read
+   as coverage that does not exist.
+3. **homelabscope's job model does not fit an event-driven pipeline.**
+   `homelabscope_job_*` is "last success + max-age budget". `deploy-hestia.yml`
+   fires on push: no cadence, no expected freshness, nothing to be late against.
+4. **A queued run is not a failed run.** GitHub emails on workflow *failure*. A
+   run nobody picks up never fails. Runner `status=offline` lives only in a
+   Settings page that nothing polls.
+
+## 4. Monitoring
+
+Alerts live in
+[`infra/configs/homelabscope/prometheus-rule.yaml`](../../../infra/configs/homelabscope/prometheus-rule.yaml),
+group `homelabscope.containers`. They are fed by the `homelabscope-heartbeat`
+container probe on hestia (docker socket, read-only), written to the
+node-exporter textfile collector and scraped through the existing
+`hestia-homelabscope` ScrapeConfig.
+
+```
+homelabscope_container_running{name="gha-runner"}          1 = running, 0 = not
+homelabscope_container_restarts_total{name="gha-runner"}   docker RestartCount (counter)
+homelabscope_container_last_exit_code{name="gha-runner"}   docker .State.ExitCode
+homelabscope_container_started_seconds{name="gha-runner"}  current instance start, epoch
+homelabscope_container_health{name="gha-runner"}           1 healthy / 0 unhealthy /
+                                                           2 starting; absent with no
+                                                           healthcheck
+homelabscope_container_probe_success                       1 = docker socket reachable
+```
+
+There is **no** completed-jobs counter and there will not be one. `docker
+inspect` exposes only the *last* exit, never a history, so N restarts between
+two polls would all be attributed to one observed exit code — the emitter
+refuses to fabricate that and publishes `last_exit_code` instead.
+
+| Alert | Expression | For | Severity |
+|---|---|---|---|
+| `HomelabscopeContainerDown` (`lifecycle: ephemeral`) | `homelabscope_container_running{name="gha-runner"} == 0` | 30m | critical |
+| `HomelabscopeContainerRestartLoop` (`lifecycle: ephemeral`) | `increase(homelabscope_container_restarts_total{name="gha-runner"}[1h]) > 100 or (increase(homelabscope_container_restarts_total{name="gha-runner"}[1h]) > 10 and max_over_time(homelabscope_container_last_exit_code{name="gha-runner"}[5m]) > 0)` | 10m | critical |
+| `HomelabscopeContainerMetricAbsent` | `absent(homelabscope_container_running{name="gha-runner"}) or absent(...{name="homelabscope-heartbeat"})` | 1h | critical |
+
+Long-lived hestia containers get the same pair with `lifecycle: long-lived`, a
+15m `for:`, and a `> 5` restart threshold.
+
+**Why the runner's numbers differ so much from every other container:**
+
+- **`for: 30m` on down.** The real gap between ephemeral jobs is a few *seconds*,
+  but the probe latches whatever it sampled for a full emit interval (60s for
+  the container probe), so one unlucky mid-restart sample pins `running=0` for a
+  minute of series. 30m needs a long unbroken run of such samples — implausible
+  for a seconds-wide window — while still catching a dead runner inside the
+  hour. Note this rule **cannot** see a crash loop: Docker reports
+  `.State.Running = true` while a container sits in restart backoff, so a
+  looping runner still reads `running=1`. The restart-loop rule covers that.
+- **`increase()`, not `delta()` or `resets()`.** `increase()` applies
+  counter-reset detection, so it survives `RestartCount` returning to 0 when the
+  container is *recreated* (image bump, SCALE `app.update`). `delta()` has no
+  reset detection and goes negative across a recreate, masking exactly the event
+  you want. `resets()` counts recreates only and would have scored **zero** on
+  2026-08-18, which was restart-policy churn within one container life.
+- **Two arms, not one threshold.** For an ephemeral runner a restart is the
+  *success* path, so rate alone cannot separate "restarting and doing work" from
+  "restarting and completing nothing". The exit code can, exactly:
+
+  | | restarts/hour | `last_exit_code` | arm |
+  |---|---|---|---|
+  | healthy 10-job deploy | ~9 | `0` | neither — silent |
+  | Renovate merge storm | tens | `0` | neither — silent |
+  | slow loop at the 60s backoff cap | ~60 | non-zero | **qualified (`> 10`)** |
+  | fast loop, ~1 restart/sec | ~3600 | non-zero | **rate-only (`> 100`)** |
+
+- **Why the exit code discriminates.** Docker zeroes `.State.ExitCode` when a
+  container enters the running state and sets it to the real code while the
+  container sits in restart backoff — so a non-zero sample means "in crash
+  backoff right now". The rule does not depend on that reading being exact:
+  even if the previous code were latched across the running window, a healthy
+  `--ephemeral` runner exits **0** after every completed job (measured:
+  `RestartCount` 0 → 9 across a 10-job deploy), so non-zero can only come from
+  an abnormal exit. Healthy busy is `0` either way.
+- **`> 10` on the qualified arm.** 10/hour is safe *only* because of the
+  exit-code conjunction — a 10-job deploy is 9 restarts at exit 0 and fails both
+  conjuncts. It is reached ~10 minutes into a 60s-cap loop, so with `for: 10m`
+  the alert pages ~20 minutes in.
+- **`> 100` on the rate-only arm, kept.** It catches a pathological loop whose
+  exits are 0, and it is what the rule degrades to if `last_exit_code` ever
+  stops being emitted. 100/hour is ~2× above the busiest plausible legitimate
+  hour and ~36× below the observed fast loop (`RestartCount` hit 11894).
+- **`max_over_time(...[5m])` with `for: 10m`, window deliberately shorter than
+  the `for:`.** A single non-zero sample at time *s* makes the exit-code half
+  true only for `[s, s+5m]` — five minutes, which cannot satisfy a ten-minute
+  `for:`. So a one-off abnormal exit during a busy deploy hour can never page;
+  firing requires abnormal exits *recurring* across >10 minutes. `max_over_time`
+  rather than an instant read or `min_over_time` because at the 60s cap roughly
+  1 sample in 60 lands mid-exec and reads 0, which would flap the `for:` timer.
+
+**The backoff-cap gap is closed.** The previous bare `> 100` could not see a
+slow crash loop pinned at Docker's 60s restart-backoff cap: it tops out near
+60/hour and stayed under the threshold forever, leaving the case to the
+off-cluster runner-canary workflow (plan §B) and its ~2h latency. The qualified
+arm catches it in ~20 minutes. The canary stays — it is off-cluster and
+therefore survives failures this rule cannot see — but it is no longer the only
+thing standing between a slow loop and a silent deploy queue.
+
+`homelabscope_container_health` is deliberately **not** alerted on. The encoding
+is now settled (1 healthy / 0 unhealthy / 2 starting, **absent** when the
+container declares no healthcheck), but no hestia container this rule file
+targets declares a healthcheck yet, so there is nothing for it to watch.
+
+Routing: `severity: critical` → `email-critical` → `gjcourt+critical@gmail.com`,
+`repeat_interval` 4h. It pages.
+
+**Dashboard (homelabscope, "Containers on hestia").** The dashboard applies the
+same lifecycle split, so a by-design restart is not shown as red. A hidden
+constant dashboard variable `$ephemeral` (currently `gha-runner`) lists the
+ephemeral containers. It mirrors the `lifecycle: ephemeral` alert arms above, so
+change both together. The "Restart status" column and the "Containers failing"
+stat use this rule:
+
+| Restart status | Long-lived container | Ephemeral container |
+|---|---|---|
+| **failing** (red) | 3+ restarts in 24 h | 3+ restarts in 24 h **and** a non-zero `last_exit_code` seen in 24 h, **or** >100 restarts in the last hour |
+| restarted (orange) | 1–2 restarts in 24 h | — |
+| normal (ephemeral) | — | any other restart count |
+| none | 0 | 0 |
+
+The "Restarts, 24 h" count is a plain number and has no colour. The verdict is in
+the status column. The dashboard is more sensitive than the alert: it has a
+24 h window and no `for:`, so one recurring-exit hour shows red. It does not
+page.
+
+## 5. Diagnosis
+
+Symptoms in rough order of how you'll notice them:
+
+| Symptom | Check |
+|---|---|
+| A `deploy-hestia` run is stuck **Queued** | `gh run list --workflow=deploy-hestia.yml` |
+| Runner shows **Offline** | `https://github.com/gjcourt/homelab/settings/actions/runners` |
+| Deploy "succeeded" but nothing changed | §7 |
+
+```bash
+# Is it running, and how many times has it restarted?
+ssh truenas_admin@10.42.2.10 \
+  'docker inspect ix-gha-runner-runner-1 --format "{{.State.Status}} restarts={{.RestartCount}} image={{.Config.Image}}"'
+
+# What is it saying on each start?
+ssh truenas_admin@10.42.2.10 'docker logs --tail 100 ix-gha-runner-runner-1'
+```
+
+Log signatures:
+
+| Log line | Meaning | Fix |
+|---|---|---|
+| `Runner version vX is deprecated and cannot receive messages` | GitHub raised its minimum version; `--disableupdate` blocks self-upgrade | §6 — bump the digest, manual deploy |
+| `curl: (22) The requested URL returned error: 403` | `ACCESS_TOKEN` lacks `Administration` (fine-grained) / `repo` (classic) | Rotate the PAT with correct scopes |
+| `Listening for Jobs` then immediate exit | Normal ephemeral completion, not a fault | Nothing |
+| Nothing at all / container absent | App stopped or removed in SCALE | Start it; check `HomelabscopeContainerMetricAbsent` |
+
+## 6. Upgrading the runner
+
+### 6.1 Automatic: the `gha-runner-watchdog` app (HOMELAB-108)
+
+The runner cannot recreate its own container mid-job, so `deploy-hestia.yml`
+skips this path. HOMELAB-106 applied the pin from a workflow that ran **on**
+the runner, which could not help once the runner stopped taking jobs. Since
+HOMELAB-108 a separate always-on Custom App does it from beside the runner:
+[`hosts/hestia/gha-runner-watchdog/`](../../../hosts/hestia/gha-runner-watchdog/docker-compose.yml),
+image source [`images/gha-runner-watchdog/`](../../../images/gha-runner-watchdog/).
+
+Every 5 minutes `watchdog.sh` `nsenter`s into hestia's host namespaces and runs
+one tick of [`watchdog.py`](../../../images/gha-runner-watchdog/watchdog.py)
+with the host `python3` and `truenas_api_client`, the same method as §6.2. The
+container is `privileged` with `pid: host`; that is host root, which the runner
+already holds through `/var/run/docker.sock`. No secret is configured: the
+GitHub token is the runner's own `ACCESS_TOKEN`, read from the stored app
+config in-process and never printed.
+
+One tick:
+
+1. Read the pin from `hosts/hestia/actions-runner/docker-compose.yml` on
+   `master` (the public raw URL). Git is the desired state.
+2. Ask GitHub for the runner's state. Record whether `ACCESS_TOKEN` was
+   accepted and when it expires (§6.3). A rejected token stops the tick:
+   recreating the runner cannot fix it.
+3. **Drift** (stored config or live container not on the pin): apply when the
+   runner is idle (GitHub online and not busy, and no `Runner.Worker` in the
+   container, on two samples 10 s apart). Busy: try again next tick. Dead
+   (offline 15 min, no job running): apply anyway, because a dead runner never
+   goes idle. That is the deprecated-version case.
+4. **Dead on the pin** (GitHub has reported `hestia` offline or missing for
+   15 min, no job running): recreate it on the pin. The ephemeral runner
+   registers itself afresh at start, which also replaces a retired
+   registration. At most once an hour; a runner still dead after that is
+   reported as a failure and left for you.
+5. Apply and recover are the same operation: `app.stop` -> `app.update` with
+   the stored config, changing **only the image** (so the masked
+   `ACCESS_TOKEN` / `TRUENAS_API_KEY` survive) -> `app.start`, then verify for
+   up to 10 min that the new container runs the pin and GitHub reports it
+   online. If the update fails after the stop, it starts the app again on the
+   old config.
+
+The between-jobs gap (the ephemeral runner deregisters and restarts after
+every job) is why "offline" needs 15 minutes before anything happens.
+
+Metrics (node-exporter textfiles on hestia):
+
+| Series | Meaning |
+|---|---|
+| `homelabscope_job_*{job="gha-runner-image-apply"}` | heartbeat; `last_success` moves while the runner is on the pin and online; 6 h `max_age` |
+| `homelabscope_gha_runner_token_valid{runner="hestia"}` | 1 if GitHub accepted `ACCESS_TOKEN` on the last tick |
+| `homelabscope_gha_runner_token_expiry_seconds{runner="hestia"}` | when it expires; absent for a token with no expiry |
+
+| Alert | Fires when |
+|---|---|
+| `HomelabscopeGhaRunnerApplyFailed` | an apply or recovery failed, the runner is still dead after one, or the token was rejected (`last_status == 1`, 5m) |
+| `HomelabscopeGhaRunnerTokenExpiring` | `ACCESS_TOKEN` expires within 14 days (§6.3) |
+| `HomelabscopeGhaRunnerTokenInvalid` | GitHub rejected `ACCESS_TOKEN`, 15m (§6.3) |
+| `HomelabscopeJobStale` | not on the pin and online for 6 h (runner busy for hours, watchdog down) |
+| `HomelabscopeJobMetricAbsent` | the heartbeat has never been written or has vanished, 1h |
+| `HomelabscopeContainerDown{name="gha-runner-watchdog"}` | the watchdog container is not running, 15m |
+
+Where to look:
+
+```bash
+ssh truenas_admin@10.42.2.10 'sudo docker logs --tail 50 gha-runner-watchdog'
+```
+
+Each tick logs one line: `desired=… config=… running=… online=… worker=…
+drift=… -> ok|wait|defer|apply|recover|cooldown`.
+
+Dry run (decides, changes nothing, writes no metric), from a hestia shell:
+
+```bash
+sudo docker exec -e DRY_RUN=1 gha-runner-watchdog \
+  sh -c 'nsenter -t 1 -m -u -i -n -p -- /usr/bin/python3 - < /app/watchdog.py'
+```
+
+Limits, on purpose:
+
+- **Image only.** Any other change to the runner compose (env vars, volumes)
+  still needs §6.2 with the full compose in mind.
+- **Residual race.** GitHub can assign a job in the second between the last
+  idle check and `app.stop`; that job is lost and needs a re-run. Queued jobs
+  wait and the new runner takes them.
+- **A pinned version GitHub has retired** cannot be fixed by recreating it. The
+  recovery fails, `HomelabscopeGhaRunnerApplyFailed` fires, and the fix is a
+  newer pin (Renovate's bump, or §6.2 step 1).
+- **A rejected or expired token** is never "fixed" by recreating; rotate it
+  (§6.3).
+- **The watchdog's own updates** go through `deploy-hestia.yml`, which needs a
+  working runner. A dead runner leaves the watchdog on its current image, which
+  is fine: the watchdog is what brings the runner back.
+
+### 6.2 Manual: upgrading a deprecated runner
+
+Use this when §6.1 cannot fix it (the watchdog is down, or the pin itself is
+retired) or for a compose change other than the image.
+
+1. Find the current digest for the pinned tag:
+   ```bash
+   docker manifest inspect myoung34/github-runner:ubuntu-noble \
+     | jq -r '.manifests[] | select(.platform.architecture=="amd64" and .platform.os=="linux") | .digest'
+   ```
+2. Update the `image:` pin in `hosts/hestia/actions-runner/docker-compose.yml`,
+   branch + PR + merge as normal. `deploy-hestia.yml` skips this path; with a
+   healthy runner §6.1 applies it, otherwise continue below.
+3. Apply it by hand, either:
+   - SCALE UI → Apps → `gha-runner` → Edit → paste the updated compose → Save; or
+   - from a machine with network access to hestia:
+     ```bash
+     TRUENAS_API_KEY=… scripts/truenas-update-app.sh gha-runner hosts/hestia/actions-runner/docker-compose.yml
+     ```
+     (`--dry-run` first to see the diff without calling `app.update`.)
+4. Verify the runner returns to **Idle** at
+   `https://github.com/gjcourt/homelab/settings/actions/runners`, then re-run any
+   queued deploy: `gh run list --workflow=deploy-hestia.yml`, `gh run rerun <id>`.
+
+**Do not "fix" this by setting `DISABLE_AUTO_UPDATE: "false"`.** It is
+presence-tested (§2.2) and will change nothing — `false` is a non-empty string and
+turns the flag ON. **Since 2026-11-08 the variable is set, so auto-update is off**
+and the running version is exactly the digest you applied. Confirm what is
+actually running (§7) rather than assuming the Git pin is live: Renovate bumps the
+pin in Git, and only §6.1 or step 3 applies it to hestia.
+
+#### Applying from a shell on hestia (2026-11-08 method)
+
+`app.update` with the Git compose would blank `ACCESS_TOKEN` / `TRUENAS_API_KEY`
+(Git holds `""`). Edit the stored config in place instead, on hestia, as root,
+without printing it:
+
+```python
+# sudo python3 apply.py   (truenas_api_client ships with TrueNAS 26.x)
+from truenas_api_client import Client
+with Client() as c:
+    cfg = c.call('app.config', 'gha-runner')
+    cfg['services']['runner']['image'] = 'myoung34/github-runner:ubuntu-noble@sha256:<digest from Git>'
+    c.call('app.stop', 'gha-runner', job=True)
+    c.call('app.update', 'gha-runner', {'custom_compose_config': cfg}, job=True)
+```
+
+then `sudo midclt call --job app.start gha-runner`. The stop first sidesteps the
+crash-loop no-op quirk (§7): on 2026-11-08 the update removed the old container
+and the start created a fresh one (`RestartCount` 0).
+
+### 6.3 Rotating the runner's `ACCESS_TOKEN`
+
+The runner exchanges `ACCESS_TOKEN` for a registration token every time it
+starts, which is after every job. When it expires or is revoked the runner
+cannot register and every hestia deploy queues. The watchdog reports it:
+`HomelabscopeGhaRunnerTokenExpiring` 14 days ahead (if the token has an expiry
+date), `HomelabscopeGhaRunnerTokenInvalid` once GitHub rejects it.
+
+1. Create the new token at <https://github.com/settings/personal-access-tokens>
+   (fine-grained, repository `gjcourt/homelab` only: **Administration:
+   read and write** to register runners, **Metadata: read**). Set an expiry;
+   the alert gives you two weeks' notice.
+2. SCALE UI → Apps → `gha-runner` → Edit → set `ACCESS_TOKEN` to the new value
+   (masked env var) → Save. Do not paste it into Git or a shell history.
+   Saving recreates the container, so do it while no deploy is running.
+3. Within 5 min the watchdog logs `online=True`, and
+   `homelabscope_gha_runner_token_valid` is 1 with the new expiry. Revoke the
+   old token.
+
+The TrueNAS API key in the same app (`TRUENAS_API_KEY`, used by
+`deploy-hestia.yml`) is not watched here.
+
+## 7. Related failure: a deploy that reports success and does nothing
+
+`app.update` can return `SUCCESS` without taking effect against a crash-looping
+container — a known, documented quirk
+([`docs/operations/2026-05-14-truenas-app-update-quirk.md`](../2026-05-14-truenas-app-update-quirk.md)).
+Confirm what is actually running rather than trusting the workflow's green tick:
+
+```bash
+ssh truenas_admin@10.42.2.10 'docker inspect ix-<app>-<service>-1 --format "{{.Config.Image}}"'
+```
+
+Diff against the compose file in Git. Post-apply verification inside
+`scripts/truenas-update-app.sh` is plan §C1; the drift check is §C2.
+
+## 8. Escalation / graduation
+
+When ≥2 self-hosted-runner workflows exist, or this Custom App becomes a
+maintenance burden, replace it with
+[`actions-runner-controller`](https://github.com/actions/actions-runner-controller)
+in `melodic-muse` — see
+[the design plan's graduation path](../../plans/2026-05-02-hestia-gha-runner.md#graduation-path--option-2b-actions-runner-controller-in-talos).
+That removes both surprises in §2 at once: ARC's ephemeral model is explicit, and
+runner version management stops being a manual digest bump on an excluded path.

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# gh with a fresh GitHub App installation token. When no App is configured
+# (e.g. a local `docker run`), fall through to gh's own auth.
+if [[ -n "${GITHUB_APP_ID:-}" && -z "${GH_TOKEN:-}" ]]; then
+  GH_TOKEN="$(/usr/local/bin/github-app-token)" || exit 1
+  export GH_TOKEN
+fi
+exec /usr/local/lib/gh/gh "$@"

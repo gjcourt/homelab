@@ -66,16 +66,10 @@ ingress:
     originRequest:
       originServerName: burntbytes.com
 
-  # Cadence — self-hosted Shopify app (agent-payment discovery demo).
-  #
-  # ⚠️ ORPHAN as of 2026-08-12: this hostname is published but there is NO
-  # production HTTPRoute for it — #1261 landed the tunnel route ahead of the app,
-  # and the app PR (#1262) is blocked on three findings, one of which is that it
-  # would expose an unauthenticated merchant dashboard (no Authelia rule, and
-  # default_policy is bypass). It therefore does not meet the bar stated at the
-  # top of this file. Left in place pending the #1262 decision — remove it if
-  # that PR is closed, and re-land it together with the app (and its auth
-  # posture) if it proceeds.
+  # Cadence — the marketing page (apps/production/cadence-site, route
+  # cadence-site-https). Public static page: no auth needed. When the Cadence
+  # Shopify app deploys (#1262), its paths route on this same hostname and need
+  # their own auth posture decided then.
   - hostname: cadence.burntbytes.com
     service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
     originRequest:

@@ -12,8 +12,12 @@ Navidrome is deployed as a standard Kubernetes `Deployment` with a single replic
 - **Networking**: Exposed via Cilium Gateway API (`HTTPRoute`).
 
 ## 3. URLs
-- **Staging**: https://music.stage.burntbytes.com
-- **Production**: https://music.burntbytes.com
+- **Staging**: https://navidrome.stage.burntbytes.com
+- **Production**: https://navidrome.burntbytes.com. `music.burntbytes.com` routed here until
+  2026-11-06, when Music Assistant took that name (MA plan step 2). Point Subsonic clients at
+  `navidrome.burntbytes.com`.
+- Every hostname that routes to Navidrome gets an Authelia `one_factor` rule (see
+  Authentication below).
 
 ## 4. Configuration
 - **Environment Variables**:
@@ -60,34 +64,34 @@ To verify Navidrome is working:
   - Check the pod logs for API rate limiting or authentication errors.
 
 ## 10. Authentication
-Navidrome is configured to use Authelia for single sign-on (SSO). The authentication flow is handled by a globally injected Envoy `ext_authz` filter on the Cilium Gateway.
+**Browser: Authelia single sign-on.** `navidrome.` and `navidrome.stage.` sit behind the
+gateway's Authelia `ExternalAuth` filter. One Authelia login goes straight into Navidrome: the
+gateway sets `Remote-User` and Navidrome trusts it (reverse-proxy auth). See
+[Gateway authentication](../../architecture/gateway-auth.md).
 
-### Flow Diagram
+**Subsonic clients and Music Assistant** use their own Navidrome credentials on `/rest`, which is
+not gated. Snapcast's mopidy talks to the in-cluster Service and never goes through the gateway.
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant G as Gateway (Cilium)
-    participant A as Authelia
-    participant N as Navidrome
+What makes reverse-proxy auth safe (all three must hold; `apps/{production,staging}/navidrome/`):
+- `ND_EXTAUTH_TRUSTEDSOURCES` is the four per-node Cilium ingress IPs, never the private ranges.
+  Navidrome checks the direct peer, so a client can't spoof it. A rebuilt node can get a new
+  ingress IP (`kubectl get ciliumnode -o custom-columns=N:.metadata.name,I:.spec.ingress`); SSO
+  then fails closed to Navidrome's own login until the list is updated.
+- The gated rule sets `Remote-User` from Authelia, replacing any client-sent value.
+- The ungated `/rest` and `/auth` rules remove a client-sent `Remote-User`. Navidrome's Subsonic
+  API also honours the header (v0.61.2 `server/subsonic/middlewares.go:61`).
 
-    U->>G: HTTP Request (music.burntbytes.com)
-    G->>A: Envoy ExtAuthz Check
-    alt Session Valid
-        A-->>G: 200 OK (Header: Remote-User=user)
-        G->>N: Request + Remote-User
-        N-->>G: 200 OK (App Response)
-        G-->>U: 200 OK
-    else Session Invalid
-        A-->>G: 401 Unauthorized (Redirect to Login)
-        G-->>U: 302 Found (Location: auth.burntbytes.com)
-    end
-```
+**`/auth` also drops `Cookie`.** On a failed login Navidrome logs every request header
+(`server/auth.go:56`), which would put the Authelia session cookie in the pod log. That cookie
+is valid on every gated `*.burntbytes.com` host. The login endpoints read credentials from the
+body only, so they don't need it.
 
-### Configuration Details
+**An Authelia user with no Navidrome account is created on first visit.** Only Authelia's own
+users can reach the gated rule.
 
-- **Global Envoy Filter**: `infra/configs/gateway/cilium-envoy-config-production.yaml` defines the `ext_authz` filter pointing to Authelia. See [Gateway Authentication Architecture](../architecture/gateway-auth.md) for details on why and how this works.
-- **Authelia Policy**: `apps/production/authelia/configuration.yaml` defines the rule for `music.burntbytes.com` (Policy: `one_factor`) which triggers the header injection.
-- **Navidrome Config**: `ND_EXTAUTH_USERHEADER` is set to `Remote-User` and trusted proxies are configured via `ND_EXTAUTH_TRUSTEDSOURCES`.
-
-See [Navidrome Documentation](https://www.navidrome.org/docs/getting-started/extauth-quickstart/) for more details on External Authentication.
+**History (2026-11-03):** reverse-proxy auth was turned off because the old gateway filter never
+ran (Cilium 1.19) and the header was trusted from every private range: any LAN client could send
+`Remote-User: <name>` and be logged in as that user, and an unknown name was auto-created (on
+stage, as the first user, an admin). Staging re-enabled it with the conditions above once
+Cilium 1.20's `ExternalAuth` worked (#1828), and the forged-header checks passed there before
+prod got it.

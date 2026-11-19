@@ -4,6 +4,9 @@ namespace: homeassistant-stage
 resources:
   - ../../base/homeassistant/
   - httproute.yaml
+  # /config/secrets.yaml (agent-desk's webhook id). SOPS-encrypted by the
+  # operator from its .example; Flux decrypts it at apply time.
+  - secret-homeassistant-secrets.yaml
 
 labels:
   - pairs:
@@ -12,6 +15,26 @@ labels:
     includeSelectors: false
 
 patches:
+  # Wyoming TTS (wyoming-piper, lab brief 03-036) in this environment. Added per
+  # overlay rather than in base so prod HA can only reach prod Piper and staging
+  # HA only staging Piper. Kept first in the list so it doesn't collide with other
+  # egress patches appended at the end (e.g. kokoro, #1532); order doesn't matter
+  # for /spec/egress/- adds.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: homeassistant
+    patch: |
+      - op: add
+        path: /spec/egress/-
+        value:
+          toEndpoints:
+            - matchLabels:
+                app: wyoming-piper
+                k8s:io.kubernetes.pod.namespace: wyoming-piper-stage
+          toPorts:
+            - ports:
+                - port: "10200"
+                  protocol: TCP
   - target:
       kind: Namespace
       name: homeassistant
@@ -19,3 +42,65 @@ patches:
       - op: replace
         path: /metadata/name
         value: homeassistant-stage
+  # Kokoro TTS (lab brief 03-036) in this environment, for the openai_tts
+  # integration. Per overlay so each Home Assistant reaches only its own.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: homeassistant
+    patch: |
+      - op: add
+        path: /spec/egress/-
+        value:
+          toEndpoints:
+            - matchLabels:
+                app: kokoro
+                k8s:io.kubernetes.pod.namespace: kokoro-stage
+          toPorts:
+            - ports:
+                - port: "8880"
+                  protocol: TCP
+  # agent-desk-stage posts its notices to the webhook (agent-desk plan,
+  # "Notifications"). Per overlay so each dispatcher reaches only its own HA.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: homeassistant
+    patch: |
+      - op: add
+        path: /spec/ingress/-
+        value:
+          fromEndpoints:
+            - matchLabels:
+                k8s:io.kubernetes.pod.namespace: agent-desk-stage
+          toPorts:
+            - ports:
+                - port: "8123"
+                  protocol: TCP
+  # Music Assistant in snapcast-stage (MA plan, step 1 announcement test). HA
+  # drives MA over its API on 8095; MA fetches TTS audio back from HA on 8123.
+  # Stage only: staging HA reaches staging MA, never prod.
+  - target:
+      kind: CiliumNetworkPolicy
+      name: homeassistant
+    patch: |
+      - op: add
+        path: /spec/egress/-
+        value:
+          toEndpoints:
+            - matchLabels:
+                app: snapcast
+                k8s:io.kubernetes.pod.namespace: snapcast-stage
+          toPorts:
+            - ports:
+                - port: "8095"
+                  protocol: TCP
+      - op: add
+        path: /spec/ingress/-
+        value:
+          fromEndpoints:
+            - matchLabels:
+                app: snapcast
+                k8s:io.kubernetes.pod.namespace: snapcast-stage
+          toPorts:
+            - ports:
+                - port: "8123"
+                  protocol: TCP

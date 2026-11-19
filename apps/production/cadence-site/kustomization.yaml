@@ -1,0 +1,30 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cadence-site-prod
+resources:
+  - ../../base/cadence-site/
+  - httproute.yaml
+
+labels:
+  - pairs:
+      env: production
+      app.kubernetes.io/instance: production
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Namespace
+      name: cadence-site
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: cadence-site-prod
+  # Public page: two replicas, spread across nodes by the base's
+  # topologySpreadConstraints, for zero-downtime rollouts.
+  - target:
+      kind: Deployment
+      name: cadence-site
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2

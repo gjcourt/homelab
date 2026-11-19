@@ -237,6 +237,224 @@ spec:
     # HomelabscopeJobMetricAbsent alerts. See
     # docs/plans/2026-07-04-homelabscope.md.
     # -------------------------------------------------------------------------
+    # Litestream — SQLite replication to S3 (vitals)
+    #
+    # The vitals CNPG cluster was retired in #1430; #1449 replaced its WAL
+    # archiving with a litestream sidecar replicating /data/vitals.db to S3.
+    # THE POD BEING READY SAYS NOTHING ABOUT THE BACKUP: litestream retries S3
+    # errors instead of exiting, and /metrics answers 200 regardless, so a
+    # revoked key or a bucket 403 leaves everything green while nothing lands
+    # in S3.
+    #
+    # ⚠️ Litestream exposes NO "last successful sync" timestamp — checked
+    # against the live 0.5.17 endpoint. The metrics available are
+    # litestream_sync_count, litestream_sync_error_count, litestream_txid,
+    # litestream_replica_operation_total{operation}, litestream_db_size and
+    # litestream_disk_full. Everything below is built from those.
+    #
+    # ⚠️ TWO TRAPS THIS GROUP HAD TO DESIGN AROUND, both found in review:
+    #
+    #   1. `increase(...{operation="PUT"}[...]) == 0` CANNOT MATCH A MISSING
+    #      SERIES. litestream creates the PUT child counter on first use, so if
+    #      credentials are revoked before the container's first successful PUT
+    #      the series never exists, `== 0` matches nothing, and the rule is
+    #      silent in exactly the scenario it was written for. Hence `unless`,
+    #      which fires when the healthy-evidence series is absent OR flat.
+    #
+    #   2. A COMPARISON AGAINST LOCAL WRITES CANNOT FIRE ON AN IDLE DATABASE,
+    #      and this one is nearly idle. The 30m rule is therefore paired with a
+    #      24h one so a database written to once a day is still covered.
+    #      There is NO time-only floor. One was removed (#1450), put back
+    #      (#1454) on the belief that the 24h snapshot uploads regardless of
+    #      writes, and removed again: litestream 0.5.17 skips the snapshot when
+    #      nothing changed since the last one. Staging's level-9 listing shows
+    #      snapshots at 00:00 on 09-19 and 09-20, each with new writes to
+    #      capture (the last write landed 09-19 00:20), then none for the next
+    #      seven days. The staging observation #1454 relied on
+    #      (00:00:01Z snapshot, last write 21:48Z) had new data to snapshot, so
+    #      it could not distinguish the two behaviours. See the comment on
+    #      LitestreamReplicationStalledDaily below.
+    #
+    # Severity: prod replication failures are `critical` and reach
+    # gjcourt+critical@. `warning` routes to gjcourt+alerts@, which is filtered
+    # out of the inbox — the pvc-writeprobe rules record that lesson twice ("the
+    # operator found the outage first, twice"). An off-site copy that stopped
+    # being written is data at risk, so it pages.
+    #
+    # ⚠️ STAGING IS DELIBERATELY QUIETER. Alertmanager routes
+    # namespace =~ ".+-stage" + severity = warning to the null receiver, so the
+    # staging rule below is visible in the Prometheus/Alertmanager UI and sends
+    # no mail. That is the right trade for a preview environment rebuilt from
+    # master + open PRs — but it means a broken staging replica is only ever
+    # found by looking, which matters because staging is where the restore is
+    # meant to be rehearsed.
+    # -------------------------------------------------------------------------
+    - name: litestream
+      rules:
+        # The slow-write path. The 30m rule below cannot fire if writes arrive
+        # less often than its window — and this database is nearly idle (the
+        # PostgreSQL cluster it replaced held zero rows for seven months). Same
+        # comparison over 24h: if ANY local write landed in a day and NOTHING
+        # was uploaded in that day, replication is broken and the only copy of
+        # those writes is the RWO volume.
+        #
+        # ⚠️ Deliberately NOT an absolute "no upload in 26h" floor. That was
+        # tried TWICE and measured false both times.
+        #
+        # The second attempt shipped as LitestreamNoRecentUpload (#1454) and
+        # paged critical continuously from 2026-09-19 on a healthy replica whose
+        # S3 max_txid matched the local litestream_txid exactly. Its
+        # premise — "snapshot.interval is 24h, so a healthy replica uploads at
+        # least once a day even with nobody touching the database" — is not how
+        # litestream 0.5.x behaves. Measured on 2026-09-22 with v0.5.17:
+        #
+        #   delta(litestream_txid[24h])             prod 0    stage 0
+        #   increase(...operation="PUT"[24h])        stage 0
+        #   litestream_replica_operation_total      prod: series absent entirely
+        #
+        # 66h of uptime, sidecar Ready, zero errors in the log, snapshot.interval
+        # set to 24h, and no upload. An idle database produces no LTX frames, so
+        # there is nothing to snapshot and no PUT ever increments. On prod the
+        # counter never existed, so `unless` could not suppress anything and the
+        # rule fired permanently.
+        #
+        # If an absolute floor is ever wanted again, it needs a synthetic write
+        # (a daily heartbeat row) to make idle indistinguishable from broken —
+        # not a time-only comparison against a counter that idle never moves.
+        # Both rules therefore key off local writes, which means a broken
+        # replica on a TRULY idle database is not detected until the next
+        # write. That is a real gap, and it is bounded by the thing that
+        # matters: detection is tied to data actually being at risk.
+        - alert: LitestreamReplicationStalledDaily
+          expr: >
+            (delta(litestream_txid{namespace="vitals-prod"}[24h]) > 0)
+            unless on (namespace, pod)
+            (increase(litestream_replica_operation_total{namespace="vitals-prod", operation="PUT"}[24h]) > 0)
+          for: 1h
+          labels:
+            severity: critical
+          annotations:
+            summary: "litestream uploaded nothing in 24h despite local writes ({{ $labels.namespace }}/{{ $labels.pod }})"
+            description: >
+              The local SQLite database took at least one write in the last 24h and litestream has uploaded nothing to S3 in that time. Those writes exist only on the vitals-data PVC. Check `kubectl logs -n {{ $labels.namespace }} {{ $labels.pod }} -c litestream` for credential or bucket errors, then docs/operations/apps/vitals.md.
+        # Sustained sync failures. A rate threshold rather than `> 0`, for the
+        # reason LokiPushErrors documents: increase(...[15m]) stays above zero
+        # for a full 15m after ONE transient 5xx, so `> 0` with a short `for`
+        # pages on a blip and teaches the operator to ignore the alert.
+        - alert: LitestreamSyncErrors
+          expr: >
+            rate(litestream_sync_error_count[15m]) > 0.01
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "litestream is failing to sync {{ $labels.namespace }}/{{ $labels.pod }} to S3"
+            description: >
+              litestream has been erroring on sync for {{ $labels.db }} in {{ $labels.namespace }} at a sustained rate for 15m. It retries rather than exiting, so the pod stays Ready and the app keeps serving while the backup falls behind. Warning rather than critical because LitestreamReplicationStalled and LitestreamReplicationStalledDaily catch the consequence; this one is the early signal.
+        # Writes are landing locally but not reaching S3. `unless` (not `== 0`)
+        # so that a missing PUT counter — the never-succeeded case — fires too.
+        - alert: LitestreamReplicationStalled
+          expr: >
+            (delta(litestream_txid{namespace="vitals-prod"}[30m]) > 0)
+            unless on (namespace, pod)
+            (increase(litestream_replica_operation_total{namespace="vitals-prod", operation="PUT"}[30m]) > 0)
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "litestream is not replicating {{ $labels.namespace }}/{{ $labels.pod }} despite local writes"
+            description: >
+              The local SQLite transaction id advanced in the last 30m but litestream made no PUT to S3 in the same window — the database is taking writes that are not reaching the replica, so a restore would lose them. ⚠️ This rule cannot fire on an idle database; LitestreamReplicationStalledDaily covers writes that arrive less often than 30m, and a broken replica on a fully idle database is a documented, accepted gap (see the group comment).
+        # Silence is not health. Asserts on every metric the rules above key
+        # off, NOT just one: if a litestream upgrade renames one of them, the
+        # rule that depends on it goes permanently dead while a single-metric
+        # guard stays quiet. litestream_replica_operation_total is deliberately
+        # excluded — it legitimately does not exist until the first PUT.
+        - alert: LitestreamMetricsAbsent
+          expr: >
+            absent(litestream_sync_count{namespace="vitals-prod"})
+            or absent(litestream_txid{namespace="vitals-prod"})
+            or absent(litestream_sync_error_count{namespace="vitals-prod"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "litestream metrics have disappeared for vitals-prod"
+            description: >
+              A metric the litestream alerts depend on has been missing for 15m. Either the sidecar is gone, the PodMonitor stopped matching, the CNP is dropping the scrape (check `up` and the :9090 ingress rule in apps/base/vitals/networkpolicy.yaml), or a litestream upgrade renamed it. While this fires, the rules that use the missing metric cannot fire at all.
+        - alert: LitestreamDiskFull
+          expr: >
+            litestream_disk_full > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "litestream reports a full volume for {{ $labels.namespace }}/{{ $labels.pod }}"
+            description: >
+              litestream cannot write because a volume it uses is full, and SQLite writes will fail next. Check which one before acting — the database lives on the 1Gi vitals-data PVC, but the sidecar also writes to a 32Mi emptyDir at /tmp, and expanding the PVC does not help if /tmp is the full one.
+        # Staging: same 24h comparison, warning severity. Alertmanager routes
+        # staging warnings to the null receiver, so this never mails — it exists
+        # so "is the rehearsal environment's replica alive?" is answerable from
+        # Alertmanager instead of by exec'ing into a pod.
+        - alert: LitestreamReplicationStalledStaging
+          expr: >
+            (delta(litestream_txid{namespace="vitals-stage"}[24h]) > 0)
+            unless on (namespace, pod)
+            (increase(litestream_replica_operation_total{namespace="vitals-stage", operation="PUT"}[24h]) > 0)
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "staging litestream took writes but uploaded nothing in 24h"
+            description: >
+              The staging replica took local writes and uploaded nothing in 24h. Nothing important is lost — staging is disposable — but the restore rehearsal in docs/operations/apps/vitals.md would be rehearsing against a stale prefix.
+    # -------------------------------------------------------------------------
+    # bench-cloud: merges by the agents' GitHub App
+    #
+    # The default-branch-guard ruleset lets the bench-cloud App merge its own
+    # PR (a merge block would also block George's merges — option 2,
+    # 2026-09-27). Policy says it never merges; the hourly bench-merge-audit
+    # Job fails when it finds one in the last 25h. Critical: on homelab a merge
+    # is already deploying via Flux.
+    #
+    # Keyed on the CronJob, not kube_job_status_failed{job_name}: each hourly
+    # run is a new Job name, so a per-Job alert re-pages every hour as a NEW
+    # alert, and resolves in whatever gap the failed Job's TTL leaves before
+    # the next run. "Last scheduled run is newer than the last success" is one
+    # series that stays true across every failing run and turns false the
+    # moment a run succeeds. The `unless` arm covers a CronJob that has never
+    # succeeded (no last_successful_time series yet — e.g. the very first run
+    # finds a merge). `for: 10m` rides out a run in progress (seconds, or a few
+    # minutes when a node first pulls the large bench-cloud image).
+    #
+    # Also fires when the audit itself is broken (search/read errors, token
+    # revoked). Deliberately critical too: under option 2 this audit is the
+    # only control on App merges, so a blind audit is the same risk; the
+    # script retries once so a single GitHub blip does not page.
+    # -------------------------------------------------------------------------
+    - name: bench-cloud
+      rules:
+        - alert: BenchCloudAppMerged
+          expr: >
+            (
+              max by (namespace, cronjob) (kube_cronjob_status_last_schedule_time{namespace="renovate", cronjob="bench-merge-audit"})
+              > on (namespace, cronjob)
+              max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace="renovate", cronjob="bench-merge-audit"})
+            )
+            or
+            (
+              max by (namespace, cronjob) (kube_cronjob_status_last_schedule_time{namespace="renovate", cronjob="bench-merge-audit"})
+              unless on (namespace, cronjob)
+              max by (namespace, cronjob) (kube_cronjob_status_last_successful_time{namespace="renovate", cronjob="bench-merge-audit"})
+            )
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "bench-cloud[bot] merged a PR (or the merge audit failed)"
+            description: >
+              The latest hourly merge audit did not succeed: either the bench-cloud GitHub App merged a PR in the last 25h, or the audit itself could not run. Read the log of the newest bench-merge-audit Job — kubectl -n renovate get jobs --sort-by=.metadata.creationTimestamp, then kubectl -n renovate logs job/<name> — then revert the merge (on homelab it has already reached Flux) and read the task record in hestia:/mnt/main/agent-inbox/runs/. "MERGED-BY-APP" lines = a real merge; "FATAL"/"ERROR" = the audit is broken. Stays firing until a run succeeds, i.e. up to ~26h after a merge.
+    # -------------------------------------------------------------------------
     # Flux reconciliation health
     #
     # gotk_resource_info is an Info gauge (always 1) emitted by kube-state-metrics
@@ -284,3 +502,44 @@ spec:
             summary: "Flux GitRepository {{ $labels.exported_namespace }}/{{ $labels.name }} not ready"
             description: >
               GitRepository {{ $labels.exported_namespace }}/{{ $labels.name }} has been Ready=False for >15m — Flux can't fetch the source, so every Kustomization downstream is frozen at its last-applied revision. Check credentials and connectivity to the Git remote.
+    # -------------------------------------------------------------------------
+    # Slow-burn container restarts
+    #
+    # The gap this closes: kube-prometheus-stack's ContainerCrashLoopBackOff
+    # keys off kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"},
+    # which only becomes true once kubelet has entered *backoff* — i.e. a
+    # container failing fast and repeatedly. A container that runs happily for
+    # hours and then dies once is restarted immediately, never enters
+    # CrashLoopBackOff, and reports Ready=True the whole time in between. That
+    # class of failure was structurally invisible.
+    #
+    # Two live examples, both running for months with zero alerts:
+    #   - democratic-csi csi-driver: 550 restarts since 2026-07-03, killed by a
+    #     failing liveness probe every few hours (fixed in #1367).
+    #   - truenas-iscsi-exporter: SIGSEGV roughly every 9.6h since 2026-08-17,
+    #     each time after ~8h of clean operation (instrumented in #1368).
+    #
+    # Threshold rationale: restarts_total is per-POD, and an evicted/drained pod
+    # is *replaced* (new pod, counter resets to 0) rather than restarted — so
+    # node drains and rollouts do not trip this. A healthy container restarts
+    # zero times. Evaluated against live cluster data at 2026-08-29, `>= 2 in
+    # 24h` matched exactly the two containers above and nothing else, so this
+    # ships with a measured false-positive rate of zero rather than a guess.
+    #
+    # `for: 1h` is deliberate dampening — this is a chronic-condition alert, not
+    # a page. Severity warning routes to gjcourt+alerts@.
+    # -------------------------------------------------------------------------
+    - name: container-restarts
+      rules:
+        - alert: ContainerRestartingSlowly
+          expr: >
+            sum by (namespace, pod, container) (
+              increase(kube_pod_container_status_restarts_total[24h])
+            ) >= 2
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container {{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) is restarting repeatedly"
+            description: >
+              {{ $labels.container }} in {{ $labels.namespace }}/{{ $labels.pod }} has restarted {{ $value | printf "%.0f" }} times in 24h without ever entering CrashLoopBackOff, so ContainerCrashLoopBackOff cannot see it. The pod may be reporting Ready between restarts. Check `kubectl logs {{ $labels.pod }} -n {{ $labels.namespace }} -c {{ $labels.container }} --previous` and the container's lastState.terminated exitCode/reason.

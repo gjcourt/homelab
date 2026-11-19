@@ -8,5 +8,4 @@ metadata:
     env: production
 data:
   ADDR: ":8080"
-  DB_HOST: vitals-db-production-cnpg-v1-rw.vitals-prod.svc.cluster.local
   WEB_DIR: "/web"

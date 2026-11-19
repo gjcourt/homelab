@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> GitOps repo for a 6-node Talos Kubernetes cluster (`melodic-muse`) running self-hosted apps via Flux CD. — https://github.com/gjcourt/homelab
+> GitOps repo for a 4-node Talos Kubernetes cluster (`melodic-muse`) running self-hosted apps via Flux CD. — https://github.com/gjcourt/homelab
 
 ## Commands
 
@@ -60,13 +60,13 @@ See `docs/architecture/` for component-level architecture (DNS strategy, gateway
 
 ## Domain
 
-6-node Talos Kubernetes cluster (3 control-plane + 3 workers, Talos v1.12.4, Kubernetes v1.35.0) running ~14 self-hosted apps (Audiobookshelf, Authelia, Excalidraw, Golinks, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Pingo, Snapcast, Vitals + Adguard / Vitals etc.) plus infrastructure (Cilium 1.19 VXLAN, cert-manager, CNPG, monitoring, Authelia SSO). GitOps via Flux CD with an automatic preview environment (`staging` branch) rebuilt by CI from `master + open PRs`.
+4-node Talos Kubernetes cluster (3 control-plane + 1 worker, Talos v1.12.4, Kubernetes v1.35.0; current topology in `docs/STATUS.md`) running ~14 self-hosted apps (Audiobookshelf, Authelia, Excalidraw, Golinks, Homepage, Immich, Jellyfin, Linkding, Mealie, Memos, Navidrome, Pingo, Snapcast, Vitals + Adguard / Vitals etc.) plus infrastructure (Cilium 1.20 VXLAN, cert-manager, CNPG, monitoring, Authelia SSO). GitOps via Flux CD with an automatic preview environment (`staging` branch) rebuilt by CI from `master + open PRs`.
 
 ## Cross-service dependencies
 
 | Service | Purpose |
 |---|---|
-| Talos Linux | 6-node Kubernetes substrate (3 control-plane, 3 workers) |
+| Talos Linux | 4-node Kubernetes substrate (3 control-plane, 1 worker) |
 | Flux CD | GitOps reconciliation |
 | Cilium + Gateway API | CNI + ingress |
 | cert-manager | TLS certificate issuance |
@@ -117,8 +117,86 @@ Recurrences: [2026-02-08](docs/operations/incidents/2026-02-08-pv-recovery.md) �
 [2026-02-15](docs/operations/incidents/2026-02-15-iscsi-targets-disabled.md) ·
 [2026-02-27](docs/operations/incidents/2026-02-27-homeassistant-staging-iscsi-io-error.md) ·
 [2026-02-28](docs/operations/incidents/2026-02-28-iscsi-mass-readonly-cnpg-loki-immich.md) ·
-[2026-08-13](docs/operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md).
+[2026-08-13](docs/operations/incidents/2026-08-13-iscsi-readonly-remount-monitoring-blind.md) ·
+[2026-09-04](docs/operations/incidents/2026-09-04-hestia-down-mass-readonly.md) **(59/63 volumes — largest to date)** ·
+[2026-11-13](docs/operations/incidents/2026-11-13-rack-switch-update-readonly-prometheus-blind.md) (switch firmware update; Prometheus blind 17h43m).
 Tracking issue: [#1080](https://github.com/gjcourt/homelab/issues/1080).
+
+### Initiator `replacement_timeout` (600 s)
+
+The I/O errors come from the initiator giving up. open-iscsi's
+`node.session.timeo.replacement_timeout` (default **120 s**) is how long a broken
+session queues I/O before failing it. A Rack Switch firmware update reboots the
+switch for longer than that, which is what happened on 2026-11-13 (18 volumes
+read-only, and Prometheus wrote no samples from 03:14 to 20:58).
+
+**The fix sets 600 s** through each StorageClass's `node-stage-secret` in
+`infra/controllers/democratic-csi/values.yaml` (key
+`node-db.node.session.timeo.replacement_timeout`). democratic-csi runs
+`iscsiadm -m node -o update` with it before every login.
+Plan: [switch-update observability](docs/plans/2026-11-14-switch-update-observability-plan.md), phase 1.
+
+**It applies at login only.** A session keeps the value it logged in with until the
+volume is staged again. Check which value is live, since the Helm values don't tell
+you:
+
+```bash
+for p in $(kubectl -n democratic-csi get pods -l app.kubernetes.io/csi-role=node -o name); do
+  echo "== $p"
+  kubectl -n democratic-csi exec "$p" -c csi-driver -- \
+    iscsiadm -m session -P 3 | grep 'Recovery Timeout' | sort | uniq -c
+done
+```
+
+**Rolling existing sessions to 600: drain one node at a time.** Tested 2026-11-15 on
+a throwaway volume on `talos-kot-7x7`. A new stage logged in at 600. Deleting the pod
+**unstaged the volume and deleted its node record**; recreating it restaged at 600
+with its data intact. So a drain moves every volume on the node to a new login at
+600, and the hundreds of stale records in `iscsiadm -m node` don't matter.
+Done on all four nodes on 2026-11-15: 80 of 80 sessions at 600.
+
+⚠️ **A plain `kubectl drain` hangs.** About 30 single-replica apps have had
+`maxUnavailable: 0` PDBs since May (`apps/base/*/pdb.yaml`), so eviction is refused
+for them indefinitely. Single-instance CNPG clusters (every `-stage` database) are
+blocked the same way by their `-primary` PDB. The rollout therefore cordons, evicts
+what it can, and **deletes** the blocked pods. Each single-replica app on the node
+is down for about a minute while it restages.
+
+1. Only with #1933 merged and reconciled. Never during a switch or gateway update
+   window (device auto-update 03:00, gateway Sunday 00:00).
+2. `kubectl cordon <node>`. CNPG switches multi-instance primaries off a cordoned
+   node by itself, **but not while the cluster is unhealthy**: on 2026-11-15
+   `plane-prod` had a broken replica and its primary stayed put. Wait until no
+   primary of a cluster with `instances > 1` is on the node, and for any that stays,
+   `kubectl cnpg promote -n <ns> <cluster> <healthy-replica-on-another-node>`.
+3. `kubectl drain <node> --ignore-daemonsets --delete-emptydir-data --timeout=120s`.
+   It evicts everything the PDBs allow, then times out on the rest.
+4. `kubectl delete pod` every pod still on the node **except** DaemonSet pods and
+   static control-plane pods (owner kind `Node`). Postgres can take about 3 minutes
+   to shut down; wait for it.
+5. Wait until every moved pod is Ready, then confirm the sessions that landed on the
+   other nodes show 600 (loop above) and the drained node shows none.
+   `kubectl uncordon <node>`.
+6. Next node. Done when every node prints only `Recovery Timeout: 600`.
+
+The alternative, `iscsiadm -m node -o update` on every record plus an `ext-iscsid`
+restart, reconnects every session on a node at once under the old 120 s and has
+**not** been tested here. Don't use it.
+
+**What 600 s changes.** An outage under 10 minutes now **hangs** writes instead of
+failing them, so volumes don't go read-only. Expect side effects, which are not
+failures:
+
+- **Restarts.** Liveness windows are far shorter than 600 s (CNPG `postgres` and
+  Prometheus ~30 s, most apps ~120 s). A probe that blocks on disk restarts the
+  container, which stays stuck until I/O returns. All 12 CNPG clusters use the same
+  target, so a failover has nowhere healthy to go.
+- **pvc-writeprobe.** It reports a hung write as `homelab_pvc_probe_unknown`, not
+  `homelab_pvc_writable 0` (15 s exec timeout, 3 tries). It probes one volume at a
+  time, so during the hang a sweep runs late.
+
+An outage **over** 600 s still fails I/O, and the volumes go read-only as before.
+Detection then starts about 8 minutes later than it did at 120 s.
 
 ### Recognising it
 
@@ -126,12 +204,48 @@ Pods stay `Running` and often `Ready` — **status lies here**. Look for
 `read-only file system` in logs, and confirm per-pod rather than trusting status:
 
 ```bash
-kubectl -n <ns> exec <pod> -c <ctr> -- sh -c 'touch <mount>/.wtest && rm -f <mount>/.wtest'
+kubectl -n <ns> exec <pod> -c <ctr> -- sh -c 'printf ok > <mount>/.wtest && rm -f <mount>/.wtest'
 ```
 
-`NodeFilesystemReadOnly` (`infra/configs/alerts/prometheus-rules.yaml`) alerts on
-this — but it is evaluated *by Prometheus*, so if Prometheus' own PVC is affected
-it goes mute and the alert never fires. Do not assume silence means healthy.
+Write bytes, don't just `touch`: creating a zero-byte file can succeed on a
+filesystem with no free space, so `touch` alone passes a volume that is full.
+
+### Why the metric will not tell you (measured 2026-08-26)
+
+**`NodeFilesystemReadOnly` cannot detect this failure.** Not "sometimes misses
+it" — cannot. On 2026-08-13 both AdGuard `work` volumes went read-only and the
+alert stayed silent for 13 days. Both of these were true at the same instant:
+
+```text
+kubectl -n adguard-prod exec adguard-0 -c adguard -- \
+  sh -c 'printf ok > /opt/adguardhome/work/.p'
+  -> sh: can't create ...: Read-only file system          # hard EROFS
+
+node_filesystem_readonly{fstype="ext4"} == 1  ->  0 series  # "everything fine"
+```
+
+The mount was **not** unmonitored — `node_filesystem_readonly` scrapes the CSI
+globalmounts (69 series). The metric was scraped and it was **wrong**. ext4's
+`emergency_ro` error mode fails every write with `EROFS` while leaving the mount
+still advertising `rw`; node-exporter reports what the mount claims, so the gauge
+stays `0` forever.
+
+**No mount-flag scan can close this gap, because the mount flag is the thing that
+is lying.** Only an actual write distinguishes a working volume from a dead one.
+That is what `pvc-writeprobe` (`infra/configs/pvc-writeprobe/`) does — it execs a
+few bytes into `<mount>/.homelab-writeprobe` in every pod that mounts a PVC
+read-write, removes it, and exports `homelab_pvc_writable{namespace,pvc,pod}`.
+Alert: `PvcNotWritable`.
+
+Two caveats that are also load-bearing:
+
+- The probe is evaluated **by Prometheus**, so if Prometheus' own PVC is affected
+  it goes mute. Silence is not health — `PvcWriteProbeStale` / `PvcWriteProbeAbsent`
+  exist to make the silence itself alert.
+- Volumes mounted `readOnly: true` (Jellyfin/audiobookshelf media, immich
+  homevideo) are deliberately **not** probed — a write there would fail by design.
+  To exclude anything else, annotate the pod
+  `homelab.burntbytes.com/writeprobe-skip: "all"` or `"<pvc>,<pvc>"`.
 
 ### Recovery, by workload type
 
@@ -143,20 +257,66 @@ force depends on the workload.
 | StatefulSet pod (Prometheus, Loki) | `kubectl delete pod <pod>` | Recreated in place; the delete is enough to detach |
 | **CNPG primary** | `kubectl delete pod <primary>` — **never the PVC** | The PVC *is* the data |
 | **CNPG replica** | delete the pod; if it still fails, **also delete its PVC** | A replica is reconstructible — CNPG re-clones from the primary. Precedent: 2026-02-28, where a replica PVC came back empty and only `delete pvc` recovered it |
-| Deployment on RWO | scale-to-0 cycle (below) | `rollout restart` is **not** sufficient — see below |
+| Deployment on RWO | `kubectl delete pod <pod>` | Terminates *before* recreating, so the device is released. `rollout restart` is **not** sufficient — see below |
 
 For CNPG, **restart the primary first**: replicas stream WAL from it and cannot
-sync until it serves. Before deleting a primary, confirm the replicas are
-*unready* — otherwise the delete triggers an unplanned switchover. `kubectl cnpg
-restart <cluster>` is the supported path when replicas are healthy.
+sync until it serves.
 
-### Deployments on RWO need the full cycle
+⚠️ **`kubectl cnpg restart <cluster>` does not work for this failure.** Measured
+2026-09-04: it printed `<cluster> restarted` and the pod was never recycled — its
+`.status.startTime` was still two months old and the volume stayed `emergency_ro`.
+Do not use it here; delete the pod.
+
+⚠️ **`kubectl cnpg fencing` does not release the volume either.** Fencing stops
+PostgreSQL *inside* the pod; the pod keeps running and keeps the device attached.
+It is the right tool for a stuck promote (see the WAL-corruption note), and the
+wrong tool here.
+
+**`kubectl delete pod` is sufficient for every workload type in the table above**,
+including RWO Deployments and CNPG primaries. The replacement is very often
+scheduled onto a *different node* and gets a brand-new device — the observable
+signature of a successful recovery:
+
+```text
+before:  /dev/sdj on /var/lib/postgresql/data type ext4 (rw,...,emergency_ro)
+after:   /dev/sdm on /var/lib/postgresql/data type ext4 (rw,relatime,...)
+         node talos-2mz-rfj -> talos-ykb-uir
+```
+
+### Deployments on RWO: delete the pod; scale-to-0 is the fallback
 
 `rollout restart` creates the replacement pod **before** terminating the old one,
 so on a ReadWriteOnce volume the new pod attaches to the same errored device and
-comes up read-only again. Two further traps: **Flux reverts a scale-to-0** within
-the reconcile interval, and pod termination is *not* proof the device was
-released — `volumeattachment` reaching zero is.
+comes up read-only again. **`kubectl delete pod` does not have this problem** — it
+terminates first — and on 2026-09-04 it recovered every affected Deployment
+(AdGuard, Authelia, Audiobookshelf, Jellyfin, Navidrome, Memos, Home Assistant,
+Vibrato, Mosquitto) in ~20–30 s each. **Prefer it.** The scale-to-0 cycle below is
+the fallback for when a delete alone does not clear the device.
+
+⚠️ **"`volumeattachment` reaching zero" only applies to the scale-to-0 cycle.**
+For anything that *self-recreates* — CNPG instances, Deployment pods — the
+replacement claims a new attachment as fast as the old one is released, so the
+count never reaches zero **even on a fully successful recovery**. On 2026-09-04
+this produced two false "still stuck" readings on volumes that were already
+healthy, and one 300-second wait for a condition that could never occur.
+
+**For self-recreating workloads the write test is the only ground truth:**
+
+```bash
+kubectl -n <ns> exec <pod> -c <ctr> -- sh -c 'printf ok > <mount>/.wtest && rm -f <mount>/.wtest'
+```
+
+⚠️ **`pvc-writeprobe` is a monitor, and monitors lag.** Its sweep interval is
+`INTERVAL_SECONDS=300`, so a sweep can be up to five minutes older than reality.
+Twice on 2026-09-04 a stale sweep was read as a regression on volumes that had
+just been fixed — compare the sweep timestamp against the pod's `.status.startTime`
+before believing it. Verify recovery with the exec above, not with the probe.
+
+#### Fallback: the scale-to-0 cycle
+
+Only needed when `kubectl delete pod` does not clear the device. Nothing recreates
+the pod here, so this **is** the case where waiting for `volumeattachment` to reach
+zero is the correct check.
 
 ```bash
 flux suspend kustomization apps-production -n flux-system   # else Flux undoes the scale
@@ -172,6 +332,61 @@ flux resume kustomization apps-production -n flux-system     # ALWAYS, even if t
 comparison against `"0"` never matches and the loop hangs — with production
 reconciliation suspended. Use `-eq`, and if you abort partway, **resume Flux
 first**. Verify with `flux get kustomizations -A` showing `SUSPENDED=False`.
+
+### Testing the alert (game-day)
+
+`PvcNotWritable` guards the most common failure in this cluster and had **never
+fired** until 2026-09-01. Re-run this after any change to `pvc-writeprobe` or its
+rules — the first run found a bug that only appears when the alert renders.
+
+Use a throwaway namespace and an **ephemeral** StorageClass. Never test on a
+production PVC.
+
+```bash
+kubectl create ns readonly-gameday
+kubectl label ns readonly-gameday pod-security.kubernetes.io/enforce=privileged
+# PVC on truenas-iscsi-ephemeral (Delete reclaim) + a privileged busybox pod
+# mounting it at /data, then:
+kubectl -n readonly-gameday exec gameday -- mount -o remount,ro /data
+```
+
+Then watch, in order:
+
+| Stage | Expect | Timing |
+| --- | --- | --- |
+| Probe picks up the new PVC | sweep count increments in `kubectl -n monitoring logs deploy/pvc-writeprobe` | up to 5 min |
+| `homelab_pvc_writable` for it | flips `1` -> `0` | next sweep, `INTERVAL_SECONDS=300` |
+| `ALERTS{alertname="PvcNotWritable"}` | `pending` | within one scrape + eval interval of the flip |
+| Same | `firing` | `for: 10m` later |
+
+**Detection-to-page is therefore ~15–16 minutes** (300s sweep + 60s scrape +
+`for: 10m` + one rule-eval interval).
+[#1300](https://github.com/gjcourt/homelab/issues/1300) asks for an alert inside
+5 minutes; that is not currently met.
+
+⚠️ **`remount,ro` does not reproduce the real failure.** It sets the mount flag,
+which is the variant `node_filesystem_readonly` can already see. The failure this
+probe exists for is ext4 `emergency_ro` — writes return `EROFS` while the mount
+still advertises `rw`. This procedure tests the exec path, the metric and the
+alert plumbing; it does **not** test the discriminating advantage. For that you
+need a device-level error (dm-error, or an iSCSI target flap on a throwaway LUN).
+
+Tear down with `kubectl delete ns readonly-gameday`. The ephemeral StorageClass
+reclaims the volume.
+
+⚠️ **Query on bare `namespace`/`pod` — NOT `exported_namespace`.** This reversed
+in [#1389](https://github.com/gjcourt/homelab/pull/1389), which set
+`honorLabels: true` on the ServiceMonitor so the probe's own labels win.
+Before that, prometheus-operator stamped the *target's* identity
+(`monitoring` / `pvc-writeprobe-*`) over the metric and renamed the probe's to
+`exported_*`; that is no longer the case.
+
+⚠️ **Series from before #1389 still carry the old shape until they age out**, so a
+query written against retained data can look right and then match nothing on
+live series. Measured 2026-09-11: `exported_namespace` is absent from current
+series, and a `label_replace` off it silently returns zero — which is
+indistinguishable from a working rule. **Prove any join binds by flipping the
+comparison (`== 1`) and checking it returns something.**
 
 ### After recovery
 

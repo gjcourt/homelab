@@ -85,7 +85,7 @@ Background: the rationale and the apps that closed the initial probe gaps are tr
 
 ## Image naming
 
-CI tags images as `YYYY-MM-DD` (first build of the day) then `YYYY-MM-DD-N` for subsequent builds. Image bumps in `apps/{staging,production}/<app>/deployment.yaml` must be strictly greater than the currently deployed tag.
+CI tags images with an immutable `YYYY-MM-DD-<sha7>` (UTC date + 7-char commit SHA), plus `latest`. Image bumps in `apps/{staging,production}/<app>/deployment.yaml` must be strictly greater than the currently deployed tag. Older pins may still use the legacy `YYYY-MM-DD` / `YYYY-MM-DD-N` form.
 
 To list published tags:
 

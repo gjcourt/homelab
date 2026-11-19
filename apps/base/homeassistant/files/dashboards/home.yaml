@@ -1,0 +1,470 @@
+# Home — the main page (HASS-10, redesigned phone-first in HASS-13).
+# Registered as `home-page` in configuration.yaml; set as the default
+# dashboard once in the UI (see the bootstrap README, "Default dashboard").
+#
+# Who and what (HASS-13 task analysis, George 2026-11-08): two people, on
+# phones. Most common: "Anything needed of me, music volume, lights". So, top
+# to bottom:
+#   1. Needs you   — what needs one of us, or "All clear" (sensor.needs_you)
+#   2. Music       — one full-width volume row per room
+#   3. Lights      — one tile per room: tap toggles, hold opens the dimmer;
+#                    All lights off (asks first) with a 2-minute Undo
+#   4. Weather     — one small tile; the forecast is one tap away
+#   5. Daily shot  — only until it's logged; at 19:00 it moves into Needs you
+#
+# Built-in cards only (tile, heading). Mushroom / card-mod / clock-weather
+# cards stuck on "Configuration error" on cold loads and never recovered
+# (HASS-13 review, finding 1), so none are used here: Home must always load.
+# Room details, schedules and maintenance stay on the Config dashboard
+# (/home-control).
+#
+# Helpers (room light groups, sensor.needs_you, the undo scripts) are in the
+# `home_page` package in configuration.yaml.
+#
+# Removed in HASS-13: the Welcome header, HA's predicted Favorites (unlabelled
+# timers, and it could surface breaker switches), the Summaries block (the
+# useful parts are now in Needs you), the curated room cards (they navigated
+# instead of acting) and the "Other areas" grid (rooms without lights). HA's
+# own Overview (/home) still has the generated area pages.
+views:
+- title: Home
+  path: home
+  icon: mdi:home
+  theme: Tinted
+  type: sections
+  # Phone: one column, in the order above. Wide screens: two columns, needs
+  # and music on the left, lights on the right.
+  max_columns: 2
+  sections:
+  # ── Needs you ──────────────────────────────────────────────────────────
+  # Each item is its own tile, shown only while it applies, so it can be
+  # tapped for details. "All clear" shows only when sensor.needs_you is
+  # exactly 0; if the sensor can't be read, it says so instead of guessing.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Needs you
+      heading_style: title
+    - type: tile
+      entity: sensor.needs_you
+      name: All clear
+      icon: mdi:check-circle
+      color: green
+      hide_state: true
+      tap_action:
+        action: none
+      icon_tap_action:
+        action: none
+      grid_options:
+        columns: 12
+      visibility:
+      - condition: state
+        entity: sensor.needs_you
+        state: "0"
+    - type: tile
+      entity: sensor.needs_you
+      name: Can't check right now
+      icon: mdi:help-circle
+      color: grey
+      grid_options:
+        columns: 12
+      visibility:
+      - condition: state
+        entity: sensor.needs_you
+        state:
+        - unknown
+        - unavailable
+    - type: tile
+      entity: binary_sensor.42_french_door_refrigerator_door
+      name: Fridge door open
+      icon: mdi:fridge-alert
+      color: red
+      hide_state: true
+      grid_options:
+        columns: 12
+      visibility:
+      - condition: state
+        entity: binary_sensor.42_french_door_refrigerator_door
+        state: "on"
+    - type: tile
+      entity: binary_sensor.42_french_door_freezer_door
+      name: Freezer door open
+      icon: mdi:fridge-alert
+      color: red
+      hide_state: true
+      grid_options:
+        columns: 12
+      visibility:
+      - condition: state
+        entity: binary_sensor.42_french_door_freezer_door
+        state: "on"
+    - type: tile
+      entity: binary_sensor.oven_on
+      name: Oven on
+      icon: mdi:stove
+      color: deep-orange
+      hide_state: true
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/area-kitchen
+      grid_options:
+        columns: 12
+      visibility:
+      - condition: state
+        entity: binary_sensor.oven_on
+        state: "on"
+    # Names the tasks (sensor.needs_you's `maintenance` attribute); tap for
+    # the Maintenance view, where each has its Done button.
+    - type: tile
+      entity: sensor.needs_you
+      name: Maintenance
+      icon: mdi:wrench-clock
+      color: amber
+      state_content:
+      - maintenance
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/maintenance
+      icon_tap_action:
+        action: navigate
+        navigation_path: /home-control/maintenance
+      grid_options:
+        columns: 12
+      visibility:
+      - condition: state
+        entity: sensor.maintenance_to_do
+        state_not:
+        - "0"
+        - unknown
+        - unavailable
+    - type: tile
+      entity: sensor.lights_offline
+      name: Lights offline
+      icon: mdi:lightbulb-alert
+      color: red
+      tap_action:
+        action: navigate
+        navigation_path: /home-control/lights
+      grid_options:
+        columns: 12
+      visibility:
+      - condition: state
+        entity: sensor.lights_offline
+        state_not:
+        - "0"
+        - unknown
+        - unavailable
+    # After the 19:00 reminder, until logged. Tap = Done (asks first, so a
+    # stray tap can't log a shot); hold = today's side. The side comes from
+    # the date (sensor.daily_shot_side, HASS-11), so there is nothing to pick.
+    - type: tile
+      entity: sensor.daily_shot
+      name: Daily shot
+      icon: mdi:needle
+      color: amber
+      state_content:
+      - next_side
+      tap_action: &shot_done
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.daily_shot_done
+        confirmation:
+          text: Log today's shot?
+      icon_tap_action: *shot_done
+      hold_action:
+        action: more-info
+        entity: sensor.daily_shot_side
+      grid_options:
+        columns: 12
+      visibility:
+      - condition: state
+        entity: binary_sensor.daily_shot_due
+        state: "on"
+  # ── Music ──────────────────────────────────────────────────────────────
+  # Same rooms, same order as Config → Audio / Visual. Full width so the
+  # slider has the whole phone's travel; the state shows only the volume.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Music
+      heading_style: title
+    # Shared anchors hold only the keys every row has in common: HA warns
+    # when a card's own key overrides a merged one.
+    - <<: &volume_row
+        type: tile
+        state_content:
+        - volume_level
+        grid_options:
+          columns: 12
+        features:
+        - type: media-player-volume-slider
+      entity: media_player.living_room_snapcast_client
+      name: Living Room
+      icon: mdi:sofa
+    - <<: *volume_row
+      entity: media_player.kitchen_snapcast_client
+      name: Kitchen
+      icon: mdi:silverware-fork-knife
+    - <<: *volume_row
+      entity: media_player.office_snapcast_client
+      name: Office
+      icon: mdi:desk
+  # ── Lights ─────────────────────────────────────────────────────────────
+  # One tile per room with lights (light groups in the home_page package).
+  # Tap anywhere toggles the room through script.smart_light_toggle, the
+  # same action as the Config "All lights" cards; hold opens the room's
+  # dimmer. The tile colour is the room's state.
+  #
+  # TODO(George): a Scenes row goes here once you name the scenes you want
+  # on Home (scenes.yaml has none yet). Not invented on purpose.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Lights
+      heading_style: title
+    # All of them, after a confirmation that says what happens; then an
+    # Undo tile for 2 minutes (timer.lights_off_undo).
+    - type: tile
+      entity: sensor.lights_on
+      name: All lights off
+      icon: mdi:lightbulb-group-off
+      color: amber
+      tap_action: &all_off
+        action: perform-action
+        perform_action: script.lights_off_with_undo
+        confirmation:
+          text: Turn off every light in the house? You can undo for 2 minutes.
+      icon_tap_action: *all_off
+      grid_options:
+        columns: 12
+      visibility:
+      - condition: state
+        entity: timer.lights_off_undo
+        state_not: active
+    - type: tile
+      entity: timer.lights_off_undo
+      name: Undo all lights off
+      icon: mdi:undo
+      color: blue
+      tap_action: &undo
+        action: perform-action
+        perform_action: script.lights_off_undo
+      icon_tap_action: *undo
+      grid_options:
+        columns: 12
+      visibility:
+      - condition: state
+        entity: timer.lights_off_undo
+        state: active
+    - <<: &room
+        type: tile
+        hold_action:
+          action: more-info
+        grid_options:
+          columns: 6
+      entity: light.living_room_lights
+      name: Living Room
+      icon: mdi:sofa
+      tap_action: &living_room
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.living_room_sconces]
+      icon_tap_action: *living_room
+    - <<: *room
+      entity: light.kitchen_lights
+      name: Kitchen
+      icon: mdi:silverware-fork-knife
+      tap_action: &kitchen
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.kitchen_main_lights, light.kitchen_under_cabinet, light.kitchen_island_pendants]
+      icon_tap_action: *kitchen
+    - <<: *room
+      entity: light.dining_room_lights
+      name: Dining Room
+      icon: mdi:table-furniture
+      tap_action: &dining
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.dining_room_sconces, light.0xa4c138b55dac7973, light.0xa4c138a9f6011cac, light.dining_room_chandelier]
+      icon_tap_action: *dining
+    - <<: *room
+      entity: light.entryway_lights
+      name: Entryway
+      icon: mdi:door
+      tap_action: &entryway
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.front_foyer_chandelier, light.front_foyer_spot_lights, light.front_foyer_closet]
+      icon_tap_action: *entryway
+    - <<: *room
+      entity: light.hallway_lights
+      name: Hallway
+      icon: mdi:door-sliding
+      tap_action: &hallway
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.hallway_long, light.hallway_landing]
+      icon_tap_action: *hallway
+    - <<: *room
+      entity: light.master_bedroom_lights
+      name: Master Bedroom
+      icon: mdi:bed
+      tap_action: &master_bedroom
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.master_bedroom_main_lights, light.master_bedroom_entry, light.master_bedroom_sconce_north, light.master_bedroom_sconce_south, light.master_bedroom_closet_light]
+      icon_tap_action: *master_bedroom
+    - <<: *room
+      entity: light.master_bathroom_lights
+      name: Master Bathroom
+      icon: mdi:shower
+      tap_action: &master_bathroom
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.master_bathroom_vanity, light.master_bathroom_ceiling]
+      icon_tap_action: *master_bathroom
+    - <<: *room
+      entity: light.office_lights
+      name: Office
+      icon: mdi:desk
+      tap_action: &office
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.office_main_lights, light.office_closet]
+      icon_tap_action: *office
+    - <<: *room
+      entity: light.niccolo_bedroom_lights
+      name: Niccolo Bedroom
+      icon: mdi:bed
+      tap_action: &niccolo
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.niccolo_bedroom_main_lights, light.secondary_bedroom_closet_light]
+      icon_tap_action: *niccolo
+    - <<: *room
+      entity: light.nursery_bedroom_lights
+      name: Nursery
+      icon: mdi:cradle
+      tap_action: &nursery
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.nursery_bedroom_main_lights, light.nursery_bedroom_closet_light]
+      icon_tap_action: *nursery
+    - <<: *room
+      entity: light.hall_bathroom_lights
+      name: Hall Bathroom
+      icon: mdi:toilet
+      tap_action: &hall_bathroom
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.hall_bathroom_main_lights, light.hall_bathroom_vanity_lights]
+      icon_tap_action: *hall_bathroom
+    - <<: *room
+      entity: light.powder_bathroom_lights
+      name: Powder Bathroom
+      icon: mdi:toilet
+      tap_action: &powder_bathroom
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.powder_bathroom_chandelier]
+      icon_tap_action: *powder_bathroom
+    - <<: *room
+      entity: light.butler_pantry_lights
+      name: Butler Pantry
+      icon: mdi:cupboard
+      tap_action: &butler_pantry
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.butler_pantry_main_lights]
+      icon_tap_action: *butler_pantry
+    - <<: *room
+      entity: light.laundry_room_lights
+      name: Laundry Room
+      icon: mdi:washing-machine
+      tap_action: &laundry_room
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.laundry_room_main_lights, light.laundry_room_cove]
+      icon_tap_action: *laundry_room
+    - <<: *room
+      entity: light.exterior_lights
+      name: Exterior
+      icon: mdi:home-outline
+      tap_action: &exterior
+        action: perform-action
+        perform_action: script.smart_light_toggle
+        data:
+          entities: [light.exterior_east, light.exterior_west]
+      icon_tap_action: *exterior
+  # ── Weather ────────────────────────────────────────────────────────────
+  # Conditions and temperature; tap for the forecast (HA's more-info).
+  - type: grid
+    cards:
+    - type: tile
+      entity: weather.forecast_home
+      name: Weather
+      state_content:
+      - state
+      - temperature
+      grid_options:
+        columns: 12
+  # ── Daily shot (HASS-11) ───────────────────────────────────────────────
+  # Only until today's shot is logged (George: "Only until done"), and only
+  # before the 19:00 reminder: after that it's in Needs you at the top.
+  - type: grid
+    visibility:
+    - condition: state
+      entity: sensor.daily_shot
+      state: To do
+    - condition: state
+      entity: binary_sensor.daily_shot_due
+      state_not: "on"
+    cards:
+    - type: heading
+      heading: Daily shot
+      heading_style: title
+    - type: tile
+      entity: sensor.daily_shot
+      name: Today
+      icon: mdi:needle
+      state_content:
+      - state
+      - last_side
+    - type: tile
+      entity: sensor.daily_shot_side
+      name: Today's side
+    # Shown only until today's shot is logged: a second press would be
+    # ignored by "Daily shot — log it" anyway, so don't offer it. (Same rule
+    # as homelab#1861.)
+    - type: tile
+      entity: input_button.daily_shot_done
+      visibility:
+      - condition: state
+        entity: sensor.daily_shot
+        state: To do
+      name: Done
+      icon: mdi:check-circle
+      hide_state: true
+      tap_action:
+        action: perform-action
+        perform_action: input_button.press
+        target:
+          entity_id: input_button.daily_shot_done
+        confirmation:
+          text: Log today's shot?

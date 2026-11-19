@@ -35,7 +35,7 @@ spec:
           type: RuntimeDefault
 
       containers:
-        - image: ghcr.io/advplyr/audiobookshelf:2.35.1@sha256:1eef6716183c52abafe5405e7d6be8390248ecd59c7488c44af871757ac8fc4d
+        - image: ghcr.io/advplyr/audiobookshelf:2.38.0@sha256:60064c23f32fd9099fd39e82c5132c51701d1221135bbca04cd099b589e1edc3
           name: audiobookshelf
           ports:
             - containerPort: 13378
@@ -64,7 +64,9 @@ spec:
               memory: 128Mi
             limits:
               cpu: 500m
-              memory: 512Mi
+              # 512Mi OOMKilled staging ABS during its first full library scan
+              # while Music Assistant synced it (2026-11-04).
+              memory: 1Gi
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

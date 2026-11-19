@@ -37,10 +37,16 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.15"
 
       - name: Install PyYAML
         run: pip install pyyaml
 
       - name: Validate Home Assistant YAML
         run: python3 scripts/validate-ha-yaml.py apps/base/homeassistant
+
+      - name: Check homepage siteMonitor egress rules
+        run: python3 scripts/check-homepage-sitemonitor.py
+
+      - name: Check Cilium policies have rules
+        run: python3 scripts/check-cilium-policies.py

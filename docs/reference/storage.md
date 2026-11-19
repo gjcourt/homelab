@@ -4,7 +4,7 @@
 Storage in the homelab is provided by a TrueNAS Scale server, `hestia` (`10.42.2.10`). The cluster uses the [democratic-csi](https://github.com/democratic-csi/democratic-csi) driver to dynamically provision iSCSI LUNs (for ReadWriteOnce block storage). NFS shares from `alcatraz` (`10.42.2.11`) back the Immich photo library and Jellyfin/Navidrome media libraries via static `PersistentVolume` manifests (ReadWriteMany / ReadOnlyMany).
 
 ## 2. Architecture
-The democratic-csi driver is deployed in the `democratic-csi` namespace as a Helm chart. It speaks to the TrueNAS API to create, delete, snapshot, and manage iSCSI LUNs on the `main` ZFS pool.
+The democratic-csi driver is deployed in the `democratic-csi` namespace as a Helm chart. It uses the SSH driver (`truenas-iscsi` → `FreeNASSshDriver`, as `truenas_admin` over SSH, plus TrueNAS API calls) to create, delete, snapshot, and manage iSCSI LUNs on the `main` ZFS pool. The API-only driver does not work on TrueNAS 26.x — see [storage gotchas](../operations/2026-08-15-storage-gotchas.md#democratic-csi-driver-and-pvc-expansion).
 - **iSCSI** (truenas): RWO block storage for databases (CNPG), app config (`-data`/`-config` PVCs), and STS volumeClaimTemplates.
 - **NFS** (alcatraz): RWX/ROX shared file storage for the photo and media libraries. Mounted via static PVs declared in the app overlays (e.g. `apps/production/immich/nfs-photos.yaml`, `apps/base/jellyfin/media/nfs-media.yaml`).
 
@@ -16,6 +16,8 @@ The democratic-csi driver is deployed in the `democratic-csi` namespace as a Hel
   - `truenas-iscsi` (Default): Persistent iSCSI storage on the `main` pool (`ReclaimPolicy: Retain`).
   - `truenas-iscsi-ssd`: iSCSI storage targeted at the SSD-backed dataset (`ReclaimPolicy: Retain`).
   - `truenas-iscsi-ephemeral`: Ephemeral iSCSI storage (`ReclaimPolicy: Delete`).
+  - `truenas-iscsi-xfs`, `truenas-iscsi-ssd-xfs`, `truenas-iscsi-ephemeral-xfs`: the same three with `fsType: xfs` (#1003).
+  - All classes allow online expansion: bump `spec.resources.requests.storage` and reconcile (works since democratic-csi v1.9.5).
 - **Volume Snapshot Classes**:
   - Provided by democratic-csi; see `kubectl get volumesnapshotclasses`.
 - **Secrets**:
@@ -68,14 +70,49 @@ kubectl get pvc example-pvc
   - The Immich photo library is mirrored from alcatraz to hestia on a daily rsync schedule with ZFS snapshot retention (see `docs/plans/2026-05-20-alcatraz-to-hestia-migration.md` Phase 2).
 - **Restore Procedure**:
   - For ZFS snapshot rollback: use TrueNAS UI or `zfs rollback <dataset>@<snap>`.
-  - To recover a destroyed PVC whose PV had `Retain`: clear the PV's `claimRef`, then create a new PVC with `volumeName` pointing to the PV (see `docs/operations/pv-retain-recovery.md` or memory `pv-retain-recovery-pattern`).
+  - To recover a destroyed PVC whose PV had `Retain`: clear the PV's `claimRef`, then create a new PVC with `volumeName` pointing to the PV (see [pv retain recovery pattern](../operations/2026-08-15-storage-gotchas.md#pv-retain-recovery-pattern)).
 
 ## 9. Troubleshooting
 - **PVC stuck in Pending**:
   - Check the democratic-csi controller logs for TrueNAS API errors.
   - Verify hestia is reachable from the cluster (`kubectl run debug --image=alpine -- nc -vz 10.42.2.10 3260`).
 - **Volume Attachment Issues**: If a pod is stuck terminating and the volume cannot be detached, you may need to force-delete the pod or manually disconnect the iSCSI session on the Talos node.
-- **Flux SSA + `volumeName` immutability**: For statically-bound PVCs under Flux management, prefer `PV.claimRef` pre-binding over `PVC.spec.volumeName` — Flux's strategic-merge dry-run will otherwise try to unset `volumeName` and fail with "spec is immutable". See memory `flux-pvc-volumename-anti-pattern`.
+- **Flux SSA + `volumeName` immutability**: For statically-bound PVCs under Flux management, prefer `PV.claimRef` pre-binding over `PVC.spec.volumeName` — Flux's strategic-merge dry-run will otherwise try to unset `volumeName` and fail with "spec is immutable". See [flux pvc volumename anti pattern](../operations/2026-08-15-cluster-gotchas.md#flux-pvc-volumename-anti-pattern).
 
 ## 10. Historical context
 The cluster originally ran on Synology iSCSI (`10.42.2.11`, `synology-csi` driver). The full migration to TrueNAS/hestia happened in May 2026 and is documented in `docs/plans/2026-05-20-alcatraz-to-hestia-migration.md`. Alcatraz now serves only the photo NFS share and is the rsync source for the hestia photo-backup dataset.
+
+## 11. TrueNAS API
+
+hestia runs TrueNAS 26.x (SCALE). Its API is WebSocket JSON-RPC; the REST-style `/api/v2.0/...`
+paths that democratic-csi expects are translated by `truenas-api-proxy`
+(`infra/controllers/democratic-csi/truenas-api-proxy.yaml`), which is the in-repo reference for the
+mappings below.
+
+**Connection.** `wss://10.42.2.10/api/current`. **It must be `wss://`** — TrueNAS 26.x
+auto-revokes an API key the first time it is used over plain `ws://` (revoked reason: "Attempt to
+use over an insecure transport"). The certificate is self-signed, so clients disable verification.
+
+**Auth.** `auth.login_with_api_key` with the key as the single positional parameter; it returns
+`true` on success. `core.ping` returns `"pong"` and needs no auth. The cluster's key is the
+`truenas-api-key` Secret in ns `democratic-csi`.
+
+```python
+ws.send(json.dumps({"jsonrpc": "2.0", "id": "1",
+                    "method": "auth.login_with_api_key", "params": [api_key]}))
+```
+
+**Method naming.** Most resources follow `<resource>.<verb>`: `iscsi.target.query([])`,
+`iscsi.target.get_instance(id)`, `iscsi.target.create(body)`, `iscsi.target.update(id, body)`,
+`iscsi.target.delete(id)`. The exceptions are where things break:
+
+| You'd expect | 26.x actually serves |
+|---|---|
+| `iscsi.global.query` | `iscsi.global.config` (no args) — singletons use `.config` |
+| `service.reload` | `service.control("RELOAD", "iscsitarget")` — verbs `START`/`STOP`/`RESTART`/`RELOAD` |
+| `pool.dataset.get_instance` | not served — this is why the API-only CSI driver fails |
+| `system.shutdown` with no args, or `{"reason": "..."}` | positional JSON string: `midclt call system.shutdown '"reason text"'` |
+
+**From a hestia shell.** `midclt call <method> '<json args>'` speaks the same API locally (for
+example `midclt call api_key.create '{"name": "...", "username": "truenas_admin"}'`). ZFS
+delegation for the CSI user is `zfs allow -u truenas_admin <perms> <dataset>`.

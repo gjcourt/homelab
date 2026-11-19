@@ -166,8 +166,8 @@ this path.**
   intercepts `*.burntbytes.com` and returns the internal LB IP, keeping
   traffic on-LAN and avoiding the tunnel hop for internal access.
 - **Authentication can layer at Cloudflare (Access) or at the cluster
-  (Authelia).** See [../gateway-auth.md](../gateway-auth.md) for how
-  Authelia integrates as an `ext_authz` filter on the Cilium gateway.
+  (Authelia).** See [../gateway-auth.md](../gateway-auth.md) for the
+  per-route Gateway API `ExternalAuth` filter that puts Authelia in front of a host.
 
 ---
 

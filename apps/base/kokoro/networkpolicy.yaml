@@ -1,0 +1,47 @@
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: kokoro
+  namespace: kokoro
+  labels:
+    app.kubernetes.io/name: kokoro
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: HTTP on 8880 from Home Assistant and the LAN gateway (web player); egress DNS only (weights are baked into the image).
+  endpointSelector:
+    matchLabels:
+      app: kokoro
+  ingress:
+    # Only Home Assistant in the same environment; overlays patch the namespace.
+    - fromEndpoints:
+        - matchLabels:
+            app: homeassistant
+            k8s:io.kubernetes.pod.namespace: homeassistant
+      toPorts:
+        - ports:
+            - port: "8880"
+              protocol: TCP
+    # host: kubelet, for the startup/readiness/liveness probes.
+    # remote-node + ingress: the gateway's Envoy, for the LAN-only web player at
+    # voice.burntbytes.com. The gateway needs all three entities.
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - port: "8880"
+              protocol: TCP
+  # DNS only. Listing an egress rule puts the endpoint in default-deny for
+  # egress, so nothing else leaves the pod.
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP

@@ -62,7 +62,7 @@ services:
       RUNNER_NAME: hestia
       LABELS: hestia,truenas
       RUNNER_WORKDIR: /tmp/runner-work
-      EPHEMERAL: "false"
+      EPHEMERAL: "true"   # corrected 2026-08-19 — see note below
       # ACCESS_TOKEN and TRUENAS_API_KEY are set in SCALE UI as masked env vars.
       # Do NOT commit values; YAML in git stays clean.
       ACCESS_TOKEN: ""
@@ -71,6 +71,14 @@ services:
       - /mnt/main/apps/actions-runner/work:/tmp/runner-work
       - /var/run/docker.sock:/var/run/docker.sock
 ```
+
+> **Corrected 2026-08-19.** The sketch above originally read `EPHEMERAL: "false"`.
+> That never disabled ephemeral mode: the image entrypoint tests the variable
+> with `[ -n "${EPHEMERAL}" ]`, so any non-empty value — `"false"` included —
+> adds `--ephemeral`. The same presence-test trap applies to
+> `DISABLE_AUTO_UPDATE`, which is why that variable is now **absent** from
+> `hosts/hestia/actions-runner/docker-compose.yml` rather than set to `"false"`.
+> Ephemeral is kept, now stated honestly. See the comment block in that file.
 
 README covers:
 - One-time bootstrap: paste this YAML into SCALE UI → Apps → Custom App; set `ACCESS_TOKEN` (PAT) and `TRUENAS_API_KEY` as masked env vars; click Install.

@@ -22,12 +22,49 @@ This is the "convert all audio nodes to one setup" bundle — the design record 
      (put the node on the IoT VLAN, same as the others).
    - `AUTO_SETUP_INSTALL_SOFTWARE_ID=192` — Snapcast Client (the script also
      installs it if missing).
-3. Copy **`Automation_Custom_Script.sh`** to the boot partition root as
-   `/boot/Automation_Custom_Script.sh`.
+   - ⚠️ **`AUTO_SETUP_SSH_PUBKEY=<your key>` — do not skip this.** Section 7 of
+     the script installs the same key, but the script runs *last*, so a node
+     whose script does not run is password-only and cannot be diagnosed
+     remotely. This option is handled by DietPi's own first-run, before the
+     script, so the two fail independently. Learned on `office` 2026-08-28: the
+     custom script silently never ran, and because the key lived only inside it
+     the node was unreachable by key — the one thing section 7 exists to
+     prevent.
+3. Copy **`Automation_Custom_Script.sh`** to the **root of the FAT boot
+   partition**. That is what you see when the card is mounted on a workstation;
+   on the running node the same partition appears at `/boot/firmware` on current
+   RPi images and at `/boot` on older ones. DietPi looks in both, so copying to
+   the partition root is correct either way — just do not assume a single path
+   when you go looking for it later.
 4. **Boot.** DietPi installs snapclient, then runs the script: it dual-homes the
    node (both NICs — see below), then sets up go-librespot, the dmix
    `asound.conf`, the auto-detect wrapper + systemd overrides, and the udev
    rule. When you plug a USB DAC in, both services bind automatically.
+5. **Verify the script actually ran** — do not assume it did:
+
+   ```bash
+   ssh root@<node> 'systemctl is-active go-librespot; command -v toppingctl'
+   ```
+
+   Both should answer. If they do not, DietPi did not execute the script. It is
+   idempotent, so just run it by hand and it will finish the job:
+
+   ```bash
+   # the FAT partition is /boot on some images and /boot/firmware on others,
+   # so take whichever exists rather than guessing
+   ssh root@<node> 'bash "$(ls /boot/firmware/Automation_Custom_Script.sh \
+                              /boot/Automation_Custom_Script.sh 2>/dev/null | head -1)"'
+   ```
+
+**Why step 5 exists.** On `office` (2026-08-28) DietPi completed its own first
+run — hostname set, network up, sshd listening, `.install_stage=2` — and never
+ran the custom script. The script was present at both `/boot` and
+`/boot/firmware`, mode 755, with `AUTO_SETUP_CUSTOM_SCRIPT_EXEC=1` in both
+`dietpi.txt` files, and running it manually worked first time. The cause is
+unknown and probably unknowable after the fact: `dietpi-ramlog` keeps `/var/log`
+in RAM, so the evidence is gone by the time anyone looks. Since `install_stage`
+is already `2`, DietPi will never retry it on its own — the node just sits there
+looking healthy and doing nothing. **Check, don't assume.**
 
 **Networking — dual-homed by default.** DietPi only configures its "primary"
 adapter and comments out the other, so a WiFi-provisioned node comes up
@@ -44,21 +81,94 @@ takes effect on DietPi's end-of-first-run reboot.)
 | `/usr/local/bin/go-librespot` | Spotify Connect daemon (release `v0.7.4`) |
 | `/root/.config/go-librespot/config.yml` | device name = hostname, output via dmix, zeroconf on `4070` |
 | `/etc/systemd/system/go-librespot.service` | runs it, `Restart=always` |
-| `/etc/asound.conf` | shared dmix (`default` → `hw:0`) |
-| `/usr/local/bin/snapclient-autodev` | waits for a USB DAC, runs snapclient via dmix |
+| `/etc/asound.conf` | generated: shared dmix at the DAC's **detected** card index, plus a plug-wrapped `pcm.snapdmix` alias. Written `0644` — ALSA silently ignores a root-only config for unprivileged clients and falls back to card 0 |
+| `/usr/local/bin/snapclient-autodev` | **waits** for a USB DAC (does not exit), then runs snapclient via dmix on the DAC's own hardware mixer |
 | `snapclient.service.d/override.conf` | uses the wrapper, retries indefinitely |
-| `/etc/udev/rules.d/99-audio-node.rules` | restart both on DAC add/remove |
+| `/usr/local/bin/audio-dmix-detect` | prints the first **playback-capable** USB card index |
+| `/usr/local/bin/audio-dmix-refresh` | writes `asound.conf` at the DAC's **current** card index (root only) |
+| `/usr/local/bin/audio-capture-detect` | prints the first **capture-capable** USB card index (the TV optical input) |
+| `/usr/local/bin/tvloop-autodev` | bridges the TV optical input into the shared dmix; polls quietly while the TV is off |
+| `/etc/systemd/system/tvloop.service` | runs it; inert on nodes with no capture device |
+| `/opt/toppingctl-venv` + `/opt/toppingctl` | `toppingctl` and its `hid` binding |
+| `/usr/local/bin/toppingctl` | wrapper so it is on PATH without activating the venv |
+| `/etc/udev/rules.d/99-audio-node.rules` | refresh config, then restart both, on DAC add/remove |
+| `/root/.ssh/authorized_keys` | root SSH key, so a node is reachable without a password from first boot |
 
 ## Knobs (env vars at the top of the script)
 
 - `SNAPSERVER_HOST` (default `10.42.2.37`) · `GLR_VERSION` (`v0.7.4`) ·
-  `ZEROCONF_PORT` (`4070`).
+  `ZEROCONF_PORT` (`4070`) · `SSH_PUBKEY` (defaults to the operator key; extra
+  keys can also be dropped one-per-line in `/boot/authorized_keys` and are merged).
+
+**Why the key is provisioned:** `kitchen` and `living-room` were both briefly
+reachable by nobody — password auth with a password that had since changed, and
+no key installed. The recovery path was physically pulling the SD card. A node
+should arrive reachable.
 
 ## Notes
 
-- **DAC assumption:** the USB DAC is ALSA card `0` (the only sound card on a
-  headless node). If you enable onboard/HDMI audio, the dmix slave (`hw:0`) needs
-  to follow the USB card index instead.
+- **Detection is playback-aware.** A node with a USB *capture* interface (an
+  optical input for TV audio) enumerates that as a sound card too, and it can
+  come first. Measured on the living-room node 2026-08-28: card 0 was the
+  capture device (`pcm0c`), card 1 the DAC (`pcm0p`) — picking "the first USB
+  card" aimed dmix at the TV input. `audio-dmix-detect` requires a `pcm*p`.
+### TV optical input (`tvloop`)
+
+A node with a USB capture interface (living room: a HiFime UR27, which
+enumerates as `SA9227 USB Audio`) bridges the TV's optical output into the
+**same dmix** snapclient and go-librespot already share. TV audio therefore
+mixes with music instead of fighting for the device, and inherits the Home
+Assistant volume control for free — that drives the DAC's own hardware mixer,
+underneath all three sources.
+
+`tvloop.service` is installed on **every** node, so provisioning stays uniform.
+On a node with no capture device it logs one line and waits — the wrapper never
+exits, so `Restart=` never fires. That distinction matters: an earlier revision
+exited when detection failed, which turned `Restart=always` into a 30s crash
+loop on every node except the living room. **Two states that look like errors
+here are normal** — no capture hardware (permanent, most nodes) and no optical
+carrier (whenever the TV is off) — and neither may be allowed to reach systemd.
+
+Card detection runs **inside** the loop, not once at startup, so a USB
+renumbering is picked up on the next pass rather than leaving a long-running
+process pinned to a stale `hw:X,0`. The udev rule restarts `tvloop` alongside
+`snapclient` and `go-librespot` for the same reason.
+
+**Why the wrapper polls instead of letting systemd restart it.** With no optical
+carrier the receiver has nothing to clock off, so the capture device opens and
+then errors — `alsaloop` prints `Poll FD initialization failed` and exits 1, and
+`arecord` reports `Input/output error`. That is the normal state whenever the TV
+is off. Driven by `Restart=`, it becomes a crash loop: **7,650 journal lines per
+hour, measured 2026-08-28**, onto a `/var/log` that is a **50 MB tmpfs**. The
+wrapper polls every 5s and logs only on transitions — two full on/off cycles
+produce 10 lines — and still reconnects within ~5s of the TV coming on.
+
+**Do not tune the buffer settings to fix lip-sync.** `-t 20000` was chosen
+empirically: `5000` produced 22 underruns and an explicit `-B 1024 -E 256`
+produced 9. The measured A/V offset is ~75 ms and does **not** respond to these
+values, nor to the dmix buffer size — halving dmix was predicted to cut 22 ms
+and instead moved 9 ms the wrong way. The delay is upstream, in the TV and/or
+the capture hardware. `buffer_size` is a ring capacity, not a fixed delay.
+
+- **`audio-dmix-refresh` writes `/etc`, so it is root-only.** `snapclient` runs
+  unprivileged and must not call it; the unit invokes it via `ExecStartPre=+`
+  (which runs as root regardless of `User=`), and the wrapper only *gates* on
+  `audio-dmix-detect`.
+- **`toppingctl` is installed on every node but is inert** until used: it refuses
+  to drive any device whose USB product string is not a confirmed model. Five
+  Topping models share USB product ID `0x152a:8750` with colliding register maps,
+  so PID cannot identify hardware.
+- ⚠️ **Do not `apt install python3-hid`** — Debian ships cython-hidapi under that
+  name (`hid.device()`), while `toppingctl` needs `hid.Device(path=...)` from the
+  PyPI `hid` package. The apt one installs cleanly, imports fine, then fails on a
+  missing attribute. Hence the venv.
+- **DAC card index is detected, not assumed.** `audio-dmix-refresh` finds the USB
+  card in `/proc/asound/cards` and writes `asound.conf` to match, re-running on
+  every plug/unplug via udev. This used to hardcode `hw:0` on the assumption that
+  the USB DAC was the only sound card — **an assumption that was already false**:
+  with onboard audio enabled, `bcm2835` takes card 0 and the DAC lands on card 1,
+  so every stream went to the 3.5 mm headphone jack while both services reported
+  healthy. Silence, no error. Verified and fixed on `office`, 2026-08-27.
 - **Software volume** (`--mixer software`) is deliberate — it survives DAC swaps
   (no dependence on the DAC exposing a hardware mixer). HASS controls it via the
   native Snapcast integration (server control port `1705`).

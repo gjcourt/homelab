@@ -26,8 +26,7 @@ Homepage is deployed as a stateless Kubernetes `Deployment` with a single replic
     - `kubernetes.yaml`, `docker.yaml`, `proxmox.yaml`: Empty files required by Homepage to prevent startup crashes.
 
 ### Updating the Dashboard
-To add a new service or change the layout, edit the `configmap-patch.yaml` in the respective environment overlay (`apps/production/homepage/configmap-patch.yaml` or `apps/staging/homepage/configmap-patch.yaml`).
-The `services.yaml` is often shared or patched depending on the environment.
+To add a new service or change the layout, edit the config files in the respective environment overlay (`apps/production/homepage/config/` or `apps/staging/homepage/config/`). Each overlay's `configMapGenerator` (`behavior: merge`) replaces the base's `services.yaml`, `settings.yaml`, `widgets.yaml` and `bookmarks.yaml` wholesale with its own copies (the other base files, such as `custom.css`, pass through unchanged), so a tile added to one environment must be added to the other separately (staging uses `*.stage.burntbytes.com` hostnames). Staging tiles carry `siteMonitor`s too. In each environment, every tile with a `siteMonitor` needs an egress rule for its backend (pods on their container port, or the endpoint IP for a selector-less Service) in that overlay's `networkpolicy-sitemonitor.yaml`, or the Gateway answers `403 Access denied` and homepage shows the dot as up (see that file's header). `make check-homepage-sitemonitor` (`scripts/check-homepage-sitemonitor.py`) checks this from the repo and fails on a missing rule; a backend whose Service comes from a Helm chart is described in the script's `HELM_BACKENDS` table.
 
 ## 5. Usage Instructions
 Navigate to the Homepage URL. The dashboard is read-only. Clicking on a service icon will open that service in a new tab.
@@ -84,13 +83,23 @@ Verify the beacon:
 kubectl -n homepage-prod exec deploy/homepage-clicks -- wget -qO- localhost:8080/metrics | grep homepage_tile_clicks_total
 ```
 
-### Layout: one page, four columns + within-group order
+### Layout: one page, five columns + within-group order
+- **Tools was split on 2026-10-19** into **Home & Life** (Home Assistant, Vibrato, Mealie, Vitals,
+  Ladder, Finance; Home Assistant moved in from Infrastructure the same day, at the top) and **Notes & Learning** (Memos, Linkding, Excalidraw, Flashcards, Open WebUI,
+  Changes, Kokoro). It had grown to 12 tiles against 5-6 in the other columns. Both halves keep
+  George's Tools order below, so the Tools rules below apply to both. Every one of those tiles
+  changed group, so their click series fork at that date (see the group-move note below).
+- **Rows by width.** One row of five from 1800px (`fiveColumns: true`); 1280-1799px is rows of
+  3 and 2 (a `custom.css` override of Homepage's 4-per-row xl rule, which left Monitoring alone
+  on a full-width row); narrower falls back to Homepage's thirds, halves, then one column.
 - **No tabs.** Every group renders on a single page as a column (`layout.<group>.style: column`).
   The Home/Admin tab split (#1171) was reverted in #1272: a tab you have to remember to click
   hides what the dashboard exists to show. Do not reintroduce `layout.<group>.tab`.
 - Within each group, tiles in `services.yaml` are ordered by expected daily-use frequency —
   **except Tools**, whose order was set explicitly by George in #1273 (2026-08-04):
   Vibrato, Memos, Linkding, Mealie, Excalidraw, Flashcards, Vitals, Ladder, Finance.
+  (Open WebUI, Changes and Kokoro were appended after Finance in the 2026-10 prod-sync pass,
+  pending George's placement.)
   That is an owner preference, not a hypothesis. A data-driven pass may propose changes to it
   but must confirm with him before applying them; the other three groups can be reordered freely
   from the panel.

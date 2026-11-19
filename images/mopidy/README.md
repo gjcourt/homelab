@@ -59,9 +59,9 @@ Images are published to `ghcr.io/gjcourt/mopidy` by the GHA workflow
 `images/mopidy/**`, plus `workflow_dispatch` for manual runs. Authentication
 uses the auto-provisioned `GITHUB_TOKEN` — no operator-set secrets required.
 
-Tag format: `YYYY-MM-DD` (first build of the day) or `YYYY-MM-DD-N` (reruns of
-the same workflow). Multi-arch: `linux/amd64` and `linux/arm64`. The `latest`
-tag is also moved to the most recent build.
+Tag format: immutable `YYYY-MM-DD-<sha7>` (UTC date + 7-char commit SHA).
+Multi-arch: `linux/amd64` and `linux/arm64`. The `latest` tag is also moved
+to the most recent build.
 
 The snapcast pod's deployment manifest (`apps/base/snapcast/deployment.yaml`)
 should be retagged to point at the date tag produced by the first CI build of

@@ -1,0 +1,18 @@
+# Cluster-internal only: Home Assistant's openai_tts integration (HACS) calls
+# http://kokoro.kokoro-<env>.svc.cluster.local:8880/v1/audio/speech. No HTTPRoute.
+apiVersion: v1
+kind: Service
+metadata:
+  name: kokoro
+  namespace: kokoro
+  labels:
+    app: kokoro
+spec:
+  type: ClusterIP
+  selector:
+    app: kokoro
+  ports:
+    - name: http
+      port: 8880
+      protocol: TCP
+      targetPort: 8880

@@ -282,8 +282,15 @@ deliverable sequencing.
     (pin per P3).
   - `environment`: `REPO_URL`, `RUNNER_NAME: alcatraz`, `RUNNER_SCOPE: repo`,
     `LABELS: alcatraz,synology`, `RUNNER_WORKDIR: /tmp/runner-work`,
-    `EPHEMERAL: "false"`, `DISABLE_AUTO_UPDATE: "true"`, empty `ACCESS_TOKEN: ""`
-    (set in Container Manager UI as a masked value — **never commit**).
+    `EPHEMERAL: "true"`, **no `DISABLE_AUTO_UPDATE` at all**, empty
+    `ACCESS_TOKEN: ""` (set in Container Manager UI as a masked value —
+    **never commit**).
+    > **Corrected 2026-08-19.** As originally written this line said
+    > `EPHEMERAL: "false"`, `DISABLE_AUTO_UPDATE: "true"`. The entrypoint
+    > presence-tests both (`[ -n "${VAR}" ]`), so `"false"` ENABLES a flag —
+    > `EPHEMERAL: "false"` was never non-ephemeral, and the only way to disable
+    > auto-update-blocking is to omit the variable. Ephemeral is now explicit
+    > and intentional; `DISABLE_AUTO_UPDATE` is removed.
   - `volumes`: `/volume1/docker/actions-runner/work:/tmp/runner-work` and
     `/var/run/docker.sock:/var/run/docker.sock`.
   - `restart: unless-stopped`; healthcheck on `pgrep -f Runner.Listener`.
@@ -431,8 +438,12 @@ A small, defensive wrapper the workflow calls per matrix entry:
   account's group membership on this DSM build; Synology occasionally relocates
   package data across DSM versions.
 - **Auto-update of packages.** If DSM auto-updates Container Manager, the Docker
-  Engine version can change under the runner. Pin nothing you can't, and keep
-  `DISABLE_AUTO_UPDATE: "true"` on the runner image itself.
+  Engine version can change under the runner. Pin nothing you can't.
+  > **Corrected 2026-08-19.** This originally advised keeping
+  > `DISABLE_AUTO_UPDATE: "true"` on the runner image. Do not: it pins the
+  > runner below GitHub's mandated minimum and takes the deploy path down at
+  > the next deprecation (as it did on hestia). The variable is now removed
+  > from both runner composes.
 - **Image arch.** Every target app image (and the runner image) must have a tag
   for alcatraz's arch (P3). An x86-only image fails to pull on an ARM unit — the
   wrapper's explicit `pull` step turns that into a clear job failure.

@@ -5,7 +5,7 @@ metadata:
   namespace: cadence
 spec:
   hostnames:
-    - cadence.burntbytes.com
+    - cadence-app.burntbytes.com
   parentRefs:
     - name: app-gateway-production
       namespace: default
@@ -24,13 +24,13 @@ metadata:
   namespace: cadence
 spec:
   hostnames:
-    - cadence.burntbytes.com
+    - cadence-app.burntbytes.com
   parentRefs:
     - name: app-gateway-production
       namespace: default
       sectionName: https
   # AUTHENTICATION — deliberately none at the gateway. Recorded here because
-  # cadence.burntbytes.com is published on the public tunnel (#1261) and
+  # cadence-app.burntbytes.com is published on the public tunnel and
   # Authelia's default_policy is `bypass`, so "no rule" is easy to mistake for
   # an oversight. It is not: the app authenticates every route itself, and the
   # route mix is why a blanket Authelia rule would break it.

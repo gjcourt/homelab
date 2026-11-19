@@ -14,9 +14,9 @@ resources:
   # build passed, CI went green, and Flux would have applied everything. There
   # is no `wait: true` or `healthChecks` on the apps-production Kustomization, so
   # Flux reports success while the pod sits in CreateContainerConfigError
-  # indefinitely — and cadence.burntbytes.com is already published on the public
-  # tunnel (#1261), so it would have started serving 503s from the gateway
-  # instead of a 404. A broken-production gate is not a merge gate.
+  # indefinitely — and cadence-app.burntbytes.com is published on the public
+  # tunnel by this same change, so it would have started serving 503s from the
+  # gateway instead of a 404. A broken-production gate is not a merge gate.
   - secret.sops.yaml
 labels:
   - pairs:

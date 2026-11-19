@@ -60,7 +60,7 @@ spec:
             # the PRODUCTION app URL and Shopify OAuth callbacks would land on
             # prod. Any new overlay MUST patch SHOPIFY_APP_URL.
             - name: SHOPIFY_APP_URL
-              value: "https://cadence.burntbytes.com"
+              value: "https://cadence-app.burntbytes.com"
             - name: SCOPES
               value: "write_orders,read_products" # keep in sync with shopify.app.toml
             - name: DATABASE_URL

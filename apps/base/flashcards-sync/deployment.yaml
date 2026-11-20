@@ -33,7 +33,7 @@ spec:
         - name: flashcards-sync
           # SHA-pinned tag forces a pull on first deploy. Bump to the
           # daily YYYY-MM-DD tag once the first deploy is verified.
-          image: ghcr.io/gjcourt/flashcards-sync:2026-08-12-cbc0dd5
+          image: ghcr.io/gjcourt/flashcards-sync:2026-09-30-39e8c05
           ports:
             - containerPort: 8080
           env:

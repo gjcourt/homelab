@@ -67,13 +67,21 @@ ingress:
       originServerName: burntbytes.com
 
   # Cadence — the marketing page (apps/production/cadence-site, route
-  # cadence-site-https). Public static page: no auth needed. When the Cadence
-  # Shopify app deploys (#1262), its paths route on this same hostname and need
-  # their own auth posture decided then.
+  # cadence-site-https). Public static page: no auth needed. The Cadence
+  # Shopify app does NOT share this hostname; it has its own entry below.
   - hostname: cadence.burntbytes.com
     service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
     originRequest:
       originServerName: cadence.burntbytes.com
+
+  # Cadence Shopify app (apps/production/cadence, route cadence-https). Not an
+  # Authelia OIDC client: it authenticates in-app (Shopify session for app.*,
+  # HMAC for webhooks.*), and auth.* / pay/:shop/:sku are public by design —
+  # see the AUTHENTICATION note in apps/production/cadence/httproute.yaml.
+  - hostname: cadence-app.burntbytes.com
+    service: https://cilium-gateway-app-gateway-production.default.svc.cluster.local
+    originRequest:
+      originServerName: cadence-app.burntbytes.com
 
   # Catch-all returns 404
   - service: http_status:404

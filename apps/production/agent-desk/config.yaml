@@ -9,6 +9,12 @@ planeWebUrl: https://plane.burntbytes.com
 # {appWebUrl}/t/<KEY> in the app. Other links stay on planeWebUrl. Remove this
 # line to roll back. Needs an agent-desk image with appWebUrl support.
 appWebUrl: https://desk.burntbytes.com
+# C6b of plane-mobile's plan (George, 2026-11-22: "Yes, I see them; cut over
+# now"): plane-mobile's Web Push sends "needs you" and "ready for review", so
+# agent-desk stops sending them through Home Assistant. "reopen?" and "webhook
+# looks off" stay on HA. Rollback: true (or delete the line). Needs an
+# agent-desk image with notifyOnState support; older images ignore it.
+notifyOnState: false
 # The agent-desk bot (plan, "Plane identity"): a Member of each mapped project's
 # Plane project, and of no others.
 botEmail: gjcourt+agent-desk@gmail.com

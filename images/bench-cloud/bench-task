@@ -239,4 +239,12 @@ if [[ -s "$out/result.json" ]] && jq -e -r --arg id "$TASK_ID" \
   echo "$TASK_ID: no JSON result (claude exit $crc)"
   tail -20 "$out/stderr.log" >&2 || true
 fi
+
+# HOMELAB-120: an agent that ended without commenting on or moving its ticket
+# (its Plane MCP connection down, or it just stopped) still reaches George: the
+# wrapper posts its final message on the Jobs' own key. Best effort; it never
+# changes the Job's outcome.
+if [[ -n "${TASK_TICKET:-}" ]]; then
+  bench-ticket last-message "$out/result.json" || true
+fi
 exit "$crc"

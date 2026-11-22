@@ -20,6 +20,12 @@
                       with the ticket still In Progress is sent back, once, to
                       set In review or Blocked (two runs on 2026-10-25 linked
                       their PR and ended without it)
+  bench-ticket last-message RESULT_JSON
+                      bench-task, after claude exits: if the agent neither
+                      commented on the ticket nor moved it, post its final
+                      message (RESULT_JSON's `result`) as a ticket comment on
+                      the Jobs' own key, so it still reaches George when the
+                      agent's Plane MCP connection was down (HOMELAB-120)
 
 Plane comments are the only channel today (agent-desk plan, "Questions and the
 ticket as chat"). poll() is the whole interface a later channel has to provide;
@@ -43,6 +49,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime
 from html.parser import HTMLParser
 
 INTERVAL = 30
@@ -394,6 +401,249 @@ def stop(event):
                           "reason": STOP_NUDGE.format(key=ticket.get("key", "this ticket"))}))
 
 
+# ---- last-message: the agent's final message, posted by the wrapper (HOMELAB-120) ----
+# The header and marker are a contract: plane-mobile (PLANEMOBILE-31) and
+# agent-desk's reaper find this comment by LAST_MESSAGE_MARKER. Change neither
+# without changing them.
+LAST_MESSAGE_HEADER = "The agent's last message — it couldn't update the ticket itself"
+LAST_MESSAGE_MARKER = "bench-last-message:"
+# Characters of the agent's Markdown kept; the rest stays in the run record.
+# Small enough that the HTML, escaped, stays well under MAX_COMMENT.
+LAST_MESSAGE_CAP = 3000
+
+# Credential shapes that must never reach a ticket. The values of the pod's own
+# secret env vars are redacted too (secret_env_values), whatever their shape.
+SECRET_PATTERNS = [
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.DOTALL),
+    re.compile(r"\bsk-ant-[A-Za-z0-9_-]{8,}"),
+    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),
+    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
+    re.compile(r"\bplane_api_[A-Za-z0-9]{8,}"),
+    re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),  # JWT
+    re.compile(r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/=-]{16,}"),
+    re.compile(r"(?i)(\b(?:api[_-]?key|token|secret|password|passwd)\b\s*[:=]\s*)['\"]?[^\s'\"<>]{8,}"),
+]
+SECRET_ENV = re.compile(r"(?i)(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)")
+REDACTED = "[redacted]"
+
+
+def secret_env_values(env=None):
+    env = os.environ if env is None else env
+    return sorted({v for k, v in env.items() if SECRET_ENV.search(k) and len(v) >= 8},
+                  key=len, reverse=True)
+
+
+def redact(text, env=None):
+    for v in secret_env_values(env):
+        text = text.replace(v, REDACTED)
+    for pat in SECRET_PATTERNS:
+        keep = pat.groups > 0  # the "token: " / "Bearer " prefix stays, the value goes
+        text = pat.sub(lambda m, keep=keep: (m.group(1) if keep else "") + REDACTED, text)
+    return text
+
+
+def _esc(s):
+    """html.escape, with < as &#60;: the same in the browser, and code that
+    mentions a tag (`<p>`) isn't taken by lint_comment for escaped markup."""
+    return html.escape(s, quote=False).replace("&lt;", "&#60;")
+
+
+def _plain(s):
+    """The words alone, as escaped paragraphs: the fallback that always lints."""
+    return "".join(f"<p>{_esc(p).replace(chr(10), '<br/>')}</p>"
+                   for p in re.split(r"\n\s*\n", s.strip()) if p.strip())
+
+
+_INLINE_CODE = re.compile(r"`([^`\n]+)`")
+_LINK = re.compile(r"\[([^\]\n]+)\]\((https?://[^\s)]+)\)")
+_BARE_URL = re.compile(r"(?<![\"'>=])\bhttps?://[^\s<]+[^\s<.,;:!?)\]'\"]")
+
+
+def _inline(s):
+    """One line of Markdown inline syntax as HTML: code, links, bold, italics."""
+    slots = []
+
+    def keep(h):
+        slots.append(h)
+        return f"\x00{len(slots) - 1}\x00"
+
+    s = _INLINE_CODE.sub(lambda m: keep(f"<code>{_esc(m[1])}</code>"), s)
+    s = _LINK.sub(lambda m: keep(f'<a href="{html.escape(m[2])}">{_esc(m[1])}</a>'), s)
+    s = _BARE_URL.sub(lambda m: keep(f'<a href="{html.escape(m[0])}">{_esc(m[0])}</a>'), s)
+    s = _esc(s)
+    s = re.sub(r"\*\*(\S(?:.*?\S)?)\*\*|__(\S(?:.*?\S)?)__", lambda m: f"<strong>{m[1] or m[2]}</strong>", s)
+    s = re.sub(r"(?<![\w*])\*(\S(?:.*?\S)?)\*(?![\w*])|(?<![\w_])_(\S(?:.*?\S)?)_(?![\w_])",
+               lambda m: f"<em>{m[1] or m[2]}</em>", s)
+    return re.sub(r"\x00(\d+)\x00", lambda m: slots[int(m[1])], s)
+
+
+def md_to_html(md):
+    """The Markdown an agent writes (paragraphs, headings, lists, code, quotes)
+    as the HTML Plane comments take. Not CommonMark; lint_comment checks the result."""
+    out, para, items, kind = [], [], [], None
+    lines = md.replace("\r\n", "\n").split("\n")
+
+    def flush():
+        nonlocal para, items, kind
+        if para:
+            out.append("<p>" + "<br/>".join(_inline(x) for x in para) + "</p>")
+        if items:
+            out.append(f"<{kind}>" + "".join(f"<li>{_inline(x)}</li>" for x in items) + f"</{kind}>")
+        para, items, kind = [], [], None
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        st = line.strip()
+        if st.startswith("```"):
+            flush()
+            body = []
+            i += 1
+            while i < len(lines) and not lines[i].strip().startswith("```"):
+                body.append(lines[i])
+                i += 1
+            out.append("<pre><code>" + _esc("\n".join(body)) + "</code></pre>")
+        elif not st:
+            flush()
+        elif m := re.match(r"(#{1,6})\s+(.*)", st):
+            flush()
+            n = min(len(m[1]), 4)
+            out.append(f"<h{n}>{_inline(m[2].rstrip('# '))}</h{n}>")
+        elif re.fullmatch(r"(?:-\s*){3,}|(?:\*\s*){3,}|(?:_\s*){3,}", st):
+            flush()
+            out.append("<hr/>")
+        elif st.startswith(">"):
+            flush()
+            quote = []
+            while i < len(lines) and lines[i].strip().startswith(">"):
+                quote.append(lines[i].strip()[1:].strip())
+                i += 1
+            out.append("<blockquote>" + md_to_html("\n".join(quote)) + "</blockquote>")
+            continue
+        elif m := re.match(r"([-*+]|\d+[.)])\s+(.*)", st):
+            k = "ol" if m[1][0].isdigit() else "ul"
+            if para or (items and k != kind):
+                flush()
+            kind = k
+            items.append(m[2])
+        elif items and line[:1].isspace():
+            items[-1] += " " + st  # a list item's continuation line
+        else:
+            if items:
+                flush()
+            para.append(st)
+        i += 1
+    flush()
+    return "".join(out)
+
+
+def last_message_html(text, task_id, env=None):
+    """The comment for the agent's final message: header, the message (redacted,
+    capped, Markdown as HTML), and the marker. None if there is nothing to say."""
+    text = redact((text or "").strip(), env)
+    if not text:
+        return None
+    cut = len(text) > LAST_MESSAGE_CAP
+    if cut:
+        text = text[:LAST_MESSAGE_CAP].rstrip()
+    body = md_to_html(text)
+    if lint_comment(body):
+        # Markup the converter got wrong: post the words as plain paragraphs.
+        body = _plain(text)
+    tail = (f"<p><em>Truncated at {LAST_MESSAGE_CAP} characters; the whole message is in "
+            f"the run record.</em></p>" if cut else "")
+    out = (f"<p><strong>{_esc(LAST_MESSAGE_HEADER)}</strong></p>"
+           + body + tail
+           + f"<p><em>Posted by the bench-cloud wrapper after the run ended.</em> "
+             f"<code>{LAST_MESSAGE_MARKER} {_esc(task_id)}</code></p>")
+    return None if lint_comment(out) else out
+
+
+def agent_updated(state, current, comments, me, started, task_id):
+    """Why the wrapper shouldn't post, or "" if it should.
+
+    state: the hook's state file; current: the ticket's state name now ("" if
+    unknown); comments: the ticket's comments (None if unknown); me: the Jobs'
+    key's user id (None if unknown); started: the run's start, ISO.
+    """
+    if state.get("commented"):
+        return "the agent commented on the ticket"
+    if current and current != IN_PROGRESS:
+        return f"the agent moved the ticket ({current})"
+    for c in comments or []:
+        text = html_to_text(c.get("comment_html", ""))
+        if f"{LAST_MESSAGE_MARKER} {task_id}" in text:
+            return "already posted"
+        if me and started and c.get("actor", c.get("created_by")) == me \
+                and _epoch(c.get("created_at")) >= _epoch(started):
+            return "the agent commented on the ticket"
+    return ""
+
+
+def _epoch(stamp):
+    """An ISO timestamp as epoch seconds; 0 when missing or malformed."""
+    try:
+        return datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def _me(channel):
+    t = channel.ticket
+    try:
+        return channel._get(f"{t['plane_url'].rstrip('/')}/api/v1/users/me/").get("id")
+    except Exception:  # noqa: BLE001 — the hook's state file is the main signal
+        return None
+
+
+def post_comment(channel, comment_html):
+    t = channel.ticket
+    url = (f"{channel._base()}/work-items/{t['work_item_id']}/comments/")
+    req = urllib.request.Request(url, data=json.dumps({"comment_html": comment_html}).encode(),
+                                 method="POST", headers={"X-API-Key": channel.key,
+                                                         "Content-Type": "application/json",
+                                                         "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.load(r)
+
+
+def last_message(path, channel, task_id, started="", state_path=STATE):
+    """Post the agent's final message unless it updated the ticket itself.
+    Returns what happened, for the Job log. Never raises on a missing record."""
+    try:
+        with open(path) as f:
+            res = json.load(f)
+        text = res.get("result") if isinstance(res, dict) else None
+    except (OSError, ValueError):
+        return "no result.json; nothing to post"
+    if not isinstance(text, str) or not text.strip():
+        return "the agent's final message is empty; nothing to post"
+    try:
+        with open(state_path) as f:
+            state = json.loads(f.read() or "{}")
+    except (OSError, ValueError):
+        state = {}
+    if state.get("commented"):  # known without asking Plane
+        return "not posted: the agent commented on the ticket"
+    try:
+        current = channel.current_state()
+    except Exception:  # noqa: BLE001 — unknown state: still try to post
+        current = ""
+    try:
+        comments = channel.all()
+    except Exception:  # noqa: BLE001
+        comments = None
+    why = agent_updated(state, current, comments, _me(channel), started, task_id)
+    if why:
+        return f"not posted: {why}"
+    body = last_message_html(text, task_id)
+    if body is None:
+        return "not posted: the message didn't make a valid comment"
+    post_comment(channel, body)
+    return "posted the agent's last message to the ticket"
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
     if cmd in ("pre", "lint"):
@@ -401,6 +651,18 @@ def main():
         return
     if cmd == "stop":
         stop(json.loads(sys.stdin.read() or "{}"))
+        return
+    if cmd == "last-message":
+        raw, key = os.environ.get("TASK_TICKET"), os.environ.get("PLANE_API_KEY")
+        if raw and key and len(sys.argv) > 2:
+            started = ""
+            try:  # the run's start, from the record bench-task wrote
+                with open(os.path.join(os.environ.get("BENCH_OUT", ""), "meta.json")) as f:
+                    started = json.load(f).get("started", "")
+            except (OSError, ValueError):
+                pass
+            print("bench-ticket: " + last_message(sys.argv[2], PlaneComments(json.loads(raw), key),
+                                                  os.environ.get("TASK_ID", ""), started))
         return
     event = json.loads(sys.stdin.read() or "{}") if cmd == "hook" else {}
     # A comment posted this run: what lets a findings playbook reach In review.

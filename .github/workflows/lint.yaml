@@ -57,6 +57,30 @@ jobs:
       - name: Only bench-gate.yaml may write commit statuses
         run: python3 scripts/bench-gate/lint_workflows.py .github/workflows
 
+  # bench-ticket and bench-session: HOMELAB-120's post-exit comment (the
+  # agent's last message) and the agent sessions plan's session events, on the
+  # image's Python (Debian bookworm's python3 is 3.11). The tests also check
+  # the Job's redaction patterns against images/agent-sessions'.
+  bench-cloud:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Unit tests
+        run: python -m pytest -q images/bench-cloud/tests
+
+      - name: Shell syntax
+        run: bash -n images/bench-cloud/bench-task
+
   # HOMELAB-106/108: pure logic of the gha-runner watchdog (pin parsing,
   # apply/recover decisions, token expiry, textfile metrics and their HELP).
   gha-runner-watchdog:

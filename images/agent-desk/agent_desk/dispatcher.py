@@ -147,6 +147,8 @@ class Dispatcher:
         self.seen_state[t.id] = t.state_name
         if prev == t.state_name or t.state_name not in (BLOCKED, IN_REVIEW):
             return
+        if not self.cfg.notify_on_state:
+            return  # plane-mobile's Web Push sends these (C6b); seen_state stays current
         if not self._seeded or "ready" not in t.label_names:
             return
         cmts = self.plane.comments(pr.id, t.id)
@@ -469,11 +471,26 @@ class Dispatcher:
                     self.log(f"{t.key}: {j['name']} succeeded with a PR → In review")
                     continue
                 self.plane.update_item(pr.id, t.id, {"state": pr.states[BLOCKED]})
-                self.plane.comment(pr.id, t.id, _p(
-                    f"Job `{j['name']}` ended ({how}) without moving the ticket to In review "
-                    f"or Blocked. The run record is at `{record}`."))
+                note = (f"Job `{j['name']}` ended ({how}) without moving the ticket to In review "
+                        f"or Blocked. The run record is at `{record}`.")
+                if self.last_message_posted(pr, t, j["name"]):
+                    # HOMELAB-120: point at the Job's own comment, never repeat it.
+                    note += (f" The agent's last message is in the comment above, marked "
+                             f"`{LAST_MESSAGE_MARKER} {j['name']}`.")
+                self.plane.comment(pr.id, t.id, _p(note))
                 self.in_progress.pop(t.id, None)
                 self.log(f"{t.key}: reaped {j['name']} ({how})")
+
+    def last_message_posted(self, pr: Project, t: Ticket, job: str) -> bool:
+        """Did the Job's wrapper post the agent's last message (bench-ticket
+        last-message)? Its comment carries LAST_MESSAGE_MARKER and the Job name."""
+        mark = f"{LAST_MESSAGE_MARKER} {job}"
+        try:
+            return any(mark in promptmod.html_to_text(c.get("comment_html", ""))
+                       for c in self.plane.comments(pr.id, t.id))
+        except Exception as e:  # noqa: BLE001 — the note goes out either way
+            self.log(f"{t.key}: comment lookup failed: {e}")
+            return False
 
     def linked_pr(self, pr: Project, t: Ticket) -> str:
         """The first link on the ticket to a PR on the project's own repo, or ""."""
@@ -544,6 +561,11 @@ class Dispatcher:
         if self.start(pr, t, d, job_list, review=review):
             job_list.append({"ticket": t.id, "playbook": d.playbook, "active": True,
                              "name": "", "succeeded": False})
+
+
+# The marker bench-cloud's wrapper puts on the agent's last message
+# (images/bench-cloud/bench-ticket, LAST_MESSAGE_MARKER). Keep the two equal.
+LAST_MESSAGE_MARKER = "bench-last-message:"
 
 
 def review_marker(review_id) -> str:

@@ -74,23 +74,30 @@ above before sending.
 
 ## Redaction
 
-`agent_sessions/redact.py` holds three lists of `(name, pattern)`:
+`agent_sessions/redact.py` holds four lists of `(name, pattern)`, the same
+as `bench-ticket`'s (HOMELAB-120's last-message comment uses them too):
 
-- **VENDOR**: token shapes a vendor issues (GitHub, GitLab, Anthropic,
-  OpenAI-style, Stripe live keys, Plane, Slack incl. `xapp-`, Hugging Face,
-  npm, AWS key ids, JWTs, private keys);
+- **VENDOR**: token shapes a vendor issues (whole PEM private keys, GitHub,
+  GitLab, Anthropic, OpenAI-style, Stripe live keys, Plane, Slack incl.
+  `xapp-`, Hugging Face, npm, AWS key ids, JWTs);
+- **CONTEXT**: secrets by context, precise enough for a comment: `Bearer …`,
+  `NAME=value` / `"name": "value"` where the name holds api_key, token,
+  secret or password, and URL passwords;
 - **GENERIC**: 32+ hex characters, 32+ characters mixing cases and digits;
-- **ASSIGN**: a secret by context: `NAME=value` and `"name": "value"` for
-  secret-looking names, `--token value`, a long value after a secret-looking
-  word, `Authorization: <scheme> X`, `Bearer …`, `mysql -p…`, `sshpass -p`,
-  `curl -u user:pw`, URL passwords.
+- **ASSIGN**: broader context: any secret-looking name (key, auth, pass, …),
+  `--token value`, a long value after a secret-looking word,
+  `Authorization: <scheme> X`, `mysql -p…`, `sshpass -p`, `curl -u user:pw`.
 
-**Two levels.** Progress summaries and plan items get all three (the full
-level). `say`/`ask` text is also posted to Plane, so it gets VENDOR only (the
-message level): commit SHAs, branch names and prose such as "the key: …"
-survive there. On the Job, both levels also replace the value of every env var
-with a secret-looking name (`*KEY*`, `*TOKEN*`, `*SECRET*`, `*PASS*`,
-`*APIKEY*`, `*AUTH*`, …).
+**Two levels.**
+
+- **Message**, for every Plane comment: `say`/`ask` and the wrapper's
+  last-message comment. It uses VENDOR and CONTEXT, so commit SHAs, branch
+  names and prose such as "the key: …" survive.
+- **Full**, for progress summaries and plan items: all four lists.
+
+On the Job, both levels also replace the value of every env var with a
+secret-looking name (`*KEY*`, `*TOKEN*`, `*SECRET*`, `*PASSW*`,
+`*CREDENTIAL*`, `*_PASS`, `*_AUTH`, …), and each line of a multi-line one.
 
 Every quantifier is bounded and every string is capped at 20,000 characters
 before a pattern runs (tests: 200,000 characters of `x-` in under 0.2 s). The

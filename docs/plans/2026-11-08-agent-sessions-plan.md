@@ -255,12 +255,14 @@ in `bench-ticket`:
   - **Built in step 2:** the redaction is new. The plan first said "the same redaction as the run
     record", but the run record isn't redacted. It lives in `bench-ticket` and again in
     `agent-sessions` (`agent_sessions/redact.py`), and a test keeps the two pattern lists the same.
-    It has two levels:
-    - **full**, for progress and the task list: env secrets, vendor token shapes, long hex and
-      mixed-character strings, and secrets by context (`NAME=value`, `--token v`,
-      `Authorization: …`, `mysql -p…`, `curl -u user:pw`, URL passwords);
-    - **message**, for `say`/`ask` text, which is also a Plane comment: env secrets and vendor
-      token shapes only, so commit SHAs and branch names survive.
+    The same patterns serve HOMELAB-120's last-message comment (#1998). It has two levels:
+    - **message**, for every Plane comment (`say`/`ask` and the last-message comment): env
+      secrets, vendor token shapes, and the precise context patterns HOMELAB-120 uses (`Bearer`,
+      `NAME=value` for token/secret/password names, URL passwords). Commit SHAs and branch names
+      survive;
+    - **full**, for progress and the task list: everything in the message level, plus long hex,
+      mixed-character strings and broader context (`--token v`, `Authorization: …`, `mysql -p…`,
+      `curl -u user:pw`, any secret-looking name).
 
     The levels are a proposal from the build, open for George to revisit.
 - **The task list** comes from the agent's own todo tool's input. Devin calls this the "task list

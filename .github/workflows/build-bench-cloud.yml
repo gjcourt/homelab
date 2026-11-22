@@ -7,7 +7,6 @@ on:
       - 'images/bench-cloud/**'
       - 'scripts/bench-cloud/**'
       - 'scripts/bench-gate/check.py'
-      - 'images/agent-sessions/agent_sessions/redact.py'
       - '.github/workflows/build-bench-cloud.yml'
   # PRs build too (no push), so a requirements set that fails pip check or the
   # plane-mcp smoke test fails the PR -- and holds Renovate's automerge --
@@ -17,7 +16,6 @@ on:
       - 'images/bench-cloud/**'
       - 'scripts/bench-cloud/**'
       - 'scripts/bench-gate/check.py'
-      - 'images/agent-sessions/agent_sessions/redact.py'
       - '.github/workflows/build-bench-cloud.yml'
   workflow_dispatch:
 
@@ -26,29 +24,7 @@ env:
   IMAGE_NAME: gjcourt/bench-cloud
 
 jobs:
-  # bench-ticket / bench-session (tests/). They also check that the Job's
-  # redaction patterns match agent-sessions', hence that path above.
-  test:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.15'
-
-      - name: Test
-        working-directory: images/bench-cloud
-        run: |
-          pip install 'pytest>=8,<9'
-          python -m pytest -q tests
-
   build-and-push:
-    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read

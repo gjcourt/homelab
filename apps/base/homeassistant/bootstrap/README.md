@@ -23,10 +23,44 @@ Home Assistant depends on two controllers in [`infra/controllers/`](../../../../
 | `configuration.yaml`, `automations.yaml`, `binary_sensors.yaml` | git + mounted (`../files/`) |
 | **Config dashboard** (was "Control"; URL `/home-control`): Overview / Auto-shutoff / Light schedules / Maintenance / Audio-Visual / Lights | git + mounted (`../files/dashboards/control.yaml`) — YAML-mode, authoritative |
 | **Home dashboard** (URL `/home-page`, HASS-10): the main page — HA's Overview rebuilt from its own cards plus the Config Overview content | git + mounted (`../files/dashboards/home.yaml`) — YAML-mode, authoritative |
+| **HTTP / trusted proxies** (Settings → System → Network, `.storage/http`) | UI-authoritative; git seed `../files/storage/http.json` written by the init container only when the file is absent. See below |
 | **Default dashboard** (which page opens first) | UI-only (`.storage/frontend.system_data`, key `core.default_panel`); see below |
 | **Areas** (`core.area_registry.json`) | UI-only → **snapshot here** |
 | **Floor Plan / Map** dashboards (`lovelace.floorplan.json`, `lovelace.map.json`) | UI-only (storage-mode) → **snapshot here** |
 | **Switchboard** (`lovelace.switchboard.json`) | **deleted 2026-10-31** (redundant with the Config dashboard's Lights view); snapshot kept for history |
+
+## HTTP settings: trusted proxies (seeded, then UI-managed)
+
+HA 2027.2 stops reading the `http:` YAML block, so configuration.yaml has none
+(HASS-9). The settings live in `.storage/http`, edited under Settings → System →
+Network. HA must trust the gateway (`use_x_forwarded_for`, proxies
+`10.244.0.0/16` pod CIDR, `10.42.2.0/24` node network, `127.0.0.1/32`), or every
+request through hass.burntbytes.com gets **400 Bad Request**.
+
+A fresh `/config` (new PVC, restore without `.storage`, the HASS-6 staging
+sanitiser) gets those values from git: the `init-files` init container copies
+[`../files/storage/http.json`](../files/storage/http.json) to
+`/config/.storage/http` **only when that file is absent or empty**, and logs
+`seeded /config/.storage/http from git`. An existing file is never overwritten,
+so the UI stays authoritative on a running install.
+
+- The seed is HA 2026.10.4's storage format, read from `components/http/config.py`:
+  version 2, minor 2, values in `data.stable`, `pending: null`,
+  `yaml_migration_done: true`. Its `stable` equals `HTTP_STORAGE_SCHEMA` applied
+  to the old YAML values. Values go straight into `stable` on purpose: the old
+  YAML import put them in `pending`, which HA reverts to the default after 5
+  minutes unless someone presses Promote in the UI.
+- If you change Network settings in the UI, make the same change in
+  `http.json`, or the next fresh `/config` comes up with the old values.
+- If HA bumps the `http` storage version, an old seed still loads (HA migrates
+  it like any install's file). Refresh it from a running pod when convenient
+  (staging: `kubectl exec -n homeassistant-stage deploy/homeassistant -- cat
+  /config/.storage/http`, then reset `created_at`).
+- If the init container were ever removed, do it by hand on a fresh `/config`:
+  copy `http.json` to `/config/.storage/http` before HA's first start. Setting
+  the values in the UI afterwards also works, but only through
+  `kubectl port-forward -n homeassistant-<env> deploy/homeassistant 8123`,
+  because the gateway gets 400 until they are set.
 
 ## Default dashboard (UI-only)
 

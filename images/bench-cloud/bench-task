@@ -206,7 +206,7 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
   # is exactly phase 1, prompt included.
   session_note=""
   if [[ -n "$(jq -r '.sessions_url // empty' <<<"$TASK_TICKET")" && -n "${BENCH_SESSION_TOKEN:-}" ]]; then
-    session_note="- This run is a live session: George can follow your progress and task list as you work, so keep your task list current. To tell George something without stopping, run \`bench-session say \"<text>\"\` with the Bash tool (plain text; it posts a ticket comment). To ask him something, run \`bench-session ask \"<question>\"\` with the Bash tool and a timeout of 960000 ms instead of posting, setting Blocked and running \`bench-ticket wait\` yourself: it does all three and returns his answer, or says he hasn't answered.
+    session_note="- This run is a live session: George can follow your progress and task list as you work, so keep your task list current. To tell George something without stopping, run \`bench-session say \"<text>\"\` with the Bash tool (Markdown, as in a ticket comment; it posts one). To ask him something, run \`bench-session ask \"<question>\"\` with the Bash tool and a timeout of 960000 ms instead of posting, setting Blocked and running \`bench-ticket wait\` yourself: it does all three and returns his answer, or says he hasn't answered.
 "
   fi
   tools+=("mcp__plane__workitem" "mcp__plane__workitem_comment" "mcp__plane__workitem_link"
@@ -246,5 +246,15 @@ if [[ -s "$out/result.json" ]] && jq -e -r --arg id "$TASK_ID" \
     "$out/result.json" 2>/dev/null; then :; else
   echo "$TASK_ID: no JSON result (claude exit $crc)"
   tail -20 "$out/stderr.log" >&2 || true
+fi
+
+# HOMELAB-120: an agent that ended without commenting on or moving its ticket
+# (its Plane MCP connection down, or it just stopped) still reaches George: the
+# wrapper posts its final message on the Jobs' own key. Best effort; it never
+# changes the Job's outcome. Not after a SIGTERM (143: deadline, `bench-cloud
+# rm`), and time-boxed otherwise, so the record upload in finish() always gets
+# its share of the pod's 90 s grace period.
+if [[ -n "${TASK_TICKET:-}" && $crc -ne 143 ]]; then
+  timeout "${BENCH_LAST_MESSAGE_TIMEOUT:-30}" bench-ticket last-message "$out/result.json" || true
 fi
 exit "$crc"

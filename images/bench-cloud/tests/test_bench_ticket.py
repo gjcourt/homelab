@@ -170,7 +170,7 @@ def test_redact_env_values_and_token_shapes(monkeypatch):
     monkeypatch.setenv("GIT_AUTHOR_NAME", "bench-cloud[bot]")
     s = bt.redact("echo averyprivatevalue ghp_" + "a1" * 15 + " sk-ant-api03-xyzxyzxyzxyz "
                   "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijk "
-                  + "0123456789abcdef" * 4 + " by bench-cloud[bot]")
+                  + "0123456789abcdef" * 4 + " by bench-cloud[bot]", full=True)
     assert "averyprivatevalue" not in s and "ghp_" not in s and "sk-ant" not in s
     assert "eyJ" not in s and "0123456789abcdef" not in s
     assert "bench-cloud[bot]" in s  # AUTHOR isn't AUTH: not a secret name
@@ -178,7 +178,7 @@ def test_redact_env_values_and_token_shapes(monkeypatch):
 
 def test_redact_assignments_headers_and_urls():
     s = bt.redact('curl -H "Authorization: Bearer abcdefghijklmnop" '
-                  "https://u:pw12345@x.io/?token=zzz9 PLANE_API_KEY=abc --password hunter22")
+                  "https://u:pw12345@x.io/?token=zzz9 PLANE_API_KEY=abc --password hunter22", full=True)
     for secret in ("abcdefghijklmnop", "pw12345", "zzz9", "=abc", "hunter22"):
         assert secret not in s
     assert "https://u:[redacted]@x.io/" in s
@@ -345,7 +345,7 @@ def test_say_posts_a_comment_and_a_say_event(server, tmp_path, bench_session):
     assert r.returncode == 0, r.stderr
     assert server.comments[-1]["comment_html"] == (
         '<p>Opened <a href="https://github.com/gjcourt/x/pull/3">https://github.com/gjcourt/x/pull/3</a>'
-        " &lt;ok&gt;</p>")
+        " &#60;ok&gt;</p>")  # bench-ticket's _esc: < as &#60;, as in the last-message comment
     assert bt.lint_comment(server.comments[-1]["comment_html"]) == []
     ev = all_events(server)
     assert ev[-1]["type"] == "say" and ev[-1]["text"].startswith("Opened https://")
@@ -411,6 +411,7 @@ def test_patterns_match_the_session_service():
     finally:
         sys.path.pop(0)
     assert svc.VENDOR == bt.SECRET_PATTERNS
+    assert svc.CONTEXT == bt.SECRET_CONTEXT
     assert svc.GENERIC == bt.SECRET_GENERIC
     assert svc.ASSIGN == bt.SECRET_ASSIGN
     assert svc.REDACTED == bt.REDACTED and svc.MAX_SCAN == bt.SECRET_MAX_SCAN
@@ -451,7 +452,7 @@ def test_redaction_levels(monkeypatch):
     sha = "12920e84a1b2c3d4e5f60718293a4b5c6d7e8f90"
     msg = bt.redact(f"pushed {sha} to feat/x, key averyprivatevalue, ghp_{'a' * 36}", full=False)
     assert sha in msg and "averyprivatevalue" not in msg and "ghp_" not in msg
-    assert sha not in bt.redact(f"git show {sha}")
+    assert sha not in bt.redact(f"git show {sha}", full=True)
     monkeypatch.setenv("DB_PASS", "dbpassword1")
     monkeypatch.setenv("MY_APIKEY", "apikeyvalue1")
     assert bt.redact("dbpassword1 apikeyvalue1", full=False) == "[redacted] [redacted]"

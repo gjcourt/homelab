@@ -33,11 +33,7 @@ patches:
         path: /metadata/name
         value: domestique-stage
 
-# PLACEHOLDER: no image is published yet (2026-11-22). gjcourt/domestique has
-# no .github/workflows/build.yml on main, so ghcr.io/gjcourt/domestique does
-# not exist. George adds it (text in domestique PR #120) and runs it once; pin
-# the YYYY-MM-DD-sha7 tag it prints here. Until then the pod sits in
-# Init:ErrImagePull on staging. The placeholder sorts below any real tag.
+# Built by gjcourt/domestique's build.yml (domestique #139) from main 7b11679.
 images:
   - name: ghcr.io/gjcourt/domestique
-    newTag: 0000-00-00-unbuilt
+    newTag: 2026-11-22-7b11679

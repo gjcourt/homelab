@@ -320,8 +320,12 @@ A small service, **`agent-sessions`**:
       secret` run inside the service's pod. Admins are the policy's one other exception:
       George, 2026-11-22, on #2005: "Keep admin exception (Recommended)".
     - agent-desk making it is its own PR, after #2003 (see Build order step 2).
-    - The Secret is `<job>-session`, labelled `agent-sessions/token: "true"`, and owned by its
-      Job, so Kubernetes also deletes it with the Job.
+    - The Secret is `<job>-session`, labelled `agent-sessions/token: "true"`. agent-desk deletes
+      it when the Job finishes, from its reaper (homelab#2006). It's also owned by its Job, so
+      Kubernetes deletes it when the Job object is deleted (up to a day later, at the Job's TTL)
+      if the reaper missed it.
+    - Deleting the Secret doesn't revoke the token: a copy already read keeps working until it
+      expires. The D2 expiry is the real bound on a token's life.
     - The admission policy refuses any create or update of such a Secret in `bench-cloud` by anyone
       but agent-desk's service accounts and cluster admins.
   - **Expiry: decided (D2).** George, 2026-11-22: "At job deadline +15m (Recommended)": each
@@ -506,9 +510,11 @@ the client API, MAS (`account.…`) and Element Web (`chat.…`).
   from a per-Job Secret, never the Job spec (see [the session service](#where-the-events-go-the-session-service)).
   - The plan first said "the service refuses tokens for Jobs that aren't active". George's D1 and
     D2 answers (2026-11-22) replace that check:
-    - the Secret is deleted when the Job ends (D1);
+    - the Secret is deleted when the Job finishes (D1, agent-desk's reaper; the owner reference
+      also deletes it when the Job object is deleted). That stops new reads of the token, but
+      doesn't revoke a copy;
     - the token expires on its own at the Job's deadline plus 15 minutes (D2), and the service
-      enforces that.
+      enforces that. This is the real bound.
 
     So the service still needs no Kubernetes RBAC. A token copied out of a Job works at most until
     its expiry.
@@ -590,10 +596,11 @@ Each step has an exit. Steps 3A and 3B are alternatives: whichever George picks 
        - `sessions_url` in `TASK_TICKET`;
        - the `agent-sessions/pilot: "true"` pod label;
        - `BENCH_SESSION_TOKEN` from `secretKeyRef <job>-session`;
-     - after creating the Job, it creates `<job>-session` in `bench-cloud`:
+     - **Built: homelab#2006.** After creating the Job, it creates `<job>-session` in
+       `bench-cloud`:
        - owned by the Job, with the D2 expiry (the playbook's deadline + 15 min);
        - with `dryRun=All` when the Jobs are;
-     - when the Job ends (the reaper), it deletes the Secret;
+     - when the Job finishes (the reaper), it deletes the Secret;
      - RBAC: `create` and `delete` on `secrets` in `bench-cloud` for agent-desk's service account;
      - tests.
    - **Changed from the text above:**

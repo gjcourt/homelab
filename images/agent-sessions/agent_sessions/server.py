@@ -39,7 +39,7 @@ MAX_EVENTS = 100
 MIN_KEY = 32           # bytes; a shorter session-key is refused at startup
 SOCKET_TIMEOUT = 10    # seconds a client may take to send its request
 MAX_THREADS = 32       # requests handled at once; more wait to be accepted
-AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$")  # ISO-8601, UTC
+AT = re.compile(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?Z$")  # ISO-8601 UTC
 WORK_ITEM = re.compile(r"^[0-9a-fA-F-]{8,64}$")   # Plane work-item ids are UUIDs
 JOB = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")  # a Kubernetes Job name
 EVENTS_PATH = re.compile(r"^/sessions/([^/]+)/events$")
@@ -54,7 +54,9 @@ SHAPES = {
 ITEM = {"content": (str, 500), "status": (str, 32)}
 
 
-TOKEN = re.compile(r"^v1\.(\d{1,12})\.([0-9a-f]{64})$")
+# No leading zeros, so one expiry has one spelling; [0-9], not \d, which
+# would match other Unicode digits.
+TOKEN = re.compile(r"^v1\.([1-9][0-9]{0,11})\.([0-9a-f]{64})$")
 # George, 2026-11-22 (D2): a token "expires on its own at its playbook deadline
 # plus 15 minutes, besides being deleted when the Job ends".
 TOKEN_GRACE = 15 * 60
@@ -65,7 +67,13 @@ MAX_TOKEN_LIFE = 12 * 3600 + TOKEN_GRACE
 
 
 def token(key: bytes, work_item: str, job: str, expires: int) -> str:
-    """The per-Job credential: v1.<expires>.HMAC(session-key, work_item | job | expires)."""
+    """The per-Job credential: v1.<expires>.HMAC(session-key, work_item | job | expires).
+
+    The fields are joined with "|", so each must be one that can't hold one:
+    otherwise token(k, "a|b", "c", e) == token(k, "a", "b|c", e). Raises
+    ValueError for anything else."""
+    if not WORK_ITEM.match(work_item) or not JOB.match(job):
+        raise ValueError("token: bad work item id or Job name")
     sig = hmac.new(key, f"{work_item}|{job}|{int(expires)}".encode(), hashlib.sha256).hexdigest()
     return f"v1.{int(expires)}.{sig}"
 
@@ -88,7 +96,7 @@ def token_problem(key: bytes, work_item: str, job: str, header: str | None,
     except UnicodeError:
         return "bad token"
     m = TOKEN.match(got)
-    if not m:
+    if not m or not WORK_ITEM.match(work_item) or not JOB.match(job):
         return "bad token"
     if not hmac.compare_digest(token(key, work_item, job, int(m[1])).encode(), got.encode()):
         return "bad token"

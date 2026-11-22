@@ -21,11 +21,13 @@ class QuickServer(server.ThreadingHTTPServer):
 
 KEY = b"test-session-key-of-at-least-32-bytes"
 
-
-def tok(key, wid, job, expires=None):
-    return server.token(key, wid, job, int(time.time()) + 3600 if expires is None else expires)
 WID = "3f1c2a9e-0000-4000-8000-0000000000aa"
 JOB = "ad-sandbox-9-20261122-abc123"
+
+
+def tok(key, wid, job, expires=None):
+    """A valid token, an hour from now unless expires is given."""
+    return server.token(key, wid, job, int(time.time()) + 3600 if expires is None else expires)
 
 
 @pytest.fixture
@@ -200,12 +202,20 @@ def test_secret_manifest(tmp_path, monkeypatch, capsys):
     assert t0 + 7200 + 900 - 2 <= exp <= time.time() + 7200 + 900
     assert server.token_problem(KEY, WID, JOB, f"Bearer {t}") == ""
     assert meta["annotations"]["agent-sessions/expires"].endswith("Z")
-    assert cli.main(["secret", "--work-item", WID, "--job", JOB]) == 0      # default deadline, no owner
+    assert cli.main(["secret", "--work-item", WID, "--job", JOB, "--deadline", "5400"]) == 0  # no owner
     assert "ownerReferences" not in json.loads(capsys.readouterr().out)["metadata"]
+    with pytest.raises(SystemExit):                                          # --deadline is required
+        cli.main(["secret", "--work-item", WID, "--job", JOB])
+    # An owner only in the Job's own namespace: elsewhere it wouldn't resolve.
+    assert cli.main(["secret", "--work-item", WID, "--job", JOB, "--deadline", "60",
+                     "--job-uid", "u", "--namespace", "default"]) == 2
+    assert cli.main(["secret", "--work-item", WID, "--job", JOB, "--deadline", "60",
+                     "--namespace", "default"]) == 0
+    capsys.readouterr()
     assert cli.main(["secret", "--work-item", WID, "--job", JOB, "--deadline", "0"]) == 2
     assert cli.main(["secret", "--work-item", WID, "--job", JOB, "--deadline", "999999"]) == 2
     monkeypatch.setenv("SESSION_KEY_FILE", str(tmp_path / "missing"))
-    assert cli.main(["secret", "--work-item", WID, "--job", JOB]) == 2
+    assert cli.main(["secret", "--work-item", WID, "--job", JOB, "--deadline", "60"]) == 2
 
 
 # --- the scripted check ----------------------------------------------------------
@@ -329,7 +339,7 @@ def test_short_session_key_is_refused(tmp_path, monkeypatch):
     kf.write_bytes(b"too-short")
     monkeypatch.setenv("SESSION_KEY_FILE", str(kf))
     assert cli.main(["serve"]) == 2
-    assert cli.main(["secret", "--work-item", WID, "--job", JOB]) == 2
+    assert cli.main(["secret", "--work-item", WID, "--job", JOB, "--deadline", "60"]) == 2
     with pytest.raises(ValueError):
         server.serve(0, b"short", lambda r: None)
 
@@ -345,3 +355,37 @@ def test_check_fails_on_a_refused_request():
     refused = json.dumps({"refused": 401, "why": "bad token", "path": "/x", "session": WID, "job": JOB})
     ok, report = check.check(logged(PROGRESS) + [refused], WID, JOB)
     assert not ok and any("refused" in r for r in report)
+
+
+# --- token edges (security review of #2003) ---------------------------------------------
+
+def test_token_edges():
+    now = 1_800_000_000
+    good = server.token(KEY, WID, JOB, now + 60)
+    sig = good.split(".", 2)[2]
+    h = lambda t: f"Bearer {t}"  # noqa: E731
+    for bad in (f"v2.{now + 60}.{sig}", f"V1.{now + 60}.{sig}",
+                f"v1.0{now + 60}.{sig}",                       # a leading zero: one spelling only
+                f"v1.-{now + 60}.{sig}", "v1.-5." + sig,        # negative
+                f"v1.{now + 60}.{sig.upper()}"):
+        assert server.token_problem(KEY, WID, JOB, h(bad), now=now) == "bad token", bad
+    at = server.token(KEY, WID, JOB, now)
+    assert server.token_problem(KEY, WID, JOB, h(at), now=now) == "expired token"      # now == expires
+    edge = server.token(KEY, WID, JOB, now + server.MAX_TOKEN_LIFE)
+    assert server.token_problem(KEY, WID, JOB, h(edge), now=now) == ""                  # the longest allowed
+    # Unicode digits are not [0-9].
+    assert server.token_problem(KEY, WID, JOB, h("v1.\u0661\u0662." + sig), now=now) == "bad token"
+
+
+@pytest.mark.parametrize("wid,job", [("a|b", "c"), (WID, "a|b"), (WID, "Bad_Job"), ("x", JOB)])
+def test_token_refuses_fields_that_could_collide(wid, job):
+    with pytest.raises(ValueError):
+        server.token(KEY, wid, job, 1_900_000_000)
+    assert server.token_problem(KEY, wid, job, "Bearer v1.1900000000." + "0" * 64,
+                                now=1_800_000_000) == "bad token"
+
+
+def test_expired_token_on_messages(svc):
+    url, log = svc
+    st, _ = call(f"{url}/sessions/{WID}/messages?job={JOB}", tok=tok(KEY, WID, JOB, int(time.time()) - 1))
+    assert st == 401 and log[-1]["why"] == "expired token"

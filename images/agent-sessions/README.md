@@ -181,9 +181,14 @@ This needs the staging manifests first (`apps/staging/agent-sessions/` and
    checking shell without echoing it, then e.g.
    `--secret-env PLANE_API_KEY --secret-env CLAUDE_CODE_OAUTH_TOKEN`. Values
    are compared, never printed.
-4. Delete the Job when the test is done. Its Secret goes with it, being
-   owned by it; otherwise run
-   `kubectl -n bench-cloud delete secret <Job name>-session`.
+4. When the test is done, delete the Secret:
+   `kubectl -n bench-cloud delete secret <Job name>-session`. For agent-desk's
+   pilots, its reaper does this when the Job finishes. The owner reference
+   only deletes the Secret when the Job object is deleted, which is up to a
+   day later, at the Job's TTL.
+
+   Deleting the Secret doesn't revoke the token: a copy already read keeps
+   working until it expires. The D2 expiry is the real bound.
 5. The phase-1 half: the same ticket, a second Job with neither field. The
    check with `--expect-none --job <second Job>` passes only if it sent
    nothing. The run itself should look as phase 1 does: the same comments,

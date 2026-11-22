@@ -1,0 +1,40 @@
+# Domestique: the gateway's Envoy and kubelet probes in; DNS out, nothing else.
+# The app makes no outbound calls and there is no internet egress. The NFS
+# fitness folder (hestia, 10.42.2.10) is mounted by the kubelet on the node,
+# not from the pod's network namespace, so it needs no egress rule here.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: domestique
+  namespace: domestique
+  labels:
+    app.kubernetes.io/name: domestique
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "domestique: gateway + probes in on 8080; out to DNS only."
+  endpointSelector:
+    matchLabels:
+      app: domestique
+  enableDefaultDeny:
+    ingress: true
+    egress: true
+  ingress:
+    # Gateway API. Envoy's source is identity 8 ("ingress"); same-node is
+    # "host" (also kubelet probes), cross-node VXLAN is "remote-node".
+    # All three are required (docs/operations/2026-08-15-networking-gotchas.md).
+    - fromEntities:
+        - host
+        - remote-node
+        - ingress
+      toPorts:
+        - ports:
+            - {port: "8080", protocol: TCP}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - {port: "53", protocol: UDP}
+            - {port: "53", protocol: TCP}

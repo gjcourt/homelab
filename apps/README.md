@@ -14,7 +14,7 @@
 - [cadence-site](base/cadence-site/)
 - [changes](base/changes/)
 - [couchdb](base/couchdb/)
-- [domestique](base/domestique/) — namespace + read-only fitness-folder PV/PVC only (workload: DOMESTIQUE-56)
+- [domestique](base/domestique/) — LAN-only cycling analysis app. Namespace + read-only fitness-folder PV/PVC in every overlay; the workload ([base/domestique/workload/](base/domestique/workload/): app, SQLite PVC, import init container, netpol) is in staging only (`ride.stage.burntbytes.com`, DOMESTIQUE-56)
 - [excalidraw](base/excalidraw/)
 - [finance-dashboard](base/finance-dashboard/)
 - [flashcards-sync](base/flashcards-sync/)

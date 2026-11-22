@@ -1,15 +1,28 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+# Staging Domestique: https://ride.stage.burntbytes.com (LAN-only, no sign-in),
+# reading the real fitness folder over read-only NFS (nfs-fitness.yaml).
+# Plan: domestique docs/plans/2026-10-31-staging-deployment-plan.md, §4.
 namespace: domestique-stage
 resources:
   - ../../base/domestique/
+  - ../../base/domestique/workload/
   - nfs-fitness.yaml
+  - httproute.yaml
 
 labels:
   - pairs:
       env: staging
       app.kubernetes.io/instance: staging
     includeSelectors: false
+
+# Env vars for adapters/web/config.py (and `domestique import`), by their
+# exact names. The database may not be inside the fitness folder.
+configMapGenerator:
+  - name: domestique-config
+    literals:
+      - DOMESTIQUE_FITNESS_FOLDER=/fitness
+      - DOMESTIQUE_SQLITE_PATH=/data/domestique.sqlite
 
 patches:
   - target:
@@ -19,3 +32,12 @@ patches:
       - op: replace
         path: /metadata/name
         value: domestique-stage
+
+# PLACEHOLDER: no image is published yet (2026-11-22). gjcourt/domestique has
+# no .github/workflows/build.yml on main, so ghcr.io/gjcourt/domestique does
+# not exist. George adds it (text in domestique PR #120) and runs it once; pin
+# the YYYY-MM-DD-sha7 tag it prints here. Until then the pod sits in
+# Init:ErrImagePull on staging. The placeholder sorts below any real tag.
+images:
+  - name: ghcr.io/gjcourt/domestique
+    newTag: 0000-00-00-unbuilt

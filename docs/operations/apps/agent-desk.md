@@ -128,6 +128,11 @@ without it, the ticket in Plane (`planeWebUrl`). The ticket link agent-desk give
 description stays on Plane either way. Rollback: remove `appWebUrl`. See
 [plane-mobile](plane-mobile.md), section 6.
 
+**Which notifications go through HA.** Since the C6b cut-over (2026-11-22), production sets
+`notifyOnState: false`: plane-mobile's Web Push sends "needs you" and "ready for review", and
+agent-desk sends only "reopen?" and "webhook looks off" through HA. Staging keeps the default
+(`true`). Rollback: `notifyOnState: true` in `apps/production/agent-desk/config.yaml`.
+
 ## 4. Observability
 
 ```bash

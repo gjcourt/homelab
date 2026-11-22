@@ -274,6 +274,54 @@ def test_finished_job_with_ticket_in_progress_is_reaped_to_blocked(tmp_path):
     assert "agent-inbox/runs/ad-sandbox-1-x/" in plane.writes[-1][2]
 
 
+def test_reaper_note_points_at_the_wrappers_last_message(tmp_path):
+    # HOMELAB-120: the Job posted the agent's last message itself; the reaper's
+    # note keeps its text, points at that comment, and doesn't repeat it.
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    plane.label("p-sb", "i1", "playbook:docs-fix", OWNER)
+    plane.set_state("p-sb", "i1", "In Progress")
+    plane.say("p-sb", "i1", OTHER, "The agent's last message</p><p>Plane was down."
+              "</p><p><code>bench-last-message: ad-sandbox-1-x</code>")
+    kube.job_list = [{"name": "ad-sandbox-1-x", "ticket": "i1", "playbook": "docs-fix",
+                      "active": False, "failed": False, "succeeded": True, "created": "1"}]
+    d.poll()
+    assert plane.state_of("p-sb", "i1") == "Blocked"
+    note = plane.writes[-1][2]
+    assert "Job <code>ad-sandbox-1-x</code> ended (succeeded) without moving the ticket" in note
+    assert "<code>bench-last-message: ad-sandbox-1-x</code>" in note
+    assert "Plane was down" not in note
+
+
+def test_reaper_note_ignores_another_jobs_last_message(tmp_path):
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    plane.label("p-sb", "i1", "playbook:docs-fix", OWNER)
+    plane.set_state("p-sb", "i1", "In Progress")
+    plane.say("p-sb", "i1", OTHER, "<code>bench-last-message: ad-sandbox-1-old</code>")
+    kube.job_list = [{"name": "ad-sandbox-1-x", "ticket": "i1", "playbook": "docs-fix",
+                      "active": False, "failed": True, "succeeded": False, "created": "1"}]
+    d.poll()
+    assert "bench-last-message" not in plane.writes[-1][2]
+
+
+def test_reaper_note_still_posts_when_the_comment_lookup_fails(tmp_path, monkeypatch):
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    plane.label("p-sb", "i1", "playbook:docs-fix", OWNER)
+    plane.set_state("p-sb", "i1", "In Progress")
+    kube.job_list = [{"name": "ad-sandbox-1-x", "ticket": "i1", "playbook": "docs-fix",
+                      "active": False, "failed": True, "succeeded": False, "created": "1"}]
+
+    def down(*a):
+        raise OSError("plane down")
+    monkeypatch.setattr(plane, "comments", down)
+    d.poll()
+    assert plane.state_of("p-sb", "i1") == "Blocked"
+    note = plane.writes[-1][2]
+    assert "ended (failed) without moving the ticket" in note and "bench-last-message" not in note
+
+
 def test_succeeded_job_with_linked_pr_goes_to_in_review(tmp_path):
     # PLANEMOBILE-1, 2026-10-25: the run opened and linked its PR, then ended
     # on its critique without moving the ticket.
@@ -658,6 +706,37 @@ def test_app_web_url_is_read_from_config(tmp_path):
     p.write_text(CONFIG.format(cap=6) + "appWebUrl: https://desk.example\n")
     cfg = config.load(str(p), env={"PLANE_URL": "http://plane", "PLANE_WORKSPACE": "ws"})
     assert cfg.app_web_url == "https://desk.example"
+
+
+def test_notify_on_state_false_silences_only_the_state_notifications(tmp_path):
+    # plane-mobile plan C6b: Web Push replaces "needs you" and "ready for
+    # review"; "reopen?" still comes from agent-desk.
+    d, plane, kube = make(tmp_path)
+    d.cfg.notify_on_state = False
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1")
+    d.poll()
+    plane.say("p-sb", "i1", BOT, "Which file?")
+    plane.set_state("p-sb", "i1", "Blocked", actor=BOT)
+    d.poll()
+    plane.set_state("p-sb", "i1", "In review", actor=BOT)
+    d.poll()
+    assert sent(d) == []
+    assert d.seen_state  # bookkeeping still current, so turning it back on is clean
+    plane.set_state("p-sb", "i1", "Done", actor=OWNER)
+    plane.say("p-sb", "i1", OWNER, "One more tweak")
+    d.poll()
+    d.poll()
+    assert [t for t, _, _ in sent(d)] == ["SANDBOX-1: reopen?"]
+
+
+def test_notify_on_state_is_read_from_config_and_defaults_on(tmp_path):
+    env = {"PLANE_URL": "http://plane", "PLANE_WORKSPACE": "ws"}
+    p = tmp_path / "config.yaml"
+    p.write_text(CONFIG.format(cap=6))
+    assert config.load(str(p), env=env).notify_on_state is True
+    p.write_text(CONFIG.format(cap=6) + "notifyOnState: false\n")
+    assert config.load(str(p), env=env).notify_on_state is False
 
 
 def test_restart_is_quiet_and_unlabelled_tickets_never_notify(tmp_path):

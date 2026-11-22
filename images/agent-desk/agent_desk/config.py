@@ -75,6 +75,11 @@ class Config:
     # notification links to {base}/t/{key} in the app instead of Plane; other
     # links (a PR description's ticket link) stay on Plane.
     app_web_url: str = ""
+    # Whether agent-desk itself sends the "needs you" / "ready for review"
+    # notifications (note_state). false once plane-mobile's Web Push replaces
+    # them (plane-mobile plan C6b; George, 2026-11-22). "reopen?" and "webhook
+    # looks off" are sent either way. Rollback: true.
+    notify_on_state: bool = True
     # George's orchestrator's Plane account (George, 2026-11-09): a `ready` it
     # adds counts like George's. Nothing else does: its comments neither wake
     # an agent nor answer a Blocked ticket, and `over-cap` stays George's.
@@ -129,6 +134,7 @@ def load(path: str | None = None, env=os.environ) -> Config:
         notify_webhook=_read_file("NOTIFY_WEBHOOK_FILE"),
         plane_web_url=raw.get("planeWebUrl", ""),
         app_web_url=raw.get("appWebUrl", "") or "",
+        notify_on_state=bool(raw.get("notifyOnState", True)),
         github_owner=raw.get("githubOwner", "") or "",
         orchestrator_email=str(raw.get("orchestratorEmail", "") or "").strip(),
     )

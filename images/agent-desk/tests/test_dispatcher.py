@@ -660,6 +660,37 @@ def test_app_web_url_is_read_from_config(tmp_path):
     assert cfg.app_web_url == "https://desk.example"
 
 
+def test_notify_on_state_false_silences_only_the_state_notifications(tmp_path):
+    # plane-mobile plan C6b: Web Push replaces "needs you" and "ready for
+    # review"; "reopen?" still comes from agent-desk.
+    d, plane, kube = make(tmp_path)
+    d.cfg.notify_on_state = False
+    plane.add_item("p-sb", "i1")
+    ready(plane, "p-sb", "i1")
+    d.poll()
+    plane.say("p-sb", "i1", BOT, "Which file?")
+    plane.set_state("p-sb", "i1", "Blocked", actor=BOT)
+    d.poll()
+    plane.set_state("p-sb", "i1", "In review", actor=BOT)
+    d.poll()
+    assert sent(d) == []
+    assert d.seen_state  # bookkeeping still current, so turning it back on is clean
+    plane.set_state("p-sb", "i1", "Done", actor=OWNER)
+    plane.say("p-sb", "i1", OWNER, "One more tweak")
+    d.poll()
+    d.poll()
+    assert [t for t, _, _ in sent(d)] == ["SANDBOX-1: reopen?"]
+
+
+def test_notify_on_state_is_read_from_config_and_defaults_on(tmp_path):
+    env = {"PLANE_URL": "http://plane", "PLANE_WORKSPACE": "ws"}
+    p = tmp_path / "config.yaml"
+    p.write_text(CONFIG.format(cap=6))
+    assert config.load(str(p), env=env).notify_on_state is True
+    p.write_text(CONFIG.format(cap=6) + "notifyOnState: false\n")
+    assert config.load(str(p), env=env).notify_on_state is False
+
+
 def test_restart_is_quiet_and_unlabelled_tickets_never_notify(tmp_path):
     d, plane, kube = make(tmp_path)
     plane.add_item("p-sb", "i1")

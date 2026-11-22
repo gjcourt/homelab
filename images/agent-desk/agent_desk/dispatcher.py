@@ -147,6 +147,8 @@ class Dispatcher:
         self.seen_state[t.id] = t.state_name
         if prev == t.state_name or t.state_name not in (BLOCKED, IN_REVIEW):
             return
+        if not self.cfg.notify_on_state:
+            return  # plane-mobile's Web Push sends these (C6b); seen_state stays current
         if not self._seeded or "ready" not in t.label_names:
             return
         cmts = self.plane.comments(pr.id, t.id)

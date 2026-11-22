@@ -5,8 +5,10 @@
 
 Passes (exit 0) when the log holds at least one progress event for that Job,
 every event for it has its plan shape, and no string in any of them is
-secret-shaped. It also fails on a "redacted on arrival" warning for the Job:
-the service caught something the Job's own redaction let through.
+secret-shaped (full level for progress and plan, message level for say and
+ask). It also fails on a "redacted on arrival" warning for the Job, meaning the
+service caught something the Job's own redaction let through, and on any
+request from the Job that the service refused.
 
 --secret-env NAME (repeatable) also checks that the value of each named
 environment variable appears nowhere in the Job's events, e.g. the run's
@@ -56,6 +58,10 @@ def check(lines, work_item: str, job: str, secret_values=(), expect_none=False):
             continue
         if rec.get("job") != job or rec.get("session") != work_item:
             continue
+        if "refused" in rec:
+            findings.append(f"line {n}: the service refused a request from this Job "
+                            f"(HTTP {rec.get('refused')}: {rec.get('why')})")
+            continue
         if "warning" in rec:
             findings.append(f"line {n}: the service redacted {rec.get('fields')} in a "
                             f"{rec.get('type')} event on arrival")
@@ -71,8 +77,9 @@ def check(lines, work_item: str, job: str, secret_values=(), expect_none=False):
             continue
         if set(event) != set(cleaned):
             findings.append(f"line {n}: {rec['type']} event has fields {sorted(set(event) - set(cleaned))}")
+        full = rec["type"] in ("progress", "plan")  # say/ask: the message level, as redacted
         for s in strings(event):
-            for name in rd.find(s):
+            for name in rd.find(s, full):
                 findings.append(f"line {n}: {rec['type']} event matches {name}")
             for i, v in enumerate(secret_values):
                 if v and v in s:

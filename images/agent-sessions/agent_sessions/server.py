@@ -24,7 +24,9 @@ import hashlib
 import hmac
 import json
 import re
+import threading
 import time
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -32,6 +34,10 @@ from . import redact as rd
 
 MAX_BODY = 256 * 1024
 MAX_EVENTS = 100
+MIN_KEY = 32           # bytes; a shorter session-key is refused at startup
+SOCKET_TIMEOUT = 10    # seconds a client may take to send its request
+MAX_THREADS = 32       # requests handled at once; more wait to be accepted
+AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$")  # ISO-8601, UTC
 WORK_ITEM = re.compile(r"^[0-9a-fA-F-]{8,64}$")   # Plane work-item ids are UUIDs
 JOB = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$")  # a Kubernetes Job name
 EVENTS_PATH = re.compile(r"^/sessions/([^/]+)/events$")
@@ -54,7 +60,21 @@ def token(key: bytes, work_item: str, job: str) -> str:
 def token_ok(key: bytes, work_item: str, job: str, header: str | None) -> bool:
     if not key or not header or not header.startswith("Bearer "):
         return False
-    return hmac.compare_digest(token(key, work_item, job), header[len("Bearer "):].strip())
+    try:
+        got = header[len("Bearer "):].strip().encode("ascii")
+    except UnicodeError:
+        return False
+    return hmac.compare_digest(token(key, work_item, job).encode(), got)
+
+
+def at_ok(value: str) -> bool:
+    if not AT.match(value):
+        return False
+    try:
+        datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
 
 
 class Invalid(ValueError):
@@ -76,11 +96,16 @@ def clean(event) -> tuple[dict, list[str]]:
     """
     if not isinstance(event, dict) or event.get("type") not in SHAPES:
         raise Invalid("each event needs a type: " + ", ".join(SHAPES))
-    out = {"type": event["type"], "at": _field(event.get("at", ""), str, 40, "at")}
+    at = _field(event.get("at", ""), str, 40, "at")
+    if not at_ok(at):
+        raise Invalid("at must be an ISO-8601 UTC time, e.g. 2026-11-22T10:00:00Z")
+    out = {"type": event["type"], "at": at}
     changed = []
+    # say/ask are also Plane comments: the message level, as on the Job.
+    full = event["type"] in ("progress", "plan")
 
     def scrub(s, name):
-        r = rd.redact(s)
+        r = rd.redact(s, full)
         if r != s:
             changed.append(name)
         return r
@@ -104,6 +129,8 @@ def make_handler(key: bytes, emit, health=lambda: True):
     """emit(dict) writes one log record."""
 
     class Handler(BaseHTTPRequestHandler):
+        timeout = SOCKET_TIMEOUT  # a client that stalls mid-request is dropped
+
         def _reply(self, code: int, body: dict | None = None):
             data = json.dumps(body or {}).encode()
             self.send_response(code)
@@ -141,7 +168,14 @@ def make_handler(key: bytes, emit, health=lambda: True):
             if not m:
                 self._reply(404, {"error": "not found"})
                 return
-            n = int(self.headers.get("Content-Length") or 0)
+            raw_len = self.headers.get("Content-Length")
+            if raw_len is None:
+                self._refuse(411, "Content-Length required")
+                return
+            if not raw_len.strip().isdigit():
+                self._refuse(400, "bad Content-Length")
+                return
+            n = int(raw_len)
             if n > MAX_BODY:
                 self._refuse(413, "body too large")
                 return
@@ -184,5 +218,32 @@ def make_handler(key: bytes, emit, health=lambda: True):
     return Handler
 
 
+class BoundedServer(ThreadingHTTPServer):
+    """ThreadingHTTPServer with at most MAX_THREADS requests at once: the
+    accept loop waits for a free slot instead of starting another thread."""
+
+    daemon_threads = True
+
+    def __init__(self, *a, max_threads: int = MAX_THREADS, **kw):
+        self._slots = threading.BoundedSemaphore(max_threads)
+        super().__init__(*a, **kw)
+
+    def process_request(self, request, client_address):
+        self._slots.acquire()
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._slots.release()
+
+
 def serve(port: int, key: bytes, emit) -> ThreadingHTTPServer:
-    return ThreadingHTTPServer(("", port), make_handler(key, emit))
+    if len(key) < MIN_KEY:
+        raise ValueError(f"the session-key must be at least {MIN_KEY} bytes")
+    return BoundedServer(("", port), make_handler(key, emit))

@@ -1,9 +1,19 @@
 """Secret-shaped strings: redaction and detection.
 
-PATTERNS and ASSIGN are the same lists as images/bench-cloud/bench-ticket's
-SECRET_PATTERNS and SECRET_ASSIGN (a bench-cloud test compares them): the Job
-redacts with them before sending, and the service redacts again before
-logging, so a pattern the Job missed is still caught here and reported.
+VENDOR, GENERIC and ASSIGN are the same (name, pattern) lists as
+images/bench-cloud/bench-ticket's SECRET_PATTERNS, SECRET_GENERIC and
+SECRET_ASSIGN (a bench-cloud test compares them). The Job redacts with them
+before sending, and the service redacts again before logging, so a pattern the
+Job missed is still caught here and reported.
+
+Two levels:
+- full (progress summaries, plan items): every list;
+- message (say/ask text, which also goes to Plane as a comment): VENDOR only,
+  so commit SHAs, branch names and prose like "the key: ..." survive. The Job
+  also removes its own env secrets at both levels.
+
+Every quantifier is bounded and strings are capped at MAX_SCAN before any
+regex runs, so no input can make a pattern backtrack for long.
 """
 
 from __future__ import annotations
@@ -11,43 +21,68 @@ from __future__ import annotations
 import re
 
 REDACTED = "[redacted]"
-PATTERNS = [
-    ("github-token", r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"),
-    ("anthropic-key", r"\bsk-ant-[A-Za-z0-9_-]{10,}"),
-    ("openai-style-key", r"\bsk-[A-Za-z0-9_-]{20,}"),
-    ("plane-key", r"\bplane_api_[A-Za-z0-9]{16,}"),
-    ("slack-token", r"\bxox[abposr]-[A-Za-z0-9-]{10,}"),
+MAX_SCAN = 20000
+# Token shapes a vendor issues: safe to redact anywhere.
+VENDOR = [
+    ("github-token", r"\b(?:gh[pousr]_[A-Za-z0-9]{20,255}|github_pat_[A-Za-z0-9_]{20,255})"),
+    ("gitlab-token", r"\bglpat-[A-Za-z0-9_-]{20,255}"),
+    ("anthropic-key", r"\bsk-ant-[A-Za-z0-9_-]{10,255}"),
+    ("openai-style-key", r"\bsk-[A-Za-z0-9_-]{20,255}"),
+    ("stripe-key", r"\b(?:sk|rk)_live_[A-Za-z0-9]{10,255}"),
+    ("plane-key", r"\bplane_api_[A-Za-z0-9]{16,255}"),
+    ("slack-token", r"\b(?:xox[abposr]|xapp)-[A-Za-z0-9-]{10,255}"),
+    ("huggingface-token", r"\bhf_[A-Za-z0-9]{30,255}"),
+    ("npm-token", r"\bnpm_[A-Za-z0-9]{30,255}"),
     ("aws-key-id", r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
-    ("jwt", r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
-    ("private-key", r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
-    ("long-hex", r"\b[0-9a-fA-F]{32,}\b"),
+    ("jwt", r"\beyJ[A-Za-z0-9_-]{8,2048}\.[A-Za-z0-9_-]{8,2048}\.[A-Za-z0-9_-]{8,2048}"),
+    ("private-key", r"-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----"),
+]
+# Shapes that are usually secrets but sometimes not (a 40-hex git SHA):
+# full level only.
+GENERIC = [
+    ("long-hex", r"\b[0-9a-fA-F]{32,1024}\b"),
     # 32+ characters mixing upper, lower and digits, with no path separator.
-    ("high-entropy", r"(?<![A-Za-z0-9+_-])(?=[A-Za-z0-9+_-]*[a-z])(?=[A-Za-z0-9+_-]*[A-Z])"
-                     r"(?=[A-Za-z0-9+_-]*[0-9])[A-Za-z0-9+_-]{32,}={0,2}"),
+    ("high-entropy", r"(?<![A-Za-z0-9+_-])(?=[A-Za-z0-9+_-]{0,1024}[a-z])(?=[A-Za-z0-9+_-]{0,1024}[A-Z])"
+                     r"(?=[A-Za-z0-9+_-]{0,1024}[0-9])[A-Za-z0-9+_-]{32,1024}={0,2}"),
 ]
-# name=value, --flag value, Authorization headers, URL passwords and query
-# parameters: the name stays, the value goes.
+# A secret by its context: group 1 stays, group 2 (the value) goes, group 3
+# (if any) stays. Full level only. Names start at a word boundary
+# ((?<![\w.-])), so a long run of word characters is tried once, not at
+# every offset.
+_NAME = r"(?:key|token|secret|passw(?:or)?d|pass|pwd|credential|auth)"
 ASSIGN = [
-    r"(?i)(\b(?:bearer|basic)\s+)(?!\[redacted\])([A-Za-z0-9._~+/=-]{8,})",
-    r"(?i)(\b[\w.-]*(?:key|token|secret|passw(?:or)?d|pwd|credential|auth)[\w.-]*\s*[=:]\s*)"
-    r"(?!\[redacted\])(\"[^\"]*\"|'[^']*'|[^\s\"',;&]+)",
-    r"(?i)(--?[\w-]*(?:key|token|secret|password|passwd|credential)[\w-]*[= ]\s*)"
-    r"(?!\[redacted\])(\"[^\"]*\"|'[^']*'|[^\s\"']+)",
-    r"(://[^/\s:@]+:)(?!\[redacted\])([^@\s/]+)(@)",
+    ("auth-header", r"(?i)(\bauthorization[\"']?\s{0,8}[:=]\s{0,8}[\"']?(?:bearer|basic|token|digest)?\s{0,8})"
+                    r"(?!\[redacted\])([^\s\"']{1,4096})"),
+    ("bearer", r"(?i)(\b(?:bearer|basic)\s{1,8})(?!\[redacted\])([A-Za-z0-9._~+/=-]{8,4096})"),
+    ("assignment", r"(?i)((?<![\w.-])[\"']?[\w.-]{0,64}" + _NAME + r"[\w.-]{0,64}[\"']?\s{0,8}[=:]\s{0,8})"
+                   r"(?!\[redacted\])(\"[^\"]{0,4096}\"|'[^']{0,4096}'|[^\s\"',;&]{1,4096})"),
+    ("flag", r"(?i)((?<![\w-])--?[\w-]{0,64}(?:key|token|secret|password|passwd|pass|credential)[\w-]{0,64}"
+             r"(?:=|\s{1,8}))(?!\[redacted\])(\"[^\"]{0,4096}\"|'[^']{0,4096}'|[^\s\"'-][^\s\"']{0,4095})"),
+    ("spaced-value", r"(?i)((?<![\w.-])[\w.-]{0,64}(?:secret|token|passw(?:or)?d|api[_-]?key|access[_-]?key|"
+                     r"private[_-]?key)[\w.-]{0,64}\s{1,8})(?!\[redacted\])([A-Za-z0-9+/=_.-]{16,4096})"),
+    ("mysql-password", r"(\bmysql\w{0,16}\b[^\n|;&]{0,200}?\s-p)(?!\[redacted\])([^\s\"']{1,4096})"),
+    ("sshpass", r"(\bsshpass\s{1,8}(?:-[a-zA-Z]{1,8}\s{1,8}){0,5}-p\s{0,8})(?!\[redacted\])([^\s\"']{1,4096})"),
+    ("curl-user", r"((?<!\S)(?:-u|--user)(?:=|\s{0,8})[^\s:\"']{1,128}:)(?!\[redacted\])([^\s\"']{1,4096})"),
+    ("url-password", r"(://[^/\s:@]{1,128}:)(?!\[redacted\])([^@\s/]{1,512})(@)"),
 ]
 
 
-def redact(s: str) -> str:
-    for pat in ASSIGN:
-        s = re.sub(pat, lambda m: m.group(1) + REDACTED + (m.group(3) if m.re.groups >= 3 else ""), s)
-    for _, pat in PATTERNS:
+def _sub(pat: str, s: str) -> str:
+    return re.sub(pat, lambda m: m.group(1) + REDACTED + (m.group(3) if m.re.groups >= 3 else ""), s)
+
+
+def redact(s: str, full: bool = True) -> str:
+    s = str(s or "")[:MAX_SCAN]
+    if full:
+        for _, pat in ASSIGN:
+            s = _sub(pat, s)
+    for _, pat in VENDOR + (GENERIC if full else []):
         s = re.sub(pat, REDACTED, s)
     return s
 
 
-def find(s: str) -> list[str]:
+def find(s: str, full: bool = True) -> list[str]:
     """The names of the patterns that match s; never the matched text."""
-    hits = [name for name, pat in PATTERNS if re.search(pat, s)]
-    if any(re.search(pat, s) for pat in ASSIGN):
-        hits.append("assignment")
-    return hits
+    s = str(s or "")[:MAX_SCAN]
+    pats = VENDOR + (GENERIC + ASSIGN if full else [])
+    return [name for name, pat in pats if re.search(pat, s)]

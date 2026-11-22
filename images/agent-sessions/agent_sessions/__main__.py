@@ -62,8 +62,9 @@ def main(argv=None) -> int:
     s.add_argument("--name", help="default: <job>-session")
     a = p.parse_args(argv)
     key = read_key()
-    if not key:
-        print("SESSION_KEY_FILE is unset, unreadable or empty", file=sys.stderr)
+    if len(key) < server.MIN_KEY:
+        print(f"SESSION_KEY_FILE is unset, unreadable or shorter than {server.MIN_KEY} bytes "
+              "(make one with: openssl rand -hex 32)", file=sys.stderr)
         return 2
     if a.cmd == "secret":
         if not server.WORK_ITEM.match(a.work_item) or not server.JOB.match(a.job):

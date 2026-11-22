@@ -13,7 +13,7 @@ Sessions pane reads from it.
 
 | Call | What it does |
 | --- | --- |
-| `POST /sessions/<work item id>/events` | A Job's batch: `{"job": "<Job name>", "events": [...]}`, 1 to 100 events, at most 256 KiB. `202 {"accepted": n}` |
+| `POST /sessions/<work item id>/events` | A Job's batch: `{"job": "<Job name>", "events": [...]}`, 1 to 100 events, at most 256 KiB. `202 {"accepted": n}`. A missing `Content-Length` is `411`, a bad one `400`, too large `413`, all before the body is read |
 | `GET /sessions/<work item id>/messages?job=<Job name>` | George's messages for `poll()`. Always `{"messages": []}` until step 3A; the hook still polls Plane |
 | `GET /healthz` | `200 {"ok": true}` |
 
@@ -21,11 +21,16 @@ Sessions pane reads from it.
 `Authorization: Bearer <token>`, where the token is
 `HMAC-SHA256(session-key, "<work item id>|<Job name>")` as lowercase hex. The
 service recomputes it, so a token works for one ticket and one Job only. A
-wrong token is `401` and is logged as refused, with no event content.
+wrong token (including a non-ASCII one) is `401` and is logged as refused,
+with no event content. The service refuses to start with a `session-key`
+under 32 bytes (`openssl rand -hex 32` makes one).
+
+**Limits.** A client gets 10 s to send its request, and at most 32 requests
+are handled at once; more wait to be accepted.
 
 **Event shapes**, as the plan's "Job side: session events" table, with a
 `type` field added to tell them apart. Unknown fields are dropped; a wrong
-type is `400`.
+type is `400`. `at` must be ISO-8601 UTC, `YYYY-MM-DDTHH:MM:SS[.ffffff]Z`.
 
 ```json
 {"type": "progress", "tool": "Bash", "summary": "git status", "at": "2026-11-22T10:00:00Z"}
@@ -61,18 +66,38 @@ Without both, the Job is exactly phase 1: no events, no extra prompt text.
 
 The hook sends at most once per 10 s per Job, holding the latest plan and up
 to 20 progress events between sends. `say` and `ask` go at once, with
-anything held; the Stop hook sends what's left.
+anything held; the Stop hook sends what's left. A send has a 2 s timeout and
+runs outside the hook's state lock. A network error, a 5xx, a 408 or a 429
+keeps the batch for the next send. Any other 4xx drops it with a line on
+stderr, since resending can't help. The Job clamps every field to the limits
+above before sending.
 
 ## Redaction
 
-`agent_sessions/redact.py` holds the patterns: token shapes (GitHub, Anthropic,
-Plane, Slack, AWS, JWTs, private keys, 32+ hex characters, 32+ mixed
-characters) and assignments (`NAME=value` for secret-looking names, `--token
-value`, `Bearer …`, URL passwords). The Job also replaces the value of every
-env var with a secret-looking name. The two copies of the list must stay the
-same, and a bench-cloud test checks they do.
+`agent_sessions/redact.py` holds three lists of `(name, pattern)`:
 
-Known over-redaction: 40-character git SHAs count as long hex.
+- **VENDOR**: token shapes a vendor issues (GitHub, GitLab, Anthropic,
+  OpenAI-style, Stripe live keys, Plane, Slack incl. `xapp-`, Hugging Face,
+  npm, AWS key ids, JWTs, private keys);
+- **GENERIC**: 32+ hex characters, 32+ characters mixing cases and digits;
+- **ASSIGN**: a secret by context: `NAME=value` and `"name": "value"` for
+  secret-looking names, `--token value`, a long value after a secret-looking
+  word, `Authorization: <scheme> X`, `Bearer …`, `mysql -p…`, `sshpass -p`,
+  `curl -u user:pw`, URL passwords.
+
+**Two levels.** Progress summaries and plan items get all three (the full
+level). `say`/`ask` text is also posted to Plane, so it gets VENDOR only (the
+message level): commit SHAs, branch names and prose such as "the key: …"
+survive there. On the Job, both levels also replace the value of every env var
+with a secret-looking name (`*KEY*`, `*TOKEN*`, `*SECRET*`, `*PASS*`,
+`*APIKEY*`, `*AUTH*`, …).
+
+Every quantifier is bounded and every string is capped at 20,000 characters
+before a pattern runs (tests: 200,000 characters of `x-` in under 0.2 s). The
+Job's copy of the lists must stay the same, and a bench-cloud test checks it.
+
+Known over-redaction at the full level: 40-character git SHAs count as long
+hex.
 
 ## Run, test
 
@@ -115,10 +140,17 @@ This needs the staging manifests first (not in this PR, see below). Then:
    ```
 
    It passes with at least one progress event, every event in shape, nothing
-   secret-shaped, and no "redacted on arrival" warning. `--secret-env NAME`
-   also checks that a named env var's value (export it in the checking shell)
-   appears nowhere; values are compared, never printed.
-4. The phase-1 half: the same ticket, a second Job with neither field. The
+   secret-shaped, no "redacted on arrival" warning and no refused request from
+   the Job.
+
+   **Also pass `--secret-env`** for the run's real credentials, so the check
+   compares their values too, not only their shapes. Export each in the
+   checking shell without echoing it, then e.g.
+   `--secret-env PLANE_API_KEY --secret-env CLAUDE_CODE_OAUTH_TOKEN`. Values
+   are compared, never printed.
+4. Delete the token's Secret when the test is done:
+   `kubectl -n bench-cloud delete secret <Job name>-session`.
+5. The phase-1 half: the same ticket, a second Job with neither field. The
    check with `--expect-none --job <second Job>` passes only if it sent
    nothing. The run itself should look as phase 1 does: the same comments,
    states and run record, with no `bench-session` instructions given to it.

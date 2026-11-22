@@ -31,6 +31,14 @@ spec:
           # Write an empty YAML list for each include file if it doesn't already exist
           # or is empty (0 bytes). A bare touch creates a 0-byte file which HA refuses
           # to parse as a list, causing it to enter recovery mode and drop trusted_proxies.
+          #
+          # Seed /config/.storage/http (HASS-9) from git only when it is absent or
+          # empty: a fresh /config (new PVC, restore without .storage, HASS-6
+          # sanitiser) then trusts the gateway's proxies instead of answering
+          # 400. An existing file is never touched, so Settings → System →
+          # Network stays authoritative. The seed is HA 2026.10's storage format
+          # (http/config.py: version 2.2, values in `stable`, yaml_migration_done
+          # true); newer HA migrates it like any existing install's file.
           command:
             - sh
             - -c
@@ -38,6 +46,19 @@ spec:
               for f in /config/automations.yaml /config/scripts.yaml /config/scenes.yaml; do
                 [ ! -s "$f" ] && printf '[]' > "$f"
               done
+              mkdir -p /config/.storage
+              # Copy to a temp file and rename, so an interrupted copy never
+              # leaves a truncated non-empty file that would block re-seeding.
+              if [ ! -s /config/.storage/http ]; then
+                if cp /seed/http.json /config/.storage/http.seed \
+                  && chmod 600 /config/.storage/http.seed \
+                  && mv /config/.storage/http.seed /config/.storage/http; then
+                  echo "seeded /config/.storage/http from git"
+                else
+                  echo "WARNING: failed to seed /config/.storage/http" >&2
+                  rm -f /config/.storage/http.seed
+                fi
+              fi
               true
           securityContext:
             allowPrivilegeEscalation: false
@@ -57,6 +78,10 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
+            - name: config-file
+              mountPath: /seed/http.json
+              subPath: http_storage_seed.json
+              readOnly: true
       containers:
         - image: ghcr.io/home-assistant/home-assistant:2026.10.4@sha256:23f4dfbb69ce76315dbc4de7915504f1c2dcecd7ca2648113a493a385972e133
           name: homeassistant

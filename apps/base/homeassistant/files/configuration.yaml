@@ -251,17 +251,12 @@ sensor:
     timeout: 5
     away_timeout: 180
 
-# Since 2026.8, HA imports this block into .storage/http on first boot and
-# ignores the YAML after that: change proxies in Settings → System → Network.
-# Kept so a fresh /config (restore drill, new PVC) imports the right values.
-# 2026.7.1 and earlier stored these without their masks; 2026.10 restores them
-# on import (http/config.py, _stable_differs_only_by_lost_proxy_masks).
-http:
-  use_x_forwarded_for: true
-  trusted_proxies:
-    - 10.244.0.0/16  # Trust Cluster Pod CIDR
-    - 10.42.2.0/24 # Trust Node Network (Envoy HostNetwork)
-    - 127.0.0.1
+# No http: block (HASS-9). Since 2026.8 HA keeps its HTTP settings in
+# .storage/http (Settings → System → Network) and 2027.2 stops reading YAML.
+# The trusted proxies (use_x_forwarded_for; pod CIDR 10.244.0.0/16, node
+# network 10.42.2.0/24, 127.0.0.1) live in files/storage/http.json, which the
+# init-files container copies to /config/.storage/http only when that file is
+# absent or empty. Without them every request through the gateway gets 400.
 
 input_datetime:
   nightlight_turnoff_time:

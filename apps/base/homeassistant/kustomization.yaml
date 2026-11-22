@@ -30,6 +30,9 @@ configMapGenerator:
       # in lovelace.dashboards.<slug>.filename.
       - dashboards_control.yaml=files/dashboards/control.yaml
       - dashboards_home.yaml=files/dashboards/home.yaml
+      # Seed for /config/.storage/http (HASS-9): mounted only into the
+      # init-files container, copied when the PVC has no .storage/http.
+      - http_storage_seed.json=files/storage/http.json
   # Vendored custom frontend cards (Mushroom v5.1.1). Kept in git (not a HACS
   # runtime download) so the resource is reproducible. Mounted to /config/www
   # and loaded as a Lovelace resource (`lovelace.resources` in configuration.yaml).

@@ -82,6 +82,8 @@ COPY images/bench-cloud/bench-task /usr/local/bin/bench-task
 COPY images/bench-cloud/bench-agents-sync /usr/local/bin/bench-agents-sync
 # Ticket mode: the comment hook and its settings (hooks and the Plane tool deny
 # list), passed by bench-task with --settings only when TASK_TICKET is set.
+# bench-session (say/ask, agent sessions plan step 2) is a link to the same
+# file, made below.
 COPY images/bench-cloud/bench-ticket /usr/local/bin/bench-ticket
 COPY images/bench-cloud/ticket-settings.json /usr/local/share/bench-cloud/ticket-settings.json
 COPY images/bench-cloud/agents-allowlist /usr/local/share/bench-cloud/agents-allowlist
@@ -98,6 +100,7 @@ COPY images/bench-cloud/CLAUDE.md /etc/claude-code/CLAUDE.md
 # The trailing version checks fail the BUILD, not the first task, if a tool is missing.
 RUN chmod 0755 /usr/local/bin/github-app-token /usr/local/bin/gh /usr/local/bin/bench-entrypoint /usr/local/bin/bench-task /usr/local/bin/bench-cloud /usr/local/bin/bench-agents-sync /usr/local/bin/bench-ticket \
       /usr/local/share/bench-cloud/git-hooks/pre-push \
+ && ln -s bench-ticket /usr/local/bin/bench-session \
  && git config --system credential.https://github.com.helper '!/usr/local/bin/github-app-token --git-credential' \
  && git config --system init.defaultBranch main \
  && go version && kubectl version --client=true && /usr/local/lib/gh/gh --version \

@@ -317,7 +317,8 @@ A small service, **`agent-sessions`**:
     agent-desk creates a fresh token Secret per Job and deletes it when the Job ends, with an
     admission policy so only agent-desk can create those Secrets.
     - For step 2's hand-launched pilot, the operator makes it, with `python -m agent_sessions
-      secret` run inside the service's pod. Admins are the policy's one other exception.
+      secret` run inside the service's pod. Admins are the policy's one other exception:
+      George, 2026-11-22, on #2005: "Keep admin exception (Recommended)".
     - agent-desk making it is its own PR, after #2003 (see Build order step 2).
     - The Secret is `<job>-session`, labelled `agent-sessions/token: "true"`, and owned by its
       Job, so Kubernetes also deletes it with the Job.

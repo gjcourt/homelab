@@ -47,10 +47,17 @@ spec:
                 [ ! -s "$f" ] && printf '[]' > "$f"
               done
               mkdir -p /config/.storage
+              # Copy to a temp file and rename, so an interrupted copy never
+              # leaves a truncated non-empty file that would block re-seeding.
               if [ ! -s /config/.storage/http ]; then
-                cp /seed/http.json /config/.storage/http
-                chmod 600 /config/.storage/http
-                echo "seeded /config/.storage/http from git"
+                if cp /seed/http.json /config/.storage/http.seed \
+                  && chmod 600 /config/.storage/http.seed \
+                  && mv /config/.storage/http.seed /config/.storage/http; then
+                  echo "seeded /config/.storage/http from git"
+                else
+                  echo "WARNING: failed to seed /config/.storage/http" >&2
+                  rm -f /config/.storage/http.seed
+                fi
               fi
               true
           securityContext:

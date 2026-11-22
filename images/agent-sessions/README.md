@@ -99,8 +99,12 @@ On the Job, both levels also replace the value of every env var with a
 secret-looking name (`*KEY*`, `*TOKEN*`, `*SECRET*`, `*PASSW*`,
 `*CREDENTIAL*`, `*_PASS`, `*_AUTH`, …), and each line of a multi-line one.
 
-Every quantifier is bounded and every string is capped at 20,000 characters
-before a pattern runs (tests: 200,000 characters of `x-` in under 0.2 s). The
+No pattern can backtrack for long: names are bounded, and values are either
+the end of their pattern or matched possessively. Values themselves are
+unbounded, so an over-long token goes whole. A text is scanned to 20,000
+characters plus a 4,096 margin, cut to 20,000, and scanned again, so a secret
+straddling the cut leaves no fragment (tests: 200,000 characters of `x-` in
+under 0.2 s). The
 Job's copy of the lists must stay the same, and a bench-cloud test checks it.
 
 Known over-redaction at the full level: 40-character git SHAs count as long

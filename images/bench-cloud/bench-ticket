@@ -363,43 +363,44 @@ SECRET_ENV = re.compile(r"(?i)KEY|TOKEN|SECRET|PASSW|CREDENTIAL|(?:^|_)(?:PASS\w
                         r"(?:_|$)")
 REDACTED = "[redacted]"
 SECRET_MAX_SCAN = 20000
+SECRET_SCAN_MARGIN = 4096
 # Token shapes a vendor issues: redacted at both levels.
 SECRET_PATTERNS = [
     # A whole PEM private key (to its END line, or the end of the text); the
     # header alone if the END is too far off to find.
-    ("private-key-block", r"(?s)-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----.{0,10000}?"
+    ("private-key-block", r"(?s)-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----.{0,20000}?"
                           r"(?:-----END [A-Z ]{0,40}PRIVATE KEY-----|\Z)"),
     ("private-key", r"-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----"),
-    ("github-token", r"\b(?:gh[pousr]_[A-Za-z0-9]{20,255}|github_pat_[A-Za-z0-9_]{20,255})"),
-    ("gitlab-token", r"\bglpat-[A-Za-z0-9_-]{20,255}"),
-    ("anthropic-key", r"\bsk-ant-[A-Za-z0-9_-]{8,255}"),
-    ("openai-style-key", r"\bsk-[A-Za-z0-9_-]{20,255}"),
-    ("stripe-key", r"\b(?:sk|rk)_live_[A-Za-z0-9]{10,255}"),
-    ("plane-key", r"\bplane_api_[A-Za-z0-9]{8,255}"),
-    ("slack-token", r"\b(?:xox[abposr]|xapp)-[A-Za-z0-9-]{10,255}"),
-    ("huggingface-token", r"\bhf_[A-Za-z0-9]{30,255}"),
-    ("npm-token", r"\bnpm_[A-Za-z0-9]{30,255}"),
+    ("github-token", r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"),
+    ("gitlab-token", r"\bglpat-[A-Za-z0-9_-]{20,}"),
+    ("anthropic-key", r"\bsk-ant-[A-Za-z0-9_-]{8,}"),
+    ("openai-style-key", r"\bsk-[A-Za-z0-9_-]{20,}"),
+    ("stripe-key", r"\b(?:sk|rk)_live_[A-Za-z0-9]{10,}"),
+    ("plane-key", r"\bplane_api_[A-Za-z0-9]{8,}"),
+    ("slack-token", r"\b(?:xox[abposr]|xapp)-[A-Za-z0-9-]{10,}"),
+    ("huggingface-token", r"\bhf_[A-Za-z0-9]{30,}"),
+    ("npm-token", r"\bnpm_[A-Za-z0-9]{30,}"),
     ("aws-key-id", r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
-    ("jwt", r"\beyJ[A-Za-z0-9_-]{8,2048}\.[A-Za-z0-9_-]{8,2048}\.[A-Za-z0-9_-]{8,2048}"),
+    ("jwt", r"\beyJ[A-Za-z0-9_-]{8,}+\.[A-Za-z0-9_-]{8,}+\.[A-Za-z0-9_-]{8,}"),
 ]
 # A secret by its context, as precise as a Plane comment needs (HOMELAB-120):
 # both levels. Group 1 stays, the rest of the match goes.
 SECRET_CONTEXT = [
-    ("bearer", r"(?i)(\bbearer\s{1,8})[A-Za-z0-9._~+/=-]{16,4096}"),
+    ("bearer", r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/=-]{16,}"),
     # NAME=value, NAME: value, "name": "value", with the name anywhere in an
     # identifier: GITHUB_TOKEN=, DB_PASSWORD:, client_secret=, "api_key": ...
     ("secret-assignment", r"(?i)((?<![A-Za-z0-9])[A-Za-z0-9_-]{0,64}(?:api[_-]?key|token|secret|password|passwd)"
-                          r"[A-Za-z0-9_-]{0,64}[\"']?\s{0,8}[:=]\s{0,8})[\"']?[^\s'\"<>,}]{8,4096}"),
+                          r"[A-Za-z0-9_-]{0,64}[\"']?\s*+[:=]\s*+)[\"']?[^\s'\"<>,}]{8,}"),
     # https://user:password@host
-    ("url-credentials", r"(://[^:/\s@]{1,128}:)[^@\s/]{1,512}(?=@)"),
+    ("url-credentials", r"(://[^:/\s@]{1,128}:)[^@\s/]++(?=@)"),
 ]
 # Shapes that are usually secrets but sometimes not (a 40-hex git SHA): full
 # level only.
 SECRET_GENERIC = [
-    ("long-hex", r"\b[0-9a-fA-F]{32,1024}\b"),
+    ("long-hex", r"\b[0-9a-fA-F]{32,}+\b"),
     # 32+ characters mixing upper, lower and digits, with no path separator.
-    ("high-entropy", r"(?<![A-Za-z0-9+_-])(?=[A-Za-z0-9+_-]{0,1024}[a-z])(?=[A-Za-z0-9+_-]{0,1024}[A-Z])"
-                     r"(?=[A-Za-z0-9+_-]{0,1024}[0-9])[A-Za-z0-9+_-]{32,1024}={0,2}"),
+    ("high-entropy", r"(?<![A-Za-z0-9+_-])(?=[A-Z0-9+_-]*+[a-z])(?=[a-z0-9+_-]*+[A-Z])"
+                     r"(?=[A-Za-z+_-]*+[0-9])[A-Za-z0-9+_-]{32,}+={0,2}"),
 ]
 # More secrets by context, broader than a comment can afford (they would eat
 # prose like "the key: ..."): full level only. Group 1 stays, group 2 (the
@@ -407,19 +408,19 @@ SECRET_GENERIC = [
 # ((?<![\w.-])), so a long run of word characters is tried once.
 _NAME = r"(?:key|token|secret|passw(?:or)?d|pass|pwd|credential|auth)"
 SECRET_ASSIGN = [
-    ("auth-header", r"(?i)(\bauthorization[\"']?\s{0,8}[:=]\s{0,8}[\"']?(?:bearer|basic|token|digest)?\s{0,8})"
-                    r"(?!\[redacted\])([^\s\"']{1,4096})"),
-    ("bearer-short", r"(?i)(\b(?:bearer|basic)\s{1,8})(?!\[redacted\])([A-Za-z0-9._~+/=-]{8,4096})"),
-    ("assignment", r"(?i)((?<![\w.-])[\"']?[\w.-]{0,64}" + _NAME + r"[\w.-]{0,64}[\"']?\s{0,8}[=:]\s{0,8})"
-                   r"(?!\[redacted\])(\"[^\"]{0,4096}\"|'[^']{0,4096}'|[^\s\"',;&]{1,4096})"),
+    ("auth-header", r"(?i)(\bauthorization[\"']?\s*+[:=]\s*+[\"']?(?:bearer|basic|token|digest)?\s*+)"
+                    r"(?!\[redacted\])([^\s\"']+)"),
+    ("bearer-short", r"(?i)(\b(?:bearer|basic)\s+)(?!\[redacted\])([A-Za-z0-9._~+/=-]{8,})"),
+    ("assignment", r"(?i)((?<![\w.-])[\"']?[\w.-]{0,64}" + _NAME + r"[\w.-]{0,64}[\"']?\s*+[=:]\s*+)"
+                   r"(?!\[redacted\])(\"[^\"]*+\"|'[^']*+'|[^\s\"',;&]+)"),
     ("flag", r"(?i)((?<![\w-])--?[\w-]{0,64}(?:key|token|secret|password|passwd|pass|credential)[\w-]{0,64}"
-             r"(?:=|\s{1,8}))(?!\[redacted\])(\"[^\"]{0,4096}\"|'[^']{0,4096}'|[^\s\"'-][^\s\"']{0,4095})"),
+             r"(?:=|\s+))(?!\[redacted\])(\"[^\"]*+\"|'[^']*+'|[^\s\"'-][^\s\"']*)"),
     ("spaced-value", r"(?i)((?<![\w.-])[\w.-]{0,64}(?:secret|token|passw(?:or)?d|api[_-]?key|access[_-]?key|"
-                     r"private[_-]?key)[\w.-]{0,64}\s{1,8})(?!\[redacted\])([A-Za-z0-9+/=_.-]{16,4096})"),
-    ("mysql-password", r"(\bmysql\w{0,16}\b[^\n|;&]{0,200}?\s-p)(?!\[redacted\])([^\s\"']{1,4096})"),
-    ("sshpass", r"(\bsshpass\s{1,8}(?:-[a-zA-Z]{1,8}\s{1,8}){0,5}-p\s{0,8})(?!\[redacted\])([^\s\"']{1,4096})"),
-    ("curl-user", r"((?<!\S)(?:-u|--user)(?:=|\s{0,8})[^\s:\"']{1,128}:)(?!\[redacted\])([^\s\"']{1,4096})"),
-    ("url-password", r"(://[^/\s:@]{1,128}:)(?!\[redacted\])([^@\s/]{1,512})(@)"),
+                     r"private[_-]?key)[\w.-]{0,64}\s+)(?!\[redacted\])([A-Za-z0-9+/=_.-]{16,})"),
+    ("mysql-password", r"(\bmysql\w{0,16}\b[^\n|;&]{0,200}?\s-p)(?!\[redacted\])([^\s\"']+)"),
+    ("sshpass", r"(\bsshpass\s+(?:-[a-zA-Z]{1,8}\s+){0,5}-p\s*)(?!\[redacted\])([^\s\"']+)"),
+    ("curl-user", r"((?<!\S)(?:-u|--user)(?:=|\s*)[^\s:\"']{1,128}:)(?!\[redacted\])([^\s\"']+)"),
+    ("url-password", r"(://[^/\s:@]{1,128}:)(?!\[redacted\])([^@\s/]++)(@)"),
 ]
 
 
@@ -433,8 +434,9 @@ TOOL_MAX = 100
 ITEM_MAX = 200
 STATUS_MAX = 32
 MAX_ITEMS = 100
-TEXT_MAX = 20000
-SCAN_FIRST = 4096        # characters looked at before a summary is cut
+# bench-session say/ask: characters of text, kept well under MAX_COMMENT so
+# that escaping and markup still fit one comment (re-linted before posting).
+SAY_MAX = 15000
 PLAN_TOOLS = ("TodoWrite", "TaskCreate", "TaskUpdate")
 
 
@@ -462,11 +464,24 @@ def redact(text, env=None, full=False):
 
     The default is the message level, for Plane comments; full=True adds the
     broader patterns, for progress and plan events."""
-    text = str(text or "").replace("\r\n", "\n")[:SECRET_MAX_SCAN]
+    text = str(text or "").replace("\r\n", "\n")
+    # Env values on the whole text (a plain replace, linear), so one that
+    # straddles the cut below goes whole.
     for v in secret_env_values(env):
         text = text.replace(v, REDACTED)
-    for _, pat in SECRET_PATTERNS + SECRET_CONTEXT + (SECRET_ASSIGN + SECRET_GENERIC if full else []):
+    pats = SECRET_PATTERNS + SECRET_CONTEXT + (SECRET_ASSIGN + SECRET_GENERIC if full else [])
+    # Patterns up to the cut plus a margin, then the cut, then the end again for
+    # anything the cut made newly visible.
+    text = text[:SECRET_MAX_SCAN + SECRET_SCAN_MARGIN]
+    for _, pat in pats:
         text = _sub(pat, text)
+    if len(text) > SECRET_MAX_SCAN:
+        # Anything the cut made newly visible sits at the end: rescan that.
+        head = text[:SECRET_MAX_SCAN - SECRET_SCAN_MARGIN]
+        tail = text[SECRET_MAX_SCAN - SECRET_SCAN_MARGIN:SECRET_MAX_SCAN]
+        for _, pat in pats:
+            tail = _sub(pat, tail)
+        text = head + tail
     return text
 
 
@@ -478,8 +493,8 @@ def _cut(s, n=SUMMARY_MAX):
 def clean_text(s, n=SUMMARY_MAX, full=True):
     """Redact, cut to n, redact again. Redacting first means a secret that
     straddles the cut is removed whole, not left as a fragment too short to
-    match; the scan itself is capped (SCAN_FIRST) so a huge input stays cheap."""
-    return redact(_cut(redact(str(s or "")[:SCAN_FIRST], full=full), n), full=full)
+    match; redact() caps its own scan, so a huge input stays cheap."""
+    return redact(_cut(redact(str(s or ""), full=full), n), full=full)
 
 
 def _path(p):
@@ -498,7 +513,7 @@ def summarize(tool, inp):
     elif tool in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit"):
         s = _path(inp.get("file_path") or inp.get("notebook_path"))
     elif tool in ("Grep", "Glob"):
-        s = str(inp.get("pattern", ""))[:SCAN_FIRST] + (f" in {_path(inp['path'])}" if inp.get("path") else "")
+        s = str(inp.get("pattern", "")) + (f" in {_path(inp['path'])}" if inp.get("path") else "")
     elif tool == "WebFetch":
         s = inp.get("url", "")
     elif tool == "WebSearch":
@@ -691,11 +706,21 @@ def session_cmd(cmd, args):
         return 2
     # The message level, as for every Plane comment: SHAs and branch names
     # reach George intact.
-    text = redact(text.replace("\x00", "")[:TEXT_MAX])[:TEXT_MAX]
+    text = redact(text.replace("\x00", ""))
+    if len(text) > SAY_MAX:
+        print(f"bench-session: not posted: {len(text)} characters; a message must be under "
+              f"{SAY_MAX}. Shorten it, or put the detail in the PR and link it.", file=sys.stderr)
+        return 1
+    body = comment_html(text)
+    problems = lint_comment(body)
+    if problems:  # e.g. text that escapes past MAX_COMMENT
+        print("bench-session: not posted: as a comment it " + "; ".join(problems)
+              + ". Shorten it or simplify the markup.", file=sys.stderr)
+        return 1
     ticket = json.loads(raw)
     channel = PlaneComments(ticket, key)
     try:
-        post_comment(channel, comment_html(text))
+        post_comment(channel, body)
     except Exception as e:  # noqa: BLE001
         print(f"bench-session: not posted to the ticket ({e}). Post it with the Plane MCP "
               "server instead.", file=sys.stderr)

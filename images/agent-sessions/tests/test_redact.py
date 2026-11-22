@@ -56,3 +56,19 @@ def test_no_pathological_backtracking(s):
     rd.redact(s)
     rd.find(s)
     assert time.perf_counter() - t < 0.2
+
+
+@pytest.mark.parametrize("full", [False, True])
+def test_a_large_pem_key_goes_whole(full):
+    body = "\n".join("MIIEow" + "Ab9+" * 14 for _ in range(220))
+    pem = f"-----BEGIN RSA PRIVATE KEY-----\n{body}\n-----END RSA PRIVATE KEY-----"
+    assert len(pem) > 13000
+    out = rd.redact(pem + "\ndone", full)
+    assert "MIIEow" not in out and out.endswith("done")
+
+
+@pytest.mark.parametrize("text", ["ghp_" + "a" * 300, "GITHUB_TOKEN=" + "c" * 5000,
+                                  "Authorization: Bearer" + " " * 12 + "a" * 40])
+def test_over_long_secrets_leave_no_tail(text):
+    for full in (False, True):
+        assert "aaaaaaaa" not in rd.redact(text, full) and "cccccccc" not in rd.redact(text, full)

@@ -8,6 +8,7 @@ import importlib.machinery
 import importlib.util
 import json
 import os
+import shutil
 import socketserver
 import subprocess
 import sys
@@ -477,6 +478,7 @@ def test_ask_reports_a_failed_blocked_separately(server, tmp_path, bench_session
     assert len(server.comments) == 1
 
 
+@pytest.mark.skipif(not shutil.which("jq"), reason="needs jq")
 def test_bench_task_prompt_only_for_a_session_job():
     src = (HERE.parent / "bench-task").read_text()
     snippet = src[src.index('  session_note=""'):]
@@ -536,3 +538,73 @@ def test_hook_against_the_real_service(server, real_service, tmp_path):
     open_window(tmp_path)
     r = hook(env, "Bash", {"command": "ls"})
     assert "dropped" in r.stderr and any(x.get("refused") == 401 for x in log)
+
+
+# --- second review of #2003 ---------------------------------------------------------
+
+def _pem(body_chars):
+    body = "\n".join(("MIIEow" + "Ab9+" * 16)[:64] for _ in range(body_chars // 65 + 1))
+    return f"-----BEGIN RSA PRIVATE KEY-----\n{body}\n-----END RSA PRIVATE KEY-----"
+
+
+@pytest.mark.parametrize("full", [False, True])
+def test_a_large_pem_key_goes_whole(full):
+    pem = _pem(13000)
+    assert len(pem) > 13000
+    out = bt.redact(f"key:\n{pem}\ndone", env={}, full=full)
+    assert "MIIEow" not in out and "Ab9+" not in out and "PRIVATE KEY" not in out
+    assert out.endswith("done")
+
+
+@pytest.mark.parametrize("text,gone", [
+    ("ghp_" + "a" * 300, "a" * 8),
+    ("sk-ant-api03-" + "b" * 5000, "b" * 8),
+    ("GITHUB_TOKEN=" + "c" * 5000, "c" * 8),
+    ("Authorization: Bearer" + " " * 12 + "d" * 40, "d" * 8),
+    ("https://u:" + "e" * 1000 + "@host/", "e" * 8),
+])
+def test_over_long_secrets_leave_no_tail(text, gone):
+    for full in (False, True):
+        out = bt.redact(text, env={}, full=full)
+        assert gone not in out, (full, out[:80])
+
+
+def test_an_env_secret_straddling_the_scan_limit_leaves_no_fragment():
+    secret = "S3CRETVALUE-" + "z" * 20
+    text = "x " * ((bt.SECRET_MAX_SCAN - 10) // 2) + secret + " tail"
+    out = bt.redact(text, env={"MY_TOKEN": secret})
+    assert "S3CRET" not in out and "zzzz" not in out
+    assert len(out) <= bt.SECRET_MAX_SCAN
+
+
+def test_say_too_long_is_refused(server, tmp_path, bench_session):
+    env = env_for(server, tmp_path)
+    run(env, "init")
+    r = run(env, "say", stdin="word " * 4000, argv0=bench_session)       # 20,000 characters
+    assert r.returncode == 1 and "must be under" in r.stderr
+    r = run(env, "say", stdin="&" * 14000, argv0=bench_session)          # escapes past MAX_COMMENT
+    assert r.returncode == 1 and "not posted" in r.stderr
+    assert server.comments == [] and session_posts(server) == []
+    r = run(env, "say", stdin="word " * 2900, argv0=bench_session)       # long but fine
+    assert r.returncode == 0 and bt.lint_comment(server.comments[-1]["comment_html"]) == []
+
+
+SAMPLES = [
+    "git status", "GITHUB_TOKEN=abcdEFGH1234ijkl and ghp_" + "a" * 36,
+    "pushed 12920e84a1b2c3d4e5f60718293a4b5c6d7e8f90 to feat/x",
+    "curl -H 'Authorization: Token X' -u admin:pw https://u:pw@x.io/",
+    '{"password": "hunter2xx", "api_key":"abc123xyz"}', "mysql -u root -phunter2 db",
+    "the key: it is in vault; Bearer abcdefghijklmnopqrstuv", _pem(200), "x-" * 15000,
+    "A1b2C3d4" * 6 + " eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijk",
+]
+
+
+def test_job_and_service_redact_the_same():
+    sys.path.insert(0, str(HERE.parents[1] / "agent-sessions"))
+    try:
+        from agent_sessions import redact as svc
+    finally:
+        sys.path.pop(0)
+    for text in SAMPLES:
+        for full in (False, True):
+            assert bt.redact(text, env={}, full=full) == svc.redact(text, full=full), (full, text[:40])

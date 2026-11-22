@@ -39,6 +39,21 @@ class Playbook:
 
 
 @dataclass
+class Sessions:
+    """Agent sessions pilots (plan docs/plans/2026-11-08-agent-sessions-plan.md,
+    step 2). Off unless url is set and a project or playbook is listed."""
+    url: str = ""
+    pilot_projects: list[str] = field(default_factory=list)   # Plane identifiers, e.g. SANDBOX
+    pilot_playbooks: list[str] = field(default_factory=list)
+
+    def pilot(self, project: str, playbook: str) -> bool:
+        return bool(self.url) and (project in self.pilot_projects or playbook in self.pilot_playbooks)
+
+
+MIN_SESSION_KEY = 32  # bytes, as agent-sessions requires
+
+
+@dataclass
 class Config:
     plane_url: str
     workspace: str
@@ -85,6 +100,10 @@ class Config:
     # an agent nor answer a Blocked ticket, and `over-cap` stays George's.
     # Empty means only George's `ready` counts.
     orchestrator_email: str = ""
+    sessions: Sessions = field(default_factory=Sessions)
+    # The agent-sessions HMAC key (SESSION_KEY_FILE, the Secret's session-key).
+    # Without it, or under MIN_SESSION_KEY bytes, no Job is a pilot.
+    session_key: bytes = b""
 
 
 def _read_file(env: str) -> str:
@@ -137,6 +156,12 @@ def load(path: str | None = None, env=os.environ) -> Config:
         notify_on_state=bool(raw.get("notifyOnState", True)),
         github_owner=raw.get("githubOwner", "") or "",
         orchestrator_email=str(raw.get("orchestratorEmail", "") or "").strip(),
+        sessions=Sessions(
+            url=str((raw.get("sessions") or {}).get("url", "") or "").strip(),
+            pilot_projects=[str(p) for p in (raw.get("sessions") or {}).get("pilotProjects") or []],
+            pilot_playbooks=[str(p) for p in (raw.get("sessions") or {}).get("pilotPlaybooks") or []],
+        ),
+        session_key=_read_file("SESSION_KEY_FILE").encode(),
     )
     for key in ("job_namespace", "job_template", "console_deployment", "run_record",
                 "jobs_token_secret"):

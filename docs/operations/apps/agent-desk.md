@@ -155,6 +155,12 @@ kubectl -n bench-cloud get jobs -l agent-desk/ticket        # dispatcher Jobs (n
 
 ## 5. Common operations
 
+- **Agent sessions pilots:** see the README's `sessions` section. A pilot Job that sits in
+  `CreateContainerConfigError` is waiting for its `<job>-session` Secret. If agent-desk couldn't
+  create it, it deleted the Job and said so on the ticket. Check the dispatcher's log for
+  `token Secret`, the `agent-sessions-token-writer` RoleBinding in bench-cloud, and the
+  `agent-sessions-token-secrets` admission policy (homelab#2005).
+
 - **Change a cap, deadline or prompt:** edit `config.yaml` and open a PR. The ConfigMap's name
   changes with its content, so the Deployment rolls out on merge.
 - **Stop all dispatching:** `kubectl -n agent-desk-stage scale deploy/agent-desk --replicas=0`.

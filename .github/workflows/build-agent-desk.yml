@@ -6,11 +6,15 @@ on:
     paths:
       - 'images/agent-desk/**'
       - 'scripts/bench-cloud/job.yaml'
+      # The token parity test reads agent-sessions' token code.
+      - 'images/agent-sessions/agent_sessions/server.py'
       - '.github/workflows/build-agent-desk.yml'
   pull_request:
     paths:
       - 'images/agent-desk/**'
       - 'scripts/bench-cloud/job.yaml'
+      # The token parity test reads agent-sessions' token code.
+      - 'images/agent-sessions/agent_sessions/server.py'
       - '.github/workflows/build-agent-desk.yml'
   workflow_dispatch:
 

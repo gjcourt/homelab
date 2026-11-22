@@ -192,7 +192,7 @@ This needs the staging manifests first (`apps/staging/agent-sessions/` and
 ## Not in this PR
 
 - **Manifests**: `agent-sessions-stage`, the pilot network rule (D3) and the
-  token-Secret admission policy (D1). They're a separate PR, on branch
+  token-Secret admission policy (D1). They are in homelab#2005 (draft), branch
   `deploy/agent-sessions-staging`.
 - **agent-desk making and deleting each Job's token Secret** (D1, D2), and
   labelling pilot Jobs. That's its own PR; the plan's Build order step 2 lists

@@ -576,7 +576,7 @@ Each step has an exit. Steps 3A and 3B are alternatives: whichever George picks 
      - The pilot label is `agent-sessions/pilot: "true"` on the Job's pod.
      - The rule is a CiliumNetworkPolicy in `bench-cloud`, shipped with the staging manifests.
    - **Still needed for the exit:**
-     - the staging manifests PR (branch `deploy/agent-sessions-staging`, a draft):
+     - the staging manifests PR (homelab#2005, a draft):
        `agent-sessions-stage`, the pilot network rule and the D1 admission policy;
      - the operator's `session-key`, SOPS, from its `.yaml.example`;
      - the image tag, pinned once #2003 merges and builds.

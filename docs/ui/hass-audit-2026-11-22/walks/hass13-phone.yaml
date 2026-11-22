@@ -1,0 +1,85 @@
+name: hass13-phone
+url: https://hass.burntbytes.com
+viewport:
+  width: 390
+  height: 844
+auth:
+  hass_token_file: ~/.config/hass/token
+allow_writes: false
+clicks: []
+steps:
+- goto: /
+- wait: 5000
+- screenshot: root-default
+- goto: /home-page/home
+- wait: 5000
+- screenshot: home
+- goto: /home-control/overview
+- wait: 5000
+- screenshot: config-overview
+- goto: /home-control/auto-shutoff
+- wait: 5000
+- screenshot: config-auto-shutoff
+- goto: /home-control/auto-shutoff-settings
+- wait: 5000
+- screenshot: config-auto-shutoff-settings
+- goto: /home-control/light-schedules
+- wait: 5000
+- screenshot: config-light-schedules
+- goto: /home-control/light-schedules-settings
+- wait: 5000
+- screenshot: config-light-schedules-settings
+- goto: /home-control/maintenance
+- wait: 5000
+- screenshot: config-maintenance
+- goto: /home-control/maintenance-intervals
+- wait: 5000
+- screenshot: config-maintenance-intervals
+- goto: /home-control/av
+- wait: 5000
+- screenshot: config-av
+- goto: /home-control/lights
+- wait: 5000
+- screenshot: config-lights
+- goto: /home-control/area-front-foyer
+- wait: 5000
+- screenshot: config-area-front-foyer
+- goto: /home-control/area-kitchen
+- wait: 5000
+- screenshot: config-area-kitchen
+- goto: /home-control/area-hallway
+- wait: 5000
+- screenshot: config-area-hallway
+- goto: /home-control/area-master-bedroom
+- wait: 5000
+- screenshot: config-area-master-bedroom
+- goto: /home-control/area-master-bathroom
+- wait: 5000
+- screenshot: config-area-master-bathroom
+- goto: /map
+- wait: 5000
+- screenshot: map
+- goto: /floorplan/floor-plan
+- wait: 5000
+- screenshot: floorplan
+- goto: /lovelace/0
+- wait: 5000
+- screenshot: builtin-lovelace-auto
+- goto: /home
+- wait: 5000
+- screenshot: builtin-home-overview
+- goto: /light
+- wait: 5000
+- screenshot: builtin-light
+- goto: /climate
+- wait: 5000
+- screenshot: builtin-climate
+- goto: /security
+- wait: 5000
+- screenshot: builtin-security
+- goto: /maintenance
+- wait: 5000
+- screenshot: builtin-maintenance
+- goto: /energy
+- wait: 5000
+- screenshot: builtin-energy

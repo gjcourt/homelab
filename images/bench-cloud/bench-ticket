@@ -347,41 +347,73 @@ def pre(event):
 
 # --- session events (agent sessions plan, "Job side: session events") --------
 
-REDACTED = "[redacted]"
-# Env var names whose values never leave the pod in an event (PLANE_API_KEY,
-# CLAUDE_CODE_OAUTH_TOKEN, BENCH_SESSION_TOKEN, ...).
-SECRET_NAME = re.compile(r"(?:^|_)(?:KEY|TOKEN|SECRET|PASSW\w*|CREDENTIALS?|AUTH|PRIVATE|COOKIE|"
+# Redaction (agent sessions plan, "The progress summary"). The lists below are
+# kept identical to images/agent-sessions/agent_sessions/redact.py (VENDOR,
+# GENERIC, ASSIGN; a test compares them). Two levels: full for progress and
+# plan, message (env secrets + SECRET_PATTERNS only) for say/ask text, which
+# is also a Plane comment, so SHAs and branch names survive there.
+# Env var names whose values never leave the pod (PLANE_API_KEY,
+# CLAUDE_CODE_OAUTH_TOKEN, BENCH_SESSION_TOKEN, DB_PASS, ...). Not PWD: that's
+# the working directory.
+SECRET_NAME = re.compile(r"(?:^|_)(?:KEY|APIKEY|TOKEN|SECRET|PASS\w*|CREDENTIALS?|AUTH|PRIVATE|COOKIE|"
                          r"SIGNATURE)(?:_|$)", re.I)
-# Token-shaped strings, whatever their source. Kept identical to
-# images/agent-sessions/agent_sessions/redact.py PATTERNS (a test checks).
+REDACTED = "[redacted]"
+SECRET_MAX_SCAN = 20000
+# Token shapes a vendor issues: safe to redact anywhere.
 SECRET_PATTERNS = [
-    ("github-token", r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"),
-    ("anthropic-key", r"\bsk-ant-[A-Za-z0-9_-]{10,}"),
-    ("openai-style-key", r"\bsk-[A-Za-z0-9_-]{20,}"),
-    ("plane-key", r"\bplane_api_[A-Za-z0-9]{16,}"),
-    ("slack-token", r"\bxox[abposr]-[A-Za-z0-9-]{10,}"),
+    ("github-token", r"\b(?:gh[pousr]_[A-Za-z0-9]{20,255}|github_pat_[A-Za-z0-9_]{20,255})"),
+    ("gitlab-token", r"\bglpat-[A-Za-z0-9_-]{20,255}"),
+    ("anthropic-key", r"\bsk-ant-[A-Za-z0-9_-]{10,255}"),
+    ("openai-style-key", r"\bsk-[A-Za-z0-9_-]{20,255}"),
+    ("stripe-key", r"\b(?:sk|rk)_live_[A-Za-z0-9]{10,255}"),
+    ("plane-key", r"\bplane_api_[A-Za-z0-9]{16,255}"),
+    ("slack-token", r"\b(?:xox[abposr]|xapp)-[A-Za-z0-9-]{10,255}"),
+    ("huggingface-token", r"\bhf_[A-Za-z0-9]{30,255}"),
+    ("npm-token", r"\bnpm_[A-Za-z0-9]{30,255}"),
     ("aws-key-id", r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
-    ("jwt", r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),
-    ("private-key", r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
-    ("long-hex", r"\b[0-9a-fA-F]{32,}\b"),
-    # 32+ characters mixing upper, lower and digits, with no path separator.
-    ("high-entropy", r"(?<![A-Za-z0-9+_-])(?=[A-Za-z0-9+_-]*[a-z])(?=[A-Za-z0-9+_-]*[A-Z])"
-                     r"(?=[A-Za-z0-9+_-]*[0-9])[A-Za-z0-9+_-]{32,}={0,2}"),
+    ("jwt", r"\beyJ[A-Za-z0-9_-]{8,2048}\.[A-Za-z0-9_-]{8,2048}\.[A-Za-z0-9_-]{8,2048}"),
+    ("private-key", r"-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----"),
 ]
-# name=value, --flag value, Authorization headers, URL passwords and query
-# parameters: the name stays, the value goes.
+# Shapes that are usually secrets but sometimes not (a 40-hex git SHA):
+# full level only.
+SECRET_GENERIC = [
+    ("long-hex", r"\b[0-9a-fA-F]{32,1024}\b"),
+    # 32+ characters mixing upper, lower and digits, with no path separator.
+    ("high-entropy", r"(?<![A-Za-z0-9+_-])(?=[A-Za-z0-9+_-]{0,1024}[a-z])(?=[A-Za-z0-9+_-]{0,1024}[A-Z])"
+                     r"(?=[A-Za-z0-9+_-]{0,1024}[0-9])[A-Za-z0-9+_-]{32,1024}={0,2}"),
+]
+# A secret by its context: group 1 stays, group 2 (the value) goes, group 3
+# (if any) stays. Full level only. Names start at a word boundary
+# ((?<![\w.-])), so a long run of word characters is tried once, not at
+# every offset.
+_NAME = r"(?:key|token|secret|passw(?:or)?d|pass|pwd|credential|auth)"
 SECRET_ASSIGN = [
-    r"(?i)(\b(?:bearer|basic)\s+)(?!\[redacted\])([A-Za-z0-9._~+/=-]{8,})",
-    r"(?i)(\b[\w.-]*(?:key|token|secret|passw(?:or)?d|pwd|credential|auth)[\w.-]*\s*[=:]\s*)"
-    r"(?!\[redacted\])(\"[^\"]*\"|'[^']*'|[^\s\"',;&]+)",
-    r"(?i)(--?[\w-]*(?:key|token|secret|password|passwd|credential)[\w-]*[= ]\s*)"
-    r"(?!\[redacted\])(\"[^\"]*\"|'[^']*'|[^\s\"']+)",
-    r"(://[^/\s:@]+:)(?!\[redacted\])([^@\s/]+)(@)",
+    ("auth-header", r"(?i)(\bauthorization[\"']?\s{0,8}[:=]\s{0,8}[\"']?(?:bearer|basic|token|digest)?\s{0,8})"
+                    r"(?!\[redacted\])([^\s\"']{1,4096})"),
+    ("bearer", r"(?i)(\b(?:bearer|basic)\s{1,8})(?!\[redacted\])([A-Za-z0-9._~+/=-]{8,4096})"),
+    ("assignment", r"(?i)((?<![\w.-])[\"']?[\w.-]{0,64}" + _NAME + r"[\w.-]{0,64}[\"']?\s{0,8}[=:]\s{0,8})"
+                   r"(?!\[redacted\])(\"[^\"]{0,4096}\"|'[^']{0,4096}'|[^\s\"',;&]{1,4096})"),
+    ("flag", r"(?i)((?<![\w-])--?[\w-]{0,64}(?:key|token|secret|password|passwd|pass|credential)[\w-]{0,64}"
+             r"(?:=|\s{1,8}))(?!\[redacted\])(\"[^\"]{0,4096}\"|'[^']{0,4096}'|[^\s\"'-][^\s\"']{0,4095})"),
+    ("spaced-value", r"(?i)((?<![\w.-])[\w.-]{0,64}(?:secret|token|passw(?:or)?d|api[_-]?key|access[_-]?key|"
+                     r"private[_-]?key)[\w.-]{0,64}\s{1,8})(?!\[redacted\])([A-Za-z0-9+/=_.-]{16,4096})"),
+    ("mysql-password", r"(\bmysql\w{0,16}\b[^\n|;&]{0,200}?\s-p)(?!\[redacted\])([^\s\"']{1,4096})"),
+    ("sshpass", r"(\bsshpass\s{1,8}(?:-[a-zA-Z]{1,8}\s{1,8}){0,5}-p\s{0,8})(?!\[redacted\])([^\s\"']{1,4096})"),
+    ("curl-user", r"((?<!\S)(?:-u|--user)(?:=|\s{0,8})[^\s:\"']{1,128}:)(?!\[redacted\])([^\s\"']{1,4096})"),
+    ("url-password", r"(://[^/\s:@]{1,128}:)(?!\[redacted\])([^@\s/]{1,512})(@)"),
 ]
 SEND_INTERVAL = 10       # at most one event send per Job per 10 s (the hook)
+SEND_TIMEOUT = 2         # seconds; a slow service never holds a tool call up
 MAX_PROGRESS = 20        # progress events held between sends; older ones drop
+# The service's limits (images/agent-sessions/agent_sessions/server.py), so a
+# batch is never refused for size.
 SUMMARY_MAX = 120
+TOOL_MAX = 100
+ITEM_MAX = 200
+STATUS_MAX = 32
+MAX_ITEMS = 100
 TEXT_MAX = 20000
+SCAN_FIRST = 4096        # characters looked at before a summary is cut
 PLAN_TOOLS = ("TodoWrite", "TaskCreate", "TaskUpdate")
 
 
@@ -390,14 +422,20 @@ def _secret_values():
     return sorted(vals, key=len, reverse=True)
 
 
-def redact(s):
-    """The same text with every env secret and token-shaped string replaced."""
-    s = str(s or "")
+def _sub(pat, s):
+    return re.sub(pat, lambda m: m.group(1) + REDACTED + (m.group(3) if m.re.groups >= 3 else ""), s)
+
+
+def redact(s, full=True):
+    """s with every env secret and token-shaped string replaced. full=False is
+    the message level: env secrets and vendor token shapes only."""
+    s = str(s or "")[:SECRET_MAX_SCAN]
     for v in _secret_values():
         s = s.replace(v, REDACTED)
-    for pat in SECRET_ASSIGN:
-        s = re.sub(pat, lambda m: m.group(1) + REDACTED + (m.group(3) if m.re.groups >= 3 else ""), s)
-    for _, pat in SECRET_PATTERNS:
+    if full:
+        for _, pat in SECRET_ASSIGN:
+            s = _sub(pat, s)
+    for _, pat in SECRET_PATTERNS + (SECRET_GENERIC if full else []):
         s = re.sub(pat, REDACTED, s)
     return s
 
@@ -405,6 +443,13 @@ def redact(s):
 def _cut(s, n=SUMMARY_MAX):
     s = " ".join(str(s or "").split())
     return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def clean_text(s, n=SUMMARY_MAX, full=True):
+    """Redact, cut to n, redact again. Redacting first means a secret that
+    straddles the cut is removed whole, not left as a fragment too short to
+    match; the scan itself is capped (SCAN_FIRST) so a huge input stays cheap."""
+    return redact(_cut(redact(str(s or "")[:SCAN_FIRST], full), n), full)
 
 
 def _path(p):
@@ -415,15 +460,15 @@ def _path(p):
 
 def summarize(tool, inp):
     """A short, fixed-form description of one tool call: never its output or a
-    file's contents. Cut, then redacted (redaction can only shorten it)."""
+    file's contents. Full redaction, before and after the cut."""
     inp = inp if isinstance(inp, dict) else {}
     if tool == "Bash":
         first = (inp.get("command") or "").strip().splitlines()
-        s = first[0][:SUMMARY_MAX] if first else ""
+        s = first[0] if first else ""
     elif tool in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit"):
         s = _path(inp.get("file_path") or inp.get("notebook_path"))
     elif tool in ("Grep", "Glob"):
-        s = inp.get("pattern", "") + (f" in {_path(inp['path'])}" if inp.get("path") else "")
+        s = str(inp.get("pattern", ""))[:SCAN_FIRST] + (f" in {_path(inp['path'])}" if inp.get("path") else "")
     elif tool == "WebFetch":
         s = inp.get("url", "")
     elif tool == "WebSearch":
@@ -439,14 +484,21 @@ def summarize(tool, inp):
     elif tool == "TaskUpdate":
         s = f"task {inp.get('taskId', '')} {inp.get('status', '')}".strip()
     elif tool.startswith("mcp__"):
-        s = " ".join(str(inp.get(k)) for k in ("action",) if inp.get(k))
+        s = str(inp.get("action") or "")
     else:
         s = ""
-    return _cut(redact(_cut(s)))
+    return clean_text(s)
 
 
 def now_iso():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _item(content, status, tid=None):
+    out = {"content": clean_text(content, ITEM_MAX), "status": str(status or "")[:STATUS_MAX]}
+    if tid is not None:
+        out["id"] = str(tid)[:64]
+    return out
 
 
 def update_plan(items, tool, inp, resp):
@@ -458,13 +510,14 @@ def update_plan(items, tool, inp, resp):
     """
     inp = inp if isinstance(inp, dict) else {}
     if tool == "TodoWrite":
-        return [{"content": _cut(redact(t.get("content")), 200), "status": str(t.get("status", ""))}
-                for t in inp.get("todos") or [] if isinstance(t, dict)]
+        todos = [t for t in inp.get("todos") or [] if isinstance(t, dict)][:MAX_ITEMS]
+        return [_item(t.get("content"), t.get("status")) for t in todos]
     items = [dict(i) for i in items or []]
     if tool == "TaskCreate":
         task = resp.get("task") if isinstance(resp, dict) else None
         tid = str((task or {}).get("id") or len(items) + 1)
-        items.append({"id": tid, "content": _cut(redact(inp.get("subject")), 200), "status": "pending"})
+        if len(items) < MAX_ITEMS:
+            items.append(_item(inp.get("subject"), "pending", tid))
         return items
     if tool == "TaskUpdate":
         tid = str(inp.get("taskId", ""))
@@ -474,9 +527,9 @@ def update_plan(items, tool, inp, resp):
                     items.remove(i)
                     break
                 if inp.get("status"):
-                    i["status"] = str(inp["status"])
+                    i["status"] = str(inp["status"])[:STATUS_MAX]
                 if inp.get("subject"):
-                    i["content"] = _cut(redact(inp["subject"]), 200)
+                    i["content"] = clean_text(inp["subject"], ITEM_MAX)
                 break
         return items
     return None
@@ -484,7 +537,7 @@ def update_plan(items, tool, inp, resp):
 
 def public_plan(items):
     """The plan event's items: {content, status}, as the agent last wrote them."""
-    return [{"content": i.get("content", ""), "status": i.get("status", "")} for i in items or []]
+    return [{"content": i.get("content", ""), "status": i.get("status", "")} for i in items or []][:MAX_ITEMS]
 
 
 class SessionEvents:
@@ -502,12 +555,26 @@ class SessionEvents:
         return cls(url, ticket, token, job)
 
     def send(self, events):
+        """'ok', 'retry' (network, 5xx, 408, 429: keep the batch) or 'drop'
+        (any other 4xx: the service will never take it, so don't resend)."""
         body = json.dumps({"job": self.job, "events": events}).encode()
         req = urllib.request.Request(
             f"{self.url}/sessions/{self.ticket['work_item_id']}/events", data=body, method="POST",
             headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=5) as r:
-            r.read()
+        try:
+            with urllib.request.urlopen(req, timeout=SEND_TIMEOUT) as r:
+                r.read()
+            return "ok"
+        except urllib.error.HTTPError as e:
+            if 400 <= e.code < 500 and e.code not in (408, 429):
+                print(f"bench-ticket: session service refused {len(events)} events "
+                      f"(HTTP {e.code}); dropped", file=sys.stderr)
+                return "drop"
+            print(f"bench-ticket: session send failed (HTTP {e.code}); will retry", file=sys.stderr)
+            return "retry"
+        except Exception as e:  # noqa: BLE001 — progress is best effort
+            print(f"bench-ticket: session send failed ({e}); will retry", file=sys.stderr)
+            return "retry"
 
 
 def queue_events(state, *, progress=None, plan=None, message=None):
@@ -521,25 +588,46 @@ def queue_events(state, *, progress=None, plan=None, message=None):
         state["messages"] = (state.get("messages") or []) + [message]
 
 
-def flush(state, events_out, force=False):
-    """Send the pending batch if SEND_INTERVAL has passed (or force). Returns
-    whether state changed. A failed send keeps the batch for next time."""
-    if events_out is None:
-        return False
+def take_batch(state, force=False):
+    """Under the lock: the batch to send now, removed from state, or None if
+    there's nothing or SEND_INTERVAL hasn't passed (unless force)."""
     batch = list(state.get("pending") or [])
     if state.get("plan_pending"):
         batch.append({"type": "plan", "items": public_plan(state.get("plan")), "at": now_iso()})
     batch += state.get("messages") or []
     if not batch or (not force and time.time() - state.get("sent", 0) < SEND_INTERVAL):
-        return False
+        return None
     state["sent"] = time.time()
-    try:
-        events_out.send(batch)
-    except Exception as e:  # noqa: BLE001 — progress is best effort
-        print(f"bench-ticket: session send failed ({e})", file=sys.stderr)
-        return True
     state["pending"], state["plan_pending"], state["messages"] = [], False, []
-    return True
+    return batch
+
+
+def restore(state, batch):
+    """Under the lock: put a batch that failed to send back, behind anything
+    queued since (a newer plan wins over the one that failed)."""
+    state["pending"] = ([e for e in batch if e["type"] == "progress"]
+                        + (state.get("pending") or []))[-MAX_PROGRESS:]
+    if any(e["type"] == "plan" for e in batch):
+        state["plan_pending"] = True
+    state["messages"] = [e for e in batch if e["type"] in ("say", "ask")] + (state.get("messages") or [])
+
+
+def locked(update):
+    """Run update(state) under the state file's lock; save if it returns truthy."""
+    with open(STATE, "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        state = load(f)
+        out = update(state)
+        save(f, state)
+        return out
+
+
+def deliver(events_out, batch):
+    """Send a batch taken under the lock, outside it; on 'retry' put it back."""
+    if not batch or events_out is None:
+        return
+    if events_out.send(batch) == "retry":
+        locked(lambda st: restore(st, batch))
 
 
 def record(event, state):
@@ -547,7 +635,7 @@ def record(event, state):
     tool, inp = event.get("tool_name", ""), event.get("tool_input") or {}
     if not tool:
         return
-    queue_events(state, progress={"type": "progress", "tool": tool,
+    queue_events(state, progress={"type": "progress", "tool": str(tool)[:TOOL_MAX],
                                   "summary": summarize(tool, inp), "at": now_iso()})
     if tool in PLAN_TOOLS:
         items = update_plan(state.get("plan_items"), tool, inp, event.get("tool_response"))
@@ -579,28 +667,40 @@ def session_cmd(cmd, args):
     if not text:
         print("bench-session: nothing to send", file=sys.stderr)
         return 2
-    text = redact(text)[:TEXT_MAX]
+    # Message level: env secrets and vendor token shapes only, so SHAs and
+    # branch names reach George intact.
+    text = redact(text[:TEXT_MAX], full=False)[:TEXT_MAX]
     ticket = json.loads(raw)
     channel = PlaneComments(ticket, key)
     try:
-        channel.say(text) if cmd == "say" else channel.ask(text)
+        channel.post(text_to_html(text))
     except Exception as e:  # noqa: BLE001
         print(f"bench-session: not posted to the ticket ({e}). Post it with the Plane MCP "
               "server instead.", file=sys.stderr)
         return 1
+    blocked_error = None
+    if cmd == "ask":
+        try:
+            channel.set_state(BLOCKED)
+        except Exception as e:  # noqa: BLE001
+            blocked_error = e
     events_out = SessionEvents.from_env(ticket)
-    with open(STATE, "a+") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        state = load(f)
+
+    def update(state):
         state["commented"] = True  # what lets a findings playbook reach In review
-        queue_events(state, message={"type": cmd, "text": text, "at": now_iso()})
-        flush(state, events_out, force=True)  # messages go at once, with any pending progress
         if events_out is None:
-            state["messages"] = []  # Plane only: nothing else to deliver them to
-        save(f, state)
+            return None  # Plane only: nothing else to deliver to
+        queue_events(state, message={"type": cmd, "text": text, "at": now_iso()})
+        return take_batch(state, force=True)  # messages go at once, with any held progress
+    deliver(events_out, locked(update))
     if cmd == "say":
         print("Posted to the ticket.")
         return 0
+    if blocked_error is not None:
+        print(f"Your question is posted on the ticket, but setting it Blocked failed ({blocked_error}). "
+              "Don't post the question again: set the ticket to Blocked with the Plane MCP server, "
+              "then run `bench-ticket wait`.")
+        return 1
     print("Posted your question and set the ticket Blocked. Waiting for George's answer.")
     wait(channel)
     return 0
@@ -704,11 +804,7 @@ def flush_now(ticket):
     if events_out is None:
         return
     try:
-        with open(STATE, "a+") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            state = load(f)
-            if flush(state, events_out, force=True):
-                save(f, state)
+        deliver(events_out, locked(lambda st: take_batch(st, force=True)))
     except OSError as e:
         print(f"bench-ticket: session flush skipped ({e})", file=sys.stderr)
 
@@ -746,37 +842,41 @@ def main():
                 nudge = WAIT_NUDGE
         except Exception as e:  # noqa: BLE001 — a reminder, not a gate
             print(f"bench-ticket: state lookup failed ({e})", file=sys.stderr)
-    new = []
+    new, batch = [], None
     events_out = SessionEvents.from_env(channel.ticket) if cmd == "hook" else None
-    with open(STATE, "a+") as f:
-        # Claude can run tools in parallel; one hook at a time, so a comment is relayed once.
-        fcntl.flock(f, fcntl.LOCK_EX)
-        state = load(f)
-        if cmd == "init":
-            # agent-desk lists the comments it put in the prompt; anything written
-            # since is news. Without the list (a hand-launched Job), all are seen.
-            ids = channel.ticket.get("seen_comments")
-            seen = ids if isinstance(ids, list) else [c.get("id") for c in channel.all()]
-            # Checked long ago: the first tool call relays what the prompt missed.
-            save(f, {"seen": seen, "checked": 0 if isinstance(ids, list) else time.time()})
-            return
-        if commented and not state.get("commented"):
-            state["commented"] = True
-            save(f, state)
-        if events_out is not None:
-            # Session Job: this call's progress (and plan), sent in batches.
-            # Before the Plane poll, so a Plane error can't drop it.
-            record(event, state)
-            flush(state, events_out)
-            save(f, state)
-        if time.time() - state.get("checked", 0) >= INTERVAL:
-            seen = set(state.get("seen", []))
-            state["checked"] = time.time()
-            save(f, state)
-            checkpoint()  # same 30 s rate as the comment check
-            new = channel.poll(seen)
-            state["seen"] = sorted(seen | {c.get("id") for c in new})
-            save(f, state)
+    try:
+        with open(STATE, "a+") as f:
+            # Claude can run tools in parallel; one hook at a time, so a comment is relayed once.
+            fcntl.flock(f, fcntl.LOCK_EX)
+            state = load(f)
+            if cmd == "init":
+                # agent-desk lists the comments it put in the prompt; anything written
+                # since is news. Without the list (a hand-launched Job), all are seen.
+                ids = channel.ticket.get("seen_comments")
+                seen = ids if isinstance(ids, list) else [c.get("id") for c in channel.all()]
+                # Checked long ago: the first tool call relays what the prompt missed.
+                save(f, {"seen": seen, "checked": 0 if isinstance(ids, list) else time.time()})
+                return
+            if commented and not state.get("commented"):
+                state["commented"] = True
+                save(f, state)
+            if events_out is not None:
+                # Session Job: this call's progress (and plan), sent in batches.
+                # Queued before the Plane poll, so a Plane error can't drop it; sent
+                # after the lock is released.
+                record(event, state)
+                batch = take_batch(state)
+                save(f, state)
+            if time.time() - state.get("checked", 0) >= INTERVAL:
+                seen = set(state.get("seen", []))
+                state["checked"] = time.time()
+                save(f, state)
+                checkpoint()  # same 30 s rate as the comment check
+                new = channel.poll(seen)
+                state["seen"] = sorted(seen | {c.get("id") for c in new})
+                save(f, state)
+    finally:
+        deliver(events_out, batch)  # outside the lock; also when the Plane poll failed
     parts = [nudge] if nudge else []
     if new:
         parts.append("George commented on this ticket while you were working. Read it before "

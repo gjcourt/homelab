@@ -52,6 +52,7 @@ class Fake:
         self.comments = []
         self.state = "s-progress"
         self.sessions_status = 202
+        self.patch_status = 200
         self.lock = threading.Lock()
 
 
@@ -105,6 +106,9 @@ def server():
 
         def do_PATCH(self):
             body = self._record()
+            if fake.patch_status >= 400:
+                self._reply(fake.patch_status, {})
+                return
             fake.state = body.get("state", fake.state)
             self._reply(200, {})
 
@@ -214,8 +218,15 @@ def test_plan_from_todowrite_and_task_tools():
 
 # --- the hook ------------------------------------------------------------------
 
-def test_phase1_job_sends_no_session_events(server, tmp_path):
-    env = env_for(server, tmp_path, session=False)
+@pytest.mark.parametrize("keep", ["neither", "url-only", "token-only"])
+def test_phase1_job_sends_no_session_events(server, tmp_path, keep):
+    env = env_for(server, tmp_path, session=keep != "neither")
+    if keep == "url-only":
+        del env["BENCH_SESSION_TOKEN"]
+    elif keep == "token-only":
+        ticket = json.loads(env["TASK_TICKET"])
+        del ticket["sessions_url"]
+        env["TASK_TICKET"] = json.dumps(ticket)
     assert run(env, "init").returncode == 0
     r = hook(env, "Bash", {"command": "ls"})
     r2 = hook(env, "TodoWrite", {"todos": [{"content": "a", "status": "pending"}]})
@@ -270,7 +281,14 @@ def test_session_hook_holds_at_most_20_progress_events(server, tmp_path):
     assert session_posts(server) == []
 
 
-def test_failed_send_keeps_the_batch(server, tmp_path):
+def open_window(home):
+    sf = home / ".bench-ticket.json"
+    st = json.loads(sf.read_text())
+    st["sent"] = st.get("sent", 0) - 11
+    sf.write_text(json.dumps(st))
+
+
+def test_failed_send_keeps_the_batch_and_resends_it(server, tmp_path):
     env = env_for(server, tmp_path)
     run(env, "init")
     server.sessions_status = 503
@@ -278,6 +296,24 @@ def test_failed_send_keeps_the_batch(server, tmp_path):
     assert r.returncode == 0 and r.stdout == ""            # never fails the tool call
     st = json.loads((tmp_path / ".bench-ticket.json").read_text())
     assert [e["summary"] for e in st["pending"]] == ["ls"]
+    server.sessions_status = 202
+    hook(env, "Bash", {"command": "pwd"})                  # inside the window: held
+    open_window(tmp_path)
+    hook(env, "Bash", {"command": "date"})
+    ok = [r for r in session_posts(server)][-1]["body"]["events"]
+    assert [e["summary"] for e in ok] == ["ls", "pwd", "date"]
+
+
+@pytest.mark.parametrize("code,kept", [(400, False), (401, False), (413, False),
+                                       (408, True), (429, True), (500, True)])
+def test_permanent_refusals_drop_the_batch(server, tmp_path, code, kept):
+    env = env_for(server, tmp_path)
+    run(env, "init")
+    server.sessions_status = code
+    r = hook(env, "Bash", {"command": "ls"})
+    st = json.loads((tmp_path / ".bench-ticket.json").read_text())
+    assert bool(st["pending"]) is kept
+    assert ("dropped" in r.stderr) is (not kept)
 
 
 def test_events_never_carry_env_secrets(server, tmp_path):
@@ -374,8 +410,10 @@ def test_patterns_match_the_session_service():
         from agent_sessions import redact as svc
     finally:
         sys.path.pop(0)
-    assert svc.PATTERNS == bt.SECRET_PATTERNS
+    assert svc.VENDOR == bt.SECRET_PATTERNS
+    assert svc.GENERIC == bt.SECRET_GENERIC
     assert svc.ASSIGN == bt.SECRET_ASSIGN
+    assert svc.REDACTED == bt.REDACTED and svc.MAX_SCAN == bt.SECRET_MAX_SCAN
 
 
 def test_plane_down_still_sends_progress(server, tmp_path):
@@ -386,3 +424,114 @@ def test_plane_down_still_sends_progress(server, tmp_path):
     (tmp_path / ".bench-ticket.json").write_text(json.dumps({"seen": [], "checked": 0}))
     assert hook(env, "Bash", {"command": "ls"}).returncode == 0
     assert [e["summary"] for e in all_events(server)] == ["ls"]
+
+
+# --- review of #2003 -----------------------------------------------------------
+
+def test_a_secret_straddling_the_cut_is_removed_whole(monkeypatch):
+    monkeypatch.setenv("SOME_API_TOKEN", "LITERALVALUE" * 4)
+    pad = "echo " + "x" * 105 + " "                        # the value starts near 111
+    out = bt.summarize("Bash", {"command": pad + "LITERALVALUE" * 4})
+    assert "LITERAL" not in out and len(out) <= 120
+    out = bt.summarize("Bash", {"command": pad + "deadbeef" * 6})
+    assert "deadbee" not in out and "[redact" in out   # the marker itself may be cut
+
+
+@pytest.mark.parametrize("s", ["x-" * 10000, "x-" * 100000])
+def test_job_redaction_is_fast(s):
+    t = time.perf_counter()
+    bt.redact(s)
+    bt.summarize("Bash", {"command": s})
+    bt.update_plan([], "TodoWrite", {"todos": [{"content": s, "status": "pending"}]}, {})
+    assert time.perf_counter() - t < 0.2
+
+
+def test_redaction_levels(monkeypatch):
+    monkeypatch.setenv("PLANE_API_KEY", "averyprivatevalue")
+    sha = "12920e84a1b2c3d4e5f60718293a4b5c6d7e8f90"
+    msg = bt.redact(f"pushed {sha} to feat/x, key averyprivatevalue, ghp_{'a' * 36}", full=False)
+    assert sha in msg and "averyprivatevalue" not in msg and "ghp_" not in msg
+    assert sha not in bt.redact(f"git show {sha}")
+    monkeypatch.setenv("DB_PASS", "dbpassword1")
+    monkeypatch.setenv("MY_APIKEY", "apikeyvalue1")
+    assert bt.redact("dbpassword1 apikeyvalue1", full=False) == "[redacted] [redacted]"
+
+
+def test_say_keeps_shas_on_the_ticket(server, tmp_path, bench_session):
+    env = env_for(server, tmp_path)
+    run(env, "init")
+    sha = "12920e84a1b2c3d4e5f60718293a4b5c6d7e8f90"
+    run(env, "say", f"Pushed {sha} to feat/agent-sessions-step2", argv0=bench_session)
+    assert sha in server.comments[-1]["comment_html"]
+    assert sha in all_events(server)[-1]["text"]
+
+
+def test_ask_reports_a_failed_blocked_separately(server, tmp_path, bench_session):
+    env = env_for(server, tmp_path)
+    run(env, "init")
+    server.patch_status = 500
+    r = run(env, "ask", "Which branch?", argv0=bench_session)
+    assert r.returncode == 1
+    assert "question is posted" in r.stdout and "Don't post the question again" in r.stdout
+    assert len(server.comments) == 1
+
+
+def test_bench_task_prompt_only_for_a_session_job():
+    src = (HERE.parent / "bench-task").read_text()
+    snippet = src[src.index('  session_note=""'):]
+    snippet = snippet[:snippet.index("\n  fi\n") + 6] + 'printf "%s" "$session_note"\n'
+    for ticket, tok, want in [('{"sessions_url":"http://s"}', "t", True), ('{"sessions_url":"http://s"}', "", False),
+                              ("{}", "t", False), ("{}", "", False)]:
+        env = {"PATH": os.environ["PATH"], "TASK_TICKET": ticket}
+        if tok:
+            env["BENCH_SESSION_TOKEN"] = tok
+        out = subprocess.run(["bash", "-c", snippet], env=env, capture_output=True, text=True, check=True).stdout
+        assert ("bench-session" in out) is want
+
+
+# --- against the real service -----------------------------------------------------
+
+@pytest.fixture
+def real_service(server):
+    """agent_sessions.server on a free port, with the Plane fake beside it."""
+    sys.path.insert(0, str(HERE.parents[1] / "agent-sessions"))
+    from agent_sessions import server as svc
+    sys.path.pop(0)
+    log = []
+    key = b"k" * 32
+
+    class Quick(svc.BoundedServer):
+        def server_bind(self):
+            socketserver.TCPServer.server_bind(self)
+            self.server_name, self.server_port = self.server_address[:2]
+
+    srv = Quick(("127.0.0.1", 0), svc.make_handler(key, log.append))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield f"http://127.0.0.1:{srv.server_address[1]}", log, key, svc
+    srv.shutdown()
+
+
+def test_hook_against_the_real_service(server, real_service, tmp_path):
+    url, log, key, svc = real_service
+    wid = "3f1c2a9e-0000-4000-8000-0000000000aa"
+    env = env_for(server, tmp_path)
+    ticket = json.loads(env["TASK_TICKET"])
+    ticket.update(work_item_id=wid, sessions_url=url)
+    env["TASK_TICKET"] = json.dumps(ticket)
+    env["BENCH_SESSION_TOKEN"] = svc.token(key, wid, env["TASK_ID"])
+    (tmp_path / ".bench-ticket.json").write_text(json.dumps({"seen": [], "checked": time.time()}))
+    todos = [{"content": f"step {i} " + "z" * 600, "status": "pending"} for i in range(101)]
+    hook(env, "Bash", {"command": f"curl -H 'X-API-Key: {FAKE_KEY}' https://x"})
+    open_window(tmp_path)
+    r = hook(env, "TodoWrite", {"todos": todos})
+    assert r.returncode == 0 and "refused" not in r.stderr, r.stderr
+    events = [x for x in log if "logged" in x]
+    assert [e["type"] for e in events] == ["progress", "progress", "plan"]
+    assert len(events[-1]["items"]) == 100 and all(len(i["content"]) <= 200 for i in events[-1]["items"])
+    assert not any("warning" in x or "refused" in x for x in log)
+    assert FAKE_KEY not in json.dumps(log)
+    # A wrong token is refused, and the Job drops rather than retries forever.
+    env["BENCH_SESSION_TOKEN"] = "0" * 64
+    open_window(tmp_path)
+    r = hook(env, "Bash", {"command": "ls"})
+    assert "dropped" in r.stderr and any(x.get("refused") == 401 for x in log)

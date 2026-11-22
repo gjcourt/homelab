@@ -1,6 +1,7 @@
 import io
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -19,6 +20,10 @@ class QuickServer(server.ThreadingHTTPServer):
 
 
 KEY = b"test-session-key-of-at-least-32-bytes"
+
+
+def tok(key, wid, job, expires=None):
+    return server.token(key, wid, job, int(time.time()) + 3600 if expires is None else expires)
 WID = "3f1c2a9e-0000-4000-8000-0000000000aa"
 JOB = "ad-sandbox-9-20261122-abc123"
 
@@ -53,10 +58,37 @@ AT = "2026-11-22T10:00:00Z"
 PLAN = {"type": "plan", "items": [{"content": "fix test", "status": "in_progress"}], "at": AT}
 
 
-def test_token_is_the_plans_hmac():
+def test_token_signs_work_item_job_and_expiry():
     import hashlib
     import hmac
-    assert server.token(KEY, WID, JOB) == hmac.new(KEY, f"{WID}|{JOB}".encode(), hashlib.sha256).hexdigest()
+    exp = 1_900_000_000
+    sig = hmac.new(KEY, f"{WID}|{JOB}|{exp}".encode(), hashlib.sha256).hexdigest()
+    assert server.token(KEY, WID, JOB, exp) == f"v1.{exp}.{sig}"
+    assert server.token_expires(5400, now=1000) == 1000 + 5400 + 900   # D2: deadline + 15m
+
+
+def test_token_expiry_and_tampering():
+    now = 1_800_000_000
+    good = server.token(KEY, WID, JOB, now + 60)
+    h = lambda t: f"Bearer {t}"  # noqa: E731
+    assert server.token_problem(KEY, WID, JOB, h(good), now=now) == ""
+    assert server.token_problem(KEY, WID, JOB, h(good), now=now + 61) == "expired token"
+    later = good.replace(f"v1.{now + 60}.", f"v1.{now + 6000}.")       # expiry moved, signature kept
+    assert server.token_problem(KEY, WID, JOB, h(later), now=now) == "bad token"
+    far = server.token(KEY, WID, JOB, now + server.MAX_TOKEN_LIFE + 1)
+    assert server.token_problem(KEY, WID, JOB, h(far), now=now) == "token lives too long"
+    for bad in ("", "Bearer", h("0" * 64), h("v1.x." + "0" * 64), h(good + "0"), "Basic " + good):
+        assert server.token_problem(KEY, WID, JOB, bad, now=now) == "bad token"
+    # Expired is reported only after the signature checks out.
+    stale = server.token(b"another-key-another-key-another-key", WID, JOB, now - 5)
+    assert server.token_problem(KEY, WID, JOB, h(stale), now=now) == "bad token"
+
+
+def test_expired_token_is_refused_and_logged(svc):
+    url, log = svc
+    st, _ = call(f"{url}/sessions/{WID}/events", "POST", events(PROGRESS),
+                 tok(KEY, WID, JOB, int(time.time()) - 1))
+    assert st == 401 and log[-1]["why"] == "expired token"
 
 
 def test_good_events_are_logged(svc):
@@ -64,16 +96,16 @@ def test_good_events_are_logged(svc):
     st, body = call(f"{url}/sessions/{WID}/events", "POST",
                     events(PROGRESS, PLAN, {"type": "say", "text": "hi", "at": AT},
                            {"type": "ask", "text": "which?", "at": AT}),
-                    server.token(KEY, WID, JOB))
+                    tok(KEY, WID, JOB))
     assert (st, body) == (202, {"accepted": 4})
     assert [r["type"] for r in log] == ["progress", "plan", "say", "ask"]
     assert all(r["session"] == WID and r["job"] == JOB and r["logged"] for r in log)
     assert log[0]["summary"] == "git status" and log[1]["items"] == PLAN["items"]
 
 
-@pytest.mark.parametrize("tok", [None, "0" * 64, server.token(KEY, WID, "ad-other-job"),
-                                 server.token(KEY, "3f1c2a9e-0000-4000-8000-0000000000bb", JOB),
-                                 server.token(b"another-key-another-key-another-key", WID, JOB)])
+@pytest.mark.parametrize("tok", [None, "0" * 64, tok(KEY, WID, "ad-other-job"),
+                                 tok(KEY, "3f1c2a9e-0000-4000-8000-0000000000bb", JOB),
+                                 tok(b"another-key-another-key-another-key", WID, JOB)])
 def test_any_other_token_is_refused(svc, tok):
     url, log = svc
     st, _ = call(f"{url}/sessions/{WID}/events", "POST", events(PROGRESS), tok)
@@ -85,7 +117,7 @@ def test_any_other_token_is_refused(svc, tok):
 def test_a_token_is_for_its_own_ticket_only(svc):
     url, _ = svc
     other = "3f1c2a9e-0000-4000-8000-0000000000bb"
-    st, _ = call(f"{url}/sessions/{other}/events", "POST", events(PROGRESS), server.token(KEY, WID, JOB))
+    st, _ = call(f"{url}/sessions/{other}/events", "POST", events(PROGRESS), tok(KEY, WID, JOB))
     assert st == 401
 
 
@@ -96,7 +128,7 @@ def test_no_key_refuses_everything():
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     try:
         st, _ = call(f"http://127.0.0.1:{srv.server_address[1]}/sessions/{WID}/events", "POST",
-                     events(PROGRESS), server.token(b"", WID, JOB))
+                     events(PROGRESS), tok(b"", WID, JOB))
         assert st == 401
     finally:
         srv.shutdown()
@@ -112,25 +144,25 @@ def test_no_key_refuses_everything():
 ])
 def test_out_of_shape_bodies_are_refused(svc, body):
     url, log = svc
-    st, _ = call(f"{url}/sessions/{WID}/events", "POST", body, server.token(KEY, WID, JOB))
+    st, _ = call(f"{url}/sessions/{WID}/events", "POST", body, tok(KEY, WID, JOB))
     assert st == 400
     assert not any(r.get("type") for r in log)
 
 
 def test_bad_ids_and_bodies(svc):
     url, _ = svc
-    tok = server.token(KEY, WID, JOB)
-    assert call(f"{url}/sessions/not-a-uuid!/events", "POST", events(PROGRESS), tok)[0] == 400
-    assert call(f"{url}/sessions/{WID}/events", "POST", events(PROGRESS, job="Bad_Job"), tok)[0] == 400
-    assert call(f"{url}/sessions/{WID}/events", "POST", tok=tok, raw=b"{nope")[0] == 400
-    assert call(f"{url}/sessions/{WID}/events", "POST", tok=tok, raw=b"x" * (server.MAX_BODY + 1))[0] == 413
+    t = tok(KEY, WID, JOB)
+    assert call(f"{url}/sessions/not-a-uuid!/events", "POST", events(PROGRESS), t)[0] == 400
+    assert call(f"{url}/sessions/{WID}/events", "POST", events(PROGRESS, job="Bad_Job"), t)[0] == 400
+    assert call(f"{url}/sessions/{WID}/events", "POST", tok=t, raw=b"{nope")[0] == 400
+    assert call(f"{url}/sessions/{WID}/events", "POST", tok=t, raw=b"x" * (server.MAX_BODY + 1))[0] == 413
     assert call(f"{url}/nope", "POST", {})[0] == 404
 
 
 def test_unknown_fields_are_dropped_and_secrets_redacted_on_arrival(svc):
     url, log = svc
     ev = dict(PROGRESS, summary="export T=ghp_" + "a" * 36, output="file contents")
-    call(f"{url}/sessions/{WID}/events", "POST", events(ev), server.token(KEY, WID, JOB))
+    call(f"{url}/sessions/{WID}/events", "POST", events(ev), tok(KEY, WID, JOB))
     warn, rec = log
     assert warn == {"warning": "redacted on arrival", "session": WID, "job": JOB,
                     "type": "progress", "fields": ["summary"]}
@@ -139,10 +171,10 @@ def test_unknown_fields_are_dropped_and_secrets_redacted_on_arrival(svc):
 
 def test_messages_needs_the_token_and_is_empty_for_now(svc):
     url, _ = svc
-    tok = server.token(KEY, WID, JOB)
-    assert call(f"{url}/sessions/{WID}/messages?job={JOB}", tok=tok) == (200, {"messages": []})
+    t = tok(KEY, WID, JOB)
+    assert call(f"{url}/sessions/{WID}/messages?job={JOB}", tok=t) == (200, {"messages": []})
     assert call(f"{url}/sessions/{WID}/messages?job={JOB}")[0] == 401
-    assert call(f"{url}/sessions/{WID}/messages?job=x-y", tok=tok)[0] == 401
+    assert call(f"{url}/sessions/{WID}/messages?job=x-y", tok=t)[0] == 401
 
 
 def test_healthz(svc):
@@ -154,11 +186,24 @@ def test_secret_manifest(tmp_path, monkeypatch, capsys):
     kf = tmp_path / "key"
     kf.write_bytes(KEY + b"\n")
     monkeypatch.setenv("SESSION_KEY_FILE", str(kf))
-    assert cli.main(["secret", "--work-item", WID, "--job", JOB]) == 0
+    t0 = time.time()
+    assert cli.main(["secret", "--work-item", WID, "--job", JOB, "--deadline", "7200",
+                     "--job-uid", "1234-abcd"]) == 0
     m = json.loads(capsys.readouterr().out)
-    assert m["metadata"] == {"name": f"{JOB}-session", "namespace": "bench-cloud",
-                             "labels": {"agent-sessions/job": JOB}}
-    assert m["stringData"]["BENCH_SESSION_TOKEN"] == server.token(KEY, WID, JOB)
+    meta = m["metadata"]
+    assert (meta["name"], meta["namespace"]) == (f"{JOB}-session", "bench-cloud")
+    assert meta["labels"] == {"agent-sessions/token": "true", "agent-sessions/job": JOB}
+    assert meta["ownerReferences"] == [{"apiVersion": "batch/v1", "kind": "Job", "name": JOB,
+                                        "uid": "1234-abcd"}]
+    t = m["stringData"]["BENCH_SESSION_TOKEN"]
+    exp = int(t.split(".")[1])
+    assert t0 + 7200 + 900 - 2 <= exp <= time.time() + 7200 + 900
+    assert server.token_problem(KEY, WID, JOB, f"Bearer {t}") == ""
+    assert meta["annotations"]["agent-sessions/expires"].endswith("Z")
+    assert cli.main(["secret", "--work-item", WID, "--job", JOB]) == 0      # default deadline, no owner
+    assert "ownerReferences" not in json.loads(capsys.readouterr().out)["metadata"]
+    assert cli.main(["secret", "--work-item", WID, "--job", JOB, "--deadline", "0"]) == 2
+    assert cli.main(["secret", "--work-item", WID, "--job", JOB, "--deadline", "999999"]) == 2
     monkeypatch.setenv("SESSION_KEY_FILE", str(tmp_path / "missing"))
     assert cli.main(["secret", "--work-item", WID, "--job", JOB]) == 2
 
@@ -263,7 +308,7 @@ def test_a_stalled_client_is_dropped(monkeypatch):
 def test_at_must_be_iso_utc(svc, at):
     url, _ = svc
     st, _ = call(f"{url}/sessions/{WID}/events", "POST", events(dict(PROGRESS, at=at)),
-                 server.token(KEY, WID, JOB))
+                 tok(KEY, WID, JOB))
     assert st == 400
 
 
@@ -272,7 +317,7 @@ def test_say_keeps_shas_and_branches_progress_does_not(svc):
     sha = "12920e84a1b2c3d4e5f60718293a4b5c6d7e8f90"
     call(f"{url}/sessions/{WID}/events", "POST",
          events({"type": "say", "text": f"pushed {sha} to feat/agent-sessions-step2", "at": AT},
-                dict(PROGRESS, summary=f"git show {sha}")), server.token(KEY, WID, JOB))
+                dict(PROGRESS, summary=f"git show {sha}")), tok(KEY, WID, JOB))
     say = next(r for r in log if r.get("type") == "say" and "logged" in r)
     prog = next(r for r in log if r.get("type") == "progress" and "logged" in r)
     assert sha in say["text"] and "feat/agent-sessions-step2" in say["text"]

@@ -19,10 +19,20 @@ Sessions pane reads from it.
 
 **Auth, per Job and stateless.** Both session calls need
 `Authorization: Bearer <token>`, where the token is
-`HMAC-SHA256(session-key, "<work item id>|<Job name>")` as lowercase hex. The
-service recomputes it, so a token works for one ticket and one Job only. A
-wrong token (including a non-ASCII one) is `401` and is logged as refused,
-with no event content. The service refuses to start with a `session-key`
+`v1.<expires>.<sig>`:
+
+- `expires` is Unix seconds, the Job's deadline plus 15 minutes (George's D2,
+  2026-11-22);
+- `sig` is `HMAC-SHA256(session-key, "<work item id>|<Job name>|<expires>")`,
+  as lowercase hex.
+
+The service recomputes it, so a token works for one ticket and one Job only,
+and only until it expires. A token signed to live more than 12 h 15 min is
+refused too.
+
+A refused token, whether wrong, expired or non-ASCII, gets `401`. It's logged
+as refused, with the reason and no event content. The signature is checked
+before the expiry, so the reason only says "expired" for a genuine token. The service refuses to start with a `session-key`
 under 32 bytes (`openssl rand -hex 32` makes one).
 
 **Limits.** A client gets 10 s to send its request, and at most 32 requests
@@ -59,7 +69,7 @@ something.
 `bench-ticket hook` (images/bench-cloud) sends the events, and
 `bench-session say|ask` the messages, only when the Job has both:
 
-- `sessions_url` in `TASK_TICKET`, e.g. `http://agent-sessions.agent-desk-stage.svc:8080`;
+- `sessions_url` in `TASK_TICKET`, e.g. `http://agent-sessions.agent-sessions-stage.svc:8080`;
 - `BENCH_SESSION_TOKEN` in its env, from a Secret.
 
 Without both, the Job is exactly phase 1: no events, no extra prompt text.
@@ -127,26 +137,38 @@ The plan's exit: "a hand-launched SANDBOX Job's events reach the service's log,
 with no secret-shaped strings in them (scripted check). The same ticket run
 without the session token behaves exactly as phase 1."
 
-This needs the staging manifests first (not in this PR, see below). Then:
+This needs the staging manifests first (`apps/staging/agent-sessions/` and
+`apps/staging/agent-sessions-pilot/`, a separate PR). Then:
 
-1. Mint the Job's token inside the service's pod, so the key never leaves it,
-   and apply it as the Job's Secret:
+1. Launch the Job from agent-desk's Job spec as for phase-1 step 5b, with:
+   - `"sessions_url": "http://agent-sessions.agent-sessions-stage.svc:8080"` in
+     `TASK_TICKET`;
+   - `BENCH_SESSION_TOKEN` from
+     `secretKeyRef: {name: <Job name>-session, key: BENCH_SESSION_TOKEN}`;
+   - the pod label `agent-sessions/pilot: "true"`. Only pilot Jobs may reach
+     the service (George's D3, 2026-11-22).
+
+   The pod waits in `CreateContainerConfigError` until its Secret exists.
+2. Mint the Job's token inside the service's pod, so the key never leaves it,
+   and apply it as the Job's Secret, owned by the Job:
 
    ```bash
-   kubectl -n agent-desk-stage exec deploy/agent-sessions -- \
+   uid=$(kubectl -n bench-cloud get job <Job name> -o jsonpath='{.metadata.uid}')
+   kubectl -n agent-sessions-stage exec deploy/agent-sessions -- \
      python -m agent_sessions secret --work-item <work item id> --job <Job name> \
+       --deadline <the Job's activeDeadlineSeconds> --job-uid "$uid" \
      | kubectl apply -f -
    ```
 
-   This creates `<Job name>-session` in `bench-cloud` with `BENCH_SESSION_TOKEN`.
-2. Launch the Job from agent-desk's Job spec as for phase-1 step 5b, with
-   `"sessions_url": "http://agent-sessions.agent-desk-stage.svc:8080"` in
-   `TASK_TICKET` and
-   `BENCH_SESSION_TOKEN` from `secretKeyRef: {name: <Job name>-session, key: BENCH_SESSION_TOKEN}`.
-3. When it ends:
+   This creates `<Job name>-session` in `bench-cloud`, labelled
+   `agent-sessions/token: "true"`. Its token expires at the deadline plus 15
+   minutes. The admission policy lets only agent-desk and cluster admins
+   create it (D1).
+3. When it ends, check the event log. It's on the service's volume, so it
+   survives a restart:
 
    ```bash
-   kubectl -n agent-desk-stage logs deploy/agent-sessions --since=24h \
+   kubectl -n agent-sessions-stage exec deploy/agent-sessions -- cat /data/events.jsonl \
      | python3 -m agent_sessions.check --work-item <id> --job <Job name>
    ```
 
@@ -159,19 +181,19 @@ This needs the staging manifests first (not in this PR, see below). Then:
    checking shell without echoing it, then e.g.
    `--secret-env PLANE_API_KEY --secret-env CLAUDE_CODE_OAUTH_TOKEN`. Values
    are compared, never printed.
-4. Delete the token's Secret when the test is done:
+4. Delete the Job when the test is done. Its Secret goes with it, being
+   owned by it; otherwise run
    `kubectl -n bench-cloud delete secret <Job name>-session`.
 5. The phase-1 half: the same ticket, a second Job with neither field. The
    check with `--expect-none --job <second Job>` passes only if it sent
    nothing. The run itself should look as phase 1 does: the same comments,
    states and run record, with no `bench-session` instructions given to it.
 
-## Not in step 2
+## Not in this PR
 
-- **Manifests**: a Deployment, Service, CiliumNetworkPolicy and a
-  `session-key` `.yaml.example` for `agent-desk-stage`, and an egress rule
-  from bench-cloud Jobs to it (bench-cloud's policy is production). Follow-up.
-- **agent-desk minting the token** per Job (its own Secret, owned by the Job).
-- **Refusing tokens of Jobs that aren't active** (plan, Security). The token
-  is a pure HMAC, so the service can't tell without asking the cluster or
-  agent-desk; that's decided with the manifests.
+- **Manifests**: `agent-sessions-stage`, the pilot network rule (D3) and the
+  token-Secret admission policy (D1). They're a separate PR, on branch
+  `deploy/agent-sessions-staging`.
+- **agent-desk making and deleting each Job's token Secret** (D1, D2), and
+  labelling pilot Jobs. That's its own PR; the plan's Build order step 2 lists
+  what it holds.

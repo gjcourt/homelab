@@ -6,8 +6,13 @@ serve (the default) runs the service. Env:
   EVENT_LOG         optional file to append the JSON lines to, as well as stdout
 
 secret prints a Secret manifest holding one Job's BENCH_SESSION_TOKEN, for a
-hand-launched test Job (step 2's exit). It reads SESSION_KEY_FILE too. Pipe it
+hand-launched pilot Job (step 2's exit). It reads SESSION_KEY_FILE too. Pipe it
 straight into `kubectl apply -f -`; don't save or paste it.
+  --deadline SECONDS  the Job's activeDeadlineSeconds; the token expires 15
+                      minutes after it (George's D2). Default 5400 (90m).
+  --job-uid UID       the Job's uid: the Secret is then owned by the Job, so
+                      Kubernetes deletes it when the Job is deleted (D1).
+agent-desk does the same for every session Job (a later PR).
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ import json
 import os
 import sys
 import threading
+import time
 
 from . import server
 
@@ -43,12 +49,21 @@ def make_emit(path: str):
     return emit
 
 
-def secret_manifest(key: bytes, work_item: str, job: str, namespace: str, name: str) -> dict:
-    return {"apiVersion": "v1", "kind": "Secret",
-            "metadata": {"name": name, "namespace": namespace,
-                         "labels": {"agent-sessions/job": job}},
-            "type": "Opaque",
-            "stringData": {"BENCH_SESSION_TOKEN": server.token(key, work_item, job)}}
+TOKEN_LABEL = "agent-sessions/token"   # the admission policy keys on it (D1)
+
+
+def secret_manifest(key: bytes, work_item: str, job: str, namespace: str, name: str,
+                    deadline: int, job_uid: str = "", now: float | None = None) -> dict:
+    expires = server.token_expires(deadline, now)
+    meta = {"name": name, "namespace": namespace,
+            "labels": {TOKEN_LABEL: "true", "agent-sessions/job": job},
+            "annotations": {"agent-sessions/expires": time.strftime("%Y-%m-%dT%H:%M:%SZ",
+                                                                    time.gmtime(expires))}}
+    if job_uid:
+        meta["ownerReferences"] = [{"apiVersion": "batch/v1", "kind": "Job", "name": job,
+                                    "uid": job_uid}]
+    return {"apiVersion": "v1", "kind": "Secret", "metadata": meta, "type": "Opaque",
+            "stringData": {"BENCH_SESSION_TOKEN": server.token(key, work_item, job, expires)}}
 
 
 def main(argv=None) -> int:
@@ -60,6 +75,9 @@ def main(argv=None) -> int:
     s.add_argument("--job", required=True)
     s.add_argument("--namespace", default="bench-cloud")
     s.add_argument("--name", help="default: <job>-session")
+    s.add_argument("--deadline", type=int, default=5400,
+                   help="the Job's activeDeadlineSeconds (default 5400)")
+    s.add_argument("--job-uid", default="", help="the Job's uid: the Job owns the Secret, which goes when the Job does")
     a = p.parse_args(argv)
     key = read_key()
     if len(key) < server.MIN_KEY:
@@ -70,8 +88,13 @@ def main(argv=None) -> int:
         if not server.WORK_ITEM.match(a.work_item) or not server.JOB.match(a.job):
             print("bad work item id or Job name", file=sys.stderr)
             return 2
+        if not 0 < a.deadline <= server.MAX_TOKEN_LIFE - server.TOKEN_GRACE:
+            print(f"--deadline must be 1 to {server.MAX_TOKEN_LIFE - server.TOKEN_GRACE} seconds",
+                  file=sys.stderr)
+            return 2
         print(json.dumps(secret_manifest(key, a.work_item, a.job, a.namespace,
-                                         a.name or f"{a.job}-session"), indent=2))
+                                         a.name or f"{a.job}-session", a.deadline, a.job_uid),
+                         indent=2))
         return 0
     port = int(os.environ.get("PORT", "8080"))
     emit = make_emit(os.environ.get("EVENT_LOG", ""))

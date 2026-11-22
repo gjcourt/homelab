@@ -5,7 +5,9 @@ validates and re-redacts them, and writes one JSON line per event to its log.
 Nothing is stored and nothing goes to a transport yet (step 3A).
 
   POST /sessions/<work item id>/events   {"job": "<Job name>", "events": [...]}
-       Authorization: Bearer <HMAC-SHA256(session-key, "<work item id>|<Job name>"), hex>
+       Authorization: Bearer v1.<expires>.<HMAC-SHA256(session-key,
+                             "<work item id>|<Job name>|<expires>"), hex>
+       (expires: Unix seconds, the Job's deadline + 15 minutes; George's D2)
   GET  /sessions/<work item id>/messages?job=<Job name>   (same token)
        George's messages for poll(); always empty until step 3A
   GET  /healthz
@@ -52,19 +54,54 @@ SHAPES = {
 ITEM = {"content": (str, 500), "status": (str, 32)}
 
 
-def token(key: bytes, work_item: str, job: str) -> str:
-    """The plan's per-Job credential: HMAC(session-key, work_item_id | job_name)."""
-    return hmac.new(key, f"{work_item}|{job}".encode(), hashlib.sha256).hexdigest()
+TOKEN = re.compile(r"^v1\.(\d{1,12})\.([0-9a-f]{64})$")
+# George, 2026-11-22 (D2): a token "expires on its own at its playbook deadline
+# plus 15 minutes, besides being deleted when the Job ends".
+TOKEN_GRACE = 15 * 60
+# The longest a token may live, from now: the longest playbook deadline (3h)
+# with room, plus the grace. A token signed further out is refused as a mint
+# mistake.
+MAX_TOKEN_LIFE = 12 * 3600 + TOKEN_GRACE
 
 
-def token_ok(key: bytes, work_item: str, job: str, header: str | None) -> bool:
+def token(key: bytes, work_item: str, job: str, expires: int) -> str:
+    """The per-Job credential: v1.<expires>.HMAC(session-key, work_item | job | expires)."""
+    sig = hmac.new(key, f"{work_item}|{job}|{int(expires)}".encode(), hashlib.sha256).hexdigest()
+    return f"v1.{int(expires)}.{sig}"
+
+
+def token_expires(deadline_seconds: int, now: float | None = None) -> int:
+    """When a token for a Job with this activeDeadlineSeconds expires (D2)."""
+    return int((time.time() if now is None else now) + deadline_seconds + TOKEN_GRACE)
+
+
+def token_problem(key: bytes, work_item: str, job: str, header: str | None,
+                  now: float | None = None) -> str:
+    """Why this Authorization header doesn't let this Job write this session;
+    "" if it does. The signature is checked before the expiry, so the reason
+    never tells an unauthenticated caller anything."""
     if not key or not header or not header.startswith("Bearer "):
-        return False
+        return "bad token"
     try:
-        got = header[len("Bearer "):].strip().encode("ascii")
+        got = header[len("Bearer "):].strip()
+        got.encode("ascii")
     except UnicodeError:
-        return False
-    return hmac.compare_digest(token(key, work_item, job).encode(), got)
+        return "bad token"
+    m = TOKEN.match(got)
+    if not m:
+        return "bad token"
+    if not hmac.compare_digest(token(key, work_item, job, int(m[1])).encode(), got.encode()):
+        return "bad token"
+    now = time.time() if now is None else now
+    if int(m[1]) <= now:
+        return "expired token"
+    if int(m[1]) > now + MAX_TOKEN_LIFE:
+        return "token lives too long"
+    return ""
+
+
+def token_ok(key: bytes, work_item: str, job: str, header: str | None, now: float | None = None) -> bool:
+    return not token_problem(key, work_item, job, header, now)
 
 
 def at_ok(value: str) -> bool:
@@ -157,8 +194,9 @@ def make_handler(key: bytes, emit, health=lambda: True):
             if not WORK_ITEM.match(wid) or not JOB.match(job):
                 self._refuse(400, "bad work item or job")
                 return
-            if not token_ok(key, wid, job, self.headers.get("Authorization")):
-                self._refuse(401, "bad token", session=wid, job=job)
+            why = token_problem(key, wid, job, self.headers.get("Authorization"))
+            if why:
+                self._refuse(401, why, session=wid, job=job)
                 return
             # Step 3A gives this a store; until then there is nothing to relay.
             self._reply(200, {"messages": []})
@@ -191,8 +229,9 @@ def make_handler(key: bytes, emit, health=lambda: True):
                 return
             # The token before anything else is looked at: an unauthenticated
             # caller learns nothing about what a valid body would be.
-            if not token_ok(key, wid, job, self.headers.get("Authorization")):
-                self._refuse(401, "bad token", session=wid, job=job)
+            why = token_problem(key, wid, job, self.headers.get("Authorization"))
+            if why:
+                self._refuse(401, why, session=wid, job=job)
                 return
             events = body.get("events")
             if not isinstance(events, list) or not events or len(events) > MAX_EVENTS:

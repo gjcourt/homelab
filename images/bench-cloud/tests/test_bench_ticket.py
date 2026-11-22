@@ -521,7 +521,7 @@ def test_hook_against_the_real_service(server, real_service, tmp_path):
     ticket = json.loads(env["TASK_TICKET"])
     ticket.update(work_item_id=wid, sessions_url=url)
     env["TASK_TICKET"] = json.dumps(ticket)
-    env["BENCH_SESSION_TOKEN"] = svc.token(key, wid, env["TASK_ID"])
+    env["BENCH_SESSION_TOKEN"] = svc.token(key, wid, env["TASK_ID"], svc.token_expires(600))
     (tmp_path / ".bench-ticket.json").write_text(json.dumps({"seen": [], "checked": time.time()}))
     todos = [{"content": f"step {i} " + "z" * 600, "status": "pending"} for i in range(101)]
     hook(env, "Bash", {"command": f"curl -H 'X-API-Key: {FAKE_KEY}' https://x"})

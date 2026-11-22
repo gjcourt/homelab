@@ -305,6 +305,23 @@ def test_reaper_note_ignores_another_jobs_last_message(tmp_path):
     assert "bench-last-message" not in plane.writes[-1][2]
 
 
+def test_reaper_note_still_posts_when_the_comment_lookup_fails(tmp_path, monkeypatch):
+    d, plane, kube = make(tmp_path)
+    plane.add_item("p-sb", "i1")
+    plane.label("p-sb", "i1", "playbook:docs-fix", OWNER)
+    plane.set_state("p-sb", "i1", "In Progress")
+    kube.job_list = [{"name": "ad-sandbox-1-x", "ticket": "i1", "playbook": "docs-fix",
+                      "active": False, "failed": True, "succeeded": False, "created": "1"}]
+
+    def down(*a):
+        raise OSError("plane down")
+    monkeypatch.setattr(plane, "comments", down)
+    d.poll()
+    assert plane.state_of("p-sb", "i1") == "Blocked"
+    note = plane.writes[-1][2]
+    assert "ended (failed) without moving the ticket" in note and "bench-last-message" not in note
+
+
 def test_succeeded_job_with_linked_pr_goes_to_in_review(tmp_path):
     # PLANEMOBILE-1, 2026-10-25: the run opened and linked its PR, then ended
     # on its critique without moving the ticket.

@@ -243,8 +243,10 @@ fi
 # HOMELAB-120: an agent that ended without commenting on or moving its ticket
 # (its Plane MCP connection down, or it just stopped) still reaches George: the
 # wrapper posts its final message on the Jobs' own key. Best effort; it never
-# changes the Job's outcome.
-if [[ -n "${TASK_TICKET:-}" ]]; then
-  bench-ticket last-message "$out/result.json" || true
+# changes the Job's outcome. Not after a SIGTERM (143: deadline, `bench-cloud
+# rm`), and time-boxed otherwise, so the record upload in finish() always gets
+# its share of the pod's 90 s grace period.
+if [[ -n "${TASK_TICKET:-}" && $crc -ne 143 ]]; then
+  timeout "${BENCH_LAST_MESSAGE_TIMEOUT:-30}" bench-ticket last-message "$out/result.json" || true
 fi
 exit "$crc"

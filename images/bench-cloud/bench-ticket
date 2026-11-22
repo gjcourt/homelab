@@ -44,6 +44,7 @@ import html
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -422,19 +423,32 @@ SECRET_PATTERNS = [
     re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),  # JWT
     re.compile(r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/=-]{16,}"),
-    re.compile(r"(?i)(\b(?:api[_-]?key|token|secret|password|passwd)\b\s*[:=]\s*)['\"]?[^\s'\"<>]{8,}"),
+    # NAME=value, NAME: value, "name": "value", with the name anywhere in an
+    # identifier: GITHUB_TOKEN=, DB_PASSWORD:, client_secret=, "api_key": ...
+    re.compile(r"(?i)((?<![A-Za-z0-9])[A-Za-z0-9_-]*(?:api[_-]?key|token|secret|password|passwd)"
+               r"[A-Za-z0-9_-]*[\"']?\s*[:=]\s*)[\"']?[^\s'\"<>,}]{8,}"),
+    # https://user:password@host
+    re.compile(r"(://[^:/\s@]+:)[^@\s/]+(?=@)"),
 ]
 SECRET_ENV = re.compile(r"(?i)(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)")
 REDACTED = "[redacted]"
 
 
 def secret_env_values(env=None):
+    """The pod's secret env values, longest first; a multi-line value (a PEM key)
+    also line by line, so a message quoting part of it is still caught."""
     env = os.environ if env is None else env
-    return sorted({v for k, v in env.items() if SECRET_ENV.search(k) and len(v) >= 8},
-                  key=len, reverse=True)
+    out = set()
+    for k, v in env.items():
+        if not SECRET_ENV.search(k):
+            continue
+        v = v.replace("\r\n", "\n")
+        out |= {x for x in [v.strip(), *(line.strip() for line in v.split("\n"))] if len(x) >= 8}
+    return sorted(out, key=len, reverse=True)
 
 
 def redact(text, env=None):
+    text = text.replace("\r\n", "\n")
     for v in secret_env_values(env):
         text = text.replace(v, REDACTED)
     for pat in SECRET_PATTERNS:
@@ -478,9 +492,13 @@ def _inline(s):
     return re.sub(r"\x00(\d+)\x00", lambda m: slots[int(m[1])], s)
 
 
-def md_to_html(md):
+MAX_QUOTE_DEPTH = 4
+
+
+def md_to_html(md, depth=0):
     """The Markdown an agent writes (paragraphs, headings, lists, code, quotes)
     as the HTML Plane comments take. Not CommonMark; lint_comment checks the result."""
+    md = md.replace("\x00", "")  # _inline's placeholders use it
     out, para, items, kind = [], [], [], None
     lines = md.replace("\r\n", "\n").split("\n")
 
@@ -519,7 +537,9 @@ def md_to_html(md):
             while i < len(lines) and lines[i].strip().startswith(">"):
                 quote.append(lines[i].strip()[1:].strip())
                 i += 1
-            out.append("<blockquote>" + md_to_html("\n".join(quote)) + "</blockquote>")
+            inner = "\n".join(quote)
+            out.append("<blockquote>" + (md_to_html(inner, depth + 1) if depth < MAX_QUOTE_DEPTH
+                                         else _plain(inner)) + "</blockquote>")
             continue
         elif m := re.match(r"([-*+]|\d+[.)])\s+(.*)", st):
             k = "ol" if m[1][0].isdigit() else "ul"
@@ -541,14 +561,17 @@ def md_to_html(md):
 def last_message_html(text, task_id, env=None):
     """The comment for the agent's final message: header, the message (redacted,
     capped, Markdown as HTML), and the marker. None if there is nothing to say."""
-    text = redact((text or "").strip(), env)
+    text = redact((text or "").replace("\x00", "").strip(), env)
     if not text:
         return None
     cut = len(text) > LAST_MESSAGE_CAP
     if cut:
         text = text[:LAST_MESSAGE_CAP].rstrip()
-    body = md_to_html(text)
-    if lint_comment(body):
+    try:
+        body = md_to_html(text)
+    except Exception:  # noqa: BLE001 — any converter bug: the plain fallback below
+        body = ""
+    if not body or lint_comment(body):
         # Markup the converter got wrong: post the words as plain paragraphs.
         body = _plain(text)
     tail = (f"<p><em>Truncated at {LAST_MESSAGE_CAP} characters; the whole message is in "
@@ -558,6 +581,20 @@ def last_message_html(text, task_id, env=None):
            + f"<p><em>Posted by the bench-cloud wrapper after the run ended.</em> "
              f"<code>{LAST_MESSAGE_MARKER} {_esc(task_id)}</code></p>")
     return None if lint_comment(out) else out
+
+
+# agent-desk posts on the same Plane user as the Jobs' key (its second key;
+# apps/production/bench-cloud/secret-plane-jobs-token.yaml.example), e.g.
+# "Started bench-cloud Job ..." just after the pod starts. Its notes are not the
+# agent commenting. Prefixes from images/agent-desk/agent_desk/dispatcher.py.
+AGENT_DESK_NOTES = ("Started bench-cloud Job ", "agent-desk can't start", "agent-desk couldn't",
+                    "Job ad-", "George requested changes on ")
+AGENT_DESK_PHRASES = ("Add over-cap to start this one now", " was closed without merging")
+
+
+def is_agent_desk_note(text):
+    return text.startswith(AGENT_DESK_NOTES) or any(p in text for p in AGENT_DESK_PHRASES) \
+        or bool(re.match(r"[A-Z][A-Z0-9]*-\d+ is [\w ]+\. Reply ", text))
 
 
 def agent_updated(state, current, comments, me, started, task_id):
@@ -576,7 +613,7 @@ def agent_updated(state, current, comments, me, started, task_id):
         if f"{LAST_MESSAGE_MARKER} {task_id}" in text:
             return "already posted"
         if me and started and c.get("actor", c.get("created_by")) == me \
-                and _epoch(c.get("created_at")) >= _epoch(started):
+                and _epoch(c.get("created_at")) >= _epoch(started) and not is_agent_desk_note(text):
             return "the agent commented on the ticket"
     return ""
 
@@ -595,6 +632,13 @@ def _me(channel):
         return channel._get(f"{t['plane_url'].rstrip('/')}/api/v1/users/me/").get("id")
     except Exception:  # noqa: BLE001 — the hook's state file is the main signal
         return None
+
+
+LAST_MESSAGE_DEADLINE = 25
+
+
+def _deadline(signum, frame):
+    raise TimeoutError(f"gave up after {LAST_MESSAGE_DEADLINE} s")
 
 
 def post_comment(channel, comment_html):
@@ -622,19 +666,26 @@ def last_message(path, channel, task_id, started="", state_path=STATE):
     try:
         with open(state_path) as f:
             state = json.loads(f.read() or "{}")
+        known = True
     except (OSError, ValueError):
-        state = {}
+        state, known = {}, False
     if state.get("commented"):  # known without asking Plane
         return "not posted: the agent commented on the ticket"
     try:
         current = channel.current_state()
     except Exception:  # noqa: BLE001 — unknown state: still try to post
         current = ""
-    try:
-        comments = channel.all()
-    except Exception:  # noqa: BLE001
-        comments = None
-    why = agent_updated(state, current, comments, _me(channel), started, task_id)
+    comments = me = None
+    if not known:
+        # No hook state (init never ran): look at the ticket's comments instead.
+        # With it, they add nothing: the hook saw every comment the agent made,
+        # and a Job runs once (backoffLimit 0), so no earlier post of this run.
+        try:
+            comments = channel.all()
+        except Exception:  # noqa: BLE001
+            comments = None
+        me = _me(channel)
+    why = agent_updated(state, current, comments, me, started, task_id)
     if why:
         return f"not posted: {why}"
     body = last_message_html(text, task_id)
@@ -655,6 +706,10 @@ def main():
     if cmd == "last-message":
         raw, key = os.environ.get("TASK_TICKET"), os.environ.get("PLANE_API_KEY")
         if raw and key and len(sys.argv) > 2:
+            # A whole-run deadline: this runs before the record upload, inside
+            # the pod's 90 s grace period (bench-task also wraps it in timeout).
+            signal.signal(signal.SIGALRM, _deadline)
+            signal.alarm(LAST_MESSAGE_DEADLINE)
             started = ""
             try:  # the run's start, from the record bench-task wrote
                 with open(os.path.join(os.environ.get("BENCH_OUT", ""), "meta.json")) as f:

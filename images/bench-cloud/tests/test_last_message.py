@@ -34,7 +34,7 @@ class FakeChannel:
         self.ticket = {"plane_url": "http://plane", "workspace": "ws", "project_id": "p",
                        "work_item_id": "w", "owner_id": OWNER}
         self.key, self.state, self.comments, self.fail = "k", state, list(comments), fail
-        self.posted = []
+        self.posted, self.listed = [], False
 
     def current_state(self):
         if self.fail:
@@ -42,6 +42,7 @@ class FakeChannel:
         return self.state
 
     def all(self):
+        self.listed = True
         if self.fail:
             raise OSError("plane down")
         return self.comments
@@ -66,7 +67,8 @@ def run(tmp_path, monkeypatch):
         elif result is not None:
             path.write_text(json.dumps(result))
         sp = tmp_path / "state.json"
-        sp.write_text(json.dumps(state or {"seen": [], "checked": 0}))
+        if state is not False:  # False: no hook state file (init never ran)
+            sp.write_text(json.dumps(state or {"seen": [], "checked": 0}))
         ch = channel or FakeChannel()
         log = bt.last_message(str(path), ch, TASK, STARTED, state_path=str(sp))
         return log, ch.posted
@@ -127,22 +129,40 @@ def test_agent_comment_seen_in_plane_posts_nothing(run):
     # The hook missed it (or it went another way), but Plane has a comment
     # from the Jobs' key since the run started.
     c = {"id": "c1", "actor": ME, "comment_html": "<p>Done.</p>", "created_at": "2026-11-22T10:05:00.1Z"}
-    _, posted = run(SUMMARY, channel=FakeChannel(comments=[c]))
+    _, posted = run(SUMMARY, state=False, channel=FakeChannel(comments=[c]))
     assert posted == []
+
+
+def test_hook_state_known_skips_the_comment_lookups(run):
+    ch = FakeChannel()
+    _, posted = run(SUMMARY, channel=ch)
+    assert len(posted) == 1 and not ch.listed
+
+
+@pytest.mark.parametrize("note", [
+    "<p>Started bench-cloud Job <code>ad-homelab-120-abc</code> (playbook <code>docs-fix</code>).</p>",
+    "<p>Cap reached. Add <code>over-cap</code> to start this one now, or it starts when a slot frees.</p>",
+    "<p>George requested changes on https://github.com/x/y/pull/1.</p>",
+])
+def test_agent_desk_notes_on_the_same_user_dont_count(run, note):
+    # agent-desk's dispatcher and the Jobs share one Plane user (two keys).
+    c = {"id": "c1", "actor": ME, "comment_html": note, "created_at": "2026-11-22T10:00:01Z"}
+    _, posted = run(SUMMARY, state=False, channel=FakeChannel(comments=[c]))
+    assert len(posted) == 1
 
 
 def test_earlier_runs_comments_and_georges_dont_count(run):
     old = {"id": "c0", "actor": ME, "comment_html": "<p>old run</p>", "created_at": "2026-11-21T09:00:00Z"}
     george = {"id": "c1", "actor": OWNER, "comment_html": "<p>any news?</p>",
               "created_at": "2026-11-22T10:05:00Z"}
-    _, posted = run(SUMMARY, channel=FakeChannel(comments=[old, george]))
+    _, posted = run(SUMMARY, state=False, channel=FakeChannel(comments=[old, george]))
     assert len(posted) == 1
 
 
 def test_never_posted_twice_for_one_run(run):
     mine = {"id": "c9", "actor": "someone", "created_at": "2026-11-22T09:00:00Z",
             "comment_html": f"<p><code>{bt.LAST_MESSAGE_MARKER} {TASK}</code></p>"}
-    log, posted = run(SUMMARY, channel=FakeChannel(comments=[mine]))
+    log, posted = run(SUMMARY, state=False, channel=FakeChannel(comments=[mine]))
     assert posted == [] and "already posted" in log
 
 
@@ -170,6 +190,36 @@ def test_secrets_are_redacted(monkeypatch):
     assert bt.redact("/home/node", env) == "/home/node"  # HOME is not a secret name
 
 
+@pytest.mark.parametrize("text,secret", [
+    ("GITHUB_TOKEN=abcdEFGH1234ijkl", "abcdEFGH1234"),
+    ("export PLANE_API_KEY=0123456789abcdef", "0123456789abcdef"),
+    ("DB_PASSWORD: correcthorsebattery", "correcthorse"),
+    ("client_secret=s3cr3tvalue99", "s3cr3tvalue"),
+    ('{"api_key": "zyxwvutsrq987654"}', "zyxwvutsrq"),
+    ("auth_token = 'qwertyuiop12345'", "qwertyuiop"),
+    ("clone https://george:hunter2pw@git.example.com/r.git", "hunter2pw"),
+    ("postgres://app:pa55w0rd@db:5432/x", "pa55w0rd"),
+])
+def test_key_value_and_url_credentials_are_redacted(text, secret):
+    out = bt.redact(text, env={})
+    assert secret not in out and bt.REDACTED in out, out
+
+
+def test_url_without_credentials_is_untouched():
+    s = "see https://github.com/gjcourt/homelab/pull/12 and http://host:8080/x"
+    assert bt.redact(s, env={}) == s
+
+
+def test_env_secret_with_crlf_and_multiple_lines_is_redacted():
+    pem = "-----BEGIN CERT-----\r\nAAAABBBBCCCCDDDD\r\nEEEEFFFFGGGGHHHH\r\n-----END CERT-----"
+    env = {"SOME_CREDENTIAL": pem, "OTHER_TOKEN": "tok-12345678\r\n"}
+    text = "line one: EEEEFFFFGGGGHHHH\r\nand the token tok-12345678 and\nAAAABBBBCCCCDDDD"
+    out = bt.redact(text, env=env)
+    for s in ("EEEEFFFF", "tok-1234", "AAAABBBB"):
+        assert s not in out, out
+    assert "\r" not in out
+
+
 def test_long_message_is_capped():
     body = bt.last_message_html("word " * 5000, TASK)
     assert body is not None and bt.lint_comment(body) == []
@@ -194,6 +244,26 @@ def test_markdown_always_makes_a_valid_comment(md):
     body = bt.last_message_html(md, TASK)
     assert body is not None and bt.lint_comment(body) == [], body
     assert "<script>" not in body and 'href="javascript' not in body
+
+
+@pytest.mark.parametrize("md", ["\x000\x00 and \x0099\x00", "`a`\x001\x00", "\x00"])
+def test_nul_bytes_cant_break_the_placeholders(md):
+    body = bt.last_message_html(md + " text", TASK)
+    assert body is not None and bt.lint_comment(body) == [] and "\x00" not in body
+
+
+def test_deep_blockquotes_are_capped():
+    body = bt.last_message_html(">" * 2000 + " deep", TASK)
+    assert body is not None and bt.lint_comment(body) == [] and "deep" in body
+    assert body.count("<blockquote>") <= bt.MAX_QUOTE_DEPTH + 1
+
+
+def test_a_converter_crash_falls_back_to_plain(monkeypatch):
+    def boom(md, depth=0):
+        raise RuntimeError("bug")
+    monkeypatch.setattr(bt, "md_to_html", boom)
+    body = bt.last_message_html("**hi** there", TASK)
+    assert body is not None and "**hi** there" in body
 
 
 def test_markdown_shapes():

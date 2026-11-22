@@ -3,7 +3,9 @@
 # agent-desk, or by a cluster admin for a hand-launched pilot. George,
 # 2026-11-22 (D1): "Per-job token (Recommended)": agent-desk creates a fresh
 # token Secret per Job and deletes it when the Job ends, with an admission
-# policy so only agent-desk can create those Secrets.
+# policy so only agent-desk can create those Secrets. Cluster admins
+# (system:masters) stay exempt: George, 2026-11-22, on #2005: "Keep admin
+# exception (Recommended)".
 #
 # Defence in depth: nothing else in bench-cloud can create Secrets today
 # (bench-agent has `view`). The policy stops a later grant from becoming a way

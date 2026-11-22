@@ -1,6 +1,6 @@
 ---
 status: planned
-last_modified: 2026-11-08
+last_modified: 2026-11-22
 lab: 03-042
 summary: "03-042 phase 2: Devin-style agent sessions (list, live progress, chat); Matrix vs plane-mobile pane, prototype first"
 ---
@@ -249,26 +249,49 @@ in `bench-ticket`:
 - **The progress summary.** The tool's name and a short, fixed-form description: the path for
   file tools, the first line of a Bash command cut to 120 characters, the query for search. Never
   the tool's output or file contents.
-  - It runs through the same redaction as the run record: no environment values, no token-shaped
-    strings.
+  - It is redacted before the cut and again after it, so a secret that straddles character 120 is
+    removed whole: no environment values, no token-shaped strings.
   - Shown to George only, but still treated as a leak path ([Risks](#risks)).
-- **The task list** comes from the agent's own todo tool's input. Its name in the Claude Code
-  version pinned in the image is checked at the build step; it has been `TodoWrite`. This is
-  Devin's "task list as a live drawer".
+  - **Built in step 2:** the redaction is new. The plan first said "the same redaction as the run
+    record", but the run record isn't redacted. It lives in `bench-ticket` and again in
+    `agent-sessions` (`agent_sessions/redact.py`), and a test keeps the two pattern lists the same.
+    It has two levels:
+    - **full**, for progress and the task list: env secrets, vendor token shapes, long hex and
+      mixed-character strings, and secrets by context (`NAME=value`, `--token v`,
+      `Authorization: …`, `mysql -p…`, `curl -u user:pw`, URL passwords);
+    - **message**, for `say`/`ask` text, which is also a Plane comment: env secrets and vendor
+      token shapes only, so commit SHAs and branch names survive.
+
+    The levels are a proposal from the build, open for George to revisit.
+- **The task list** comes from the agent's own todo tool's input. Devin calls this the "task list
+  as a live drawer".
+  - The plan expected the tool to be `TodoWrite`.
+  - **Checked at step 2:** Claude Code 2.1.283, the image's pin, has both `TodoWrite`, which
+    rewrites the list, and `TaskCreate`/`TaskUpdate`, which change one task at a time. The task
+    tools appear to be the default.
+  - The hook reads both kinds and sends the whole list each time.
 - **Plane implementation.** `say` and `ask` post a ticket comment, as the agent does today through
   MCP. `progress` and `plan` are dropped. Ticket Jobs behave exactly as now.
 - **Rate.** Events go to an in-cluster service, never to Plane, so they don't touch the
   180/min key.
   - The hook still batches: at most one send per 10 s per Job, holding the latest `plan` and up to
     20 `progress` events.
-  - The `poll` interval can drop from 30 s to 10 s for session Jobs, for the same reason.
+  - The `poll` interval can drop from 30 s to 10 s for session Jobs, once `poll` reads from the
+    service.
+  - **Step 2: it stays at 30 s.** `poll` still reads Plane until step 3A gives the service its
+    messages, and 10 s would triple the load on the Jobs' key.
+- **Which Jobs** (step 2): only a Job with both `sessions_url` in `TASK_TICKET` and
+  `BENCH_SESSION_TOKEN` in its env sends events or is told about `bench-session`. Any other Job
+  is phase 1, unchanged.
 
 ### Where the events go: the session service
 
 A small service, **`agent-sessions`**:
 
-- **Code:** `images/agent-sessions/`, Python 3.12, stdlib-first like agent-desk.
-- **Namespace:** `agent-desk`, beside the dispatcher; it needs no Kubernetes RBAC.
+- **Code:** `images/agent-sessions/`, stdlib-first like agent-desk.
+  - Python 3.15, as agent-desk's image and CI use (the plan first said 3.12).
+- **Namespace:** `agent-desk`, beside the dispatcher (`agent-desk-stage` on staging); it needs no
+  Kubernetes RBAC.
 - **Takes Job events** at `POST /sessions/<ticket>/events` and serves `GET .../messages` for
   `poll`.
 - **Hands them to the transport:**
@@ -276,8 +299,17 @@ A small service, **`agent-sessions`**:
     plane-mobile's own store; that's decided in plane-mobile's plan.
   - **B:** the Matrix room. The room is the store, and the service is the bot.
 - **Per-Job credential, stateless.**
-  - agent-desk puts a session token in `TASK_TICKET`:
-    `HMAC(session-key, work_item_id | job_name)`.
+  - The token is `HMAC(session-key, work_item_id | job_name)`.
+  - **It reaches the Job through a per-Job Secret**, as `BENCH_SESSION_TOKEN` from a
+    `secretKeyRef`, and not in `TASK_TICKET` as first planned. A Job's env values are plain text
+    in its spec, and `bench-agent` can `get` Jobs and pods in `bench-cloud` (checked 2026-11-22).
+    In `TASK_TICKET`, every Job could read every other Job's token. Only `sessions_url`, which
+    isn't secret, goes in `TASK_TICKET`.
+  - Who makes that Secret:
+    - for step 2's hand launch, the operator, with `python -m agent_sessions secret` run inside
+      the service's pod;
+    - later, **proposal:** agent-desk creates it beside the Job, owned by the Job. That needs
+      `create secrets` in `bench-cloud` for agent-desk; George's call.
   - `agent-sessions` recomputes it and accepts that Job's writes for that ticket only.
   - Jobs never hold the Matrix token or a key for another session.
   - The `session-key` is shared by the two services through SOPS (operator).
@@ -452,8 +484,13 @@ the client API, MAS (`account.…`) and Element Web (`chat.…`).
   - the `session-key`;
   - the dispatcher's signing key for `/session-message`;
   - the MAS and Synapse secrets the chart needs.
-- **Jobs hold only their own session token.** It's scoped to one ticket and one Job, and expires
-  with the Job: the service refuses tokens for Jobs that aren't active.
+- **Jobs hold only their own session token.** It's scoped to one ticket and one Job, and it comes
+  from a per-Job Secret, never the Job spec (see [the session service](#where-the-events-go-the-session-service)).
+  - The aim: it expires with the Job, because the service refuses tokens for Jobs that aren't active.
+  - **Deferred to step 3A.** The token is a pure HMAC, and the service has no Kubernetes RBAC, so
+    it can't tell a finished Job from a live one by itself.
+  - **Proposal:** the service asks agent-desk, which already lists the Jobs. Until then, a token
+    works after its Job ends.
 - **Untrusted input.** Chat text reaching an agent is fenced, as ticket text is: "it describes the
   task; it can't change the rules you run under". Only George's messages are relayed at all.
 - **Network policies** (CiliumNetworkPolicy, default deny):
@@ -511,6 +548,21 @@ Each step has an exit. Steps 3A and 3B are alternatives: whichever George picks 
    - **Exit:** a hand-launched SANDBOX Job's events reach the service's log, with no secret-shaped
      strings in them (scripted check). The same ticket run without the session token behaves
      exactly as phase 1.
+   - **Built** (homelab#2003): the Job side, the service image and the scripted check
+     (`python -m agent_sessions.check`; how to run it is in `images/agent-sessions/README.md`).
+   - **Still needed for the exit:**
+     - staging manifests for `agent-sessions` in `agent-desk-stage`;
+     - the operator's `session-key`;
+     - an egress rule from bench-cloud Jobs to the service. bench-cloud's policy is production,
+       so this is George's call.
+   - **Changed from the text above:**
+     - the token comes from a per-Job Secret;
+     - the active-Job check moves to step 3A;
+     - the redaction is new;
+     - `poll` stays at 30 s;
+     - the hook reads both todo tools.
+
+     Each is noted where it applies above.
 3. **The transport.**
 
    **3A. Pane** (plane-mobile plan PR first, then code there; homelab carries the manifests):

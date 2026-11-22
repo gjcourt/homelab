@@ -1,0 +1,23 @@
+# agent-sessions' own network: kubelet probes in, nothing out. Which
+# Jobs may call it is per environment (the overlay's networkpolicy-jobs.yaml):
+# on staging, bench-cloud pilot Jobs only (George's D3, 2026-11-22). Step 2
+# calls nothing; agent-desk and Plane rules come with step 3A.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: agent-sessions
+  namespace: agent-sessions
+  labels:
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "agent-sessions: probes in on 8080; no egress. Job ingress is in the overlay."
+  endpointSelector: {}
+  enableDefaultDeny:
+    ingress: true
+    egress: true
+  ingress:
+    - fromEntities:
+        - host
+      toPorts:
+        - ports:
+            - {port: "8080", protocol: TCP}

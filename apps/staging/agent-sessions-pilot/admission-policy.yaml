@@ -1,0 +1,46 @@
+# A Job's agent-sessions token Secret (<job>-session, labelled
+# agent-sessions/token) may be created or changed in bench-cloud only by
+# agent-desk, or by a cluster admin for a hand-launched pilot. George,
+# 2026-11-22 (D1): "Per-job token (Recommended)": agent-desk creates a fresh
+# token Secret per Job and deletes it when the Job ends, with an admission
+# policy so only agent-desk can create those Secrets.
+#
+# Defence in depth: nothing else in bench-cloud can create Secrets today
+# (bench-agent has `view`). The policy stops a later grant from becoming a way
+# to plant a token for another Job. Deletes are not checked.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: agent-sessions-token-secrets
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: bench-cloud
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE", "UPDATE"]
+        resources: ["secrets"]
+  matchConditions:
+    # A token Secret by its label or by its name, now or before this change.
+    - name: token-secret
+      expression: >-
+        has(object.metadata.labels) && 'agent-sessions/token' in object.metadata.labels || object.metadata.name.endsWith('-session') || oldObject != null && has(oldObject.metadata.labels) && 'agent-sessions/token' in oldObject.metadata.labels
+  validations:
+    - expression: >-
+        request.userInfo.username in [
+          'system:serviceaccount:agent-desk:agent-desk',
+          'system:serviceaccount:agent-desk-stage:agent-desk'] ||
+        'system:masters' in request.userInfo.groups
+      message: "agent-sessions token Secrets in bench-cloud are made by agent-desk only (George, 2026-11-22, D1)"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: agent-sessions-token-secrets
+spec:
+  policyName: agent-sessions-token-secrets
+  validationActions: ["Deny"]

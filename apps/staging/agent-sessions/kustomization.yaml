@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Staging agent-sessions (agent sessions plan, step 2): the trial target for
+# hand-launched SANDBOX pilot Jobs. There is one bench-cloud, in production,
+# so the pilot Jobs are real; only Jobs labelled agent-sessions/pilot may
+# reach this service (George, 2026-11-22, D3: "Staging, pilot jobs only").
+# The bench-cloud side of that rule and the token-Secret admission policy are
+# in ../agent-sessions-pilot/.
+#
+# Not wired into apps/staging/kustomization.yaml yet. To deploy it, George:
+#   1. creates secret-agent-sessions.yaml from its .example and SOPS-encrypts
+#      it (operator-only; agents never run sops);
+#   2. uncomments `- secret-agent-sessions.yaml` below;
+#   3. pins the image tag below once homelab#2003 has merged and
+#      build-agent-sessions.yml has published it;
+#   4. adds `- agent-sessions` and `- agent-sessions-pilot` to
+#      apps/staging/kustomization.yaml.
+namespace: agent-sessions-stage
+resources:
+  - ../../base/agent-sessions/
+  - networkpolicy-jobs.yaml
+  # - secret-agent-sessions.yaml
+
+labels:
+  - pairs:
+      env: staging
+      app.kubernetes.io/instance: staging
+    includeSelectors: false
+
+patches:
+  - target:
+      kind: Namespace
+      name: agent-sessions
+    patch: |
+      - op: replace
+        path: /metadata/name
+        value: agent-sessions-stage
+
+# Pinned date-sha tag from build-agent-sessions.yml (Flux does not
+# auto-track). A placeholder until homelab#2003 merges and builds.
+images:
+  - name: ghcr.io/gjcourt/agent-sessions
+    newTag: pending-homelab-2003

@@ -27,16 +27,30 @@
                       the Jobs' own key, so it still reaches George when the
                       agent's Plane MCP connection was down (HOMELAB-120)
 
-Plane comments are the only channel today (agent-desk plan, "Questions and the
-ticket as chat"). poll() is the whole interface a later channel has to provide;
-the agent replies through the Plane MCP server.
+  bench-session say TEXT   post an agent message (Markdown) to George as a
+                           ticket comment, redacted and converted as the
+                           last-message comment is; no state change
+  bench-session ask TEXT   post a question, set the ticket Blocked, then wait
+                           for George's answer exactly as `bench-ticket wait`
+                           (bench-session is a link to this file)
+
+Plane comments are the channel today (agent-desk plan, "Questions and the
+ticket as chat"). The channel interface (agent sessions plan, "Job side:
+session events") is poll(seen), say(text), ask(text), progress(event) and
+plan(items). On Plane, say and ask post a comment and progress and plan are
+dropped. A session Job (TASK_TICKET.sessions_url plus BENCH_SESSION_TOKEN in
+the env) also sends every one of them to the agent-sessions service, batched;
+without both, the Job behaves exactly as phase 1.
 
 The hook calls Plane at most once per INTERVAL seconds, whatever the tool-call
-rate: at 24 Jobs that is 48 requests/min on the Jobs' key. It never fails the
-tool call it runs after; any error just means no new context this time.
+rate: at 24 Jobs that is 48 requests/min on the Jobs' key. Session events go
+to agent-sessions, never Plane, at most once per SEND_INTERVAL. The hook never
+fails the tool call it runs after; any error just means no new context (or no
+event send) this time.
 
 Env: TASK_TICKET (JSON from agent-desk: project_id, work_item_id, plane_url,
-workspace, owner_id) and PLANE_API_KEY.
+workspace, owner_id, and for a session Job sessions_url), PLANE_API_KEY and,
+for a session Job, BENCH_SESSION_TOKEN.
 """
 
 import fcntl
@@ -115,6 +129,23 @@ class PlaneComments:
         new = [c for c in self.all()
                if c.get("id") not in seen and owner and c.get("actor", c.get("created_by")) == owner]
         return sorted(new, key=lambda c: c.get("created_at") or "")
+
+    def _send(self, method, url, body):
+        req = urllib.request.Request(url, data=json.dumps(body).encode(), method=method, headers={
+            "X-API-Key": self.key, "Content-Type": "application/json", "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            txt = r.read().decode()
+            return json.loads(txt) if txt else {}
+
+    def set_state(self, name):
+        page = self._get(f"{self._base()}/states/?per_page=100")
+        states = page if isinstance(page, list) else page.get("results", [])
+        sid = next((s["id"] for s in states if s.get("name") == name), None)
+        if not sid:
+            raise RuntimeError(f"no state named {name!r} in this project")
+        return self._send("PATCH", f"{self._base()}/work-items/{self.ticket['work_item_id']}/",
+                          {"state": sid})
+
 
 
 ALLOWED_TAGS = {"p", "br", "a", "code", "pre", "strong", "em", "b", "i", "ul", "ol", "li",
@@ -312,8 +343,418 @@ def pre(event):
         gate(inp, PlaneComments(ticket, key), commented)
 
 
+# --- session events (agent sessions plan, "Job side: session events") --------
+
+# Redaction: one set of patterns for every text that leaves the pod, at two
+# levels (agent sessions plan, "The progress summary"; HOMELAB-120):
+# - message, for Plane comments (the last-message comment, bench-session
+#   say/ask): env secrets, SECRET_PATTERNS (vendor token shapes) and
+#   SECRET_CONTEXT (Bearer, NAME=value for secret names, URL passwords), so
+#   commit SHAs and branch names survive;
+# - full, for progress summaries and plan items: also SECRET_GENERIC and
+#   SECRET_ASSIGN.
+# The lists are kept identical to images/agent-sessions/agent_sessions/
+# redact.py (VENDOR, CONTEXT, GENERIC, ASSIGN; a test compares them).
+#
+# Env var names whose values never leave the pod (PLANE_API_KEY,
+# CLAUDE_CODE_OAUTH_TOKEN, BENCH_SESSION_TOKEN, DB_PASS, MY_APIKEY, ...). Not
+# PWD: that's the working directory.
+SECRET_ENV = re.compile(r"(?i)KEY|TOKEN|SECRET|PASSW|CREDENTIAL|(?:^|_)(?:PASS\w*|AUTH|PRIVATE|COOKIE|SIGNATURE)"
+                        r"(?:_|$)")
+REDACTED = "[redacted]"
+SECRET_MAX_SCAN = 20000
+SECRET_SCAN_MARGIN = 4096
+# Token shapes a vendor issues: redacted at both levels.
+SECRET_PATTERNS = [
+    # A whole PEM private key (to its END line, or the end of the text); the
+    # header alone if the END is too far off to find.
+    ("private-key-block", r"(?s)-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----.{0,20000}?"
+                          r"(?:-----END [A-Z ]{0,40}PRIVATE KEY-----|\Z)"),
+    ("private-key", r"-----BEGIN [A-Z ]{0,40}PRIVATE KEY-----"),
+    ("github-token", r"\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})"),
+    ("gitlab-token", r"\bglpat-[A-Za-z0-9_-]{20,}"),
+    ("anthropic-key", r"\bsk-ant-[A-Za-z0-9_-]{8,}"),
+    ("openai-style-key", r"\bsk-[A-Za-z0-9_-]{20,}"),
+    ("stripe-key", r"\b(?:sk|rk)_live_[A-Za-z0-9]{10,}"),
+    ("plane-key", r"\bplane_api_[A-Za-z0-9]{8,}"),
+    ("slack-token", r"\b(?:xox[abposr]|xapp)-[A-Za-z0-9-]{10,}"),
+    ("huggingface-token", r"\bhf_[A-Za-z0-9]{30,}"),
+    ("npm-token", r"\bnpm_[A-Za-z0-9]{30,}"),
+    ("aws-key-id", r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
+    ("jwt", r"\beyJ[A-Za-z0-9_-]{8,}+\.[A-Za-z0-9_-]{8,}+\.[A-Za-z0-9_-]{8,}"),
+]
+# A secret by its context, as precise as a Plane comment needs (HOMELAB-120):
+# both levels. Group 1 stays, the rest of the match goes.
+SECRET_CONTEXT = [
+    ("bearer", r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/=-]{16,}"),
+    # NAME=value, NAME: value, "name": "value", with the name anywhere in an
+    # identifier: GITHUB_TOKEN=, DB_PASSWORD:, client_secret=, "api_key": ...
+    ("secret-assignment", r"(?i)((?<![A-Za-z0-9])[A-Za-z0-9_-]{0,64}(?:api[_-]?key|token|secret|password|passwd)"
+                          r"[A-Za-z0-9_-]{0,64}[\"']?\s*+[:=]\s*+)[\"']?[^\s'\"<>,}]{8,}"),
+    # https://user:password@host
+    ("url-credentials", r"(://[^:/\s@]{1,128}:)[^@\s/]++(?=@)"),
+]
+# Shapes that are usually secrets but sometimes not (a 40-hex git SHA): full
+# level only.
+SECRET_GENERIC = [
+    ("long-hex", r"\b[0-9a-fA-F]{32,}+\b"),
+    # 32+ characters mixing upper, lower and digits, with no path separator.
+    ("high-entropy", r"(?<![A-Za-z0-9+_-])(?=[A-Z0-9+_-]*+[a-z])(?=[a-z0-9+_-]*+[A-Z])"
+                     r"(?=[A-Za-z+_-]*+[0-9])[A-Za-z0-9+_-]{32,}+={0,2}"),
+]
+# More secrets by context, broader than a comment can afford (they would eat
+# prose like "the key: ..."): full level only. Group 1 stays, group 2 (the
+# value) goes, group 3 (if any) stays. Names start at a word boundary
+# ((?<![\w.-])), so a long run of word characters is tried once.
+_NAME = r"(?:key|token|secret|passw(?:or)?d|pass|pwd|credential|auth)"
+SECRET_ASSIGN = [
+    ("auth-header", r"(?i)(\bauthorization[\"']?\s*+[:=]\s*+[\"']?(?:bearer|basic|token|digest)?\s*+)"
+                    r"(?!\[redacted\])([^\s\"']+)"),
+    ("bearer-short", r"(?i)(\b(?:bearer|basic)\s+)(?!\[redacted\])([A-Za-z0-9._~+/=-]{8,})"),
+    ("assignment", r"(?i)((?<![\w.-])[\"']?[\w.-]{0,64}" + _NAME + r"[\w.-]{0,64}[\"']?\s*+[=:]\s*+)"
+                   r"(?!\[redacted\])(\"[^\"]*+\"|'[^']*+'|[^\s\"',;&]+)"),
+    ("flag", r"(?i)((?<![\w-])--?[\w-]{0,64}(?:key|token|secret|password|passwd|pass|credential)[\w-]{0,64}"
+             r"(?:=|\s+))(?!\[redacted\])(\"[^\"]*+\"|'[^']*+'|[^\s\"'-][^\s\"']*)"),
+    ("spaced-value", r"(?i)((?<![\w.-])[\w.-]{0,64}(?:secret|token|passw(?:or)?d|api[_-]?key|access[_-]?key|"
+                     r"private[_-]?key)[\w.-]{0,64}\s+)(?!\[redacted\])([A-Za-z0-9+/=_.-]{16,})"),
+    ("mysql-password", r"(\bmysql\w{0,16}\b[^\n|;&]{0,200}?\s-p)(?!\[redacted\])([^\s\"']+)"),
+    ("sshpass", r"(\bsshpass\s+(?:-[a-zA-Z]{1,8}\s+){0,5}-p\s*)(?!\[redacted\])([^\s\"']+)"),
+    ("curl-user", r"((?<!\S)(?:-u|--user)(?:=|\s*)[^\s:\"']{1,128}:)(?!\[redacted\])([^\s\"']+)"),
+    ("url-password", r"(://[^/\s:@]{1,128}:)(?!\[redacted\])([^@\s/]++)(@)"),
+]
+
+
+SEND_INTERVAL = 10       # at most one event send per Job per 10 s (the hook)
+SEND_TIMEOUT = 2         # seconds; a slow service never holds a tool call up
+MAX_PROGRESS = 20        # progress events held between sends; older ones drop
+# The service's limits (images/agent-sessions/agent_sessions/server.py), so a
+# batch is never refused for size.
+SUMMARY_MAX = 120
+TOOL_MAX = 100
+ITEM_MAX = 200
+STATUS_MAX = 32
+MAX_ITEMS = 100
+# bench-session say/ask: characters of text, kept well under MAX_COMMENT so
+# that escaping and markup still fit one comment (re-linted before posting).
+SAY_MAX = 15000
+PLAN_TOOLS = ("TodoWrite", "TaskCreate", "TaskUpdate")
+
+
+def secret_env_values(env=None):
+    """The pod's secret env values, longest first; a multi-line value (a PEM key)
+    also line by line, so a message quoting part of it is still caught."""
+    env = os.environ if env is None else env
+    out = set()
+    for k, v in env.items():
+        if not SECRET_ENV.search(k):
+            continue
+        v = v.replace("\r\n", "\n")
+        out |= {x for x in [v.strip(), *(line.strip() for line in v.split("\n"))] if len(x) >= 8}
+    return sorted(out, key=len, reverse=True)
+
+
+def _sub(pat, s):
+    """Keep group 1 (the name) and group 3 (a suffix), if the pattern has them."""
+    return re.sub(pat, lambda m: (m.group(1) if m.re.groups >= 1 else "") + REDACTED
+                  + (m.group(3) if m.re.groups >= 3 else ""), s)
+
+
+def redact(text, env=None, full=False):
+    """text with the pod's env secrets and secret-shaped strings replaced.
+
+    The default is the message level, for Plane comments; full=True adds the
+    broader patterns, for progress and plan events."""
+    text = str(text or "").replace("\r\n", "\n")
+    # Env values on the whole text (a plain replace, linear), so one that
+    # straddles the cut below goes whole.
+    for v in secret_env_values(env):
+        text = text.replace(v, REDACTED)
+    pats = SECRET_PATTERNS + SECRET_CONTEXT + (SECRET_ASSIGN + SECRET_GENERIC if full else [])
+    # Patterns up to the cut plus a margin, then the cut, then the end again for
+    # anything the cut made newly visible.
+    text = text[:SECRET_MAX_SCAN + SECRET_SCAN_MARGIN]
+    for _, pat in pats:
+        text = _sub(pat, text)
+    if len(text) > SECRET_MAX_SCAN:
+        # Anything the cut made newly visible sits at the end: rescan that.
+        head = text[:SECRET_MAX_SCAN - SECRET_SCAN_MARGIN]
+        tail = text[SECRET_MAX_SCAN - SECRET_SCAN_MARGIN:SECRET_MAX_SCAN]
+        for _, pat in pats:
+            tail = _sub(pat, tail)
+        text = head + tail
+    return text
+
+
+def _cut(s, n=SUMMARY_MAX):
+    s = " ".join(str(s or "").split())
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def clean_text(s, n=SUMMARY_MAX, full=True):
+    """Redact, cut to n, redact again. Redacting first means a secret that
+    straddles the cut is removed whole, not left as a fragment too short to
+    match; redact() caps its own scan, so a huge input stays cheap."""
+    return redact(_cut(redact(str(s or ""), full=full), n), full=full)
+
+
+def _path(p):
+    repo = os.path.join(os.environ.get("WORKSPACE", "/home/node/work"), "repo") + "/"
+    p = str(p or "")
+    return p[len(repo):] if p.startswith(repo) else p
+
+
+def summarize(tool, inp):
+    """A short, fixed-form description of one tool call: never its output or a
+    file's contents. Full redaction, before and after the cut."""
+    inp = inp if isinstance(inp, dict) else {}
+    if tool == "Bash":
+        first = (inp.get("command") or "").strip().splitlines()
+        s = first[0] if first else ""
+    elif tool in ("Read", "Edit", "Write", "MultiEdit", "NotebookEdit"):
+        s = _path(inp.get("file_path") or inp.get("notebook_path"))
+    elif tool in ("Grep", "Glob"):
+        s = str(inp.get("pattern", "")) + (f" in {_path(inp['path'])}" if inp.get("path") else "")
+    elif tool == "WebFetch":
+        s = inp.get("url", "")
+    elif tool == "WebSearch":
+        s = inp.get("query", "")
+    elif tool == "Skill":
+        s = inp.get("skill") or inp.get("name") or ""
+    elif tool in ("Task", "Agent"):
+        s = inp.get("description", "")
+    elif tool == "TodoWrite":
+        s = f"task list, {len(inp.get('todos') or [])} items"
+    elif tool == "TaskCreate":
+        s = inp.get("subject", "")
+    elif tool == "TaskUpdate":
+        s = f"task {inp.get('taskId', '')} {inp.get('status', '')}".strip()
+    elif tool.startswith("mcp__"):
+        s = str(inp.get("action") or "")
+    else:
+        s = ""
+    return clean_text(s)
+
+
+def now_iso():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _item(content, status, tid=None):
+    out = {"content": clean_text(content, ITEM_MAX), "status": str(status or "")[:STATUS_MAX]}
+    if tid is not None:
+        out["id"] = str(tid)[:64]
+    return out
+
+
+def update_plan(items, tool, inp, resp):
+    """The task list after one todo-tool call, or None if it didn't change it.
+
+    Claude Code 2.1.283 (the image's pin) ships both TodoWrite, which rewrites
+    the whole list, and TaskCreate/TaskUpdate, which change one task each;
+    which one the agent gets depends on its settings, so both are read.
+    """
+    inp = inp if isinstance(inp, dict) else {}
+    if tool == "TodoWrite":
+        todos = [t for t in inp.get("todos") or [] if isinstance(t, dict)][:MAX_ITEMS]
+        return [_item(t.get("content"), t.get("status")) for t in todos]
+    items = [dict(i) for i in items or []]
+    if tool == "TaskCreate":
+        task = resp.get("task") if isinstance(resp, dict) else None
+        tid = str((task or {}).get("id") or len(items) + 1)
+        if len(items) < MAX_ITEMS:
+            items.append(_item(inp.get("subject"), "pending", tid))
+        return items
+    if tool == "TaskUpdate":
+        tid = str(inp.get("taskId", ""))
+        for i in items:
+            if i.get("id") == tid:
+                if inp.get("status") == "deleted":
+                    items.remove(i)
+                    break
+                if inp.get("status"):
+                    i["status"] = str(inp["status"])[:STATUS_MAX]
+                if inp.get("subject"):
+                    i["content"] = clean_text(inp["subject"], ITEM_MAX)
+                break
+        return items
+    return None
+
+
+def public_plan(items):
+    """The plan event's items: {content, status}, as the agent last wrote them."""
+    return [{"content": i.get("content", ""), "status": i.get("status", "")} for i in items or []][:MAX_ITEMS]
+
+
+class SessionEvents:
+    """The session service's write side for this Job: one ticket, one token."""
+
+    def __init__(self, url, ticket, token, job):
+        self.url, self.ticket, self.token, self.job = url.rstrip("/"), ticket, token, job
+
+    @classmethod
+    def from_env(cls, ticket):
+        url, token = ticket.get("sessions_url"), os.environ.get("BENCH_SESSION_TOKEN")
+        job = os.environ.get("TASK_ID")
+        if not (url and token and job and ticket.get("work_item_id")):
+            return None  # not a session Job: phase 1, unchanged
+        return cls(url, ticket, token, job)
+
+    def send(self, events):
+        """'ok', 'retry' (network, 5xx, 408, 429: keep the batch) or 'drop'
+        (any other 4xx: the service will never take it, so don't resend)."""
+        body = json.dumps({"job": self.job, "events": events}).encode()
+        req = urllib.request.Request(
+            f"{self.url}/sessions/{self.ticket['work_item_id']}/events", data=body, method="POST",
+            headers={"Authorization": f"Bearer {self.token}", "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=SEND_TIMEOUT) as r:
+                r.read()
+            return "ok"
+        except urllib.error.HTTPError as e:
+            if 400 <= e.code < 500 and e.code not in (408, 429):
+                print(f"bench-ticket: session service refused {len(events)} events "
+                      f"(HTTP {e.code}); dropped", file=sys.stderr)
+                return "drop"
+            print(f"bench-ticket: session send failed (HTTP {e.code}); will retry", file=sys.stderr)
+            return "retry"
+        except Exception as e:  # noqa: BLE001 — progress is best effort
+            print(f"bench-ticket: session send failed ({e}); will retry", file=sys.stderr)
+            return "retry"
+
+
+def queue_events(state, *, progress=None, plan=None, message=None):
+    """Add to the pending batch in state (held under the state file's lock)."""
+    if progress:
+        state["pending"] = (state.get("pending") or [])[-(MAX_PROGRESS - 1):] + [progress]
+    if plan is not None:
+        state["plan"] = plan
+        state["plan_pending"] = True
+    if message:
+        state["messages"] = (state.get("messages") or []) + [message]
+
+
+def take_batch(state, force=False):
+    """Under the lock: the batch to send now, removed from state, or None if
+    there's nothing or SEND_INTERVAL hasn't passed (unless force)."""
+    batch = list(state.get("pending") or [])
+    if state.get("plan_pending"):
+        batch.append({"type": "plan", "items": public_plan(state.get("plan")), "at": now_iso()})
+    batch += state.get("messages") or []
+    if not batch or (not force and time.time() - state.get("sent", 0) < SEND_INTERVAL):
+        return None
+    state["sent"] = time.time()
+    state["pending"], state["plan_pending"], state["messages"] = [], False, []
+    return batch
+
+
+def restore(state, batch):
+    """Under the lock: put a batch that failed to send back, behind anything
+    queued since (a newer plan wins over the one that failed)."""
+    state["pending"] = ([e for e in batch if e["type"] == "progress"]
+                        + (state.get("pending") or []))[-MAX_PROGRESS:]
+    if any(e["type"] == "plan" for e in batch):
+        state["plan_pending"] = True
+    state["messages"] = [e for e in batch if e["type"] in ("say", "ask")] + (state.get("messages") or [])
+
+
+def locked(update):
+    """Run update(state) under the state file's lock; save if it returns truthy."""
+    with open(STATE, "a+") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        state = load(f)
+        out = update(state)
+        save(f, state)
+        return out
+
+
+def deliver(events_out, batch):
+    """Send a batch taken under the lock, outside it; on 'retry' put it back."""
+    if not batch or events_out is None:
+        return
+    if events_out.send(batch) == "retry":
+        locked(lambda st: restore(st, batch))
+
+
+def record(event, state):
+    """The hook's progress and plan events for one tool call."""
+    tool, inp = event.get("tool_name", ""), event.get("tool_input") or {}
+    if not tool:
+        return
+    queue_events(state, progress={"type": "progress", "tool": str(tool)[:TOOL_MAX],
+                                  "summary": summarize(tool, inp), "at": now_iso()})
+    if tool in PLAN_TOOLS:
+        items = update_plan(state.get("plan_items"), tool, inp, event.get("tool_response"))
+        if items is not None:
+            state["plan_items"] = items
+            queue_events(state, plan=items)
+
+
+def session_cmd(cmd, args):
+    """bench-session say|ask TEXT (or the text on stdin). Exit 1 if the
+    message didn't reach the ticket: Plane is the record, so that's the one
+    failure the agent must hear about."""
+    if cmd not in ("say", "ask"):
+        print("usage: bench-session say|ask TEXT  (TEXT may also come on stdin)", file=sys.stderr)
+        return 2
+    raw, key = os.environ.get("TASK_TICKET"), os.environ.get("PLANE_API_KEY")
+    if not raw or not key:
+        print("bench-session works only in a ticket Job.")
+        return 1
+    text = " ".join(args).strip() if args and args != ["-"] else sys.stdin.read().strip()
+    if not text:
+        print("bench-session: nothing to send", file=sys.stderr)
+        return 2
+    # The message level, as for every Plane comment: SHAs and branch names
+    # reach George intact.
+    text = redact(text.replace("\x00", ""))
+    if len(text) > SAY_MAX:
+        print(f"bench-session: not posted: {len(text)} characters; a message must be under "
+              f"{SAY_MAX}. Shorten it, or put the detail in the PR and link it.", file=sys.stderr)
+        return 1
+    body = comment_html(text)
+    problems = lint_comment(body)
+    if problems:  # e.g. text that escapes past MAX_COMMENT
+        print("bench-session: not posted: as a comment it " + "; ".join(problems)
+              + ". Shorten it or simplify the markup.", file=sys.stderr)
+        return 1
+    ticket = json.loads(raw)
+    channel = PlaneComments(ticket, key)
+    try:
+        post_comment(channel, body)
+    except Exception as e:  # noqa: BLE001
+        print(f"bench-session: not posted to the ticket ({e}). Post it with the Plane MCP "
+              "server instead.", file=sys.stderr)
+        return 1
+    blocked_error = None
+    if cmd == "ask":
+        try:
+            channel.set_state(BLOCKED)
+        except Exception as e:  # noqa: BLE001
+            blocked_error = e
+    events_out = SessionEvents.from_env(ticket)
+
+    def update(state):
+        state["commented"] = True  # what lets a findings playbook reach In review
+        if events_out is None:
+            return None  # Plane only: nothing else to deliver to
+        queue_events(state, message={"type": cmd, "text": text, "at": now_iso()})
+        return take_batch(state, force=True)  # messages go at once, with any held progress
+    deliver(events_out, locked(update))
+    if cmd == "say":
+        print("Posted to the ticket.")
+        return 0
+    if blocked_error is not None:
+        print(f"Your question is posted on the ticket, but setting it Blocked failed ({blocked_error}). "
+              "Don't post the question again: set the ticket to Blocked with the Plane MCP server, "
+              "then run `bench-ticket wait`.")
+        return 1
+    print("Posted your question and set the ticket Blocked. Waiting for George's answer.")
+    wait(channel)
+    return 0
+
+
 WAIT_MINUTES = float(os.environ.get("BENCH_WAIT_MINUTES", "15"))
-WAIT_POLL = 15
+WAIT_POLL = float(os.environ.get("BENCH_WAIT_POLL", "15"))
 
 
 def checkpoint():
@@ -389,6 +830,8 @@ def stop(event):
     the hook can never hold a run open. Any error lets the run end; the
     dispatcher's reaper still moves the ticket on."""
     raw, key = os.environ.get("TASK_TICKET"), os.environ.get("PLANE_API_KEY")
+    if raw:
+        flush_now(json.loads(raw))  # whatever progress is still held goes before the run ends
     if event.get("stop_hook_active") or not raw or not key:
         return
     ticket = json.loads(raw)
@@ -402,6 +845,17 @@ def stop(event):
                           "reason": STOP_NUDGE.format(key=ticket.get("key", "this ticket"))}))
 
 
+def flush_now(ticket):
+    """Send any held events now (the Stop hook). Session Jobs only."""
+    events_out = SessionEvents.from_env(ticket)
+    if events_out is None:
+        return
+    try:
+        deliver(events_out, locked(lambda st: take_batch(st, force=True)))
+    except OSError as e:
+        print(f"bench-ticket: session flush skipped ({e})", file=sys.stderr)
+
+
 # ---- last-message: the agent's final message, posted by the wrapper (HOMELAB-120) ----
 # The header and marker are a contract: plane-mobile (PLANEMOBILE-31) and
 # agent-desk's reaper find this comment by LAST_MESSAGE_MARKER. Change neither
@@ -411,51 +865,6 @@ LAST_MESSAGE_MARKER = "bench-last-message:"
 # Characters of the agent's Markdown kept; the rest stays in the run record.
 # Small enough that the HTML, escaped, stays well under MAX_COMMENT.
 LAST_MESSAGE_CAP = 3000
-
-# Credential shapes that must never reach a ticket. The values of the pod's own
-# secret env vars are redacted too (secret_env_values), whatever their shape.
-SECRET_PATTERNS = [
-    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)", re.DOTALL),
-    re.compile(r"\bsk-ant-[A-Za-z0-9_-]{8,}"),
-    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}"),
-    re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}"),
-    re.compile(r"\bplane_api_[A-Za-z0-9]{8,}"),
-    re.compile(r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"),
-    re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"),  # JWT
-    re.compile(r"(?i)(\bbearer\s+)[A-Za-z0-9._~+/=-]{16,}"),
-    # NAME=value, NAME: value, "name": "value", with the name anywhere in an
-    # identifier: GITHUB_TOKEN=, DB_PASSWORD:, client_secret=, "api_key": ...
-    re.compile(r"(?i)((?<![A-Za-z0-9])[A-Za-z0-9_-]*(?:api[_-]?key|token|secret|password|passwd)"
-               r"[A-Za-z0-9_-]*[\"']?\s*[:=]\s*)[\"']?[^\s'\"<>,}]{8,}"),
-    # https://user:password@host
-    re.compile(r"(://[^:/\s@]+:)[^@\s/]+(?=@)"),
-]
-SECRET_ENV = re.compile(r"(?i)(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL)")
-REDACTED = "[redacted]"
-
-
-def secret_env_values(env=None):
-    """The pod's secret env values, longest first; a multi-line value (a PEM key)
-    also line by line, so a message quoting part of it is still caught."""
-    env = os.environ if env is None else env
-    out = set()
-    for k, v in env.items():
-        if not SECRET_ENV.search(k):
-            continue
-        v = v.replace("\r\n", "\n")
-        out |= {x for x in [v.strip(), *(line.strip() for line in v.split("\n"))] if len(x) >= 8}
-    return sorted(out, key=len, reverse=True)
-
-
-def redact(text, env=None):
-    text = text.replace("\r\n", "\n")
-    for v in secret_env_values(env):
-        text = text.replace(v, REDACTED)
-    for pat in SECRET_PATTERNS:
-        keep = pat.groups > 0  # the "token: " / "Bearer " prefix stays, the value goes
-        text = pat.sub(lambda m, keep=keep: (m.group(1) if keep else "") + REDACTED, text)
-    return text
-
 
 def _esc(s):
     """html.escape, with < as &#60;: the same in the browser, and code that
@@ -558,6 +967,17 @@ def md_to_html(md, depth=0):
     return "".join(out)
 
 
+def comment_html(text):
+    """An agent's Markdown as a Plane comment that always lints: md_to_html,
+    or the words as plain paragraphs if the converter got the markup wrong.
+    Used by the last-message comment and by bench-session say/ask."""
+    try:
+        body = md_to_html(text)
+    except Exception:  # noqa: BLE001 — any converter bug: the plain fallback below
+        body = ""
+    return _plain(text) if not body or lint_comment(body) else body
+
+
 def last_message_html(text, task_id, env=None):
     """The comment for the agent's final message: header, the message (redacted,
     capped, Markdown as HTML), and the marker. None if there is nothing to say."""
@@ -567,13 +987,7 @@ def last_message_html(text, task_id, env=None):
     cut = len(text) > LAST_MESSAGE_CAP
     if cut:
         text = text[:LAST_MESSAGE_CAP].rstrip()
-    try:
-        body = md_to_html(text)
-    except Exception:  # noqa: BLE001 — any converter bug: the plain fallback below
-        body = ""
-    if not body or lint_comment(body):
-        # Markup the converter got wrong: post the words as plain paragraphs.
-        body = _plain(text)
+    body = comment_html(text)
     tail = (f"<p><em>Truncated at {LAST_MESSAGE_CAP} characters; the whole message is in "
             f"the run record.</em></p>" if cut else "")
     out = (f"<p><strong>{_esc(LAST_MESSAGE_HEADER)}</strong></p>"
@@ -641,10 +1055,10 @@ def _deadline(signum, frame):
     raise TimeoutError(f"gave up after {LAST_MESSAGE_DEADLINE} s")
 
 
-def post_comment(channel, comment_html):
+def post_comment(channel, body_html):
     t = channel.ticket
     url = (f"{channel._base()}/work-items/{t['work_item_id']}/comments/")
-    req = urllib.request.Request(url, data=json.dumps({"comment_html": comment_html}).encode(),
+    req = urllib.request.Request(url, data=json.dumps({"comment_html": body_html}).encode(),
                                  method="POST", headers={"X-API-Key": channel.key,
                                                          "Content-Type": "application/json",
                                                          "Accept": "application/json"})
@@ -697,6 +1111,9 @@ def last_message(path, channel, task_id, started="", state_path=STATE):
 
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if os.path.basename(sys.argv[0]) == "bench-session" or cmd in ("say", "ask"):
+        args = sys.argv[1:]
+        return session_cmd(args[0] if args else "", args[1:])
     if cmd in ("pre", "lint"):
         pre(json.loads(sys.stdin.read() or "{}"))
         return
@@ -741,30 +1158,41 @@ def main():
                 nudge = WAIT_NUDGE
         except Exception as e:  # noqa: BLE001 — a reminder, not a gate
             print(f"bench-ticket: state lookup failed ({e})", file=sys.stderr)
-    new = []
-    with open(STATE, "a+") as f:
-        # Claude can run tools in parallel; one hook at a time, so a comment is relayed once.
-        fcntl.flock(f, fcntl.LOCK_EX)
-        state = load(f)
-        if cmd == "init":
-            # agent-desk lists the comments it put in the prompt; anything written
-            # since is news. Without the list (a hand-launched Job), all are seen.
-            ids = channel.ticket.get("seen_comments")
-            seen = ids if isinstance(ids, list) else [c.get("id") for c in channel.all()]
-            # Checked long ago: the first tool call relays what the prompt missed.
-            save(f, {"seen": seen, "checked": 0 if isinstance(ids, list) else time.time()})
-            return
-        if commented and not state.get("commented"):
-            state["commented"] = True
-            save(f, state)
-        if time.time() - state.get("checked", 0) >= INTERVAL:
-            seen = set(state.get("seen", []))
-            state["checked"] = time.time()
-            save(f, state)
-            checkpoint()  # same 30 s rate as the comment check
-            new = channel.poll(seen)
-            state["seen"] = sorted(seen | {c.get("id") for c in new})
-            save(f, state)
+    new, batch = [], None
+    events_out = SessionEvents.from_env(channel.ticket) if cmd == "hook" else None
+    try:
+        with open(STATE, "a+") as f:
+            # Claude can run tools in parallel; one hook at a time, so a comment is relayed once.
+            fcntl.flock(f, fcntl.LOCK_EX)
+            state = load(f)
+            if cmd == "init":
+                # agent-desk lists the comments it put in the prompt; anything written
+                # since is news. Without the list (a hand-launched Job), all are seen.
+                ids = channel.ticket.get("seen_comments")
+                seen = ids if isinstance(ids, list) else [c.get("id") for c in channel.all()]
+                # Checked long ago: the first tool call relays what the prompt missed.
+                save(f, {"seen": seen, "checked": 0 if isinstance(ids, list) else time.time()})
+                return
+            if commented and not state.get("commented"):
+                state["commented"] = True
+                save(f, state)
+            if events_out is not None:
+                # Session Job: this call's progress (and plan), sent in batches.
+                # Queued before the Plane poll, so a Plane error can't drop it; sent
+                # after the lock is released.
+                record(event, state)
+                batch = take_batch(state)
+                save(f, state)
+            if time.time() - state.get("checked", 0) >= INTERVAL:
+                seen = set(state.get("seen", []))
+                state["checked"] = time.time()
+                save(f, state)
+                checkpoint()  # same 30 s rate as the comment check
+                new = channel.poll(seen)
+                state["seen"] = sorted(seen | {c.get("id") for c in new})
+                save(f, state)
+    finally:
+        deliver(events_out, batch)  # outside the lock; also when the Plane poll failed
     parts = [nudge] if nudge else []
     if new:
         parts.append("George commented on this ticket while you were working. Read it before "
@@ -777,8 +1205,11 @@ def main():
 
 
 if __name__ == "__main__":
+    rc = 0
     try:
-        main()
+        rc = main() or 0
     except Exception as e:  # noqa: BLE001 — never fail the tool call this runs after
         print(f"bench-ticket: {e}", file=sys.stderr)
-    sys.exit(0)
+        # bench-session is a command the agent runs: it must see a failure.
+        rc = 1 if os.path.basename(sys.argv[0]) == "bench-session" else 0
+    sys.exit(rc)

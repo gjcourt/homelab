@@ -57,8 +57,10 @@ jobs:
       - name: Only bench-gate.yaml may write commit statuses
         run: python3 scripts/bench-gate/lint_workflows.py .github/workflows
 
-  # HOMELAB-120: bench-ticket's post-exit comment (the agent's last message),
-  # on the image's Python (Debian bookworm's python3 is 3.11).
+  # bench-ticket and bench-session: HOMELAB-120's post-exit comment (the
+  # agent's last message) and the agent sessions plan's session events, on the
+  # image's Python (Debian bookworm's python3 is 3.11). The tests also check
+  # the Job's redaction patterns against images/agent-sessions'.
   bench-cloud:
     runs-on: ubuntu-latest
     steps:

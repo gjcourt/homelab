@@ -33,7 +33,7 @@ patches:
         path: /metadata/name
         value: domestique-stage
 
-# Built by gjcourt/domestique's build.yml (domestique #139) from main 7b11679.
+# Built by gjcourt/domestique's build.yml (domestique #139) from main b308414.
 images:
   - name: ghcr.io/gjcourt/domestique
-    newTag: 2026-11-22-7b11679
+    newTag: 2026-11-23-b308414

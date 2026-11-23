@@ -201,6 +201,14 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
       echo "resume: no earlier session for $key; starting from the thread"
     fi
   fi
+  # A session Job (agent sessions plan, step 2): agent-desk (or a hand launch)
+  # gave it the session service's URL and its own token. Without both the run
+  # is exactly phase 1, prompt included.
+  session_note=""
+  if [[ -n "$(jq -r '.sessions_url // empty' <<<"$TASK_TICKET")" && -n "${BENCH_SESSION_TOKEN:-}" ]]; then
+    session_note="- This run is a live session: George can follow your progress and task list as you work, so keep your task list current. To tell George something without stopping, run \`bench-session say \"<text>\"\` with the Bash tool (Markdown, as in a ticket comment; it posts one). To ask him something, run \`bench-session ask \"<question>\"\` with the Bash tool and a timeout of 960000 ms instead of posting, setting Blocked and running \`bench-ticket wait\` yourself: it does all three and returns his answer, or says he hasn't answered.
+"
+  fi
   tools+=("mcp__plane__workitem" "mcp__plane__workitem_comment" "mcp__plane__workitem_link"
     "mcp__plane__state" "mcp__plane__workitem_activity")
   args+=(--mcp-config "$mcp" --strict-mcp-config
@@ -215,7 +223,7 @@ if [[ -n "${TASK_TICKET:-}" ]]; then
 - A comment's comment_html is raw HTML, e.g. <p>Opened <a href=\"…\">PR #3</a>.</p>. Send the tags as they are; never escape them as &lt;p&gt;, or the ticket shows the markup.
 - Comment on a change only after you have made it (pushed, edited, run), never in the same step.
 - Touch only ticket $key. Never change its labels, and never delete anything in Plane.
-End with a short summary that includes the PR URL, or says plainly why there is no PR.")
+${session_note}End with a short summary that includes the PR URL, or says plainly why there is no PR.")
 else
   args+=(--append-system-prompt "You are running unattended as bench-cloud task $TASK_ID in a fresh clone of $TASK_REPO. Nobody can answer questions mid-task. Deliver your work as a pull request from a new branch, and end with a short summary that includes the PR URL, or says plainly why there is no PR.")
 fi

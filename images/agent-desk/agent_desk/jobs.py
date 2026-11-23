@@ -31,6 +31,9 @@ TOKEN_KEY = "BENCH_SESSION_TOKEN"
 # D2: "each per-Job token also expires on its own at its playbook deadline plus
 # 15 minutes, besides being deleted when the Job ends".
 TOKEN_GRACE = 15 * 60
+# As agent-sessions' MAX_TOKEN_LIFE: it refuses a token signed to live longer,
+# so a pilot playbook's deadline + TOKEN_GRACE must fit inside it.
+MAX_TOKEN_LIFE = 12 * 3600 + TOKEN_GRACE
 # As agent-sessions' server.py: Plane work-item ids are UUIDs; a Job name is a
 # Kubernetes name.
 WORK_ITEM = re.compile(r"^[0-9a-fA-F-]{8,64}$")
@@ -52,6 +55,7 @@ def token(key: bytes, work_item: str, job: str, expires: int) -> str:
 
 
 def token_expires(deadline_seconds: int, now: float | None = None) -> int:
+    """now is the Job's start (its creation time when recreating a Secret)."""
     return int((time.time() if now is None else now) + deadline_seconds + TOKEN_GRACE)
 
 
@@ -69,6 +73,8 @@ def token_secret(*, tid: str, namespace: str, work_item: str, key: bytes, deadli
             "labels": {TOKEN_LABEL: "true", "agent-sessions/job": tid},
             "annotations": {"agent-sessions/expires": time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                                                     time.gmtime(expires))}}
+    # A dry-run create may return no uid, so a dry-run Secret can lack its
+    # ownerReference. Harmless: neither the dry-run Job nor its Secret is stored.
     if job_uid:
         meta["ownerReferences"] = [{"apiVersion": "batch/v1", "kind": "Job", "name": tid,
                                     "uid": job_uid}]
@@ -172,6 +178,10 @@ class Kube:
                 "reason": next((c.reason for c in (st.conditions or [])
                                 if c.type == "Failed" and c.status == "True"), ""),
                 "pilot": (j.metadata.labels or {}).get(PILOT_LABEL) == "true",
+                "uid": j.metadata.uid or "",
+                "created_epoch": j.metadata.creation_timestamp.timestamp()
+                if j.metadata.creation_timestamp else 0.0,
+                "deadline": (j.spec.active_deadline_seconds or 0) if j.spec else 0,
             })
         return out
 
@@ -184,8 +194,15 @@ class Kube:
         res = self.batch.create_namespaced_job(self.ns, job, dry_run="All" if dry_run else None)
         return getattr(getattr(res, "metadata", None), "uid", "") or ""
 
-    def create_secret(self, secret: dict, dry_run: bool) -> None:
-        self.core.create_namespaced_secret(self.ns, secret, dry_run="All" if dry_run else None)
+    def create_secret(self, secret: dict, dry_run: bool) -> bool:
+        """Create a token Secret: True if created, False if it already exists."""
+        try:
+            self.core.create_namespaced_secret(self.ns, secret, dry_run="All" if dry_run else None)
+        except self._api_exception as e:
+            if e.status == 409:
+                return False
+            raise
+        return True
 
     def delete_secret(self, name: str) -> None:
         """Delete a token Secret; already gone is fine."""

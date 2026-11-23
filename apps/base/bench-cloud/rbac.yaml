@@ -78,8 +78,13 @@ subjects:
 # each pilot Job and deletes it when the Job finishes. RBAC can't name a
 # Secret that doesn't exist yet, so this is create and delete on Secrets in
 # bench-cloud: no get, list, watch, update or patch, so agent-desk can't read
-# any Secret here. The token-Secret admission policy (homelab#2005) limits
-# creates and updates of token Secrets to agent-desk and cluster admins.
+# any Secret here. What bounds the grant is
+# admission-policy-agent-desk-secrets.yaml (George, 2026-11-22: "Add the
+# restriction"): agent-desk may create only a labelled, Opaque *-session
+# Secret, delete only a Secret labelled as a token, and update none.
+#
+# Bound to staging's dispatcher only: production has no pilots yet. Its
+# binding comes with the first production pilot, in that PR.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -103,9 +108,6 @@ subjects:
   - kind: ServiceAccount
     name: agent-desk
     namespace: agent-desk-stage
-  - kind: ServiceAccount
-    name: agent-desk
-    namespace: agent-desk
 ---
 # Ticket Jobs run the console's image, read from its Deployment as
 # `bench-cloud run` does, so there's one pin. Only that one object.

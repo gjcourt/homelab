@@ -139,6 +139,8 @@ class FakeKube:
         self.deleted_jobs = []
         self.deny_secret = None
         self.fail_delete_secret = None
+        self.fail_delete_job = None
+        self.existing_secrets = set()
 
     def jobs(self):
         return list(self.job_list)
@@ -155,7 +157,10 @@ class FakeKube:
     def create_secret(self, secret, dry_run):
         if self.deny_secret:
             raise RuntimeError(self.deny_secret)
+        if secret["metadata"]["name"] in self.existing_secrets:
+            return False  # 409 AlreadyExists
         self.secrets.append((secret, dry_run))
+        return True
 
     def delete_secret(self, name):
         if self.fail_delete_secret:
@@ -163,4 +168,6 @@ class FakeKube:
         self.deleted_secrets.append(name)
 
     def delete_job(self, name):
+        if self.fail_delete_job:
+            raise RuntimeError(self.fail_delete_job)
         self.deleted_jobs.append(name)

@@ -115,6 +115,16 @@ def _read_file(env: str) -> str:
         return f.read().strip()
 
 
+def _read_bytes(env: str) -> bytes:
+    """A binary-safe secret file, stripped as agent-sessions strips it (so a
+    key with a trailing newline, or not UTF-8 at all, is the same key there)."""
+    path = os.environ.get(env, "")
+    if not path or not os.path.exists(path):
+        return b""
+    with open(path, "rb") as f:
+        return f.read().strip()
+
+
 def load(path: str | None = None, env=os.environ) -> Config:
     path = path or env.get("AGENT_DESK_CONFIG", "/config/config.yaml")
     with open(path) as f:
@@ -161,7 +171,7 @@ def load(path: str | None = None, env=os.environ) -> Config:
             pilot_projects=[str(p) for p in (raw.get("sessions") or {}).get("pilotProjects") or []],
             pilot_playbooks=[str(p) for p in (raw.get("sessions") or {}).get("pilotPlaybooks") or []],
         ),
-        session_key=_read_file("SESSION_KEY_FILE").encode(),
+        session_key=_read_bytes("SESSION_KEY_FILE"),
     )
     for key in ("job_namespace", "job_template", "console_deployment", "run_record",
                 "jobs_token_secret"):

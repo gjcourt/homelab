@@ -84,7 +84,13 @@ bench-cloud:
   deadline plus 15 minutes (D2). That expiry is what bounds the token:
   deleting the Secret doesn't revoke a token already read.
 - If the Secret can't be made, the Job is deleted (on a real run) and the
-  ticket gets one comment.
+  ticket moves to Blocked with one comment, so a lasting failure doesn't
+  start a Job on every poll.
+- A playbook whose deadline plus 15 minutes is longer than agent-sessions
+  accepts (12 h 15 min) never pilots; that's logged once.
+- Each poll, an active pilot Job with no Secret gets one, with the expiry its
+  start implies, or is deleted. That covers a restart between the Job and its
+  Secret.
 
 When the Job finishes, the poll deletes the Secret. The owner reference also
 removes it when the Job itself is deleted. Any other Job gets none of this.

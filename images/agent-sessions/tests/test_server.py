@@ -389,3 +389,10 @@ def test_expired_token_on_messages(svc):
     url, log = svc
     st, _ = call(f"{url}/sessions/{WID}/messages?job={JOB}", tok=tok(KEY, WID, JOB, int(time.time()) - 1))
     assert st == 401 and log[-1]["why"] == "expired token"
+
+
+def test_token_known_answer():
+    """The same vector as images/agent-desk/tests/test_sessions.py (homelab#2006),
+    which mints these tokens: if either side changes, one of the two fails."""
+    assert server.token(b"k" * 32, WID, JOB, 1_900_000_000) == (
+        "v1.1900000000.2a66375b698e1f3e3440a7767438dbf1e5834cfe73cfcec49d4e25c85a4a765d")

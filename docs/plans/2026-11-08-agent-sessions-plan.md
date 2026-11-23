@@ -601,7 +601,14 @@ Each step has an exit. Steps 3A and 3B are alternatives: whichever George picks 
        - owned by the Job, with the D2 expiry (the playbook's deadline + 15 min);
        - with `dryRun=All` when the Jobs are;
      - when the Job finishes (the reaper), it deletes the Secret;
-     - RBAC: `create` and `delete` on `secrets` in `bench-cloud` for agent-desk's service account;
+     - RBAC: `create` and `delete` on `secrets` in `bench-cloud`, bound to staging's dispatcher
+       only. Production's binding comes with its first pilot;
+     - **an admission policy narrowing that grant: decided.** George, 2026-11-22, on #2006: "Add
+       the restriction (Recommended)": an admission policy refuses any agent-desk delete of a
+       bench-cloud Secret that isn't a session token. agent-desk may create only an Opaque,
+       labelled `*-session` Secret, delete only a labelled token, and update none;
+     - a token failure moves the ticket to Blocked with one comment; an active pilot Job left
+       without a token, e.g. after a restart, gets one or is deleted;
      - tests.
    - **Changed from the text above:**
      - the token comes from a per-Job Secret and carries its expiry;

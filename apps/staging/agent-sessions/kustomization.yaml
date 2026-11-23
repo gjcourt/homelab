@@ -37,7 +37,7 @@ patches:
         value: agent-sessions-stage
 
 # Pinned date-sha tag from build-agent-sessions.yml (Flux does not
-# auto-track). A placeholder until homelab#2003 merges and builds.
+# auto-track). Built from master 0160454 after homelab#2003 merged.
 images:
   - name: ghcr.io/gjcourt/agent-sessions
-    newTag: pending-homelab-2003
+    newTag: 2026-11-23-0160454

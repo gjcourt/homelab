@@ -445,7 +445,11 @@ def test_job_redaction_is_fast(s):
     bt.redact(s)
     bt.summarize("Bash", {"command": s})
     bt.update_plan([], "TodoWrite", {"todos": [{"content": s, "status": "pending"}]}, {})
-    assert time.perf_counter() - t < 0.2
+    # A guard against catastrophic backtracking, not a benchmark. The linear path
+    # takes ~0.12 s on an M1 and ~0.24 s on a busy shared runner, so 0.2 s failed
+    # on healthy code (2026-11-23, 2026-11-25 twice). Backtracking on these inputs
+    # costs seconds to minutes, so 2 s still catches it with ~10x headroom.
+    assert time.perf_counter() - t < 2.0
 
 
 def test_redaction_levels(monkeypatch):

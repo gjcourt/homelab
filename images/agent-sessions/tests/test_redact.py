@@ -55,7 +55,11 @@ def test_no_pathological_backtracking(s):
     t = time.perf_counter()
     rd.redact(s)
     rd.find(s)
-    assert time.perf_counter() - t < 0.2
+    # A guard against catastrophic backtracking, not a benchmark. The linear path
+    # takes ~0.12 s on an M1 and ~0.24 s on a busy shared runner, so 0.2 s failed
+    # on healthy code (2026-11-23, 2026-11-25 twice). Backtracking on these inputs
+    # costs seconds to minutes, so 2 s still catches it with ~10x headroom.
+    assert time.perf_counter() - t < 2.0
 
 
 @pytest.mark.parametrize("full", [False, True])

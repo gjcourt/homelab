@@ -72,6 +72,43 @@ subjects:
     name: agent-desk
     namespace: agent-desk
 ---
+# Agent sessions pilots (plan docs/plans/2026-11-08-agent-sessions-plan.md,
+# step 2; George, 2026-11-22, D1: "agent-desk creates a fresh token Secret per
+# Job and deletes it when the Job ends"). agent-desk creates <job>-session for
+# each pilot Job and deletes it when the Job finishes. RBAC can't name a
+# Secret that doesn't exist yet, so this is create and delete on Secrets in
+# bench-cloud: no get, list, watch, update or patch, so agent-desk can't read
+# any Secret here. What bounds the grant is
+# admission-policy-agent-desk-secrets.yaml (George, 2026-11-22: "Add the
+# restriction"): agent-desk may create only a labelled, Opaque *-session
+# Secret, delete only a Secret labelled as a token, and update none.
+#
+# Bound to staging's dispatcher only: production has no pilots yet. Its
+# binding comes with the first production pilot, in that PR.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-sessions-token-writer
+  namespace: bench-cloud
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-desk-sessions-token-writer
+  namespace: bench-cloud
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: agent-sessions-token-writer
+subjects:
+  - kind: ServiceAccount
+    name: agent-desk
+    namespace: agent-desk-stage
+---
 # Ticket Jobs run the console's image, read from its Deployment as
 # `bench-cloud run` does, so there's one pin. Only that one object.
 apiVersion: rbac.authorization.k8s.io/v1

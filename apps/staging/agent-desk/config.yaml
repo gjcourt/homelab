@@ -55,3 +55,12 @@ playbooks:
       citing the failed run and the cause, or, if the cause isn't in the repo
       (flaky test, outage, expired secret), comment the evidence. Then move the
       ticket to In review.
+
+# Agent sessions pilots (agent sessions plan, step 2). Off until the
+# session-key is in secret-agent-desk.yaml and agent-sessions-stage runs
+# (homelab#2005). Staging creates its Jobs and their token Secrets with
+# dryRun=All, so this exercises RBAC and the admission policy only.
+# sessions:
+#   url: http://agent-sessions.agent-sessions-stage.svc:8080
+#   pilotProjects: [SANDBOX]
+#   pilotPlaybooks: []

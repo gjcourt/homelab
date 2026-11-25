@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 
+from . import config
 from . import jobs as jobmod
 from . import prompt as promptmod
 from . import rules
@@ -73,6 +74,11 @@ class Dispatcher:
         # changes made while this pod was down don't count as missed.
         self.last_delivery = time.time()
         self.webhook_quiet = False
+        # Finished pilot Jobs whose token Secret this process already deleted.
+        self.tokens_deleted: set[str] = set()
+        # Active pilot Jobs whose token Secret is known to exist.
+        self.tokens_ensured: set[str] = set()
+        self._logged_once: set[str] = set()
 
     # -- context ----------------------------------------------------------------
 
@@ -359,15 +365,19 @@ class Dispatcher:
                     request = rules.wake_comments(cmts, self.owner_id, self.bot_id)
                 ticket["resume_prompt"] = promptmod.build_resume(
                     key=t.key, comments=[c.get("comment_html", "") for c in request])
+        pilot = self.session_pilot(pr, d.playbook)
         job = jobmod.build_job(self.template, tid=tid, image=self.kube.console_image(),
                                repo=pr.repo, prompt=text, ticket=ticket, playbook=d.playbook,
                                deadline=pb.deadline, model=pb.model,
-                               jobs_token_secret=self.cfg.jobs_token_secret)
+                               jobs_token_secret=self.cfg.jobs_token_secret,
+                               sessions_url=self.cfg.sessions.url if pilot else "")
         try:
-            self.kube.create(job, dry_run=self.cfg.dry_run_jobs)
+            uid = self.kube.create(job, dry_run=self.cfg.dry_run_jobs)
         except Exception as e:  # noqa: BLE001 — admission denial, quota, API error
             self.log(f"{t.key}: Job create failed: {e}")
             self.comment_once(pr, t, f"agent-desk couldn't create the Job: {str(e)[:300]}")
+            return False
+        if pilot and not self.create_token(pr, t, tid, uid, pb.deadline):
             return False
         self.in_progress[t.id] = d.playbook
         self.seen_state[t.id] = IN_PROGRESS
@@ -391,6 +401,108 @@ class Dispatcher:
         self.log(f"{t.key}: started {tid}{' (dry-run)' if self.cfg.dry_run_jobs else ''}")
         return True
 
+    # -- agent sessions (plan step 2; George's D1/D2, 2026-11-22) ------------------
+
+    def session_pilot(self, pr: Project, playbook: str) -> bool:
+        """Is this Job a session pilot? Only with the sessions block naming its
+        project or playbook, a usable session-key, and a deadline whose token
+        agent-sessions would accept."""
+        if not self.cfg.sessions.pilot(pr.identifier, playbook):
+            return False
+        if len(self.cfg.session_key) < config.MIN_SESSION_KEY:
+            self.log_once("key", "sessions: pilots are configured but SESSION_KEY_FILE is missing "
+                          f"or under {config.MIN_SESSION_KEY} bytes; starting them as plain Jobs")
+            return False
+        deadline = self.cfg.playbooks[playbook].deadline
+        if deadline + jobmod.TOKEN_GRACE > jobmod.MAX_TOKEN_LIFE:
+            self.log_once(f"deadline:{playbook}", f"sessions: playbook {playbook}'s deadline "
+                          f"({deadline} s) + 15 min is past the longest token agent-sessions "
+                          f"accepts ({jobmod.MAX_TOKEN_LIFE} s); starting it as a plain Job")
+            return False
+        return True
+
+    def log_once(self, what: str, msg: str) -> None:
+        if what not in self._logged_once:
+            self._logged_once.add(what)
+            self.log(msg)
+
+    def create_token(self, pr: Project, t: Ticket, tid: str, uid: str, deadline: int) -> bool:
+        """The pilot Job's token Secret, owned by the Job, expiring at its
+        deadline plus 15 minutes (D2). The Job's pod waits for it.
+
+        If it can't be made, the Job is deleted (it would only wait out its
+        deadline) and the ticket goes to Blocked with one comment, so a
+        failure that persists doesn't start and delete a Job on every poll.
+        George's reply restarts it, as for any Blocked ticket."""
+        try:
+            secret = jobmod.token_secret(tid=tid, namespace=self.cfg.job_namespace, work_item=t.id,
+                                         key=self.cfg.session_key, deadline=deadline, job_uid=uid)
+            self.kube.create_secret(secret, dry_run=self.cfg.dry_run_jobs)
+            self.tokens_ensured.add(tid)
+            return True
+        except Exception as e:  # noqa: BLE001 — admission denial, RBAC, API error
+            error = str(e)[:300]
+            self.log(f"{t.key}: token Secret for {tid} failed: {e}")
+        stuck = ""
+        if not self.cfg.dry_run_jobs:
+            try:
+                self.kube.delete_job(tid)
+            except Exception as e:  # noqa: BLE001
+                self.log(f"{t.key}: couldn't delete {tid} after its token failed: {e}")
+                stuck = (f" Deleting the Job failed too ({str(e)[:200]}); the next poll tries "
+                         "again.")
+        self.plane.update_item(pr.id, t.id, {"state": pr.states[BLOCKED]})
+        self.comment_once(pr, t, f"agent-desk couldn't create the session token for Job `{tid}` "
+                                 f"({error}), so it didn't start it and moved the ticket to "
+                                 f"Blocked.{stuck} Reply here once it's fixed to start again.")
+        return False
+
+    def ensure_tokens(self, job_list: list[dict]) -> None:
+        """An active pilot Job whose token Secret was never made (agent-desk
+        restarted between creating the Job and its Secret, or the delete after
+        a failure failed) would wait out its deadline holding a playbook slot.
+        Once per Job per process: create its Secret, with the expiry its Job's
+        start implies (an existing one is fine), or else delete the Job."""
+        if self.cfg.dry_run_jobs:
+            return  # dry-run Jobs are never stored
+        for j in job_list:
+            name = j["name"]
+            if not j.get("pilot") or not j["active"] or name in self.tokens_ensured:
+                continue
+            try:
+                secret = jobmod.token_secret(
+                    tid=name, namespace=self.cfg.job_namespace, work_item=j.get("ticket") or "",
+                    key=self.cfg.session_key, deadline=int(j.get("deadline") or 0),
+                    job_uid=j.get("uid", ""), now=j.get("created_epoch") or None)
+                if len(self.cfg.session_key) < config.MIN_SESSION_KEY:
+                    raise ValueError("no usable session-key")
+                if self.kube.create_secret(secret, dry_run=False):
+                    self.log(f"sessions: recreated the missing token of {name}")
+                self.tokens_ensured.add(name)
+            except Exception as e:  # noqa: BLE001
+                self.log(f"sessions: {name} has no token and none can be made ({e}); deleting it")
+                try:
+                    self.kube.delete_job(name)
+                    self.tokens_ensured.add(name)
+                except Exception as e2:  # noqa: BLE001 — retried on the next poll
+                    self.log(f"sessions: couldn't delete {name}: {e2}")
+
+    def reap_tokens(self, job_list: list[dict]) -> None:
+        """D1: a pilot Job's token Secret is deleted when the Job finishes. The
+        owner reference also deletes it when the Job object is deleted."""
+        for j in job_list:
+            if not j.get("pilot") or j["active"] or j["name"] in self.tokens_deleted:
+                continue
+            try:
+                self.kube.delete_secret(jobmod.token_secret_name(j["name"]))
+                self.tokens_deleted.add(j["name"])
+                self.log(f"sessions: deleted the token of {j['name']}")
+            except Exception as e:  # noqa: BLE001 — retried on the next poll
+                self.log(f"sessions: couldn't delete the token of {j['name']}: {e}")
+        names = {j["name"] for j in job_list}
+        self.tokens_deleted &= names   # Jobs gone (TTL) need no memory
+        self.tokens_ensured &= names
+
     # -- loops ------------------------------------------------------------------
 
     def items(self) -> dict[str, list[dict]]:
@@ -405,6 +517,12 @@ class Dispatcher:
         self.refresh(force=True)
         by_project = self.items()
         job_list = self.snapshot(by_project)
+        # Before reap(): a Plane error there mustn't skip the token cleanup.
+        try:
+            self.ensure_tokens(job_list)
+            self.reap_tokens(job_list)
+        except Exception as e:  # noqa: BLE001
+            self.log(f"sessions: token pass failed: {e}")
         self.reap(by_project, job_list)
         for pid, items in by_project.items():
             for it in items:

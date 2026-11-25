@@ -36,7 +36,8 @@ Rules 2 and 4 get one comment on the ticket. Every other miss stays silent.
 
 `config.yaml`, mounted from a ConfigMap reviewed in this repo. The env
 supplies `PLANE_URL`, `PLANE_WORKSPACE`, `DRY_RUN_JOBS`, and the `*_FILE`
-secrets (`PLANE_API_KEY_FILE`, `WEBHOOK_SECRET_FILE`, `GITHUB_TOKEN_FILE`).
+secrets (`PLANE_API_KEY_FILE`, `WEBHOOK_SECRET_FILE`, `GITHUB_TOKEN_FILE`,
+`SESSION_KEY_FILE`).
 With `DRY_RUN_JOBS=true`, Jobs are created with `dryRun=All`: the API server
 runs RBAC, admission and quota checks but stores nothing. Plane writes are
 still real.
@@ -53,6 +54,46 @@ playbook prompt for that repo, ahead of the ticket. homelab uses it to tell
 the agent which paths a bench PR may change there (HOMELAB-85,
 `scripts/bench-gate/rules.yaml`), so a playbook such as `docs-fix` doesn't try
 a file the gate would refuse.
+
+`sessions` (optional, off by default) makes some Jobs agent-sessions pilots
+(agent sessions plan, step 2; George's D1–D3, 2026-11-22):
+
+```yaml
+sessions:
+  url: http://agent-sessions.agent-sessions-stage.svc:8080
+  pilotProjects: [SANDBOX]   # Plane identifiers
+  pilotPlaybooks: []         # or by playbook
+```
+
+A Job whose project or playbook is listed is a pilot, as long as
+`SESSION_KEY_FILE` (the Secret's `session-key`, at least 32 bytes) is present.
+A pilot Job gets:
+
+- `sessions_url` in `TASK_TICKET`;
+- the pod label `agent-sessions/pilot: "true"`, the only thing that lets it
+  reach agent-sessions;
+- `BENCH_SESSION_TOKEN` from the Secret `<job>-session`. The ref isn't
+  optional, so the pod waits for that Secret.
+
+Right after creating the Job, agent-desk creates `<job>-session` in
+bench-cloud:
+
+- It's owned by the Job and labelled `agent-sessions/token`. It uses
+  `dryRun=All` when the Jobs do.
+- It holds a `v1.<expires>.<hmac>` token that expires at the playbook's
+  deadline plus 15 minutes (D2). That expiry is what bounds the token:
+  deleting the Secret doesn't revoke a token already read.
+- If the Secret can't be made, the Job is deleted (on a real run) and the
+  ticket moves to Blocked with one comment, so a lasting failure doesn't
+  start a Job on every poll.
+- A playbook whose deadline plus 15 minutes is longer than agent-sessions
+  accepts (12 h 15 min) never pilots; that's logged once.
+- Each poll, an active pilot Job with no Secret gets one, with the expiry its
+  start implies, or is deleted. That covers a restart between the Job and its
+  Secret.
+
+When the Job finishes, the poll deletes the Secret. The owner reference also
+removes it when the Job itself is deleted. Any other Job gets none of this.
 
 ## Develop
 

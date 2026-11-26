@@ -127,6 +127,8 @@ views:
         navigation_path: area-kitchen
     - type: custom:mushroom-template-card
       primary: Entryway
+      # Room temperature from the thermostat; says so when it's offline.
+      secondary: "{% set t = state_attr('climate.entry_thermostat', 'current_temperature') %}{% if t | is_number %}{{ t | round(0) | int }}°F{% set a = state_attr('climate.entry_thermostat', 'hvac_action') %}{{ ' · heating' if a == 'heating' else '' }}{% else %}Thermostat offline{% endif %}"
       icon: mdi:door
       icon_color: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -134,6 +136,8 @@ views:
         navigation_path: area-front-foyer
     - type: custom:mushroom-template-card
       primary: Hallway
+      # Room temperature from the thermostat; says so when it's offline.
+      secondary: "{% set t = state_attr('climate.hall_landing_thermostat', 'current_temperature') %}{% if t | is_number %}{{ t | round(0) | int }}°F{% set a = state_attr('climate.hall_landing_thermostat', 'hvac_action') %}{{ ' · heating' if a == 'heating' else '' }}{% else %}Thermostat offline{% endif %}"
       icon: mdi:door-sliding
       icon_color: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -2291,6 +2295,105 @@ views:
             background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
             transition: background 0.3s ease;
           }
+  # Thermostat: KONOz (LUX KN-Z-WH1-B04) on Zigbee2MQTT, paired 2026-11-26.
+  # Tile shows the room temperature and setpoint; the mode buttons and +/-
+  # act on the thermostat directly. Heat only:
+  # the house has no cooling, so Cool isn't offered. Tap opens more-info for history.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Entryway Climate
+      heading_style: title
+      icon: mdi:thermostat
+    - type: tile
+      entity: climate.entry_thermostat
+      name: Entry Thermostat
+      state_content:
+      - current_temperature
+      - hvac_action
+      features_position: bottom
+      features:
+      - type: climate-hvac-modes
+        hvac_modes:
+        - 'off'
+        - heat
+      - type: target-temperature
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    # Schedule: on/off switch (tap toggles), then its times and temperatures.
+    - type: tile
+      entity: automation.entry_thermostat_schedule
+      name: Schedule
+      icon: mdi:calendar-clock
+      color: green
+      tap_action:
+        action: toggle
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_datetime.entry_thermostat_on
+      name: Heat on at
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_number.entry_thermostat_temp
+      name: Heat to
+      features_position: inline
+      features:
+      - type: numeric-input
+        style: buttons
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_datetime.entry_thermostat_off
+      name: Off at
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
 - title: Kitchen
   theme: Tinted
   path: area-kitchen
@@ -2669,6 +2772,123 @@ views:
             box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
             background: {% if is_state(config.entity, 'on') %}linear-gradient(150deg, rgba(255, 184, 56, 0.22), rgba(255, 150, 40, 0.12)), var(--card-background-color){% else %}var(--card-background-color){% endif %};
             transition: background 0.3s ease;
+          }
+  # Thermostat: KONOz (LUX KN-Z-WH1-B04) on Zigbee2MQTT, paired 2026-11-26.
+  # Tile shows the room temperature and setpoint; the mode buttons and +/-
+  # act on the thermostat directly. Heat only:
+  # the house has no cooling, so Cool isn't offered. Tap opens more-info for history.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Hallway Climate
+      heading_style: title
+      icon: mdi:thermostat
+    - type: tile
+      entity: climate.hall_landing_thermostat
+      name: Hall Landing Thermostat
+      state_content:
+      - current_temperature
+      - hvac_action
+      features_position: bottom
+      features:
+      - type: climate-hvac-modes
+        hvac_modes:
+        - 'off'
+        - heat
+      - type: target-temperature
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    # Schedule: on/off switch (tap toggles), then its times and temperatures.
+    - type: tile
+      entity: automation.hall_landing_thermostat_schedule
+      name: Schedule
+      icon: mdi:calendar-clock
+      color: green
+      tap_action:
+        action: toggle
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_datetime.hall_landing_thermostat_evening
+      name: Evening at
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_number.hall_landing_evening_temp
+      name: Evening temp
+      features_position: inline
+      features:
+      - type: numeric-input
+        style: buttons
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_datetime.hall_landing_thermostat_night
+      name: Night at
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_number.hall_landing_night_temp
+      name: Night temp
+      features_position: inline
+      features:
+      - type: numeric-input
+        style: buttons
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
           }
 - title: Master Bedroom
   theme: Tinted

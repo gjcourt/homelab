@@ -9,8 +9,9 @@
 #   2. Music       — one full-width volume row per room
 #   3. Lights      — one tile per room: tap toggles, hold opens the dimmer;
 #                    All lights off (asks first) with a 2-minute Undo
-#   4. Weather     — one small tile; the forecast is one tap away
-#   5. Daily shot  — only until it's logged; at 19:00 it moves into Needs you
+#   4. Thermostats — Entry and Hall Landing, each with its schedule switch
+#   5. Weather     — one small tile; the forecast is one tap away
+#   6. Daily shot  — only until it's logged; at 19:00 it moves into Needs you
 #
 # Built-in cards only (tile, heading). Mushroom / card-mod / clock-weather
 # cards stuck on "Configuration error" on cold loads and never recovered
@@ -412,6 +413,70 @@ views:
         data:
           entities: [light.exterior_east, light.exterior_west]
       icon_tap_action: *exterior
+  # ── Thermostats ───────────────────────────────────────────────────────
+  # One tile per thermostat: room temperature and what it's doing, mode
+  # buttons and setpoint +/-. Under each, its schedule's on/off switch
+  # (tap toggles). Schedule times and temperatures are on the Config
+  # dashboard's Entryway and Hallway pages.
+  - type: grid
+    cards:
+    - type: heading
+      heading: Thermostats
+      heading_style: title
+    - type: tile
+      entity: climate.entry_thermostat
+      name: Entry
+      state_content:
+      - current_temperature
+      - hvac_action
+      features_position: bottom
+      features:
+      - type: climate-hvac-modes
+        hvac_modes:
+        - 'off'
+        - heat
+      - type: target-temperature
+      grid_options:
+        columns: 12
+    - type: tile
+      entity: climate.hall_landing_thermostat
+      name: Hall Landing
+      state_content:
+      - current_temperature
+      - hvac_action
+      features_position: bottom
+      features:
+      - type: climate-hvac-modes
+        hvac_modes:
+        - 'off'
+        - heat
+      - type: target-temperature
+      grid_options:
+        columns: 12
+    - type: tile
+      entity: automation.entry_thermostat_schedule
+      name: Entry schedule
+      icon: mdi:calendar-clock
+      color: green
+      state_content:
+      - state
+      tap_action: &entry_thermostat_schedule
+        action: toggle
+      icon_tap_action: *entry_thermostat_schedule
+      grid_options:
+        columns: 6
+    - type: tile
+      entity: automation.hall_landing_thermostat_schedule
+      name: Hall Landing schedule
+      icon: mdi:calendar-clock
+      color: green
+      state_content:
+      - state
+      tap_action: &hall_landing_thermostat_schedule
+        action: toggle
+      icon_tap_action: *hall_landing_thermostat_schedule
+      grid_options:
+        columns: 6
   # ── Weather ────────────────────────────────────────────────────────────
   # Conditions and temperature; tap for the forecast (HA's more-info).
   - type: grid

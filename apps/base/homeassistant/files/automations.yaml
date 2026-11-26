@@ -726,7 +726,7 @@
 # helper is in the seeded list yet). That matches what `initial:` did on every
 # start before, so nothing set since the previous start survived anyway.
 - alias: "Helpers — seed defaults on a fresh install"
-  description: "On start, write the default of any auto-off or nightlight setting that has never been seeded."
+  description: "On start, write the default of any auto-off, nightlight or thermostat schedule setting that has never been seeded."
   mode: single
   trigger:
     - platform: homeassistant
@@ -746,6 +746,14 @@
           input_number.nightlight_brightness: 6
           input_number.nightlight_random_offset: 30
           input_datetime.nightlight_turnoff_time: "23:00:00"
+          # Thermostat schedules: the Feb 2026 backup's values.
+          input_number.entry_thermostat_temp: 65
+          input_number.hall_landing_evening_temp: 68
+          input_number.hall_landing_night_temp: 66
+          input_datetime.entry_thermostat_on: "07:45:00"
+          input_datetime.entry_thermostat_off: "18:30:00"
+          input_datetime.hall_landing_thermostat_evening: "18:30:00"
+          input_datetime.hall_landing_thermostat_night: "23:30:00"
         seeded: "{{ state_attr('sensor.helper_defaults_seeded', 'keys') or [] }}"
         todo: "{{ defaults.keys() | reject('in', seeded) | list }}"
     - condition: template
@@ -779,7 +787,7 @@
 - alias: "Helpers — save settings right after a change"
   description: "Persist auto-off and nightlight settings, and auto-off timer starts and stops, immediately."
   mode: queued
-  # First start seeds 12 helpers at once; each change queues a run.
+  # First start seeds 19 helpers at once; each change queues a run.
   max: 30
   max_exceeded: silent
   trigger:
@@ -797,6 +805,13 @@
         - input_number.nightlight_brightness
         - input_number.nightlight_random_offset
         - input_datetime.nightlight_turnoff_time
+        - input_number.entry_thermostat_temp
+        - input_number.hall_landing_evening_temp
+        - input_number.hall_landing_night_temp
+        - input_datetime.entry_thermostat_on
+        - input_datetime.entry_thermostat_off
+        - input_datetime.hall_landing_thermostat_evening
+        - input_datetime.hall_landing_thermostat_night
       not_from:
         - unknown
         - unavailable
@@ -942,3 +957,65 @@
                   message: clear_notification
                   data:
                     tag: daily_shot
+
+# ---------------------------------------------------------------------------
+# Thermostat schedules (2026-11-26). Helpers are in configuration.yaml
+# (package thermostat_schedules). Turning one of these automations off is the
+# schedule's on/off switch (Home and the area pages show it); HA restores it
+# across restarts. Rebuilt from the Feb 2026 backup's "Thermostat Control".
+# Change from the original: Hall Landing switches to heat at each step (the
+# old one only set the temperature and relied on heat already being on).
+# Staging has neither thermostat, so these do nothing there.
+
+- alias: "Entry thermostat — schedule"
+  description: "Heat the entry at the morning time, turn it off at the evening time."
+  mode: single
+  trigger:
+    - platform: time
+      at: input_datetime.entry_thermostat_on
+      id: "on"
+    - platform: time
+      at: input_datetime.entry_thermostat_off
+      id: "off"
+  action:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: "on"
+          sequence:
+            - service: climate.set_temperature
+              target:
+                entity_id: climate.entry_thermostat
+              data:
+                hvac_mode: heat
+                temperature: "{{ states('input_number.entry_thermostat_temp') | int(65) }}"
+        - conditions:
+            - condition: trigger
+              id: "off"
+          sequence:
+            - service: climate.set_hvac_mode
+              target:
+                entity_id: climate.entry_thermostat
+              data:
+                hvac_mode: "off"
+
+- alias: "Hall Landing thermostat — schedule"
+  description: "Heat the hall landing to the evening temperature, then the night temperature."
+  mode: single
+  trigger:
+    - platform: time
+      at: input_datetime.hall_landing_thermostat_evening
+      id: evening
+    - platform: time
+      at: input_datetime.hall_landing_thermostat_night
+      id: night
+  action:
+    - service: climate.set_temperature
+      target:
+        entity_id: climate.hall_landing_thermostat
+      data:
+        hvac_mode: heat
+        temperature: >-
+          {{ states('input_number.hall_landing_evening_temp') | int(68)
+             if trigger.id == 'evening'
+             else states('input_number.hall_landing_night_temp') | int(66) }}

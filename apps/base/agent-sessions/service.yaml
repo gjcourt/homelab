@@ -1,0 +1,13 @@
+# Jobs call http://agent-sessions.<namespace>.svc:8080 (TASK_TICKET.sessions_url).
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-sessions
+  namespace: agent-sessions
+spec:
+  selector:
+    app: agent-sessions
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

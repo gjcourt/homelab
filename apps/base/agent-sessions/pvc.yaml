@@ -1,0 +1,15 @@
+# The event log (EVENT_LOG=/data/events.jsonl), so the step-2 exit check can
+# read a pilot run's events after a restart. Small: one JSON line per event.
+# RWO, hence strategy: Recreate on the Deployment.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-sessions-data
+  namespace: agent-sessions
+spec:
+  storageClassName: truenas-iscsi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

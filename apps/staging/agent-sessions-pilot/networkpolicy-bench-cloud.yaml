@@ -1,0 +1,27 @@
+# Egress for bench-cloud pilot Jobs to staging agent-sessions, 8080 only.
+# Cilium policies add up: this allows one more destination on top of
+# apps/base/bench-cloud/networkpolicy.yaml and changes nothing for other pods,
+# which don't carry the label. George, 2026-11-22 (D3): "Staging, pilot jobs
+# only (Recommended)": a network rule lets only Jobs labelled as session
+# pilots reach agent-sessions-stage on 8080; removed when production
+# agent-sessions ships.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: agent-sessions-stage-pilot
+  namespace: bench-cloud
+  labels:
+    app.kubernetes.io/part-of: network-policies
+spec:
+  description: "bench-cloud pilot Jobs (agent-sessions/pilot=true) out to agent-sessions-stage:8080."
+  endpointSelector:
+    matchLabels:
+      agent-sessions/pilot: "true"
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: agent-sessions-stage
+            app: agent-sessions
+      toPorts:
+        - ports:
+            - {port: "8080", protocol: TCP}

@@ -1,0 +1,60 @@
+# One replica, Recreate: the log is one file on an RWO volume. Stateless
+# otherwise: the token check needs only the session-key.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-sessions
+  namespace: agent-sessions
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: agent-sessions
+  template:
+    metadata:
+      labels:
+        app: agent-sessions
+    spec:
+      automountServiceAccountToken: false # it needs no Kubernetes API
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534 # the secret file (0440) and the data volume
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: agent-sessions
+          # The tag is pinned in each overlay.
+          image: ghcr.io/gjcourt/agent-sessions:latest
+          args: ["serve"]
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - {name: SESSION_KEY_FILE, value: /secrets/session-key}
+            - {name: EVENT_LOG, value: /data/events.jsonl}
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 30
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources:
+            requests: {cpu: 10m, memory: 48Mi}
+            limits: {memory: 128Mi}
+          volumeMounts:
+            - {name: secrets, mountPath: /secrets, readOnly: true}
+            - {name: data, mountPath: /data}
+      volumes:
+        - name: secrets
+          secret:
+            secretName: agent-sessions
+            defaultMode: 0440
+        - name: data
+          persistentVolumeClaim:
+            claimName: agent-sessions-data

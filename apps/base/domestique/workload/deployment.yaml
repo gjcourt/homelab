@@ -1,0 +1,121 @@
+# One replica, Recreate: the store is SQLite on an RWO volume, with one
+# writer. Settings are env vars from the overlay's ConfigMap
+# (domestique-config): DOMESTIQUE_FITNESS_FOLDER and DOMESTIQUE_SQLITE_PATH,
+# which the app requires and gives no defaults (adapters/web/config.py).
+#
+# The import runs as an init container on every pod start (George,
+# 2026-11-22: "Init container on pod start"). It is idempotent: a rerun
+# imports only new or changed files. To pick up new rides, restart the pod:
+#   kubectl -n domestique-stage rollout restart deploy/domestique
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: domestique
+  namespace: domestique
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: domestique
+  template:
+    metadata:
+      labels:
+        app: domestique
+    spec:
+      serviceAccountName: domestique
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: ghcr-secret
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534 # the new iSCSI volume must be writable by 65534
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # `domestique import` exit codes (adapters/cli.py): 0 done; 1 done,
+        # but some files failed for a reason outside the file (retried next
+        # run); 2 usage/config error; 3 stopped part-way. 0 and 1 let the
+        # server start; 2 and 3 fail the init container, so kubelet retries.
+        # The wrapper only adds the exit code and the wall-clock time to the
+        # log; the import's own report (counts) comes first.
+        - name: import
+          # The tag is pinned in each overlay (images.newTag).
+          image: ghcr.io/gjcourt/domestique
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              start=$(date +%s)
+              domestique import
+              rc=$?
+              echo "domestique import: exit ${rc} after $(( $(date +%s) - start ))s"
+              [ "${rc}" -le 1 ]
+          envFrom:
+            - configMapRef:
+                name: domestique-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          # Unmeasured: the first import parses the whole history.
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 1Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: fitness, mountPath: /fitness, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      containers:
+        - name: domestique
+          # The tag is pinned in each overlay (images.newTag).
+          image: ghcr.io/gjcourt/domestique
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: domestique-config
+          # /readyz: the fitness folder can be listed and the SQLite file
+          # written (a rolled-back write). /healthz: the process is serving,
+          # no I/O. Distinct signals, so both probes.
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          # Unmeasured: trends and power curves are computed per request over
+          # the stored rides (no summary cache yet).
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 1Gi}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: fitness, mountPath: /fitness, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: domestique-data
+        # The read-only NFS fitness folder (overlay nfs-fitness.yaml).
+        - name: fitness
+          persistentVolumeClaim:
+            claimName: domestique-fitness
+            readOnly: true
+        # SQLite's temporary files fall back to /tmp (read-only root).
+        - name: tmp
+          emptyDir: {sizeLimit: 256Mi}

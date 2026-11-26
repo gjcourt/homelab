@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# Domestique's workload (DOMESTIQUE-56): the app, its derived-data store and
+# its network policy. Kept apart from ../ (the namespace) on purpose: the
+# production overlay includes ../ for its fitness-folder PV/PVC, and must not
+# pick up a workload until production is planned. An overlay opts in by
+# listing this directory as well. Environment-specific pieces (ConfigMap,
+# image tag, HTTPRoute) live in each overlay.
+resources:
+  - serviceaccount.yaml
+  - pvc.yaml
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+  - secret-ghcr.yaml

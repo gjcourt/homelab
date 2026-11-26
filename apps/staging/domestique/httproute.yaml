@@ -1,0 +1,41 @@
+# Staging front door: https://ride.stage.burntbytes.com via the Cilium gateway.
+# LAN/VPN-only, like every *.stage host: AdGuard's *.stage wildcard resolves it
+# to the staging gateway VIP and there is no Cloudflare tunnel entry. No
+# sign-in (George, 2026-11-22: "None, LAN-only"): no ExternalAuth filter, and
+# staging Authelia's default_policy is bypass. To gate it later, add an
+# ExternalAuth filter plus a one_factor rule (docs/architecture/gateway-auth.md).
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: domestique-http
+  namespace: domestique-stage
+spec:
+  hostnames:
+    - ride.stage.burntbytes.com
+  parentRefs:
+    - name: app-gateway-staging
+      namespace: default
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  name: domestique-https
+  namespace: domestique-stage
+spec:
+  hostnames:
+    - ride.stage.burntbytes.com
+  parentRefs:
+    - name: app-gateway-staging
+      namespace: default
+      sectionName: https
+  rules:
+    - backendRefs:
+        - name: domestique
+          port: 80

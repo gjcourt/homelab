@@ -11,6 +11,7 @@
 - [authelia](base/authelia/)
 - [bench-cloud](base/bench-cloud/)
 - [burntbytes](base/burntbytes/)
+- [cadence](base/cadence/)
 - [cadence-site](base/cadence-site/)
 - [changes](base/changes/)
 - [couchdb](base/couchdb/)

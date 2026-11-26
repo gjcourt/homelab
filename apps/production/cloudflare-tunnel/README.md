@@ -44,7 +44,8 @@ Currently published:
 | `memos.burntbytes.com` | Memos | "Local cloud" — notes from anywhere | OIDC, `two_factor` |
 | `food.burntbytes.com` | Mealie | "Local cloud" — recipes from anywhere | OIDC, `two_factor` |
 | `burntbytes.com` + `-origin` | Blog | Public by definition | none |
-| `cadence.burntbytes.com` | — | **Orphan** — see the note in `config.yaml` | none |
+| `cadence.burntbytes.com` | Cadence marketing page (`cadence-site`) | Public static page | none |
+| `cadence-app.burntbytes.com` | Cadence Shopify app (`cadence`) | Shopify OAuth install, webhooks, and the agent-facing `pay/` endpoint must be reachable from the internet | in-app (Shopify session / webhook HMAC); see `apps/production/cadence/httproute.yaml` |
 
 ### Bar for adding a hostname
 
@@ -60,7 +61,7 @@ Before adding an entry:
    `apps/production/authelia/configuration.yaml`, **and** that the hostname you
    are publishing appears in that client's `redirect_uris`.
 2. Confirm a production HTTPRoute actually serves the hostname (otherwise you
-   publish a hostname with no backend — see the cadence note).
+   publish a hostname with no backend).
 3. Add the Cloudflare DNS `CNAME` → `<tunnel-uuid>.cfargotunnel.com`.
    **DNS is not managed in this repo** and there is no external-dns; the record
    is created by hand in the Cloudflare dashboard. Without it the tunnel entry

@@ -435,7 +435,6 @@ views:
         hvac_modes:
         - 'off'
         - heat
-        - cool
       - type: target-temperature
       grid_options:
         columns: 12
@@ -451,7 +450,6 @@ views:
         hvac_modes:
         - 'off'
         - heat
-        - cool
       - type: target-temperature
       grid_options:
         columns: 12

@@ -128,7 +128,7 @@ views:
     - type: custom:mushroom-template-card
       primary: Entryway
       # Room temperature from the thermostat; says so when it's offline.
-      secondary: "{% set t = state_attr('climate.entry_thermostat', 'current_temperature') %}{% if t | is_number %}{{ t | round(0) | int }}°F{% set a = state_attr('climate.entry_thermostat', 'hvac_action') %}{{ ' · ' ~ a if a in ['heating', 'cooling'] else '' }}{% else %}Thermostat offline{% endif %}"
+      secondary: "{% set t = state_attr('climate.entry_thermostat', 'current_temperature') %}{% if t | is_number %}{{ t | round(0) | int }}°F{% set a = state_attr('climate.entry_thermostat', 'hvac_action') %}{{ ' · heating' if a == 'heating' else '' }}{% else %}Thermostat offline{% endif %}"
       icon: mdi:door
       icon_color: "{% set l = ['light.front_foyer_chandelier', 'light.front_foyer_spot_lights', 'light.front_foyer_closet'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -137,7 +137,7 @@ views:
     - type: custom:mushroom-template-card
       primary: Hallway
       # Room temperature from the thermostat; says so when it's offline.
-      secondary: "{% set t = state_attr('climate.hall_landing_thermostat', 'current_temperature') %}{% if t | is_number %}{{ t | round(0) | int }}°F{% set a = state_attr('climate.hall_landing_thermostat', 'hvac_action') %}{{ ' · ' ~ a if a in ['heating', 'cooling'] else '' }}{% else %}Thermostat offline{% endif %}"
+      secondary: "{% set t = state_attr('climate.hall_landing_thermostat', 'current_temperature') %}{% if t | is_number %}{{ t | round(0) | int }}°F{% set a = state_attr('climate.hall_landing_thermostat', 'hvac_action') %}{{ ' · heating' if a == 'heating' else '' }}{% else %}Thermostat offline{% endif %}"
       icon: mdi:door-sliding
       icon_color: "{% set l = ['light.hallway_long', 'light.hallway_landing'] %}{{ 'amber' if l | select('is_state', 'on') | list | count > 0 else ('red' if l | select('is_state', 'unavailable') | list | count > 0 else 'disabled') }}"
       tap_action:
@@ -2297,7 +2297,8 @@ views:
           }
   # Thermostat: KONOz (LUX KN-Z-WH1-B04) on Zigbee2MQTT, paired 2026-11-26.
   # Tile shows the room temperature and setpoint; the mode buttons and +/-
-  # act on the thermostat directly. Tap opens more-info for history.
+  # act on the thermostat directly. Heat only:
+  # the house has no cooling, so Cool isn't offered. Tap opens more-info for history.
   - type: grid
     cards:
     - type: heading
@@ -2316,7 +2317,6 @@ views:
         hvac_modes:
         - 'off'
         - heat
-        - cool
       - type: target-temperature
       grid_options:
         columns: full
@@ -2775,7 +2775,8 @@ views:
           }
   # Thermostat: KONOz (LUX KN-Z-WH1-B04) on Zigbee2MQTT, paired 2026-11-26.
   # Tile shows the room temperature and setpoint; the mode buttons and +/-
-  # act on the thermostat directly. Tap opens more-info for history.
+  # act on the thermostat directly. Heat only:
+  # the house has no cooling, so Cool isn't offered. Tap opens more-info for history.
   - type: grid
     cards:
     - type: heading
@@ -2794,7 +2795,6 @@ views:
         hvac_modes:
         - 'off'
         - heat
-        - cool
       - type: target-temperature
       grid_options:
         columns: full

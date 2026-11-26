@@ -890,6 +890,53 @@ homeassistant:
     # just logs it"). Done (on the dashboard or the phone notification) only
     # records the time and side; the automations are in automations.yaml under
     # "Daily shot".
+    # Thermostat schedules (2026-11-26). Rebuilt from the "Thermostat Control"
+    # automation in the Feb 2026 backup, with the same default times and
+    # temperatures. George: "I'd like the times to be configurable, more
+    # importantly I'd like to toggle the automations on and off". The on/off
+    # toggle is each schedule's automation entity; times and temperatures
+    # are these helpers, edited on the Entryway and Hallway pages. Defaults
+    # are written once by "Helpers — seed defaults on a fresh install".
+    thermostat_schedules:
+      input_datetime:
+        entry_thermostat_on:
+          name: Entry thermostat on
+          icon: mdi:thermometer
+          has_date: false
+          has_time: true
+        entry_thermostat_off:
+          name: Entry thermostat off
+          icon: mdi:thermometer-off
+          has_date: false
+          has_time: true
+        hall_landing_thermostat_evening:
+          name: Hall Landing evening
+          icon: mdi:home-thermometer
+          has_date: false
+          has_time: true
+        hall_landing_thermostat_night:
+          name: Hall Landing night
+          icon: mdi:weather-night
+          has_date: false
+          has_time: true
+      input_number:
+        entry_thermostat_temp:
+          <<: &thermostat_temp
+            min: 55
+            max: 80
+            step: 1
+            unit_of_measurement: "°F"
+            mode: box
+          name: Entry heat to
+          icon: mdi:thermometer
+        hall_landing_evening_temp:
+          <<: *thermostat_temp
+          name: Hall Landing evening temp
+          icon: mdi:home-thermometer
+        hall_landing_night_temp:
+          <<: *thermostat_temp
+          name: Hall Landing night temp
+          icon: mdi:weather-night
     daily_shot:
       input_button:
         daily_shot_done:

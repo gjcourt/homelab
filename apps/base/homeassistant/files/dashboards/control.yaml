@@ -2329,6 +2329,71 @@ views:
             border: none;
             box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
           }
+    # Schedule: on/off switch (tap toggles), then its times and temperatures.
+    - type: tile
+      entity: automation.entry_thermostat_schedule
+      name: Schedule
+      icon: mdi:calendar-clock
+      color: green
+      tap_action:
+        action: toggle
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_datetime.entry_thermostat_on
+      name: Heat on at
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_number.entry_thermostat_temp
+      name: Heat to
+      features_position: inline
+      features:
+      - type: numeric-input
+        style: buttons
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_datetime.entry_thermostat_off
+      name: Off at
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
 - title: Kitchen
   theme: Tinted
   path: area-kitchen
@@ -2731,6 +2796,89 @@ views:
         - heat
         - cool
       - type: target-temperature
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    # Schedule: on/off switch (tap toggles), then its times and temperatures.
+    - type: tile
+      entity: automation.hall_landing_thermostat_schedule
+      name: Schedule
+      icon: mdi:calendar-clock
+      color: green
+      tap_action:
+        action: toggle
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_datetime.hall_landing_thermostat_evening
+      name: Evening at
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_number.hall_landing_evening_temp
+      name: Evening temp
+      features_position: inline
+      features:
+      - type: numeric-input
+        style: buttons
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_datetime.hall_landing_thermostat_night
+      name: Night at
+      grid_options:
+        columns: full
+      card_mod:
+        style: |
+          ha-card {
+            max-width: 500px !important;
+            margin: 0 auto;
+            border-radius: 22px;
+            border: none;
+            box-shadow: 0 1px 2px rgba(30, 50, 90, 0.06);
+          }
+    - type: tile
+      entity: input_number.hall_landing_night_temp
+      name: Night temp
+      features_position: inline
+      features:
+      - type: numeric-input
+        style: buttons
       grid_options:
         columns: full
       card_mod:

@@ -3,7 +3,7 @@
 # One image for both the console pod and the task Jobs. Everything is pinned:
 # an agent image that drifts on rebuild makes "it worked yesterday" unanswerable.
 # Bump versions deliberately, in a PR.
-FROM node:22-bookworm@sha256:e13726ca604184d7a91fcacab1fc09eefd642dc28e79ac34e85540dd93b78cfb
+FROM node:22-bookworm@sha256:7c400d78797d8cbe3f6bb21d2227b86af4cd24b0014cc9f62ff989cc16de988e
 
 ARG CLAUDE_CODE_VERSION=2.1.283
 ARG GO_VERSION=1.27.1

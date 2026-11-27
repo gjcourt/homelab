@@ -16,7 +16,7 @@ spec:
       containers:
         - name: db-init
           # postgres 18-alpine
-          image: postgres@sha256:fe9ef8058929c976110d4b75d9b939e61a590ba1e105e609e891c71bb39a8944
+          image: postgres@sha256:4ea94de574c17f0372722806c949757050fbb1cd7648410fe45d6bba275cc00e
           command: ["/bin/sh", "-c"]
           # Immich uses VectorChord (`vchord`, which pulls in `vector`) as of the
           # pgvecto.rs -> VectorChord migration. The old `vectors` (pgvecto.rs)

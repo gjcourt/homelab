@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+# The bench-cloud half of the staging agent-sessions trial (agent sessions
+# plan, step 2). No `namespace:` here: these act on bench-cloud, which is
+# shared with production, and on the cluster.
+#
+# - networkpolicy-bench-cloud.yaml: pilot Jobs out to agent-sessions-stage
+#   on 8080 (George, 2026-11-22, D3). Removed when production agent-sessions
+#   ships.
+# - admission-policy.yaml: only agent-desk (and cluster admins, for the
+#   hand-launched pilot) may create or change a Job's token Secret (George,
+#   2026-11-22, D1).
+#
+# Not wired into apps/staging/kustomization.yaml yet; see
+# ../agent-sessions/kustomization.yaml.
+resources:
+  - networkpolicy-bench-cloud.yaml
+  - admission-policy.yaml
